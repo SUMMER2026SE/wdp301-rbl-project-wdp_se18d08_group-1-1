@@ -1,0 +1,60 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "name": "Admin VALO",
+      "email": "admin@valo.vn",
+      "password": "Admin@123",
+      "role": "admin",
+      "avatar": null,
+      "wallet": 1500000,
+      "licensePlate": "51G-123.45",
+      "createdAt": "2025-01-10T08:00:00Z"
+    },
+    {
+      "id": 5,
+      "name": "Manager Parking",
+      "email": "manager@valo.vn",
+      "password": "Manager@123",
+      "role": "manager",
+      "avatar": null,
+      "wallet": 0,
+      "licensePlate": null,
+      "createdAt": "2025-01-15T08:00:00Z"
+    },
+    {
+      "id": 2,
+      "name": "Nguyen Van Khoi",
+      "email": "khoi@valo.vn",
+      "password": "Khoi@123",
+      "role": "customer",
+      "avatar": null,
+      "wallet": 350000,
+      "licensePlate": "43A-567.89",
+      "createdAt": "2025-03-15T09:30:00Z"
+    },
+    {
+      "id": 3,
+      "name": "Tran Thi Bao",
+      "email": "bao@valo.vn",
+      "password": "Bao@123",
+      "role": "customer",
+      "avatar": null,
+      "wallet": 820000,
+      "licensePlate": "30H-999.11",
+      "createdAt": "2025-04-20T14:00:00Z"
+    },
+    {
+      "id": 4,
+      "name": "Staff Gate",
+      "email": "staff@valo.vn",
+      "password": "Staff@123",
+      "role": "staff",
+      "avatar": null,
+      "wallet": 0,
+      "licensePlate": null,
+      "createdAt": "2025-02-01T07:00:00Z"
+    }
+  ]
+}
+
