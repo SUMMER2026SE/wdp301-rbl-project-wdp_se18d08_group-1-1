@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, User, ArrowRight, Zap, ShieldCheck, Car, CheckCircle, XCircle } from 'lucide-react';
 import Logo from '../../assets/images/logo.png';
-import mockData from '../../data/mockUsers.json';
+
+const API_BASE = 'http://localhost:5000/api';
 
 // ─── Google Icon SVG ───────────────────────────────────────────────────────────
 const GoogleIcon = () => (
@@ -58,64 +59,89 @@ export default function LoginPage() {
 
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
-    // Simulate network delay
-    setTimeout(() => {
+    try {
       if (isLogin) {
-        // ── LOGIN: check email + password against mockUsers.json ──
-        const found = mockData.users.find(
-          (u) => u.email === form.email && u.password === form.password
-        );
-        if (found) {
-          // Store mock session (replace with real JWT later)
-          sessionStorage.setItem('valo_user', JSON.stringify({
-            id: found.id,
-            name: found.name,
-            email: found.email,
-            role: found.role,
-            wallet: found.wallet,
-          }));
-          // Báo Navbar cập nhật ngay lập tức
-          window.dispatchEvent(new Event('valo_auth_change'));
-          showToast('success', `Chào mừng trở lại, ${found.name}! 🎉`);
+        // ── LOGIN: call POST /api/auth/login ──
+        const res = await fetch(`${API_BASE}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: form.email, password: form.password }),
+        });
+        const data = await res.json();
 
-          // ── Redirect theo role ──
-          const roleRedirect = {
-            admin:   '/admin/dashboard',
-            manager: '/manager/dashboard',
-          };
-          const dest = roleRedirect[found.role] || '/';
-          setTimeout(() => navigate(dest), 1000);
-        } else {
-          showToast('error', 'Email hoặc mật khẩu không đúng. Vui lòng thử lại.');
+        if (!res.ok) {
+          showToast('error', data.message || 'Email hoặc mật khẩu không đúng. Vui lòng thử lại.');
+          return;
         }
+
+        const { user, accessToken, refreshToken } = data.data;
+
+        // Store tokens
+        localStorage.setItem('accessToken', accessToken);
+        localStorage.setItem('refreshToken', refreshToken);
+        sessionStorage.setItem('valo_user', JSON.stringify({
+          id: user.id,
+          name: user.username,
+          email: user.email,
+          role: user.role,
+        }));
+
+        // Báo Navbar cập nhật ngay lập tức
+        window.dispatchEvent(new Event('valo_auth_change'));
+        showToast('success', `Chào mừng trở lại, ${user.username}!`);
+
+        // ── Redirect theo role ──
+        const roleRedirect = {
+          admin:   '/admin/dashboard',
+          manager: '/manager/dashboard',
+        };
+        const dest = roleRedirect[user.role] || '/';
+        setTimeout(() => navigate(dest), 1000);
       } else {
-        // ── SIGNUP: basic validation ──
+        // ── SIGNUP: basic client-side validation ──
         if (!form.name.trim()) {
-          showToast('error', 'Vui lòng nhập họ và tên.');
-          setLoading(false);
+          showToast('error', 'Vui lòng nhập tên tài khoản.');
           return;
         }
         if (form.password !== form.confirm) {
           showToast('error', 'Mật khẩu xác nhận không khớp.');
-          setLoading(false);
           return;
         }
-        const exists = mockData.users.find((u) => u.email === form.email);
-        if (exists) {
-          showToast('error', 'Email này đã được đăng ký. Vui lòng đăng nhập.');
-          setLoading(false);
+
+        // Call POST /api/auth/register
+        const res = await fetch(`${API_BASE}/auth/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: form.name,
+            email: form.email,
+            password: form.password,
+            confirmPassword: form.confirm,
+          }),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          const msg =
+            data.errors && data.errors.length > 0
+              ? data.errors[0].message
+              : data.message || 'Đăng ký thất bại. Vui lòng thử lại.';
+          showToast('error', msg);
           return;
         }
-        // Mock success – in real app, call API POST /auth/register
+
         showToast('success', 'Tạo tài khoản thành công! Đang chuyển hướng…');
-        setTimeout(() => setMode('login'), 1500);
+        setTimeout(() => { setMode('login'); setForm({ name: '', email: '', password: '', confirm: '' }); }, 1500);
       }
+    } catch (err) {
+      showToast('error', 'Không thể kết nối đến máy chủ. Vui lòng thử lại sau.');
+    } finally {
       setLoading(false);
-    }, 900);
+    }
   };
 
   const handleGoogleAuth = () => {
