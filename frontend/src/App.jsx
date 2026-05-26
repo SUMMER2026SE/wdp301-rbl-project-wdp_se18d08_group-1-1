@@ -11,6 +11,10 @@ import ProtectedRoute from './components/ProtectedRoute';
 // Pages – Guest
 import GuestHome from './pages/Guest/GuestHome';
 import LoginPage from './pages/Guest/LoginPage';
+import ParkingMap from './pages/Guest/ParkingMap';
+
+// Pages - Kiosk
+import KioskFlow from './pages/Kiosk/KioskFlow';
 
 // Pages – Admin
 import AdminDashboard from './pages/Admin/Dashboard';
@@ -26,9 +30,13 @@ export default function App() {
     <BrowserRouter>
       <Routes>
 
+        {/* ── Standalone Kiosk app ── */}
+        <Route path="/kiosk/*" element={<KioskFlow />} />
+
         {/* ── Public: Navbar + Footer ── */}
         <Route element={<MainLayout />}>
           <Route path="/" element={<GuestHome />} />
+          <Route path="/parking-map" element={<ParkingMap />} />
           {/* /pricing, /about... thêm vào đây */}
         </Route>
 
