@@ -9,6 +9,9 @@ const {
   googleLogin,
   sendOTP,
   verifyOTP,
+  forgotPassword,
+  verifyResetPasswordOTP,
+  resetPassword,
 } = require('../controllers/authController');
 const { protect } = require('../middlewares/authMiddleware');
 const {
@@ -16,6 +19,9 @@ const {
   loginValidator,
   sendOTPValidator,
   verifyOTPValidator,
+  forgotPasswordValidator,
+  verifyResetPasswordOTPValidator,
+  resetPasswordValidator,
 } = require('../validators/authValidator');
 
 // Public routes
@@ -25,6 +31,9 @@ router.post('/refresh-token', refreshAccessToken);
 router.post('/google', googleLogin);
 router.post('/send-otp', sendOTPValidator, sendOTP);
 router.post('/verify-otp', verifyOTPValidator, verifyOTP);
+router.post('/forgot-password', forgotPasswordValidator, forgotPassword);
+router.post('/verify-reset-otp', verifyResetPasswordOTPValidator, verifyResetPasswordOTP);
+router.post('/reset-password', resetPasswordValidator, resetPassword);
 
 // Protected routes
 router.post('/logout', protect, logout);

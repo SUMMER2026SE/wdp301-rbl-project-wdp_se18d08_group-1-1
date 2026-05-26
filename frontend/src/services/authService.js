@@ -60,3 +60,24 @@ export const getMe = () =>
     method: 'GET',
     headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` },
   });
+
+/** POST /api/auth/forgot-password — send reset OTP to email */
+export const forgotPassword = (email) =>
+  apiFetch('/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+
+/** POST /api/auth/verify-reset-otp — verify OTP before showing new password form */
+export const verifyResetPasswordOTP = (email, otp) =>
+  apiFetch('/auth/verify-reset-otp', {
+    method: 'POST',
+    body: JSON.stringify({ email, otp }),
+  });
+
+/** POST /api/auth/reset-password — verify OTP + set new password */
+export const resetPassword = (email, otp, newPassword) =>
+  apiFetch('/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ email, otp, newPassword }),
+  });

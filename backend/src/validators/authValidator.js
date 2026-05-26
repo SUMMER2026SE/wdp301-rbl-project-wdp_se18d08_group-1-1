@@ -113,10 +113,76 @@ const verifyOTPValidator = [
     .withMessage('OTP must contain only digits'),
 ];
 
+/**
+ * Validation rules for forgot password (send OTP)
+ */
+const forgotPasswordValidator = [
+  body('email')
+    .trim()
+    .notEmpty()
+    .withMessage('Email is required')
+    .isEmail()
+    .withMessage('Please provide a valid email')
+    .normalizeEmail(),
+];
+
+/**
+ * Validation rules for verify reset OTP
+ */
+const verifyResetPasswordOTPValidator = [
+  body('email')
+    .trim()
+    .notEmpty()
+    .withMessage('Email is required')
+    .isEmail()
+    .withMessage('Please provide a valid email')
+    .normalizeEmail(),
+
+  body('otp')
+    .trim()
+    .notEmpty()
+    .withMessage('OTP is required')
+    .isLength({ min: 6, max: 6 })
+    .withMessage('OTP must be 6 digits')
+    .isNumeric()
+    .withMessage('OTP must contain only digits'),
+];
+
+/**
+ * Validation rules for reset password
+ */
+const resetPasswordValidator = [
+  body('email')
+    .trim()
+    .notEmpty()
+    .withMessage('Email is required')
+    .isEmail()
+    .withMessage('Please provide a valid email')
+    .normalizeEmail(),
+
+  body('otp')
+    .trim()
+    .notEmpty()
+    .withMessage('OTP is required')
+    .isLength({ min: 6, max: 6 })
+    .withMessage('OTP must be 6 digits')
+    .isNumeric()
+    .withMessage('OTP must contain only digits'),
+
+  body('newPassword')
+    .notEmpty()
+    .withMessage('New password is required')
+    .isLength({ min: 6 })
+    .withMessage('Password must be at least 6 characters'),
+];
+
 module.exports = {
   registerValidator,
   loginValidator,
   changePasswordValidator,
   sendOTPValidator,
   verifyOTPValidator,
+  forgotPasswordValidator,
+  verifyResetPasswordOTPValidator,
+  resetPasswordValidator,
 };
