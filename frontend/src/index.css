@@ -5,6 +5,16 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Navbar animations ── */
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
 @layer utilities {
   /* Màu sắc và viền kính */
   .text-gold-gradient {

@@ -5,7 +5,7 @@ import {
   Ticket, Wrench, BarChart2, DollarSign,
   // Manager icons
   MonitorCheck, Car, Gauge, FileWarning, ClipboardList,
-  BookOpen, SlidersHorizontal,
+  BookOpen, SlidersHorizontal, DoorOpen, Activity,
   // Common
   Bell, LogOut, Menu, X, ChevronDown,
 } from 'lucide-react';
@@ -24,13 +24,13 @@ const NAV_CONFIG = {
   ],
   manager: [
     { label: 'Overview',          icon: <LayoutDashboard size={18} />, to: '/manager/dashboard'         },
-    { label: 'Live Grid Monitor', icon: <MonitorCheck size={18} />,    to: '/manager/live-grid'         },
-    { label: 'Gate Control',      icon: <Car size={18} />,             to: '/manager/gate'              },
-    { label: 'Occupancy Reports', icon: <Gauge size={18} />,           to: '/manager/reports'           },
-    { label: 'Booking Management',icon: <BookOpen size={18} />,        to: '/manager/bookings'          },
-    { label: 'Parking Violations',icon: <FileWarning size={18} />,     to: '/manager/violations'        },
-    { label: 'Task Status',       icon: <ClipboardList size={18} />,   to: '/manager/tasks'             },
-    { label: 'Overtime Rates',    icon: <SlidersHorizontal size={18}/>,to: '/manager/rates'             },
+    { label: 'Gate Control',      icon: <DoorOpen size={18} />,        to: '/manager/gate'              },
+    { label: 'Bookings',          icon: <BookOpen size={18} />,        to: '/manager/bookings'          },
+    { label: 'Vehicles & Plates', icon: <Car size={18} />,             to: '/manager/vehicles'          },
+    { label: 'Parking Lots',      icon: <ParkingCircle size={18} />,   to: '/manager/lots'              },
+    { label: 'Services',          icon: <Wrench size={18} />,          to: '/manager/services'          },
+    { label: 'Notifications',     icon: <Bell size={18} />,            to: '/manager/notifications'     },
+    { label: 'System Logs',       icon: <Activity size={18} />,        to: '/manager/logs'              },
   ],
 };
 
@@ -44,12 +44,12 @@ const ROLE_THEME = {
     headerBadgeCls: 'bg-red-500/10 border-red-500/20 text-red-400',
   },
   manager: {
-    accent: 'from-emerald-400 to-teal-600',
-    activeBg: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-    activeHover: 'hover:text-emerald-300',
-    badge: { cls: 'bg-emerald-900/50 text-emerald-400', label: 'Manager' },
+    accent: 'from-yellow-400 to-yellow-600',
+    activeBg: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
+    activeHover: 'hover:text-yellow-300',
+    badge: { cls: 'bg-yellow-900/50 text-yellow-400', label: 'Manager' },
     panelLabel: 'Manager Panel',
-    headerBadgeCls: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400',
+    headerBadgeCls: 'bg-yellow-500/10 border-yellow-500/20 text-yellow-400',
   },
 };
 
@@ -83,7 +83,7 @@ export default function DashboardLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0D0D0D] flex font-sans">
+    <div className="h-screen overflow-hidden bg-[#0D0D0D] flex font-sans">
 
       {/* ══════════ SIDEBAR ══════════ */}
       <aside
@@ -91,7 +91,7 @@ export default function DashboardLayout() {
           ${collapsed ? 'w-[72px]' : 'w-60'}
           flex-shrink-0 bg-[#111111] border-r border-white/5
           flex flex-col transition-all duration-300 ease-in-out relative
-          overflow-hidden
+          z-40
         `}
       >
         {/* Logo */}
