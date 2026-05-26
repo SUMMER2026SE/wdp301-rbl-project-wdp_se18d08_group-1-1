@@ -9,8 +9,9 @@ import DashboardLayout from './layouts/DashboardLayout';
 import ProtectedRoute from './components/ProtectedRoute';
 
 // Pages – Guest
-import GuestHome from './pages/Guest/GuestHome';
-import LoginPage from './pages/Guest/LoginPage';
+import GuestHome    from './pages/Guest/GuestHome';
+import LoginPage   from './pages/Guest/LoginPage';
+import OAuthCallback from './pages/OAuthCallback';
 
 // Pages – Admin
 import AdminDashboard from './pages/Admin/Dashboard';
@@ -34,6 +35,7 @@ export default function App() {
 
         {/* ── Standalone auth page ── */}
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/oauth/callback" element={<OAuthCallback />} />
 
         {/* ══════════════════════════════════════════
             ADMIN section — DashboardLayout chung
@@ -86,4 +88,4 @@ export default function App() {
     </BrowserRouter>
   );
 }
-
+
