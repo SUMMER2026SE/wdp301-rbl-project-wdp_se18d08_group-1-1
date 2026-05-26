@@ -8,7 +8,7 @@ const {
   generateRefreshToken,
   verifyRefreshToken,
 } = require('../utils/tokenUtils');
-const { generateOTP, sendOTPEmail } = require('../utils/emailUtils');
+const { generateOTP, sendOTPEmail, sendResetPasswordEmail } = require('../utils/emailUtils');
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -549,6 +549,108 @@ const verifyOTP = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Send OTP for password reset
+ * @route   POST /api/auth/forgot-password
+ * @access  Public
+ */
+const forgotPassword = async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array().map((err) => ({ field: err.path, message: err.msg })),
+      });
+    }
+
+    const { email } = req.body;
+    const user = await User.findOne({ email });
+
+    // Generic response to prevent email enumeration
+    if (!user) {
+      return res.status(200).json({
+        success: true,
+        message: 'If an account with that email exists, an OTP has been sent.',
+      });
+    }
+
+    // Remove any existing reset OTPs
+    await UserToken.deleteMany({ userId: user._id, type: 'reset_password' });
+
+    const otp = generateOTP();
+    const expiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+
+    await UserToken.create({
+      userId: user._id,
+      type: 'reset_password',
+      tokenValue: otp,
+      expiresAt: expiry,
+    });
+
+    await sendResetPasswordEmail(email, otp);
+
+    res.status(200).json({
+      success: true,
+      message: 'OTP sent to your email. It will expire in 15 minutes.',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Reset password using OTP
+ * @route   POST /api/auth/reset-password
+ * @access  Public
+ */
+const resetPassword = async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array().map((err) => ({ field: err.path, message: err.msg })),
+      });
+    }
+
+    const { email, otp, newPassword } = req.body;
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(400).json({ success: false, message: 'Invalid request.' });
+    }
+
+    const otpRecord = await UserToken.findOne({
+      userId: user._id,
+      type: 'reset_password',
+      tokenValue: otp,
+    });
+
+    if (!otpRecord || otpRecord.expiresAt < new Date()) {
+      if (otpRecord) await otpRecord.deleteOne();
+      return res.status(400).json({ success: false, message: 'Invalid or expired OTP.' });
+    }
+
+    // Update password (pre-save hook will hash it)
+    user.password = newPassword;
+    await user.save();
+
+    // Clean up OTP and all refresh tokens (force re-login)
+    await otpRecord.deleteOne();
+    await UserToken.deleteMany({ userId: user._id, type: 'refresh' });
+
+    res.status(200).json({
+      success: true,
+      message: 'Password reset successfully. Please login with your new password.',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   register,
   login,
@@ -558,4 +660,6 @@ module.exports = {
   googleLogin,
   sendOTP,
   verifyOTP,
+  forgotPassword,
+  resetPassword,
 };
