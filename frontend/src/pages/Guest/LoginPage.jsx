@@ -1,9 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, User, ArrowRight, Zap, ShieldCheck, Car, CheckCircle, XCircle } from 'lucide-react';
 import Logo from '../../assets/images/logo.png';
-
-const API_BASE = 'http://localhost:5000/api';
+import { loginUser, registerUser, loginWithGoogle, sendOTP, verifyOTP } from '../../services/authService';
 
 // ─── Google Icon SVG ───────────────────────────────────────────────────────────
 const GoogleIcon = () => (
@@ -51,6 +50,11 @@ export default function LoginPage() {
   const [form, setForm] = useState({ name: '', email: '', password: '', confirm: '' });
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(null); // { type: 'success'|'error', message: string }
+  const [signupStep, setSignupStep] = useState('form'); // 'form' | 'otp'
+  const [otpDigits, setOtpDigits] = useState(Array(6).fill(''));
+  const [registeredEmail, setRegisteredEmail] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
+  const otpRefs = useRef([]);
 
   const showToast = (type, message) => {
     setToast({ type, message });
@@ -65,15 +69,10 @@ export default function LoginPage() {
 
     try {
       if (isLogin) {
-        // ── LOGIN: call POST /api/auth/login ──
-        const res = await fetch(`${API_BASE}/auth/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: form.email, password: form.password }),
-        });
-        const data = await res.json();
+        // ── LOGIN ──
+        const { ok, data } = await loginUser(form.email, form.password);
 
-        if (!res.ok) {
+        if (!ok) {
           showToast('error', data.message || 'Email hoặc mật khẩu không đúng. Vui lòng thử lại.');
           return;
         }
@@ -112,30 +111,26 @@ export default function LoginPage() {
           return;
         }
 
-        // Call POST /api/auth/register
-        const res = await fetch(`${API_BASE}/auth/register`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            username: form.name,
-            email: form.email,
-            password: form.password,
-            confirmPassword: form.confirm,
-          }),
-        });
-        const data = await res.json();
+        // ── REGISTER ──
+        const { ok, data } = await registerUser(form.name, form.email, form.password, form.confirm);
 
-        if (!res.ok) {
-          const msg =
-            data.errors && data.errors.length > 0
-              ? data.errors[0].message
-              : data.message || 'Đăng ký thất bại. Vui lòng thử lại.';
+        if (!ok) {
+          const msg = data.errors?.length ? data.errors[0].message : data.message || 'Đăng ký thất bại. Vui lòng thử lại.';
           showToast('error', msg);
           return;
         }
 
-        showToast('success', 'Tạo tài khoản thành công! Đang chuyển hướng…');
-        setTimeout(() => { setMode('login'); setForm({ name: '', email: '', password: '', confirm: '' }); }, 1500);
+        // Registration successful → send OTP for email verification
+        const { ok: otpOk, data: otpData } = await sendOTP(form.email);
+
+        if (!otpOk) {
+          showToast('error', otpData.message || 'Không gửi được mã xác minh.');
+          return;
+        }
+
+        setRegisteredEmail(form.email);
+        setSignupStep('otp');
+        showToast('success', `Mã xác minh đã gửi đến ${form.email}`);
       }
     } catch (err) {
       showToast('error', 'Không thể kết nối đến máy chủ. Vui lòng thử lại sau.');
@@ -144,9 +139,101 @@ export default function LoginPage() {
     }
   };
 
+  // ── OTP input helpers ──
+  const handleOtpChange = (index, value) => {
+    if (!/^\d*$/.test(value)) return;
+    if (value.length > 1) {
+      const digits = value.replace(/\D/g, '').slice(0, 6).split('');
+      const next = [...otpDigits];
+      digits.forEach((d, i) => { if (index + i < 6) next[index + i] = d; });
+      setOtpDigits(next);
+      otpRefs.current[Math.min(index + digits.length, 5)]?.focus();
+      return;
+    }
+    const next = [...otpDigits];
+    next[index] = value;
+    setOtpDigits(next);
+    if (value && index < 5) otpRefs.current[index + 1]?.focus();
+  };
+
+  const handleOtpKeyDown = (index, e) => {
+    if (e.key === 'Backspace' && !otpDigits[index] && index > 0) otpRefs.current[index - 1]?.focus();
+    if (e.key === 'ArrowLeft' && index > 0) otpRefs.current[index - 1]?.focus();
+    if (e.key === 'ArrowRight' && index < 5) otpRefs.current[index + 1]?.focus();
+  };
+
+  const handleVerifyOTP = async (e) => {
+    e.preventDefault();
+    const code = otpDigits.join('');
+    if (code.length !== 6) { showToast('error', 'Vui lòng nhập đủ 6 chữ số.'); return; }
+    setOtpLoading(true);
+    try {
+      const { ok, data } = await verifyOTP(registeredEmail, code);
+      if (!ok) {
+        showToast('error', data.message || 'Mã xác minh không đúng.');
+        return;
+      }
+      showToast('success', 'Email đã xác minh! Vui lòng đăng nhập.');
+      setTimeout(() => {
+        setSignupStep('form');
+        setOtpDigits(Array(6).fill(''));
+        setMode('login');
+        setForm({ name: '', email: '', password: '', confirm: '' });
+      }, 1500);
+    } catch {
+      showToast('error', 'Không thể kết nối đến máy chủ. Vui lòng thử lại sau.');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleResendOTP = async () => {
+    setOtpLoading(true);
+    try {
+      const { ok, data } = await sendOTP(registeredEmail);
+      if (!ok) { showToast('error', data.message || 'Không gửi được mã.'); return; }
+      showToast('success', 'Mã xác minh mới đã được gửi!');
+      setOtpDigits(Array(6).fill(''));
+    } catch {
+      showToast('error', 'Không thể kết nối đến máy chủ.');
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
   const handleGoogleAuth = () => {
-    // TODO: integrate Google OAuth (firebase / backend redirect)
-    showToast('error', 'Google OAuth chưa được kích hoạt — cần backend.');
+    if (!window.google?.accounts?.id) {
+      showToast('error', 'Google đang tải, vui lòng thử lại sau.');
+      return;
+    }
+    window.google.accounts.id.initialize({
+      client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
+      callback: async ({ credential }) => {
+        setLoading(true);
+        try {
+          const { ok, data } = await loginWithGoogle(credential);
+          if (!ok) {
+            showToast('error', data.message || 'Google login thất bại. Vui lòng thử lại.');
+            return;
+          }
+          const { user, accessToken, refreshToken } = data.data;
+          localStorage.setItem('accessToken', accessToken);
+          localStorage.setItem('refreshToken', refreshToken);
+          sessionStorage.setItem('valo_user', JSON.stringify({
+            id: user.id, name: user.username, email: user.email, role: user.role,
+          }));
+          window.dispatchEvent(new Event('valo_auth_change'));
+          showToast('success', `Chào mừng, ${user.username}!`);
+          const roleRedirect = { admin: '/admin/dashboard', manager: '/manager/dashboard' };
+          setTimeout(() => navigate(roleRedirect[user.role] || '/'), 1000);
+        } catch {
+          showToast('error', 'Không thể kết nối đến máy chủ. Vui lòng thử lại sau.');
+        } finally {
+          setLoading(false);
+        }
+      },
+    });
+    window.google.accounts.id.prompt();
   };
 
   const isLogin = mode === 'login';
@@ -260,7 +347,7 @@ export default function LoginPage() {
               <button
                 key={m}
                 id={`tab-${m}`}
-                onClick={() => { setMode(m); setShowPassword(false); setShowConfirm(false); }}
+                onClick={() => { setMode(m); setShowPassword(false); setShowConfirm(false); setSignupStep('form'); setOtpDigits(Array(6).fill('')); }}
                 className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all duration-300 ${
                   mode === m
                     ? 'bg-gold text-charcoal shadow-lg shadow-gold/20'
@@ -301,7 +388,74 @@ export default function LoginPage() {
             <div className="flex-1 h-px bg-white/10" />
           </div>
 
-          {/* ── Form ── */}
+          {/* ── Form / OTP Step ── */}
+          {!isLogin && signupStep === 'otp' ? (
+            /* ── OTP Verification ── */
+            <form onSubmit={handleVerifyOTP} className="space-y-6" noValidate>
+              <div className="text-center">
+                <div className="w-16 h-16 rounded-full bg-gold/10 border border-gold/20 flex items-center justify-center mx-auto mb-4">
+                  <Mail size={28} className="text-gold" />
+                </div>
+                <h2 className="text-xl font-bold text-white mb-2">Xác minh Email</h2>
+                <p className="text-gray-400 text-sm leading-relaxed">
+                  Nhập mã 6 chữ số đã gửi đến<br />
+                  <span className="text-gold font-semibold">{registeredEmail}</span>
+                </p>
+              </div>
+
+              <div className="flex gap-2 justify-center">
+                {otpDigits.map((digit, i) => (
+                  <input
+                    key={i}
+                    ref={(el) => (otpRefs.current[i] = el)}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    value={digit}
+                    onChange={(e) => handleOtpChange(i, e.target.value)}
+                    onKeyDown={(e) => handleOtpKeyDown(i, e)}
+                    className="w-11 h-14 text-center text-xl font-bold bg-white/5 border border-white/10 focus:border-gold/60 rounded-xl text-white outline-none transition-all duration-200 focus:shadow-[0_0_0_3px_rgba(212,175,55,0.1)]"
+                  />
+                ))}
+              </div>
+
+              <button
+                type="submit"
+                disabled={otpLoading || otpDigits.join('').length !== 6}
+                className="w-full flex items-center justify-center gap-2 bg-gold hover:bg-gold-dark text-charcoal font-extrabold py-4 rounded-xl transition-all duration-200 hover:shadow-xl hover:shadow-gold/25 hover:-translate-y-0.5 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed text-sm tracking-wide"
+              >
+                {otpLoading ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4 text-charcoal" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    Đang xác minh…
+                  </>
+                ) : (
+                  <>Xác minh Email <ArrowRight size={16} /></>
+                )}
+              </button>
+
+              <div className="flex items-center justify-between text-sm">
+                <button
+                  type="button"
+                  onClick={() => { setSignupStep('form'); setOtpDigits(Array(6).fill('')); }}
+                  className="text-gray-500 hover:text-gray-300 transition-colors"
+                >
+                  ← Quay lại
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResendOTP}
+                  disabled={otpLoading}
+                  className="text-gold hover:text-gold-light font-semibold transition-colors disabled:opacity-50"
+                >
+                  Gửi lại mã
+                </button>
+              </div>
+            </form>
+          ) : (
           <form onSubmit={handleSubmit} className="space-y-4" noValidate>
 
             {/* Full Name (signup only) */}
@@ -436,9 +590,10 @@ export default function LoginPage() {
               )}
             </button>
           </form>
+          )}
 
           {/* ── Terms (signup only) ── */}
-          {!isLogin && (
+          {!isLogin && signupStep === 'form' && (
             <p className="text-center text-xs text-gray-600 mt-4 leading-relaxed">
               By creating an account you agree to our{' '}
               <button className="text-gold hover:underline">Terms of Service</button>{' '}
@@ -451,7 +606,7 @@ export default function LoginPage() {
           <p className="text-center text-sm text-gray-500 mt-6">
             {isLogin ? "Don't have an account? " : 'Already have an account? '}
             <button
-              onClick={() => { setMode(isLogin ? 'signup' : 'login'); setShowPassword(false); setShowConfirm(false); }}
+              onClick={() => { setMode(isLogin ? 'signup' : 'login'); setShowPassword(false); setShowConfirm(false); setSignupStep('form'); setOtpDigits(Array(6).fill('')); }}
               className="text-gold hover:text-gold-light font-bold transition-colors"
             >
               {isLogin ? 'Sign up' : 'Log in'}
