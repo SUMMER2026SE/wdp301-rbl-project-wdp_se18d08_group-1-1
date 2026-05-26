@@ -78,8 +78,45 @@ const changePasswordValidator = [
     }),
 ];
 
+/**
+ * Validation rules for sending OTP
+ */
+const sendOTPValidator = [
+  body('email')
+    .trim()
+    .notEmpty()
+    .withMessage('Email is required')
+    .isEmail()
+    .withMessage('Please provide a valid email')
+    .normalizeEmail(),
+];
+
+/**
+ * Validation rules for verifying OTP
+ */
+const verifyOTPValidator = [
+  body('email')
+    .trim()
+    .notEmpty()
+    .withMessage('Email is required')
+    .isEmail()
+    .withMessage('Please provide a valid email')
+    .normalizeEmail(),
+
+  body('otp')
+    .trim()
+    .notEmpty()
+    .withMessage('OTP is required')
+    .isLength({ min: 6, max: 6 })
+    .withMessage('OTP must be 6 digits')
+    .isNumeric()
+    .withMessage('OTP must contain only digits'),
+];
+
 module.exports = {
   registerValidator,
   loginValidator,
   changePasswordValidator,
+  sendOTPValidator,
+  verifyOTPValidator,
 };

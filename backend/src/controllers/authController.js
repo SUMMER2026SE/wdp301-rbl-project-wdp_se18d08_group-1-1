@@ -1,4 +1,5 @@
 const { validationResult } = require('express-validator');
+const { OAuth2Client } = require('google-auth-library');
 const User = require('../models/User');
 const UserDetail = require('../models/UserDetail');
 const UserToken = require('../models/UserToken');
@@ -7,6 +8,9 @@ const {
   generateRefreshToken,
   verifyRefreshToken,
 } = require('../utils/tokenUtils');
+const { generateOTP, sendOTPEmail } = require('../utils/emailUtils');
+
+const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 /**
  * @desc    Register a new user
@@ -302,10 +306,256 @@ const getMe = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Login / Register with Google OAuth
+ * @route   POST /api/auth/google
+ * @access  Public
+ */
+const googleLogin = async (req, res, next) => {
+  try {
+    const { idToken } = req.body;
+
+    if (!idToken) {
+      return res.status(400).json({
+        success: false,
+        message: 'Google ID token is required.',
+      });
+    }
+
+    // Verify the Google ID token
+    let payload;
+    try {
+      const ticket = await googleClient.verifyIdToken({
+        idToken,
+        audience: process.env.GOOGLE_CLIENT_ID,
+      });
+      payload = ticket.getPayload();
+    } catch {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid Google token.',
+      });
+    }
+
+    const { sub: googleId, email, name, picture } = payload;
+
+    // Find existing user by googleId or email
+    let user = await User.findOne({ $or: [{ googleId }, { email }] });
+
+    if (user) {
+      // Link googleId if not already linked
+      if (!user.googleId) {
+        user.googleId = googleId;
+        user.isEmailVerified = true;
+        await user.save();
+      }
+
+      if (!user.status) {
+        return res.status(403).json({
+          success: false,
+          message: 'Your account has been deactivated. Please contact admin.',
+        });
+      }
+    } else {
+      // Create new user from Google info
+      const baseUsername = (name || email.split('@')[0])
+        .toLowerCase()
+        .replace(/[^a-z0-9_]/g, '_')
+        .slice(0, 25);
+
+      // Ensure username is unique by appending random suffix if needed
+      let username = baseUsername;
+      const existing = await User.findOne({ username });
+      if (existing) {
+        username = `${baseUsername}_${Math.floor(1000 + Math.random() * 9000)}`;
+      }
+
+      user = await User.create({
+        username,
+        email,
+        googleId,
+        isEmailVerified: true,
+        role: 'customer',
+      });
+
+      // Create empty user detail profile
+      await UserDetail.create({
+        userId: user._id,
+        fullName: name || '',
+        avatarUrl: picture || '',
+      });
+    }
+
+    // Generate tokens
+    const accessToken = generateAccessToken(user);
+    const refreshToken = generateRefreshToken(user);
+
+    await UserToken.deleteMany({ userId: user._id, type: 'refresh' });
+
+    const refreshExpiry = new Date();
+    refreshExpiry.setDate(refreshExpiry.getDate() + 7);
+
+    await UserToken.create({
+      userId: user._id,
+      type: 'refresh',
+      tokenValue: refreshToken,
+      expiresAt: refreshExpiry,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Google login successful',
+      data: {
+        user: {
+          id: user._id,
+          username: user.username,
+          email: user.email,
+          role: user.role,
+        },
+        accessToken,
+        refreshToken,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Send OTP to email for account verification
+ * @route   POST /api/auth/send-otp
+ * @access  Public
+ */
+const sendOTP = async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array().map((err) => ({ field: err.path, message: err.msg })),
+      });
+    }
+
+    const { email } = req.body;
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'No account found with this email.',
+      });
+    }
+
+    if (user.isEmailVerified) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is already verified.',
+      });
+    }
+
+    // Remove any existing OTP for this user
+    await UserToken.deleteMany({ userId: user._id, type: 'email_verification' });
+
+    // Generate OTP and set 10-minute expiry
+    const otp = generateOTP();
+    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+
+    await UserToken.create({
+      userId: user._id,
+      type: 'email_verification',
+      tokenValue: otp,
+      expiresAt: otpExpiry,
+    });
+
+    await sendOTPEmail(email, otp);
+
+    res.status(200).json({
+      success: true,
+      message: 'OTP sent to your email. It will expire in 10 minutes.',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Verify OTP to confirm email
+ * @route   POST /api/auth/verify-otp
+ * @access  Public
+ */
+const verifyOTP = async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array().map((err) => ({ field: err.path, message: err.msg })),
+      });
+    }
+
+    const { email, otp } = req.body;
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'No account found with this email.',
+      });
+    }
+
+    if (user.isEmailVerified) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is already verified.',
+      });
+    }
+
+    // Find the OTP record
+    const otpRecord = await UserToken.findOne({
+      userId: user._id,
+      type: 'email_verification',
+      tokenValue: otp,
+    });
+
+    if (!otpRecord) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or expired OTP.',
+      });
+    }
+
+    // Check expiry (TTL index handles cleanup but we double-check)
+    if (otpRecord.expiresAt < new Date()) {
+      await otpRecord.deleteOne();
+      return res.status(400).json({
+        success: false,
+        message: 'OTP has expired. Please request a new one.',
+      });
+    }
+
+    // Mark email as verified and delete OTP
+    user.isEmailVerified = true;
+    await user.save();
+    await otpRecord.deleteOne();
+
+    res.status(200).json({
+      success: true,
+      message: 'Email verified successfully.',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   register,
   login,
   refreshAccessToken,
   logout,
   getMe,
+  googleLogin,
+  sendOTP,
+  verifyOTP,
 };
