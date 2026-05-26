@@ -202,38 +202,68 @@ export default function LoginPage() {
   };
 
   const handleGoogleAuth = () => {
-    if (!window.google?.accounts?.id) {
-      showToast('error', 'Google đang tải, vui lòng thử lại sau.');
-      return;
-    }
-    window.google.accounts.id.initialize({
-      client_id: import.meta.env.VITE_GOOGLE_CLIENT_ID,
-      callback: async ({ credential }) => {
-        setLoading(true);
-        try {
-          const { ok, data } = await loginWithGoogle(credential);
-          if (!ok) {
-            showToast('error', data.message || 'Google login thất bại. Vui lòng thử lại.');
-            return;
-          }
-          const { user, accessToken, refreshToken } = data.data;
-          localStorage.setItem('accessToken', accessToken);
-          localStorage.setItem('refreshToken', refreshToken);
-          sessionStorage.setItem('valo_user', JSON.stringify({
-            id: user.id, name: user.username, email: user.email, role: user.role,
-          }));
-          window.dispatchEvent(new Event('valo_auth_change'));
-          showToast('success', `Chào mừng, ${user.username}!`);
-          const roleRedirect = { admin: '/admin/dashboard', manager: '/manager/dashboard' };
-          setTimeout(() => navigate(roleRedirect[user.role] || '/'), 1000);
-        } catch {
-          showToast('error', 'Không thể kết nối đến máy chủ. Vui lòng thử lại sau.');
-        } finally {
-          setLoading(false);
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+    const redirectUri = encodeURIComponent(`${window.location.origin}/oauth/callback`);
+    const scope = encodeURIComponent('openid email profile');
+    const nonce = Math.random().toString(36).slice(2);
+
+    const oauthUrl =
+      `https://accounts.google.com/o/oauth2/v2/auth` +
+      `?client_id=${clientId}` +
+      `&redirect_uri=${redirectUri}` +
+      `&response_type=id_token` +
+      `&scope=${scope}` +
+      `&nonce=${nonce}`;
+
+    const popup = window.open(oauthUrl, 'google-oauth', 'width=500,height=600,left=200,top=100');
+
+    let checkClosed;
+
+    const handleMessage = async (event) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data?.type !== 'GOOGLE_OAUTH') return;
+
+      window.removeEventListener('message', handleMessage);
+      clearInterval(checkClosed);
+
+      const { idToken, error } = event.data;
+      if (error || !idToken) {
+        showToast('error', 'Google login bị hủy hoặc thất bại.');
+        return;
+      }
+
+      setLoading(true);
+      try {
+        const { ok, data } = await loginWithGoogle(idToken);
+        if (!ok) {
+          showToast('error', data.message || 'Google login thất bại.');
+          return;
         }
-      },
-    });
-    window.google.accounts.id.prompt();
+        const { user, accessToken, refreshToken } = data.data;
+        localStorage.setItem('accessToken', accessToken);
+        localStorage.setItem('refreshToken', refreshToken);
+        sessionStorage.setItem('valo_user', JSON.stringify({
+          id: user.id, name: user.username, email: user.email, role: user.role,
+        }));
+        window.dispatchEvent(new Event('valo_auth_change'));
+        showToast('success', `Chào mừng, ${user.username}!`);
+        const roleRedirect = { admin: '/admin/dashboard', manager: '/manager/dashboard' };
+        setTimeout(() => navigate(roleRedirect[user.role] || '/'), 1000);
+      } catch {
+        showToast('error', 'Không thể kết nối đến máy chủ.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+
+    checkClosed = setInterval(() => {
+      if (popup?.closed) {
+        clearInterval(checkClosed);
+        window.removeEventListener('message', handleMessage);
+      }
+    }, 500);
   };
 
   const isLogin = mode === 'login';
