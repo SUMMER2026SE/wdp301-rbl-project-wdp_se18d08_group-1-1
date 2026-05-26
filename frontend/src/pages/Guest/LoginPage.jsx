@@ -523,22 +523,26 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* ── Google Button ── */}
-          <button
-            id="btn-google-auth"
-            onClick={handleGoogleAuth}
-            className="w-full flex items-center justify-center gap-3 bg-white hover:bg-gray-50 text-gray-800 font-bold py-3.5 rounded-xl transition-all duration-200 hover:shadow-xl hover:shadow-black/20 hover:-translate-y-0.5 active:scale-95 border border-gray-200 mb-6"
-          >
-            <GoogleIcon />
-            <span>{isLogin ? 'Continue with Google' : 'Sign up with Google'}</span>
-          </button>
+          {isLogin && !forgotStep && (
+            <>
+              {/* ── Google Button ── */}
+              <button
+                id="btn-google-auth"
+                onClick={handleGoogleAuth}
+                className="w-full flex items-center justify-center gap-3 bg-white hover:bg-gray-50 text-gray-800 font-bold py-3.5 rounded-xl transition-all duration-200 hover:shadow-xl hover:shadow-black/20 hover:-translate-y-0.5 active:scale-95 border border-gray-200 mb-6"
+              >
+                <GoogleIcon />
+                <span>{isLogin ? 'Continue with Google' : 'Sign up with Google'}</span>
+              </button>
 
-          {/* ── Divider ── */}
-          <div className="flex items-center gap-4 mb-6">
-            <div className="flex-1 h-px bg-white/10" />
-            <span className="text-gray-600 text-xs font-semibold uppercase tracking-wider">or continue with email</span>
-            <div className="flex-1 h-px bg-white/10" />
-          </div>
+              {/* ── Divider ── */}
+              <div className="flex items-center gap-4 mb-6">
+                <div className="flex-1 h-px bg-white/10" />
+                <span className="text-gray-600 text-xs font-semibold uppercase tracking-wider">or continue with email</span>
+                <div className="flex-1 h-px bg-white/10" />
+              </div>
+            </>
+          )}
 
           {/* ── Form / OTP Step / Forgot Password ── */}
           {isLogin && forgotStep === 'email' ? (
