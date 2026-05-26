@@ -2,7 +2,7 @@ import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 
 // Layouts
-import MainLayout      from './layouts/MainLayout';
+import MainLayout from './layouts/MainLayout';
 import DashboardLayout from './layouts/DashboardLayout';
 
 // Guard
@@ -86,4 +86,4 @@ export default function App() {
     </BrowserRouter>
   );
 }
-
+

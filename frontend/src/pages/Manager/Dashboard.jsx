@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   MonitorCheck, Car, Gauge, FileWarning, ClipboardList,
   TrendingUp, CheckCircle2, AlertTriangle, Clock, DoorOpen,
-  XCircle, ArrowRightCircle,
+  XCircle, ArrowRightCircle, QrCode,
 } from 'lucide-react';
 
 // ─── Stat Card ─────────────────────────────────────────────────────────────────
@@ -88,8 +88,8 @@ export default function ManagerDashboard() {
       {/* ── Stat cards ── */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
         <StatCard
-          icon={<MonitorCheck size={18} className="text-emerald-400" />}
-          color="bg-emerald-500/10"
+          icon={<MonitorCheck size={18} className="text-yellow-400" />}
+          color="bg-yellow-500/10"
           label="Slots Under Management"
           value="124"
           sub="3 lots assigned"
@@ -160,7 +160,7 @@ export default function ManagerDashboard() {
 
         {/* Gate Control Panel */}
         <div className="bg-[#16181F] border border-white/5 rounded-2xl p-5 flex flex-col gap-4">
-          <h3 className="text-white font-bold text-sm">Gate Control</h3>
+          <h3 className="text-white font-bold text-sm">Gate & Quick Actions</h3>
 
           {/* Open Gate Manually */}
           <div className={`rounded-2xl border p-4 flex flex-col items-center gap-3 transition-all duration-300 ${
@@ -186,17 +186,26 @@ export default function ManagerDashboard() {
           </div>
 
           {/* Process Vehicle Exit */}
-          <button className="w-full flex items-center gap-2.5 p-3.5 rounded-xl bg-sky-500/8 border border-sky-500/15 hover:bg-sky-500/12 transition-colors text-left">
-            <ArrowRightCircle size={16} className="text-sky-400 shrink-0" />
+          <button className="w-full flex items-center gap-2.5 p-3.5 rounded-xl bg-sky-500/8 border border-sky-500/15 hover:bg-sky-500/12 transition-colors text-left group">
+            <ArrowRightCircle size={16} className="text-sky-400 shrink-0 group-hover:translate-x-0.5 transition-transform" />
             <div>
               <p className="text-xs font-bold text-gray-300">Process Vehicle Exit</p>
               <p className="text-[10px] text-gray-600">Confirm cash / deduct wallet</p>
             </div>
           </button>
 
+          {/* Scan QR Check-out */}
+          <button className="w-full flex items-center gap-2.5 p-3.5 rounded-xl bg-yellow-500/8 border border-yellow-500/15 hover:bg-yellow-500/12 transition-colors text-left group">
+            <QrCode size={16} className="text-yellow-400 shrink-0 group-hover:scale-110 transition-transform" />
+            <div>
+              <p className="text-xs font-bold text-gray-300">Scan QR Check-out</p>
+              <p className="text-[10px] text-gray-600">Manual checkout / Kiosk fallback</p>
+            </div>
+          </button>
+
           {/* Update Slot Status */}
-          <button className="w-full flex items-center gap-2.5 p-3.5 rounded-xl bg-yellow-500/8 border border-yellow-500/15 hover:bg-yellow-500/12 transition-colors text-left">
-            <ClipboardList size={16} className="text-yellow-400 shrink-0" />
+          <button className="w-full flex items-center gap-2.5 p-3.5 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors text-left group">
+            <ClipboardList size={16} className="text-gray-400 shrink-0 group-hover:-translate-y-0.5 transition-transform" />
             <div>
               <p className="text-xs font-bold text-gray-300">Update Slot Status</p>
               <p className="text-[10px] text-gray-600">Mark as maintenance / blocked</p>

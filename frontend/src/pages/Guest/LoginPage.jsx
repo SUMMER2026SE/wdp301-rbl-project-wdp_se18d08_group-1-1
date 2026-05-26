@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, User, ArrowRight, Zap, ShieldCheck, Car, CheckCircle, XCircle } from 'lucide-react';
 import Logo from '../../assets/images/logo.png';
 
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = 'http://localhost:5001/api';
 
 // ─── Google Icon SVG ───────────────────────────────────────────────────────────
 const GoogleIcon = () => (
@@ -96,7 +96,7 @@ export default function LoginPage() {
 
         // ── Redirect theo role ──
         const roleRedirect = {
-          admin:   '/admin/dashboard',
+          admin: '/admin/dashboard',
           manager: '/manager/dashboard',
         };
         const dest = roleRedirect[user.role] || '/';
@@ -157,11 +157,10 @@ export default function LoginPage() {
       {/* ── Toast notification ── */}
       {toast && (
         <div
-          className={`fixed top-6 left-1/2 -translate-x-1/2 z-[999] flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-2xl text-sm font-semibold transition-all duration-300 ${
-            toast.type === 'success'
+          className={`fixed top-6 left-1/2 -translate-x-1/2 z-[999] flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-2xl text-sm font-semibold transition-all duration-300 ${toast.type === 'success'
               ? 'bg-green-900/90 border border-green-500/40 text-green-200'
               : 'bg-red-900/90 border border-red-500/40 text-red-200'
-          }`}
+            }`}
         >
           {toast.type === 'success'
             ? <CheckCircle size={18} className="text-green-400 shrink-0" />
@@ -172,11 +171,11 @@ export default function LoginPage() {
 
       {/* ── Decorative particles ── */}
       {[
-        { top: '10%',  left: '8%',  animationDelay: '0s',   animationDuration: '3s'  },
-        { top: '25%',  left: '15%', animationDelay: '0.8s', animationDuration: '4s'  },
-        { top: '70%',  left: '5%',  animationDelay: '1.5s', animationDuration: '2.5s'},
-        { top: '85%',  left: '20%', animationDelay: '0.3s', animationDuration: '3.5s'},
-        { top: '40%',  left: '3%',  animationDelay: '2s',   animationDuration: '5s'  },
+        { top: '10%', left: '8%', animationDelay: '0s', animationDuration: '3s' },
+        { top: '25%', left: '15%', animationDelay: '0.8s', animationDuration: '4s' },
+        { top: '70%', left: '5%', animationDelay: '1.5s', animationDuration: '2.5s' },
+        { top: '85%', left: '20%', animationDelay: '0.3s', animationDuration: '3.5s' },
+        { top: '40%', left: '3%', animationDelay: '2s', animationDuration: '5s' },
       ].map((s, i) => <Particle key={i} style={s} />)}
 
       {/* ════════════════════════════════════════════
@@ -261,11 +260,10 @@ export default function LoginPage() {
                 key={m}
                 id={`tab-${m}`}
                 onClick={() => { setMode(m); setShowPassword(false); setShowConfirm(false); }}
-                className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all duration-300 ${
-                  mode === m
+                className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all duration-300 ${mode === m
                     ? 'bg-gold text-charcoal shadow-lg shadow-gold/20'
                     : 'text-gray-400 hover:text-white'
-                }`}
+                  }`}
               >
                 {m === 'login' ? 'Log In' : 'Sign Up'}
               </button>
