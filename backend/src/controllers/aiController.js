@@ -15,6 +15,7 @@ exports.scanPlate = async (req, res, next) => {
     // PlateRecognizer expects multipart form-data
     const formData = new FormData();
     formData.append('upload', buffer, { filename: 'capture.jpg', contentType: 'image/jpeg' });
+    formData.append('regions', 'vn'); // Optimize for Vietnamese plates
 
     // Ensure token is present
     if (!process.env.PLATE_RECOGNIZER_TOKEN) {

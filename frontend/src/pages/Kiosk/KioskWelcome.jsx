@@ -21,26 +21,64 @@ export default function KioskWelcome({ onStart, updateFormData }) {
   };
 
   const formatVietnamesePlate = (plate) => {
-    if (!plate) return '';
-    // Clean up all non-alphanumeric
+    if (!plate) return null;
     const clean = plate.toUpperCase().replace(/[^A-Z0-9]/g, '');
     
-    // Match standard Vietnamese plate format: [2 digits][1-2 letters][4-5 digits]
-    const match = clean.match(/^(\d{2}[A-Z]{1,2})(\d{4,5})$/);
-    
-    if (match) {
-      const prefix = match[1];
-      const numbers = match[2];
+    let province, series, numbers;
+
+    // Explicitly parse based on length to avoid regex ambiguity (greedy digits)
+    if (clean.length === 9) {
+      // 9 chars: Motorbike (43B1-123.45) OR Car 2-letter (43LD-123.45)
+      if (/^\d{2}[A-Z]\d\d{5}$/.test(clean)) { // Motorbike
+        province = clean.slice(0, 2);
+        series = clean.slice(2, 4);
+        numbers = clean.slice(4);
+      } else if (/^\d{2}[A-Z]{2}\d{5}$/.test(clean)) { // Car LD/KT
+        province = clean.slice(0, 2);
+        series = clean.slice(2, 4);
+        numbers = clean.slice(4);
+      }
+    } else if (clean.length === 8) {
+      // 8 chars: Car 5-digit (30F-557.75 -> 30F55775) OR Motorbike 4-digit (43B1-1234 -> 43B11234)
+      // We PRIORITIZE Car 5-digit because it is the standard now, and fixes the F5 bug.
+      if (/^\d{2}[A-Z]\d{5}$/.test(clean)) {
+        province = clean.slice(0, 2);
+        series = clean.slice(2, 3);
+        numbers = clean.slice(3);
+      } else if (/^\d{2}[A-Z]\d\d{4}$/.test(clean)) {
+        province = clean.slice(0, 2);
+        series = clean.slice(2, 4);
+        numbers = clean.slice(4);
+      } else if (/^\d{2}[A-Z]{2}\d{4}$/.test(clean)) { // Old Car LD 4-digit
+        province = clean.slice(0, 2);
+        series = clean.slice(2, 4);
+        numbers = clean.slice(4);
+      }
+    } else if (clean.length === 7) {
+      // 7 chars: Car 4-digit (43A-1234 -> 43A1234)
+      if (/^\d{2}[A-Z]\d{4}$/.test(clean)) {
+        province = clean.slice(0, 2);
+        series = clean.slice(2, 3);
+        numbers = clean.slice(3);
+      }
+    }
+
+    if (province && series && numbers) {
+      let formattedNumbers = numbers;
+      if (numbers.length === 5) {
+        formattedNumbers = `${numbers.slice(0,3)}.${numbers.slice(3)}`;
+      }
       
-      if (numbers.length === 4) {
-        return `${prefix}-${numbers}`;
-      } else if (numbers.length === 5) {
-        return `${prefix}-${numbers.slice(0,3)}.${numbers.slice(3)}`;
+      const isMotorbike = /\d/.test(series);
+      if (isMotorbike) {
+        return `${province}-${series} ${formattedNumbers}`;
+      } else {
+        return `${province}${series} - ${formattedNumbers}`;
       }
     }
     
-    // Fallback to raw string if it doesn't match standard format
-    return clean;
+    // STRICT VALIDATION: Reject if not standard
+    return null;
   };
 
   const startSilentScan = async () => {
@@ -66,13 +104,17 @@ export default function KioskWelcome({ onStart, updateFormData }) {
         // Try scanning up to 3 times to ensure a good capture
         let success = false;
         for (let i = 0; i < 3; i++) {
-          const result = await captureAndAnalyze();
-          if (result) {
-            if (updateFormData) {
-              updateFormData({ licensePlate: formatVietnamesePlate(result) });
+          const rawResult = await captureAndAnalyze();
+          if (rawResult) {
+            const formatted = formatVietnamesePlate(rawResult);
+            // Only accept if it passed the strict regex validation
+            if (formatted) {
+              if (updateFormData) {
+                updateFormData({ licensePlate: formatted });
+              }
+              success = true;
+              break;
             }
-            success = true;
-            break;
           }
           // Wait 1 second before retrying
           await new Promise(r => setTimeout(r, 1000));
