@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, User, ArrowRight, Zap, ShieldCheck, Car, CheckCircle, XCircle } from 'lucide-react';
 import Logo from '../../assets/images/logo.png';
-import { loginUser, registerUser, loginWithGoogle, sendOTP, verifyOTP, forgotPassword, resetPassword } from '../../services/authService';
+import { loginUser, registerUser, loginWithGoogle, sendOTP, verifyOTP, forgotPassword, verifyResetPasswordOTP, resetPassword } from '../../services/authService';
 
 // ─── Google Icon SVG ───────────────────────────────────────────────────────────
 const GoogleIcon = () => (
@@ -57,9 +57,10 @@ export default function LoginPage() {
   const otpRefs = useRef([]);
 
   // ── Forgot password state ──
-  const [forgotStep, setForgotStep] = useState(null); // null | 'email' | 'otp'
+  const [forgotStep, setForgotStep] = useState(null); // null | 'email' | 'otp' | 'password'
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotOtpDigits, setForgotOtpDigits] = useState(Array(6).fill(''));
+  const [forgotVerifiedOTP, setForgotVerifiedOTP] = useState('');
   const [forgotNewPass, setForgotNewPass] = useState('');
   const [forgotConfirmPass, setForgotConfirmPass] = useState('');
   const [forgotLoading, setForgotLoading] = useState(false);
@@ -243,6 +244,7 @@ export default function LoginPage() {
       const { ok, data } = await forgotPassword(forgotEmail);
       if (!ok) { showToast('error', data.message || 'Không gửi được mã.'); return; }
       setForgotStep('otp');
+      setForgotVerifiedOTP('');
       setForgotOtpDigits(Array(6).fill(''));
       showToast('success', `Mã OTP đã gửi đến ${forgotEmail}`);
     } catch {
@@ -252,21 +254,40 @@ export default function LoginPage() {
     }
   };
 
-  const handleForgotReset = async (e) => {
+  const handleForgotVerifyOTP = async (e) => {
     e.preventDefault();
     const code = forgotOtpDigits.join('');
     if (code.length !== 6) { showToast('error', 'Vui lòng nhập đủ 6 chữ số.'); return; }
+    setForgotLoading(true);
+    try {
+      const { ok, data } = await verifyResetPasswordOTP(forgotEmail, code);
+      if (!ok) { showToast('error', data.message || 'Mã OTP không hợp lệ.'); return; }
+      setForgotVerifiedOTP(code);
+      setForgotOtpDigits(Array(6).fill(''));
+      setForgotStep('password');
+      showToast('success', 'OTP hợp lệ. Bạn có thể nhập mật khẩu mới.');
+    } catch {
+      showToast('error', 'Không thể kết nối đến máy chủ.');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const handleForgotReset = async (e) => {
+    e.preventDefault();
+    if (!forgotVerifiedOTP) { showToast('error', 'Vui lòng xác minh OTP trước.'); return; }
     if (forgotNewPass.length < 6) { showToast('error', 'Mật khẩu phải ít nhất 6 ký tự.'); return; }
     if (forgotNewPass !== forgotConfirmPass) { showToast('error', 'Mật khẩu xác nhận không khớp.'); return; }
     setForgotLoading(true);
     try {
-      const { ok, data } = await resetPassword(forgotEmail, code, forgotNewPass);
+      const { ok, data } = await resetPassword(forgotEmail, forgotVerifiedOTP, forgotNewPass);
       if (!ok) { showToast('error', data.message || 'Đặt lại mật khẩu thất bại.'); return; }
       showToast('success', 'Đặt lại mật khẩu thành công! Vui lòng đăng nhập.');
       setTimeout(() => {
         setForgotStep(null);
         setForgotEmail('');
         setForgotOtpDigits(Array(6).fill(''));
+        setForgotVerifiedOTP('');
         setForgotNewPass('');
         setForgotConfirmPass('');
       }, 1500);
@@ -295,6 +316,7 @@ export default function LoginPage() {
     setForgotStep(null);
     setForgotEmail('');
     setForgotOtpDigits(Array(6).fill(''));
+    setForgotVerifiedOTP('');
     setForgotNewPass('');
     setForgotConfirmPass('');
   };
@@ -458,16 +480,18 @@ export default function LoginPage() {
           </div>
 
           {/* ── Heading ── */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-extrabold text-white mb-2">
-              {isLogin ? 'Welcome back' : 'Create account'}
-            </h1>
-            <p className="text-gray-500 text-sm">
-              {isLogin
-                ? 'Sign in to access your VALO dashboard'
-                : 'Join VALO and experience smart parking'}
-            </p>
-          </div>
+          {!(isLogin && forgotStep) && (
+            <div className="mb-8">
+              <h1 className="text-3xl font-extrabold text-white mb-2">
+                {isLogin ? 'Welcome back' : 'Create account'}
+              </h1>
+              <p className="text-gray-500 text-sm">
+                {isLogin
+                  ? 'Sign in to access your VALO dashboard'
+                  : 'Join VALO and experience smart parking'}
+              </p>
+            </div>
+          )}
 
           {/* ── Google Button ── */}
           <button
@@ -488,14 +512,13 @@ export default function LoginPage() {
 
           {/* ── Form / OTP Step / Forgot Password ── */}
           {isLogin && forgotStep === 'email' ? (
-            /* ── Forgot: Enter Email ── */
             <form onSubmit={handleForgotSendOTP} className="space-y-5" noValidate>
               <div className="text-center">
                 <div className="w-16 h-16 rounded-full bg-gold/10 border border-gold/20 flex items-center justify-center mx-auto mb-4">
                   <Lock size={28} className="text-gold" />
                 </div>
                 <h2 className="text-xl font-bold text-white mb-2">Quên mật khẩu?</h2>
-                <p className="text-gray-400 text-sm">Nhập email tài khoản — chúng tôi sẽ gửi mã OTP để đặt lại mật khẩu.</p>
+                <p className="text-gray-400 text-sm">Nhập email tài khoản để nhận mã OTP đặt lại mật khẩu.</p>
               </div>
               <div className="group">
                 <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Email</label>
@@ -517,7 +540,7 @@ export default function LoginPage() {
                 className="w-full flex items-center justify-center gap-2 bg-gold hover:bg-gold-dark text-charcoal font-extrabold py-4 rounded-xl transition-all duration-200 hover:shadow-xl hover:shadow-gold/25 hover:-translate-y-0.5 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed text-sm tracking-wide"
               >
                 {forgotLoading ? (
-                  <><svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Đang gửi…</>
+                  <><svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Đang gửi…</>
                 ) : (<>Gửi mã OTP <ArrowRight size={16} /></>)}
               </button>
               <button type="button" onClick={resetForgot} className="w-full text-sm text-gray-500 hover:text-gray-300 transition-colors text-center">
@@ -525,8 +548,7 @@ export default function LoginPage() {
               </button>
             </form>
           ) : isLogin && forgotStep === 'otp' ? (
-            /* ── Forgot: Enter OTP + New Password ── */
-            <form onSubmit={handleForgotReset} className="space-y-5" noValidate>
+            <form onSubmit={handleForgotVerifyOTP} className="space-y-5" noValidate>
               <div className="text-center">
                 <div className="w-16 h-16 rounded-full bg-gold/10 border border-gold/20 flex items-center justify-center mx-auto mb-4">
                   <Mail size={28} className="text-gold" />
@@ -550,6 +572,33 @@ export default function LoginPage() {
                     className="w-11 h-14 text-center text-xl font-bold bg-white/5 border border-white/10 focus:border-gold/60 rounded-xl text-white outline-none transition-all duration-200 focus:shadow-[0_0_0_3px_rgba(212,175,55,0.1)]"
                   />
                 ))}
+              </div>
+              <button
+                type="submit"
+                disabled={forgotLoading || forgotOtpDigits.join('').length !== 6}
+                className="w-full flex items-center justify-center gap-2 bg-gold hover:bg-gold-dark text-charcoal font-extrabold py-4 rounded-xl transition-all duration-200 hover:shadow-xl hover:shadow-gold/25 hover:-translate-y-0.5 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed text-sm tracking-wide"
+              >
+                {forgotLoading ? (
+                  <><svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Đang xác minh…</>
+                ) : (<>Xác minh OTP <ArrowRight size={16} /></>)}
+              </button>
+              <div className="flex items-center justify-between text-sm">
+                <button type="button" onClick={() => setForgotStep('email')} className="text-gray-500 hover:text-gray-300 transition-colors">
+                  ← Quay lại
+                </button>
+                <button type="button" onClick={handleForgotResendOTP} disabled={forgotLoading} className="text-gold hover:text-gold-light font-semibold transition-colors disabled:opacity-50">
+                  Gửi lại mã
+                </button>
+              </div>
+            </form>
+          ) : isLogin && forgotStep === 'password' ? (
+            <form onSubmit={handleForgotReset} className="space-y-5" noValidate>
+              <div className="text-center">
+                <div className="w-16 h-16 rounded-full bg-gold/10 border border-gold/20 flex items-center justify-center mx-auto mb-4">
+                  <Lock size={28} className="text-gold" />
+                </div>
+                <h2 className="text-xl font-bold text-white mb-2">Tạo mật khẩu mới</h2>
+                <p className="text-gray-400 text-sm">OTP đã xác minh. Nhập mật khẩu mới cho tài khoản của bạn.</p>
               </div>
               <div className="group">
                 <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Mật khẩu mới</label>
@@ -587,24 +636,20 @@ export default function LoginPage() {
               </div>
               <button
                 type="submit"
-                disabled={forgotLoading || forgotOtpDigits.join('').length !== 6}
+                disabled={forgotLoading}
                 className="w-full flex items-center justify-center gap-2 bg-gold hover:bg-gold-dark text-charcoal font-extrabold py-4 rounded-xl transition-all duration-200 hover:shadow-xl hover:shadow-gold/25 hover:-translate-y-0.5 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed text-sm tracking-wide"
               >
                 {forgotLoading ? (
-                  <><svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>Đang đặt lại…</>
+                  <><svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Đang đặt lại…</>
                 ) : (<>Đặt lại mật khẩu <ArrowRight size={16} /></>)}
               </button>
               <div className="flex items-center justify-between text-sm">
-                <button type="button" onClick={() => setForgotStep('email')} className="text-gray-500 hover:text-gray-300 transition-colors">
+                <button type="button" onClick={() => { setForgotStep('otp'); setForgotVerifiedOTP(''); }} className="text-gray-500 hover:text-gray-300 transition-colors">
                   ← Quay lại
-                </button>
-                <button type="button" onClick={handleForgotResendOTP} disabled={forgotLoading} className="text-gold hover:text-gold-light font-semibold transition-colors disabled:opacity-50">
-                  Gửi lại mã
                 </button>
               </div>
             </form>
           ) : !isLogin && signupStep === 'otp' ? (
-            /* ── OTP Verification ── */
             <form onSubmit={handleVerifyOTP} className="space-y-6" noValidate>
               <div className="text-center">
                 <div className="w-16 h-16 rounded-full bg-gold/10 border border-gold/20 flex items-center justify-center mx-auto mb-4">

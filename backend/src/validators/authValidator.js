@@ -127,6 +127,28 @@ const forgotPasswordValidator = [
 ];
 
 /**
+ * Validation rules for verify reset OTP
+ */
+const verifyResetPasswordOTPValidator = [
+  body('email')
+    .trim()
+    .notEmpty()
+    .withMessage('Email is required')
+    .isEmail()
+    .withMessage('Please provide a valid email')
+    .normalizeEmail(),
+
+  body('otp')
+    .trim()
+    .notEmpty()
+    .withMessage('OTP is required')
+    .isLength({ min: 6, max: 6 })
+    .withMessage('OTP must be 6 digits')
+    .isNumeric()
+    .withMessage('OTP must contain only digits'),
+];
+
+/**
  * Validation rules for reset password
  */
 const resetPasswordValidator = [
@@ -161,5 +183,6 @@ module.exports = {
   sendOTPValidator,
   verifyOTPValidator,
   forgotPasswordValidator,
+  verifyResetPasswordOTPValidator,
   resetPasswordValidator,
 };

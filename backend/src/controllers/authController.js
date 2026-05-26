@@ -601,6 +601,49 @@ const forgotPassword = async (req, res, next) => {
 };
 
 /**
+ * @desc    Verify OTP for password reset
+ * @route   POST /api/auth/verify-reset-otp
+ * @access  Public
+ */
+const verifyResetPasswordOTP = async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array().map((err) => ({ field: err.path, message: err.msg })),
+      });
+    }
+
+    const { email, otp } = req.body;
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(400).json({ success: false, message: 'Invalid request.' });
+    }
+
+    const otpRecord = await UserToken.findOne({
+      userId: user._id,
+      type: 'reset_password',
+      tokenValue: otp,
+    });
+
+    if (!otpRecord || otpRecord.expiresAt < new Date()) {
+      if (otpRecord) await otpRecord.deleteOne();
+      return res.status(400).json({ success: false, message: 'Invalid or expired OTP.' });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'OTP verified successfully.',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * @desc    Reset password using OTP
  * @route   POST /api/auth/reset-password
  * @access  Public
@@ -661,5 +704,6 @@ module.exports = {
   sendOTP,
   verifyOTP,
   forgotPassword,
+  verifyResetPasswordOTP,
   resetPassword,
 };
