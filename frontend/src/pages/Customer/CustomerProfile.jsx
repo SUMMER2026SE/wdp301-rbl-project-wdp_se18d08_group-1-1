@@ -1,5 +1,7 @@
 ﻿import { useState, useEffect, useRef } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
+import logoImg from "../../assets/images/logo.png";
+import { apiFetch } from "../../services/api";
 import {
   Home,
   User,
@@ -13,27 +15,10 @@ import {
   Pencil,
   Check,
   X,
-  Lock,
   Eye,
   EyeOff,
-  ChevronDown,
   CreditCard,
 } from "lucide-react";
-
-// ─── Seed / dummy data ────────────────────────────────────────────────────────
-const DUMMY_USER = {
-  name: "Nguyễn Văn A",
-  role: "Customer",
-  phone: "+84 90 123 4567",
-  email: "nguyenvana@gmail.com",
-  avatar:
-    "https://ui-avatars.com/api/?name=Nguyen+Van+A&background=1a1a1a&color=D4AF37&size=400&bold=true&font-size=0.38",
-  wallet: { balance: 2_450_000 },
-  vehicles: [
-    { id: 1, plate: "30A-888.88", type: "Car" },
-    { id: 2, plate: "51G-123.45", type: "Motorbike" },
-  ],
-};
 
 const NAV_ITEMS = [
   { label: "Home", icon: Home, to: "/" },
@@ -57,22 +42,46 @@ const formatVND = (amount) =>
     amount,
   );
 
+// ─── Map raw API response → UI profile state ─────────────────────────────────
+const buildProfile = (raw) => {
+  const p = raw.profile || {};
+  const firstName = p.firstName || raw.firstName || "";
+  const lastName  = p.lastName  || raw.lastName  || "";
+  const name = [firstName, lastName].filter(Boolean).join(" ") || raw.username || "User";
+  return {
+    name,
+    firstName,
+    lastName,
+    phone:    p.phone    || raw.phone    || "",
+    email:    raw.email  || "",
+    avatar:   p.avatar   || raw.avatar   || "",
+    role:     raw.role   || "Customer",
+    wallet:   raw.wallet || { balance: 0 },
+    vehicles: raw.vehicles || [],
+  };
+};
+
 // ─── Logo — shared between sidebar & topbar ───────────────────────────────────
-function Logo({ textSize = "text-[14px]", vSize = "text-3xl" }) {
+function Logo({ textClass = "text-[15px]", imgClass = "h-8" }) {
   return (
-    <div className="flex items-center gap-2.5">
-      <span
-        className={`${vSize} font-extrabold text-yellow-500 leading-none shrink-0`}
-      >
-        V
-      </span>
-      <span
-        className={`${textSize} font-extrabold leading-tight whitespace-nowrap
-          bg-gradient-to-r from-yellow-600 via-yellow-400 to-yellow-300
-          bg-clip-text text-transparent`}
-      >
-        VALO PARKING
-      </span>
+    <div className="flex items-center gap-3">
+      <img
+        src={logoImg}
+        alt="Valo Parking"
+        className={`${imgClass} w-auto object-contain shrink-0`}
+      />
+      <div className="flex flex-col leading-none gap-0.5">
+        <span
+          className={`${textClass} font-black tracking-widest whitespace-nowrap
+            bg-gradient-to-r from-yellow-500 via-yellow-300 to-yellow-600
+            bg-clip-text text-transparent`}
+        >
+          VALO PARKING
+        </span>
+        <span className="text-[9px] font-semibold tracking-[0.22em] whitespace-nowrap text-gray-400 dark:text-gray-500 uppercase">
+          Smart Parking
+        </span>
+      </div>
     </div>
   );
 }
@@ -176,40 +185,6 @@ function EditableField({ field, label, value, goldText = false, onSave }) {
   );
 }
 
-// ─── Password field row ───────────────────────────────────────────────────────
-function PwField({ label, value, show, onChange, onToggleShow }) {
-  return (
-    <div>
-      <label className="text-[10px] text-gray-400 uppercase tracking-widest block mb-1.5 font-semibold select-none">
-        {label}
-      </label>
-      <div className="relative">
-        <input
-          type={show ? "text" : "password"}
-          value={value}
-          onChange={onChange}
-          placeholder="••••••••"
-          className="
-            w-full rounded-xl px-4 py-2.5 text-sm outline-none pr-10
-            border transition-all duration-200
-            bg-gray-100 border-gray-300 text-gray-900 placeholder:text-gray-400
-            focus:border-yellow-500/60 focus:ring-1 focus:ring-yellow-500/20
-            dark:bg-white/5 dark:border-white/10 dark:text-white dark:placeholder:text-gray-600
-            dark:focus:border-yellow-500/50 dark:focus:ring-yellow-500/20
-          "
-        />
-        <button
-          type="button"
-          onClick={onToggleShow}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-        >
-          {show ? <EyeOff size={14} /> : <Eye size={14} />}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function CustomerProfile() {
   const navigate = useNavigate();
@@ -218,6 +193,8 @@ export default function CustomerProfile() {
   // ── Profile state ──────────────────────────────────────────────────────────
   const [profile, setProfile] = useState({
     name: "",
+    firstName: "",
+    lastName: "",
     phone: "",
     email: "",
     avatar: "",
@@ -232,33 +209,28 @@ export default function CustomerProfile() {
   );
 
   // ── Other UI state ─────────────────────────────────────────────────────────
-  const [pwOpen, setPwOpen] = useState(false);
-  const [pwForm, setPwForm] = useState({ current: "", next: "", confirm: "" });
-  const [showPw, setShowPw] = useState({
-    current: false,
-    next: false,
-    confirm: false,
-  });
   const [balanceHidden, setBalanceHidden] = useState(true);
   const [toast, setToast] = useState(null);
 
-  // ── Fetch user data on mount (API skeleton) ────────────────────────────────
+  // ── Fetch user data on mount ───────────────────────────────────────────────
   useEffect(() => {
     const fetchUserData = async () => {
-      // TODO: replace with → const res = await api.get("/user/profile");
-      const session = JSON.parse(sessionStorage.getItem("valo_user") || "null");
-      await new Promise((r) => setTimeout(r, 300));
+      // Show cached data immediately so page doesn't flicker on navigation
+      const cached = JSON.parse(sessionStorage.getItem("valo_user") || "null");
+      if (cached) setProfile(buildProfile(cached));
 
-      if (session) {
-        const name  = session.name  ?? session.fullName  ?? DUMMY_USER.name;
-        const email = session.email ?? DUMMY_USER.email;
-        const phone = session.phone ?? session.phoneNumber ?? DUMMY_USER.phone;
-        // Use real avatar URL if provided; otherwise leave empty → initials div renders
-        const avatar = session.avatar ?? session.avatarUrl ?? "";
+      // Always refresh from the real API
+      const token = localStorage.getItem("accessToken");
+      if (!token) return;
 
-        setProfile({ ...DUMMY_USER, name, email, phone, avatar });
-      } else {
-        setProfile(DUMMY_USER);
+      const { ok, data } = await apiFetch("/profile", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (ok && data?.success) {
+        setProfile(buildProfile(data.data));
+        // Keep cache fresh so quick back-navigation is instant
+        sessionStorage.setItem("valo_user", JSON.stringify(data.data));
       }
     };
     fetchUserData();
@@ -278,23 +250,42 @@ export default function CustomerProfile() {
     setTimeout(() => setToast(null), 2500);
   };
 
-  // ── Save profile field (API skeleton) ─────────────────────────────────────
-  const handleSaveProfile = (field, value) => {
-    // Update local state
-    setProfile((prev) => ({ ...prev, [field]: value }));
-
-    // Persist to sessionStorage so sidebar & refreshes stay in sync
-    try {
-      const session = JSON.parse(sessionStorage.getItem("valo_user") || "{}");
-      sessionStorage.setItem("valo_user", JSON.stringify({ ...session, [field]: value }));
-    } catch { /* ignore storage errors */ }
-
+  // ── Save profile field → real API ──────────────────────────────────────────
+  const handleSaveProfile = async (field, value) => {
+    // Optimistic UI update
+    const updated = { ...profile, [field]: value };
+    if (field === "name") {
+      const spaceIdx = value.lastIndexOf(" ");
+      updated.firstName = spaceIdx > 0 ? value.slice(0, spaceIdx) : value;
+      updated.lastName  = spaceIdx > 0 ? value.slice(spaceIdx + 1) : "";
+    }
+    setProfile(updated);
     setToast({ msg: "Saving...", type: "saving" });
-    // TODO: await api.patch("/user/profile", { [field]: value });
-    setTimeout(() => {
+
+    const token = localStorage.getItem("accessToken");
+    if (!token) { showToast("Not authenticated", "error"); return; }
+
+    const { ok, data } = await apiFetch("/profile", {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        firstName: updated.firstName,
+        lastName:  updated.lastName,
+        phone:     updated.phone,
+      }),
+    });
+
+    if (ok && data?.success) {
+      const fresh = buildProfile(data.data);
+      setProfile(fresh);
+      sessionStorage.setItem("valo_user", JSON.stringify(data.data));
       setToast({ msg: "Profile updated ✓", type: "success" });
       setTimeout(() => setToast(null), 2000);
-    }, 700);
+    } else {
+      // Rollback on error
+      setProfile(profile);
+      showToast(data?.message || "Update failed", "error");
+    }
   };
 
   // ── Avatar upload — instant preview (API skeleton) ─────────────────────────
@@ -308,7 +299,16 @@ export default function CustomerProfile() {
   };
 
   // ── Logout ─────────────────────────────────────────────────────────────────
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    const token = localStorage.getItem("accessToken");
+    if (token) {
+      await apiFetch("/auth/logout", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    }
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("refreshToken");
     sessionStorage.removeItem("valo_user");
     window.dispatchEvent(new Event("valo_auth_change"));
     navigate("/login");
@@ -320,7 +320,7 @@ export default function CustomerProfile() {
   const renderSidebar = () => (
     <aside
       className="
-        hidden md:flex w-52 flex-col flex-shrink-0 min-h-screen sticky top-0 z-30
+        hidden md:flex w-64 flex-col flex-shrink-0 min-h-screen sticky top-0 z-30
         bg-white shadow-lg border-r border-gray-200
         dark:bg-[#141414] dark:shadow-none dark:border-white/10
         transition-colors duration-300
@@ -450,7 +450,7 @@ export default function CustomerProfile() {
             transition-colors duration-300
           "
         >
-          <Logo textSize="text-xs" vSize="text-2xl" />
+          <Logo textClass="text-xs tracking-wider" imgClass="h-6" />
           <div className="flex items-center gap-1">
             <button
               onClick={toggleDarkMode}
@@ -542,78 +542,18 @@ export default function CustomerProfile() {
                   value={profile.phone}
                   onSave={handleSaveProfile}
                 />
-                <EditableField
-                  field="email"
-                  label="Email"
-                  value={profile.email}
-                  onSave={handleSaveProfile}
-                />
-              </div>
-
-              {/* Change Password accordion */}
-              <div>
-                <button
-                  onClick={() => setPwOpen((o) => !o)}
-                  className="flex items-center gap-1.5 text-yellow-500 hover:text-yellow-400 dark:hover:text-yellow-300 text-sm font-semibold transition-colors mx-auto sm:mx-0"
-                >
-                  <Lock size={13} />
-                  <span>Change Password</span>
-                  <ChevronDown
-                    size={13}
-                    className={`transition-transform duration-300 ${pwOpen ? "rotate-180" : ""}`}
-                  />
-                </button>
-
-                <div
-                  className={`overflow-hidden transition-all duration-300 ease-in-out
-                    ${pwOpen ? "max-h-[440px] opacity-100 mt-4" : "max-h-0 opacity-0"}`}
-                >
-                  <div
-                    className="
-                      rounded-2xl p-5 space-y-3 border
-                      bg-gray-100 border-gray-200
-                      dark:bg-white/[0.04] dark:backdrop-blur-md dark:border-white/10
-                    "
-                  >
-                    <PwField
-                      label="Current Password"
-                      value={pwForm.current}
-                      show={showPw.current}
-                      onChange={(e) =>
-                        setPwForm((p) => ({ ...p, current: e.target.value }))
-                      }
-                      onToggleShow={() =>
-                        setShowPw((p) => ({ ...p, current: !p.current }))
-                      }
-                    />
-                    <PwField
-                      label="New Password"
-                      value={pwForm.next}
-                      show={showPw.next}
-                      onChange={(e) =>
-                        setPwForm((p) => ({ ...p, next: e.target.value }))
-                      }
-                      onToggleShow={() =>
-                        setShowPw((p) => ({ ...p, next: !p.next }))
-                      }
-                    />
-                    <PwField
-                      label="Confirm New Password"
-                      value={pwForm.confirm}
-                      show={showPw.confirm}
-                      onChange={(e) =>
-                        setPwForm((p) => ({ ...p, confirm: e.target.value }))
-                      }
-                      onToggleShow={() =>
-                        setShowPw((p) => ({ ...p, confirm: !p.confirm }))
-                      }
-                    />
-                    <button className="w-full mt-1 bg-yellow-500 hover:bg-yellow-400 active:bg-yellow-600 text-black font-bold py-2.5 rounded-xl text-sm transition-colors duration-150">
-                      Update Password
-                    </button>
-                  </div>
+                {/* Email is tied to the account, shown read-only */}
+                <div>
+                  <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1 font-semibold select-none">
+                    Email
+                  </p>
+                  <p className="text-base font-bold leading-tight text-gray-900 dark:text-white min-h-[28px]">
+                    {profile.email || <span className="text-gray-400 font-normal italic text-sm">—</span>}
+                  </p>
                 </div>
               </div>
+
+
             </div>
           </div>
 
