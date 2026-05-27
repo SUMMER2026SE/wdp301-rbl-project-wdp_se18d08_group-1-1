@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
+import logoImg from "../assets/images/logo.png";
 import {
   LayoutDashboard,
   Users,
@@ -9,6 +10,11 @@ import {
   Wrench,
   BarChart2,
   DollarSign,
+  // Customer icons
+  Home,
+  User,
+  Wallet,
+  Settings,
   // Manager icons
   MonitorCheck,
   Car,
@@ -21,8 +27,9 @@ import {
   Bell,
   LogOut,
   Menu,
-  X,
   ChevronDown,
+  Moon,
+  Sun,
 } from "lucide-react";
 
 // ─── Nav configs per role ─────────────────────────────────────────────────────
@@ -103,6 +110,17 @@ const NAV_CONFIG = {
       to: "/manager/rates",
     },
   ],
+  customer: [
+    { label: "Home", icon: <Home size={18} />, to: "/" },
+    { label: "Profile", icon: <User size={18} />, to: "/profile" },
+    { label: "My Vehicles", icon: <Car size={18} />, to: "/customer/vehicles" },
+    { label: "Wallet", icon: <Wallet size={18} />, to: "/customer/wallet" },
+    {
+      label: "Settings",
+      icon: <Settings size={18} />,
+      to: "/customer/settings",
+    },
+  ],
 };
 
 const ROLE_THEME = {
@@ -122,6 +140,14 @@ const ROLE_THEME = {
     panelLabel: "Manager Panel",
     headerBadgeCls: "bg-emerald-500/10 border-emerald-500/20 text-emerald-400",
   },
+  customer: {
+    accent: "from-yellow-400 to-yellow-600",
+    activeBg: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
+    activeHover: "hover:text-yellow-300",
+    badge: { cls: "bg-yellow-900/50 text-yellow-400", label: "Customer" },
+    panelLabel: "My Account",
+    headerBadgeCls: "bg-yellow-500/10 border-yellow-500/20 text-yellow-400",
+  },
 };
 
 const getInitials = (name = "") =>
@@ -139,11 +165,29 @@ export default function DashboardLayout() {
   );
   const [collapsed, setCollapsed] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [darkMode, setDarkMode] = useState(
+    () => localStorage.getItem("valo_theme") !== "light",
+  );
   const notifRef = useRef(null);
 
   const role = user?.role;
   const navItems = NAV_CONFIG[role] || [];
   const theme = ROLE_THEME[role] || ROLE_THEME.admin;
+  const displayName = user
+    ? [user.profile?.firstName, user.profile?.lastName]
+        .filter(Boolean)
+        .join(" ") ||
+      user.username ||
+      "User"
+    : "User";
+
+  // Sync dark class with darkMode state
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", darkMode);
+    localStorage.setItem("valo_theme", darkMode ? "dark" : "light");
+  }, [darkMode]);
+
+  const toggleDarkMode = () => setDarkMode((prev) => !prev);
 
   // Listen for auth changes (including profile updates)
   useEffect(() => {
@@ -166,37 +210,44 @@ export default function DashboardLayout() {
   }, []);
 
   const handleLogout = () => {
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("refreshToken");
     sessionStorage.removeItem("valo_user");
     window.dispatchEvent(new Event("valo_auth_change"));
     navigate("/login");
   };
 
   return (
-    <div className="min-h-screen bg-[#0D0D0D] flex font-sans">
+    <div className="min-h-screen bg-gray-100 dark:bg-[#0D0D0D] flex font-sans transition-colors duration-300">
       {/* ══════════ SIDEBAR ══════════ */}
       <aside
         className={`
           ${collapsed ? "w-[72px]" : "w-60"}
-          flex-shrink-0 bg-[#111111] border-r border-white/5
+          flex-shrink-0 bg-white dark:bg-[#111111] border-r border-gray-200 dark:border-white/5
           flex flex-col transition-all duration-300 ease-in-out relative
           overflow-hidden
         `}
       >
         {/* Logo */}
-        <div className="h-[70px] flex items-center px-4 border-b border-white/5 gap-3 shrink-0">
-          <div
-            className={`w-9 h-9 rounded-xl bg-gradient-to-br ${theme.accent}
-              flex items-center justify-center text-black font-extrabold text-base
-              shrink-0 shadow-lg`}
-          >
-            V
-          </div>
+        <div className="h-[70px] flex items-center px-4 border-b border-gray-200 dark:border-white/5 gap-3 shrink-0">
+          {/* Icon */}
+          <img
+            src={logoImg}
+            alt="Valo Parking"
+            className="w-9 h-9 object-contain shrink-0"
+          />
           {!collapsed && (
-            <div className="overflow-hidden">
-              <p className="text-white font-extrabold text-sm leading-tight whitespace-nowrap">
-                VALO Parking
+            <div className="overflow-hidden leading-none">
+              <p
+                className="
+                  text-[13px] font-black tracking-[0.18em] whitespace-nowrap
+                  bg-gradient-to-r from-yellow-500 via-yellow-300 to-yellow-600
+                  bg-clip-text text-transparent
+                "
+              >
+                VALO PARKING
               </p>
-              <p className="text-[10px] text-gray-500 uppercase tracking-widest whitespace-nowrap">
+              <p className="text-[9px] font-semibold tracking-[0.25em] text-gray-400 dark:text-gray-500 uppercase whitespace-nowrap mt-0.5">
                 {theme.panelLabel}
               </p>
             </div>
@@ -229,19 +280,19 @@ export default function DashboardLayout() {
 
         {/* User section */}
         <div
-          className={`border-t border-white/5 p-3 flex items-center gap-3 ${collapsed ? "justify-center" : ""}`}
+          className={`border-t border-gray-200 dark:border-white/5 p-3 flex items-center gap-3 ${collapsed ? "justify-center" : ""}`}
         >
           <div
             className={`w-9 h-9 rounded-full bg-gradient-to-br ${theme.accent}
               flex items-center justify-center text-black font-extrabold text-sm shrink-0`}
           >
-            {getInitials(user.name)}
+            {getInitials(displayName)}
           </div>
           {!collapsed && (
             <>
               <div className="flex-1 min-w-0">
-                <p className="text-white font-bold text-xs truncate">
-                  {user.name}
+                <p className="text-gray-900 dark:text-white font-bold text-xs truncate">
+                  {displayName}
                 </p>
                 <span
                   className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${theme.badge.cls}`}
@@ -250,8 +301,17 @@ export default function DashboardLayout() {
                 </span>
               </div>
               <button
+                onClick={toggleDarkMode}
+                className="text-gray-500 hover:text-yellow-400 transition-colors shrink-0"
+                title={
+                  darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"
+                }
+              >
+                {darkMode ? <Sun size={15} /> : <Moon size={15} />}
+              </button>
+              <button
                 onClick={handleLogout}
-                className="text-gray-600 hover:text-red-400 transition-colors shrink-0"
+                className="text-gray-500 hover:text-red-400 transition-colors shrink-0"
                 title="Đăng xuất"
               >
                 <LogOut size={15} />
@@ -265,9 +325,9 @@ export default function DashboardLayout() {
           onClick={() => setCollapsed((c) => !c)}
           className="
             absolute -right-3 top-[82px]
-            w-6 h-6 bg-[#1C1C1C] border border-white/10 rounded-full
+            w-6 h-6 bg-gray-100 dark:bg-[#1C1C1C] border border-gray-200 dark:border-white/10 rounded-full
             flex items-center justify-center
-            text-gray-500 hover:text-white hover:border-white/30
+            text-gray-500 hover:text-gray-900 dark:hover:text-white hover:border-gray-300 dark:hover:border-white/30
             transition-all z-20
           "
         >
@@ -282,10 +342,10 @@ export default function DashboardLayout() {
       {/* ══════════ MAIN AREA ══════════ */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Topbar */}
-        <header className="h-[70px] bg-[#111111] border-b border-white/5 flex items-center justify-between px-6 shrink-0">
+        <header className="h-[70px] bg-white dark:bg-[#111111] border-b border-gray-200 dark:border-white/5 flex items-center justify-between px-6 shrink-0 transition-colors duration-300">
           {/* Hamburger (mobile) */}
           <button
-            className="lg:hidden text-gray-500 hover:text-white"
+            className="lg:hidden text-gray-500 hover:text-gray-900 dark:hover:text-white"
             onClick={() => setCollapsed((c) => !c)}
           >
             <Menu size={20} />
@@ -309,15 +369,15 @@ export default function DashboardLayout() {
             <div className="relative" ref={notifRef}>
               <button
                 onClick={() => setNotifOpen((o) => !o)}
-                className="relative w-9 h-9 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-colors"
+                className="relative w-9 h-9 rounded-xl bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
               >
                 <Bell size={17} />
                 <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
               </button>
               {notifOpen && (
-                <div className="absolute right-0 top-[calc(100%+8px)] w-72 bg-[#1A1A1A] border border-white/10 rounded-2xl shadow-2xl overflow-hidden z-50">
-                  <div className="px-4 py-3 border-b border-white/5">
-                    <p className="text-white font-bold text-sm">
+                <div className="absolute right-0 top-[calc(100%+8px)] w-72 bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden z-50">
+                  <div className="px-4 py-3 border-b border-gray-100 dark:border-white/5">
+                    <p className="text-gray-900 dark:text-white font-bold text-sm">
                       Notifications
                     </p>
                   </div>
@@ -340,16 +400,16 @@ export default function DashboardLayout() {
                   ].map((n, i) => (
                     <div
                       key={i}
-                      className="flex items-start gap-3 px-4 py-3 hover:bg-white/5 border-b border-white/5 last:border-0 cursor-pointer"
+                      className="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-white/5 border-b border-gray-100 dark:border-white/5 last:border-0 cursor-pointer"
                     >
                       <div
                         className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${n.dot}`}
                       />
                       <div>
-                        <p className="text-gray-300 text-xs font-medium">
+                        <p className="text-gray-700 dark:text-gray-300 text-xs font-medium">
                           {n.text}
                         </p>
-                        <p className="text-gray-600 text-[10px] mt-0.5">
+                        <p className="text-gray-400 dark:text-gray-600 text-[10px] mt-0.5">
                           {n.time}
                         </p>
                       </div>
@@ -363,15 +423,15 @@ export default function DashboardLayout() {
             <div
               className={`w-9 h-9 rounded-full bg-gradient-to-br ${theme.accent}
                 flex items-center justify-center text-black font-extrabold text-sm cursor-pointer`}
-              title={user.name}
+              title={displayName}
             >
-              {getInitials(user.name)}
+              {getInitials(displayName)}
             </div>
           </div>
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto bg-[#0D0D0D]">
+        <main className="flex-1 overflow-y-auto bg-gray-100 dark:bg-[#0D0D0D] transition-colors duration-300">
           <Outlet />
         </main>
       </div>

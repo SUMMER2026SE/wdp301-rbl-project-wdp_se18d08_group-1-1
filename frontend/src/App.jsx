@@ -83,15 +83,16 @@ export default function App() {
           <Route path="/manager/rates"      element={<OvertimeRates />} /> */}
         </Route>
 
-        {/* ── Customer Profile ── */}
+        {/* ── Customer section ── */}
         <Route
-          path="/profile"
           element={
-            <ProtectedRoute allowedRoles={["customer", "admin", "manager"]}>
-              <CustomerProfile />
+            <ProtectedRoute allowedRoles={["customer"]}>
+              <DashboardLayout />
             </ProtectedRoute>
           }
-        />
+        >
+          <Route path="/profile" element={<CustomerProfile />} />
+        </Route>
 
         {/* ── 403 ── */}
         <Route path="/unauthorized" element={<UnauthorizedPage />} />

@@ -53,6 +53,11 @@ export default function Navbar() {
       .join("")
       .toUpperCase();
 
+  // Derive display name from raw sessionStorage shape
+  const displayName = user
+    ? [user.profile?.firstName, user.profile?.lastName].filter(Boolean).join(" ") || user.username || "User"
+    : "";
+
   // Màu badge theo role
   const roleBadge = {
     admin: { label: "Admin", cls: "bg-red-100 text-red-700" },
@@ -111,10 +116,10 @@ export default function Navbar() {
               >
                 {/* Avatar circle */}
                 <div className="w-9 h-9 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 flex items-center justify-center text-black font-extrabold text-sm shadow-inner select-none">
-                  {getInitials(user.name)}
+                  {getInitials(displayName)}
                 </div>
                 <span className="text-sm font-bold text-gray-800 hidden sm:block max-w-[120px] truncate">
-                  {user.name.split(" ").pop()}
+                  {displayName.split(" ").pop()}
                 </span>
                 <ChevronDown
                   size={14}
@@ -129,11 +134,11 @@ export default function Navbar() {
                   <div className="px-4 pt-4 pb-3 border-b border-gray-50">
                     <div className="flex items-center gap-3">
                       <div className="w-11 h-11 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 flex items-center justify-center text-black font-extrabold text-base shadow select-none">
-                        {getInitials(user.name)}
+                        {getInitials(displayName)}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-gray-900 text-sm truncate">
-                          {user.name}
+                          {displayName}
                         </p>
                         <p className="text-xs text-gray-400 truncate">
                           {user.email}
