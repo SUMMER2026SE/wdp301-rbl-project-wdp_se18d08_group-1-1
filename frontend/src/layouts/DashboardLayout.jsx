@@ -23,15 +23,11 @@ import {
   ClipboardList,
   BookOpen,
   SlidersHorizontal,
-  DoorOpen,
-  Activity,
   // Common
   Bell,
   LogOut,
   Menu,
   ChevronDown,
-  Moon,
-  Sun,
 } from "lucide-react";
 
 // ─── Nav configs per role ─────────────────────────────────────────────────────
@@ -167,9 +163,6 @@ export default function DashboardLayout() {
   );
   const [collapsed, setCollapsed] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
-  const [darkMode, setDarkMode] = useState(
-    () => localStorage.getItem("valo_theme") !== "light",
-  );
   const notifRef = useRef(null);
 
   const role = user?.role;
@@ -183,13 +176,10 @@ export default function DashboardLayout() {
       "User"
     : "User";
 
-  // Sync dark class with darkMode state
+  // Always dark mode
   useEffect(() => {
-    document.documentElement.classList.toggle("dark", darkMode);
-    localStorage.setItem("valo_theme", darkMode ? "dark" : "light");
-  }, [darkMode]);
-
-  const toggleDarkMode = () => setDarkMode((prev) => !prev);
+    document.documentElement.classList.add("dark");
+  }, []);
 
   // Listen for auth changes (including profile updates)
   useEffect(() => {
@@ -280,48 +270,6 @@ export default function DashboardLayout() {
           ))}
         </nav>
 
-        {/* User section */}
-        <div
-          className={`border-t border-gray-200 dark:border-white/5 p-3 flex items-center gap-3 ${collapsed ? "justify-center" : ""}`}
-        >
-          <div
-            className={`w-9 h-9 rounded-full bg-gradient-to-br ${theme.accent}
-              flex items-center justify-center text-black font-extrabold text-sm shrink-0`}
-          >
-            {getInitials(displayName)}
-          </div>
-          {!collapsed && (
-            <>
-              <div className="flex-1 min-w-0">
-                <p className="text-gray-900 dark:text-white font-bold text-xs truncate">
-                  {displayName}
-                </p>
-                <span
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${theme.badge.cls}`}
-                >
-                  {theme.badge.label}
-                </span>
-              </div>
-              <button
-                onClick={toggleDarkMode}
-                className="text-gray-500 hover:text-yellow-400 transition-colors shrink-0"
-                title={
-                  darkMode ? "Switch to Light Mode" : "Switch to Dark Mode"
-                }
-              >
-                {darkMode ? <Sun size={15} /> : <Moon size={15} />}
-              </button>
-              <button
-                onClick={handleLogout}
-                className="text-gray-500 hover:text-red-400 transition-colors shrink-0"
-                title="Đăng xuất"
-              >
-                <LogOut size={15} />
-              </button>
-            </>
-          )}
-        </div>
-
         {/* Collapse toggle */}
         <button
           onClick={() => setCollapsed((c) => !c)}
@@ -366,6 +314,15 @@ export default function DashboardLayout() {
                 {theme.badge.label}
               </span>
             </div>
+
+            {/* Logout */}
+            <button
+              onClick={handleLogout}
+              className="w-9 h-9 rounded-xl bg-gray-100 dark:bg-white/5 hover:bg-red-500/10 flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-red-400 transition-colors"
+              title="Đăng xuất"
+            >
+              <LogOut size={17} />
+            </button>
 
             {/* Notifications */}
             <div className="relative" ref={notifRef}>

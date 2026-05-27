@@ -1,17 +1,34 @@
-﻿import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { apiFetch } from "../../services/api";
 import {
-  Car,
   Camera,
-  Pencil,
   Check,
   X,
+  Key,
+  User,
+  Phone,
+  Mail,
+  CalendarDays,
   Eye,
   EyeOff,
-  CreditCard,
+  Shield,
+  Lock,
+  LockOpen,
 } from "lucide-react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+const getPwdChecks = (pwd) => ({
+  length: pwd.length >= 8,
+  cases: /[A-Z]/.test(pwd) && /[a-z]/.test(pwd),
+  number: /[0-9]/.test(pwd),
+  special: /[^a-zA-Z0-9]/.test(pwd),
+});
+
+const getPwdStrength = (pwd) => {
+  const c = getPwdChecks(pwd);
+  return [c.length, c.cases, c.number, c.special].filter(Boolean).length; // 0-4
+};
+
 const getInitials = (name = "") =>
   name
     .split(" ")
@@ -20,12 +37,6 @@ const getInitials = (name = "") =>
     .join("")
     .toUpperCase();
 
-const formatVND = (amount) =>
-  new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(
-    amount,
-  );
-
-// ─── Map raw API response → UI profile state ─────────────────────────────────
 const buildProfile = (raw) => {
   const p = raw.profile || {};
   const firstName = p.firstName || raw.firstName || "";
@@ -42,37 +53,52 @@ const buildProfile = (raw) => {
     role: raw.role || "Customer",
     wallet: raw.wallet || { balance: 0 },
     vehicles: raw.vehicles || [],
+    createdAt: raw.createdAt || null,
   };
 };
 
-// ─── Inline-editable field ────────────────────────────────────────────────────
-function EditableField({ field, label, value, goldText = false, onSave }) {
+// ─── Gold underline editable field ───────────────────────────────────────────
+function GoldUnderlineField({
+  field,
+  label,
+  value,
+  readOnly = false,
+  onSave,
+  icon: Icon,
+}) {
   const [isEditing, setIsEditing] = useState(false);
-  const [isHovering, setIsHovering] = useState(false);
   const [draft, setDraft] = useState(value);
 
   const save = () => {
     onSave(field, draft);
     setIsEditing(false);
   };
-
   const cancel = () => {
     setDraft(value);
     setIsEditing(false);
   };
 
   return (
-    <div
-      onMouseEnter={() => setIsHovering(true)}
-      onMouseLeave={() => setIsHovering(false)}
-    >
-      {/* Label */}
-      <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1 font-semibold select-none">
+    <div className="group">
+      <label
+        className="flex items-center gap-1 mb-1 tracking-[0.2em] text-[10px] font-semibold"
+        style={{ color: "rgba(234,179,8,0.7)" }}
+      >
+        {Icon && <Icon size={10} />}
         {label}
-      </p>
+      </label>
 
-      {isEditing ? (
-        /* ── Edit mode ─────────────────────────────────────────────────────── */
+      {readOnly ? (
+        <p
+          className="w-full pb-1.5 text-sm"
+          style={{
+            borderBottom: "1px solid rgba(255,255,255,0.15)",
+            color: "#e2e1eb",
+          }}
+        >
+          {value || "—"}
+        </p>
+      ) : isEditing ? (
         <div className="flex items-center gap-2">
           <input
             autoFocus
@@ -82,62 +108,41 @@ function EditableField({ field, label, value, goldText = false, onSave }) {
               if (e.key === "Enter") save();
               if (e.key === "Escape") cancel();
             }}
-            className={`
-              w-full rounded-lg px-3 py-1.5 text-sm font-bold outline-none
-              border transition-all duration-200
-              bg-gray-100 border-gray-300 text-gray-900
-              focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/20
-              dark:bg-black/50 dark:border-white/20 dark:text-white
-              dark:focus:border-yellow-500 dark:focus:ring-yellow-500/20
-              ${goldText ? "text-yellow-500 dark:text-yellow-400" : ""}
-            `}
+            className="flex-1 bg-transparent pb-1.5 text-sm outline-none"
+            style={{
+              borderBottom: "1px solid #EAB308",
+              color: "#e2e1eb",
+            }}
           />
           <button
             onClick={save}
-            className="text-emerald-500 hover:text-emerald-400 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors shrink-0"
-            title="Save"
+            className="shrink-0 transition-colors text-emerald-400 hover:text-emerald-300"
           >
             <Check size={15} />
           </button>
           <button
             onClick={cancel}
-            className="text-red-500 hover:text-red-400 dark:text-red-400 dark:hover:text-red-300 transition-colors shrink-0"
-            title="Cancel"
+            className="shrink-0 transition-colors text-red-400 hover:text-red-300"
           >
             <X size={15} />
           </button>
         </div>
       ) : (
-        /* ── Display mode ───────────────────────────────────────────────────── */
-        <div className="flex items-center gap-2 min-h-[28px]">
-          <p
-            className={`text-base font-bold leading-tight
-              ${
-                goldText
-                  ? "text-yellow-500 dark:text-yellow-400"
-                  : "text-gray-900 dark:text-white"
-              }`}
-          >
-            {value || (
-              <span className="text-gray-400 font-normal italic text-sm">
-                —
-              </span>
-            )}
-          </p>
-          <button
-            onClick={() => {
-              setDraft(value);
-              setIsEditing(true);
-            }}
-            className={`
-              text-gray-400 hover:text-yellow-500 dark:hover:text-yellow-400
-              transition-all duration-200
-              ${isHovering ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-1"}
-            `}
-            title={`Edit ${label}`}
-          >
-            <Pencil size={12} />
-          </button>
+        <div
+          className="flex items-center gap-2 pb-1.5 transition-all duration-300"
+          style={{
+            borderBottom: "1px solid rgba(255,255,255,0.15)",
+          }}
+          onMouseEnter={(e) =>
+            (e.currentTarget.style.borderBottomColor = "rgba(234,179,8,0.5)")
+          }
+          onMouseLeave={(e) =>
+            (e.currentTarget.style.borderBottomColor = "rgba(255,255,255,0.15)")
+          }
+        >
+          <span className="flex-1 text-sm" style={{ color: "#e2e1eb" }}>
+            {value || <span className="italic text-sm text-gray-600">—</span>}
+          </span>
         </div>
       )}
     </div>
@@ -147,6 +152,9 @@ function EditableField({ field, label, value, goldText = false, onSave }) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function CustomerProfile() {
   const avatarInputRef = useRef(null);
+  const spotlightRef = useRef(null);
+  const orbRef = useRef(null);
+  const magneticRef = useRef(null);
 
   // ── Profile state ──────────────────────────────────────────────────────────
   const [profile, setProfile] = useState({
@@ -159,20 +167,57 @@ export default function CustomerProfile() {
     role: "Customer",
     wallet: { balance: 0 },
     vehicles: [],
+    createdAt: null,
   });
-
-  // ── Other UI state ─────────────────────────────────────────────────────────
-  const [balanceHidden, setBalanceHidden] = useState(true);
   const [toast, setToast] = useState(null);
+  const [editMode, setEditMode] = useState(false);
+  const [formDraft, setFormDraft] = useState({ name: "", phone: "" });
+  const [formErrors, setFormErrors] = useState({ name: "", phone: "" });
 
-  // ── Fetch user data on mount ───────────────────────────────────────────────
+  // ── Change Password modal state ────────────────────────────────────────────
+  const [cpOpen, setCpOpen] = useState(false);
+  const [cpForm, setCpForm] = useState({
+    current: "",
+    newPwd: "",
+    confirm: "",
+  });
+  const [cpShow, setCpShow] = useState({
+    current: false,
+    newPwd: false,
+    confirm: false,
+  });
+  const [cpErrors, setCpErrors] = useState({
+    current: "",
+    newPwd: "",
+    confirm: "",
+  });
+  const [cpLoading, setCpLoading] = useState(false);
+  const [cpRipple, setCpRipple] = useState(false);
+  const [cpLockOpen, setCpLockOpen] = useState(false);
+
+  // ── Spotlight + orb parallax ───────────────────────────────────────────────
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (spotlightRef.current) {
+        spotlightRef.current.style.setProperty("--x", `${e.clientX}px`);
+        spotlightRef.current.style.setProperty("--y", `${e.clientY}px`);
+      }
+      if (orbRef.current) {
+        const xAxis = (window.innerWidth / 2 - e.pageX) / 40;
+        const yAxis = (window.innerHeight / 2 - e.pageY) / 40;
+        orbRef.current.style.transform = `rotateY(${xAxis}deg) rotateX(${yAxis}deg)`;
+      }
+    };
+    document.addEventListener("mousemove", handleMouseMove);
+    return () => document.removeEventListener("mousemove", handleMouseMove);
+  }, []);
+
+  // ── Fetch user data ────────────────────────────────────────────────────────
   useEffect(() => {
     const fetchUserData = async () => {
-      // Show cached data immediately so page doesn't flicker on navigation
       const cached = JSON.parse(sessionStorage.getItem("valo_user") || "null");
       if (cached) setProfile(buildProfile(cached));
 
-      // Always refresh from the real API
       const token = localStorage.getItem("accessToken");
       if (!token) return;
 
@@ -182,7 +227,6 @@ export default function CustomerProfile() {
 
       if (ok && data?.success) {
         setProfile(buildProfile(data.data));
-        // Keep cache fresh so quick back-navigation is instant
         sessionStorage.setItem("valo_user", JSON.stringify(data.data));
       }
     };
@@ -195,9 +239,8 @@ export default function CustomerProfile() {
     setTimeout(() => setToast(null), 2500);
   };
 
-  // ── Save profile field → real API ──────────────────────────────────────────
+  // ── Save profile field ─────────────────────────────────────────────────────
   const handleSaveProfile = async (field, value) => {
-    // Optimistic UI update
     const updated = { ...profile, [field]: value };
     if (field === "name") {
       const spaceIdx = value.lastIndexOf(" ");
@@ -224,172 +267,930 @@ export default function CustomerProfile() {
     });
 
     if (ok && data?.success) {
-      const fresh = buildProfile(data.data);
+      const merged = { ...data.data, createdAt: profile.createdAt };
+      const fresh = buildProfile(merged);
       setProfile(fresh);
-      sessionStorage.setItem("valo_user", JSON.stringify(data.data));
+      sessionStorage.setItem("valo_user", JSON.stringify(merged));
       window.dispatchEvent(new Event("valo_auth_change"));
       setToast({ msg: "Profile updated ✓", type: "success" });
       setTimeout(() => setToast(null), 2000);
     } else {
-      // Rollback on error
       setProfile(profile);
       showToast(data?.message || "Update failed", "error");
     }
   };
 
-  // ── Avatar upload — instant preview (API skeleton) ─────────────────────────
+  // ── Avatar upload ──────────────────────────────────────────────────────────
   const handleAvatarChange = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setProfile((prev) => ({ ...prev, avatar: URL.createObjectURL(file) }));
     showToast("Avatar updated ✓", "success");
-    // TODO: const fd = new FormData(); fd.append("avatar", file);
-    // TODO: await api.post("/user/avatar", fd);
+  };
+
+  // ── Edit mode handlers ─────────────────────────────────────────────────────
+  const enterEdit = () => {
+    setFormDraft({ name: profile.name, phone: profile.phone });
+    setFormErrors({ name: "", phone: "" });
+    setEditMode(true);
+  };
+
+  const cancelEdit = () => {
+    setFormErrors({ name: "", phone: "" });
+    setEditMode(false);
+  };
+
+  const saveAll = async () => {
+    const errors = { name: "", phone: "" };
+    const trimName = formDraft.name.trim();
+    const trimPhone = formDraft.phone.trim();
+
+    if (!trimName) errors.name = "Name is required.";
+    else if (trimName.length < 2)
+      errors.name = "Name must be at least 2 characters.";
+    if (!trimPhone) errors.phone = "Phone number is required.";
+    else if (!/^0[0-9]{9}$/.test(trimPhone))
+      errors.phone = "Invalid phone (e.g. 0905414132).";
+
+    if (errors.name || errors.phone) {
+      setFormErrors(errors);
+      return;
+    }
+    setFormErrors({ name: "", phone: "" });
+
+    const spaceIdx = trimName.lastIndexOf(" ");
+    const firstName = spaceIdx > 0 ? trimName.slice(0, spaceIdx) : trimName;
+    const lastName = spaceIdx > 0 ? trimName.slice(spaceIdx + 1) : "";
+    const updated = {
+      ...profile,
+      name: trimName,
+      phone: trimPhone,
+      firstName,
+      lastName,
+    };
+    setProfile(updated);
+    setEditMode(false);
+    setToast({ msg: "Saving...", type: "saving" });
+
+    const token = localStorage.getItem("accessToken");
+    if (!token) {
+      showToast("Not authenticated", "error");
+      return;
+    }
+
+    const { ok, data } = await apiFetch("/profile", {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ firstName, lastName, phone: trimPhone }),
+    });
+
+    if (ok && data?.success) {
+      const merged = { ...data.data, createdAt: profile.createdAt };
+      const fresh = buildProfile(merged);
+      setProfile(fresh);
+      sessionStorage.setItem("valo_user", JSON.stringify(merged));
+      window.dispatchEvent(new Event("valo_auth_change"));
+      setToast({ msg: "Profile updated ✓", type: "success" });
+      setTimeout(() => setToast(null), 2000);
+    } else {
+      setProfile(profile);
+      showToast(data?.message || "Update failed", "error");
+    }
+  };
+
+  // ── Change Password handler ──────────────────────────────────────────────────
+  const closeCpModal = () => {
+    setCpOpen(false);
+    setCpForm({ current: "", newPwd: "", confirm: "" });
+    setCpErrors({ current: "", newPwd: "", confirm: "" });
+    setCpShow({ current: false, newPwd: false, confirm: false });
+  };
+
+  const handleChangePwd = async () => {
+    const { current, newPwd, confirm } = cpForm;
+    const errs = { current: "", newPwd: "", confirm: "" };
+    if (!current.trim()) errs.current = "Current password is required.";
+    if (!newPwd) errs.newPwd = "New password is required.";
+    else if (newPwd.length < 8) errs.newPwd = "Minimum 8 characters required.";
+    else if (!/[A-Z]/.test(newPwd) || !/[a-z]/.test(newPwd))
+      errs.newPwd = "Must contain both uppercase and lowercase letters.";
+    else if (!/[0-9]/.test(newPwd))
+      errs.newPwd = "Must contain at least 1 number.";
+    else if (!/[^a-zA-Z0-9]/.test(newPwd))
+      errs.newPwd = "Must contain at least 1 special character.";
+    else if (newPwd === current.trim())
+      errs.newPwd = "New password must differ from current password.";
+    const strength = getPwdStrength(newPwd);
+    if (strength === 4) {
+      if (!confirm) errs.confirm = "Please confirm your new password.";
+      else if (confirm !== newPwd) errs.confirm = "Passwords do not match.";
+    }
+    if (errs.current || errs.newPwd || errs.confirm) {
+      setCpErrors(errs);
+      return;
+    }
+
+    setCpRipple(true);
+    setCpLockOpen(true);
+    setTimeout(() => setCpRipple(false), 700);
+    setTimeout(() => setCpLockOpen(false), 1200);
+    setCpLoading(true);
+
+    const token = localStorage.getItem("accessToken");
+    const { ok, data } = await apiFetch("/profile/change-password", {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ currentPassword: current, newPassword: newPwd }),
+    });
+    setCpLoading(false);
+
+    if (ok && data?.success) {
+      showToast("Password updated ✓", "success");
+      closeCpModal();
+    } else {
+      setCpErrors((p) => ({
+        ...p,
+        current: data?.message || "Incorrect current password.",
+      }));
+    }
+  };
+
+  // ── Magnetic button handlers ───────────────────────────────────────────────
+  const handleMagneticMove = (e) => {
+    if (!magneticRef.current) return;
+    const rect = magneticRef.current.getBoundingClientRect();
+    const x = e.clientX - rect.left - rect.width / 2;
+    const y = e.clientY - rect.top - rect.height / 2;
+    magneticRef.current.style.transform = `translate(${x * 0.3}px, ${y * 0.3}px)`;
+  };
+  const handleMagneticLeave = () => {
+    if (magneticRef.current)
+      magneticRef.current.style.transform = "translate(0, 0)";
   };
 
   // ───────────────────────────────────────────────────────────────────────────
   // RENDER
   // ───────────────────────────────────────────────────────────────────────────
   return (
-    <div className="max-w-3xl mx-auto px-4 sm:px-8 py-10 md:py-14">
-      {/* ══ Section: Avatar + Info ══════════════════════════════════════════ */}
-      <div className="flex flex-col sm:flex-row items-center sm:items-start gap-8 sm:gap-10 mb-12">
-        {/* Avatar */}
-        <div className="relative shrink-0 group">
-          <div className="absolute inset-0 bg-yellow-500/20 blur-[80px] rounded-full scale-150 opacity-30 group-hover:opacity-60 transition-opacity duration-500 pointer-events-none" />
-          <label
-            htmlFor="avatar-upload"
-            className="
-              relative block w-36 h-36 sm:w-40 sm:h-40 rounded-full
-              cursor-pointer overflow-hidden p-1.5
-              bg-black/5 dark:bg-white/5 backdrop-blur-md
-              ring-2 ring-yellow-500 shadow-[0_0_25px_rgba(234,179,8,0.55)]
-              group-hover:shadow-[0_0_44px_rgba(234,179,8,0.85)]
-              transition-all duration-300
-              ring-offset-4 ring-offset-gray-100 dark:ring-offset-[#0D0D0D]
-            "
+    <div
+      className="relative h-full flex flex-col overflow-hidden"
+      style={{
+        backgroundColor: "#050505",
+        fontFamily: "'Plus Jakarta Sans', 'Montserrat', sans-serif",
+      }}
+    >
+      {/* ── Cursor spotlight ── */}
+      <div
+        ref={spotlightRef}
+        className="fixed inset-0 pointer-events-none z-10"
+        style={{
+          background:
+            "radial-gradient(circle at var(--x, 50%) var(--y, 50%), rgba(255,184,0,0.07) 0%, transparent 40%)",
+        }}
+      />
+
+      {/* ── Gold dust dot pattern ── */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          backgroundImage:
+            "radial-gradient(circle at 1px 1px, rgba(234,179,8,0.08) 1px, transparent 0)",
+          backgroundSize: "40px 40px",
+        }}
+      />
+
+      {/* ════════════════════ HERO SECTION ════════════════════ */}
+      <section className="relative flex items-center px-8 py-5 overflow-hidden flex-shrink-0">
+        {/* Ambient glow */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background:
+              "radial-gradient(ellipse at 15% 60%, rgba(255,184,0,0.18) 0%, transparent 55%)",
+          }}
+        />
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{
+            background: "linear-gradient(to top, #050505 0%, transparent 60%)",
+          }}
+        />
+
+        <div className="relative z-10 flex flex-col md:flex-row items-center md:items-end gap-10 w-full">
+          {/* ── 3D Avatar Orb ── */}
+          <div
+            ref={orbRef}
+            className="relative flex-shrink-0"
+            style={{
+              width: 150,
+              height: 150,
+              perspective: "1000px",
+              transition: "transform 0.1s ease-out",
+            }}
           >
-            {profile.avatar ? (
-              <img
-                src={profile.avatar}
-                alt={profile.name}
-                className="w-full h-full rounded-full object-cover border-2 border-yellow-400/30"
+            {/* Outer rotating ring */}
+            <div
+              className="absolute inset-0 rounded-full border border-yellow-500"
+              style={{
+                opacity: 0.55,
+                animation: "valo-rotateRing 8s linear infinite",
+              }}
+            />
+            {/* Inner rotating ring */}
+            <div
+              className="absolute rounded-full border"
+              style={{
+                inset: "8px",
+                borderColor: "#ffdea8",
+                opacity: 0.35,
+                animation: "valo-rotateRing 5s linear infinite reverse",
+              }}
+            />
+
+            {/* Avatar sphere */}
+            <div
+              className="w-full h-full rounded-full overflow-hidden"
+              style={{
+                border: "2px solid #EAB308",
+                padding: "3px",
+                background: "#1a1b22",
+                boxShadow:
+                  "0 0 36px rgba(255,184,0,0.3), 0 0 80px rgba(255,184,0,0.1)",
+              }}
+            >
+              {profile.avatar ? (
+                <img
+                  src={profile.avatar}
+                  alt={profile.name}
+                  className="w-full h-full rounded-full object-cover"
+                />
+              ) : (
+                <div className="w-full h-full rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 flex items-center justify-center text-black font-extrabold text-2xl">
+                  {getInitials(profile.name)}
+                </div>
+              )}
+            </div>
+
+            {/* Hover upload overlay */}
+            <label
+              htmlFor="avatar-upload"
+              className="absolute inset-0 rounded-full cursor-pointer flex flex-col items-center justify-center gap-1 transition-all duration-300 group"
+              style={{ background: "rgba(0,0,0,0)" }}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.background = "rgba(0,0,0,0.6)")
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.background = "rgba(0,0,0,0)")
+              }
+            >
+              <Camera
+                size={22}
+                className="text-yellow-400 opacity-0 group-hover:opacity-100 transition-opacity"
               />
-            ) : (
-              <div className="w-full h-full rounded-full bg-gradient-to-br from-yellow-400 via-yellow-500 to-yellow-600 flex items-center justify-center text-black font-extrabold text-3xl sm:text-4xl border-2 border-yellow-400/30">
-                {getInitials(profile.name)}
-              </div>
-            )}
-            <div className="absolute inset-0 rounded-full bg-black/55 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex flex-col items-center justify-center gap-1">
-              <Camera size={24} className="text-yellow-400" />
-              <span className="text-yellow-400 text-[9px] font-bold tracking-wider uppercase">
+              <span className="text-yellow-400 text-[9px] font-bold tracking-wider uppercase opacity-0 group-hover:opacity-100 transition-opacity">
                 Change
               </span>
-              <span className="text-yellow-400 text-[9px] font-bold tracking-wider uppercase">
-                Avatar
-              </span>
-            </div>
-          </label>
-          <input
-            id="avatar-upload"
-            ref={avatarInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handleAvatarChange}
-          />
-          <div className="absolute inset-0 rounded-full ring-1 ring-yellow-400/20 scale-110 opacity-0 group-hover:opacity-100 transition-all duration-500 pointer-events-none" />
-        </div>
-
-        {/* Info */}
-        <div className="flex-1 w-full text-center sm:text-left">
-          <div className="mb-5">
-            <EditableField
-              field="name"
-              label="Name"
-              value={profile.name}
-              onSave={handleSaveProfile}
+            </label>
+            <input
+              id="avatar-upload"
+              ref={avatarInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleAvatarChange}
             />
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
-            <EditableField
-              field="phone"
-              label="Phone Number"
-              value={profile.phone}
-              onSave={handleSaveProfile}
-            />
-            <div>
-              <p className="text-[10px] text-gray-400 uppercase tracking-widest mb-1 font-semibold select-none">
-                Email
-              </p>
-              <p className="text-base font-bold leading-tight text-gray-900 dark:text-white min-h-[28px]">
-                {profile.email || (
-                  <span className="text-gray-400 font-normal italic text-sm">
-                    —
-                  </span>
-                )}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      {/* ══ Section: Widgets ════════════════════════════════════════════════ */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-        {/* Wallet */}
-        <div className="relative rounded-2xl p-6 border group cursor-pointer bg-white dark:bg-white/[0.04] backdrop-blur-md border-gray-200 dark:border-white/10 hover:border-yellow-500/30 hover:shadow-[0_0_32px_rgba(234,179,8,0.15)] transition-all duration-300">
-          <div className="absolute inset-0 bg-yellow-500/5 blur-3xl rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 -z-10" />
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center group-hover:bg-yellow-500/15 transition-colors">
-                <CreditCard size={16} className="text-yellow-400" />
-              </div>
-              <span className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">
-                Wallet
-              </span>
-            </div>
-            <button
-              onClick={() => setBalanceHidden((h) => !h)}
-              className="text-gray-400 hover:text-yellow-400 transition-colors p-1"
-              title={balanceHidden ? "Show balance" : "Hide balance"}
+            {/* Spark dot */}
+            <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-yellow-500 rounded-full animate-ping" />
+          </div>
+
+          {/* ── Name & role ── */}
+          <div className="flex-1 text-center md:text-left">
+            <h2
+              className="text-3xl font-black leading-none"
+              style={{
+                color: "#ffdea8",
+                textShadow: "0 4px 24px rgba(255,184,0,0.45)",
+              }}
             >
-              {balanceHidden ? <Eye size={15} /> : <EyeOff size={15} />}
+              {profile.name || "—"}
+            </h2>
+            <p
+              className="mt-1.5 tracking-[0.15em] text-xs font-semibold uppercase"
+              style={{ color: "rgba(234,179,8,0.65)" }}
+            >
+              {profile.role}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* ════════════════════ CONTENT GRID ════════════════════ */}
+      <section className="px-8 py-8 grid grid-cols-12 gap-8 flex-1">
+        {/* ── Left: Personal Records ── */}
+        <div className="col-span-12 md:col-span-7">
+          <h3
+            className="text-2xl font-bold mt-1 mb-10"
+            style={{ color: "#ffdea8" }}
+          >
+            Personal Records
+          </h3>
+
+          {editMode ? (
+            <div className="space-y-5">
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <label
+                    className="flex items-center gap-1 mb-1 tracking-[0.2em] text-[10px] font-semibold"
+                    style={{ color: "rgba(234,179,8,0.7)" }}
+                  >
+                    <User size={10} /> NAME
+                  </label>
+                  <input
+                    autoFocus
+                    value={formDraft.name}
+                    onChange={(e) => {
+                      setFormDraft((p) => ({ ...p, name: e.target.value }));
+                      if (formErrors.name)
+                        setFormErrors((p) => ({ ...p, name: "" }));
+                    }}
+                    onKeyDown={(e) => e.key === "Enter" && saveAll()}
+                    className="w-full bg-transparent pb-1.5 text-sm outline-none"
+                    style={{
+                      borderBottom: formErrors.name
+                        ? "1px solid rgba(239,68,68,0.7)"
+                        : "1px solid #EAB308",
+                      color: "#e2e1eb",
+                    }}
+                  />
+                  {formErrors.name && (
+                    <p className="mt-1 text-[10px] text-red-400">
+                      {formErrors.name}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label
+                    className="flex items-center gap-1 mb-1 tracking-[0.2em] text-[10px] font-semibold"
+                    style={{ color: "rgba(234,179,8,0.7)" }}
+                  >
+                    <Phone size={10} /> PHONE
+                  </label>
+                  <input
+                    value={formDraft.phone}
+                    onChange={(e) => {
+                      setFormDraft((p) => ({ ...p, phone: e.target.value }));
+                      if (formErrors.phone)
+                        setFormErrors((p) => ({ ...p, phone: "" }));
+                    }}
+                    onKeyDown={(e) => e.key === "Enter" && saveAll()}
+                    className="w-full bg-transparent pb-1.5 text-sm outline-none"
+                    style={{
+                      borderBottom: formErrors.phone
+                        ? "1px solid rgba(239,68,68,0.7)"
+                        : "1px solid #EAB308",
+                      color: "#e2e1eb",
+                    }}
+                  />
+                  {formErrors.phone && (
+                    <p className="mt-1 text-[10px] text-red-400">
+                      {formErrors.phone}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <GoldUnderlineField
+                field="email"
+                label="EMAIL"
+                icon={Mail}
+                value={profile.email}
+                readOnly
+                onSave={() => {}}
+              />
+              <GoldUnderlineField
+                field="createdAt"
+                label="MEMBER SINCE"
+                icon={CalendarDays}
+                value={
+                  profile.createdAt
+                    ? new Date(profile.createdAt).toLocaleDateString("vi-VN", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                      })
+                    : "—"
+                }
+                readOnly
+                onSave={() => {}}
+              />
+            </div>
+          ) : (
+            <div className="space-y-5">
+              <div className="grid grid-cols-2 gap-6">
+                <GoldUnderlineField
+                  field="name"
+                  label="NAME"
+                  icon={User}
+                  value={profile.name}
+                  onSave={handleSaveProfile}
+                />
+                <GoldUnderlineField
+                  field="phone"
+                  label="PHONE"
+                  icon={Phone}
+                  value={profile.phone}
+                  onSave={handleSaveProfile}
+                />
+              </div>
+              <GoldUnderlineField
+                field="email"
+                label="EMAIL"
+                icon={Mail}
+                value={profile.email}
+                readOnly
+                onSave={() => {}}
+              />
+              <GoldUnderlineField
+                field="createdAt"
+                label="MEMBER SINCE"
+                icon={CalendarDays}
+                value={
+                  profile.createdAt
+                    ? new Date(profile.createdAt).toLocaleDateString("vi-VN", {
+                        day: "2-digit",
+                        month: "2-digit",
+                        year: "numeric",
+                      })
+                    : "—"
+                }
+                readOnly
+                onSave={() => {}}
+              />
+            </div>
+          )}
+
+          {/* ── Edit Profile / Cancel + Save buttons ── */}
+          <div className="pt-6 flex items-center gap-3">
+            {editMode && (
+              <button
+                onClick={saveAll}
+                className="px-6 py-2 rounded-full text-xs font-semibold tracking-wider transition-colors duration-200"
+                style={{ background: "#EAB308", color: "#050505" }}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.background = "#fbbf24")
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.background = "#EAB308")
+                }
+              >
+                Save Changes
+              </button>
+            )}
+            <button
+              ref={magneticRef}
+              onMouseMove={editMode ? undefined : handleMagneticMove}
+              onMouseLeave={editMode ? undefined : handleMagneticLeave}
+              onClick={editMode ? cancelEdit : enterEdit}
+              className="group relative px-5 py-2 overflow-hidden rounded-full"
+              style={{
+                border: editMode
+                  ? "1px solid rgba(239,68,68,0.6)"
+                  : "1px solid #EAB308",
+                transition: "transform 0.2s cubic-bezier(0.23,1,0.32,1)",
+                background: "transparent",
+              }}
+            >
+              <span
+                className="relative z-10 font-semibold tracking-wider text-xs transition-colors duration-300"
+                style={{ color: editMode ? "rgba(239,68,68,0.8)" : "#EAB308" }}
+              >
+                {editMode ? "Cancel" : "Edit Profile"}
+              </span>
+              <div
+                className="absolute inset-0 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out"
+                style={{
+                  background: editMode ? "rgba(239,68,68,0.1)" : "#EAB308",
+                }}
+              />
             </button>
           </div>
-          <p className="text-xl font-bold text-gray-900 dark:text-white tracking-wider">
-            {balanceHidden ? (
-              <span className="text-gray-400 tracking-[0.2em]">••• •</span>
-            ) : (
-              formatVND(profile.wallet.balance)
-            )}
-          </p>
         </div>
 
-        {/* My Vehicles */}
-        <div className="relative rounded-2xl p-6 border group cursor-pointer bg-white dark:bg-white/[0.04] backdrop-blur-md border-gray-200 dark:border-white/10 hover:border-yellow-500/30 hover:shadow-[0_0_32px_rgba(234,179,8,0.15)] transition-all duration-300">
-          <div className="absolute inset-0 bg-yellow-500/5 blur-3xl rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 -z-10" />
-          <div className="flex items-center gap-2.5 mb-4">
-            <div className="w-9 h-9 rounded-xl bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center group-hover:bg-yellow-500/15 transition-colors">
-              <Car size={16} className="text-yellow-400" />
-            </div>
-            <span className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">
-              My Vehicles
-            </span>
-          </div>
-          <p className="text-xl font-bold text-gray-900 dark:text-white">
-            {profile.vehicles.length}{" "}
-            <span className="text-sm font-normal text-gray-400">Vehicles</span>
-          </p>
-        </div>
-      </div>
+        {/* ── Right: Security + Cards ── */}
+        <div className="col-span-12 md:col-span-5">
+          <h3 className="text-2xl font-bold mb-10" style={{ color: "#ffdea8" }}>
+            Security
+          </h3>
 
-      {/* Toast */}
+          {!cpOpen ? (
+            /* Change Password button */
+            <button
+              onClick={() => setCpOpen(true)}
+              className="flex items-center gap-2.5 px-5 py-2.5 rounded-full transition-all duration-300"
+              style={{
+                border: "1px solid rgba(234,179,8,0.4)",
+                background: "transparent",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "rgba(255,184,0,0.1)";
+                e.currentTarget.style.borderColor = "#EAB308";
+                e.currentTarget.style.boxShadow =
+                  "0 0 16px rgba(255,184,0,0.12)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = "transparent";
+                e.currentTarget.style.borderColor = "rgba(234,179,8,0.4)";
+                e.currentTarget.style.boxShadow = "none";
+              }}
+            >
+              <Key size={14} className="text-yellow-500 shrink-0" />
+              <span
+                className="font-semibold tracking-widest text-xs"
+                style={{ color: "#ffdea8" }}
+              >
+                Change Password
+              </span>
+            </button>
+          ) : (
+            (() => {
+              const strength = getPwdStrength(cpForm.newPwd);
+              const checks = getPwdChecks(cpForm.newPwd);
+              const newDiffersFromCurrent =
+                !cpForm.newPwd || cpForm.newPwd !== cpForm.current.trim();
+              const cpIsValid =
+                !!cpForm.current.trim() &&
+                strength === 4 &&
+                newDiffersFromCurrent &&
+                !!cpForm.confirm &&
+                cpForm.confirm === cpForm.newPwd;
+              const fieldStyle = (hasError) => ({
+                width: "100%",
+                background: "transparent",
+                border: "none",
+                borderBottom: hasError
+                  ? "1px solid rgba(239,68,68,0.7)"
+                  : "1px solid rgba(234,179,8,0.3)",
+                padding: "8px 36px 8px 0",
+                color: "#e2e1eb",
+                fontSize: "13px",
+                outline: "none",
+                caretColor: "#EAB308",
+                transition: "border-color 0.2s",
+              });
+              const onFocusGold = (e) =>
+                (e.currentTarget.style.borderColor = "#EAB308");
+              const onBlurGold = (hasErr) => (e) => {
+                e.currentTarget.style.borderColor = hasErr
+                  ? "rgba(239,68,68,0.7)"
+                  : "rgba(234,179,8,0.3)";
+              };
+              const strengthColors = [
+                "rgba(255,255,255,0.08)",
+                "rgba(239,68,68,0.7)",
+                "rgba(249,115,22,0.8)",
+                "rgba(234,179,8,0.6)",
+                "#EAB308",
+              ];
+              return (
+                <div
+                  className="space-y-6"
+                  style={{ animation: "cp-slideDown 0.3s ease-out" }}
+                >
+                  {/* Current Password */}
+                  <div>
+                    <label
+                      style={{
+                        color: "rgba(234,179,8,0.65)",
+                        fontSize: "10px",
+                        fontWeight: 700,
+                        letterSpacing: "0.22em",
+                      }}
+                    >
+                      CURRENT PASSWORD
+                    </label>
+                    <div className="relative mt-1.5">
+                      <input
+                        type={cpShow.current ? "text" : "password"}
+                        value={cpForm.current}
+                        autoComplete="current-password"
+                        onChange={(e) => {
+                          setCpForm((p) => ({ ...p, current: e.target.value }));
+                          if (cpErrors.current)
+                            setCpErrors((p) => ({ ...p, current: "" }));
+                        }}
+                        style={fieldStyle(!!cpErrors.current)}
+                        onFocus={onFocusGold}
+                        onBlur={onBlurGold(!!cpErrors.current)}
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setCpShow((p) => ({ ...p, current: !p.current }))
+                        }
+                        className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-600 hover:text-yellow-400 transition-colors"
+                      >
+                        {cpShow.current ? (
+                          <EyeOff size={14} />
+                        ) : (
+                          <Eye size={14} />
+                        )}
+                      </button>
+                    </div>
+                    {cpErrors.current && (
+                      <p className="mt-1 text-[10px] text-red-400">
+                        {cpErrors.current}
+                      </p>
+                    )}
+                    <button
+                      type="button"
+                      className="mt-1 text-[10px] transition-colors"
+                      style={{ color: "rgba(234,179,8,0.35)" }}
+                      onMouseEnter={(e) =>
+                        (e.currentTarget.style.color = "rgba(234,179,8,0.8)")
+                      }
+                      onMouseLeave={(e) =>
+                        (e.currentTarget.style.color = "rgba(234,179,8,0.35)")
+                      }
+                    >
+                      Forgot current password?
+                    </button>
+                  </div>
+                  {/* New Password */}
+                  <div>
+                    <label
+                      style={{
+                        color: "rgba(234,179,8,0.65)",
+                        fontSize: "10px",
+                        fontWeight: 700,
+                        letterSpacing: "0.22em",
+                      }}
+                    >
+                      NEW PASSWORD
+                    </label>
+                    <div className="relative mt-1.5">
+                      <input
+                        type={cpShow.newPwd ? "text" : "password"}
+                        value={cpForm.newPwd}
+                        autoComplete="new-password"
+                        onChange={(e) => {
+                          setCpForm((p) => ({
+                            ...p,
+                            newPwd: e.target.value,
+                            confirm: "",
+                          }));
+                          if (cpErrors.newPwd)
+                            setCpErrors((p) => ({
+                              ...p,
+                              newPwd: "",
+                              confirm: "",
+                            }));
+                        }}
+                        style={{
+                          ...fieldStyle(!!cpErrors.newPwd),
+                          paddingRight: "56px",
+                        }}
+                        onFocus={onFocusGold}
+                        onBlur={onBlurGold(!!cpErrors.newPwd)}
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setCpShow((p) => ({ ...p, newPwd: !p.newPwd }))
+                        }
+                        className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-600 hover:text-yellow-400 transition-colors"
+                      >
+                        {cpShow.newPwd ? (
+                          <EyeOff size={14} />
+                        ) : (
+                          <Eye size={14} />
+                        )}
+                      </button>
+                      <Shield
+                        size={15}
+                        className="absolute right-0 top-1/2 -translate-y-1/2 transition-all duration-500"
+                        style={{
+                          color: strengthColors[strength],
+                          filter:
+                            strength === 4
+                              ? "drop-shadow(0 0 6px rgba(255,184,0,0.9))"
+                              : "none",
+                          animation:
+                            strength === 4
+                              ? "cp-shield-pulse 1.8s ease-in-out infinite"
+                              : "none",
+                        }}
+                      />
+                    </div>
+                    {/* Strength bars */}
+                    {cpForm.newPwd && (
+                      <div className="flex gap-1 mt-2">
+                        {[1, 2, 3, 4].map((i) => (
+                          <div
+                            key={i}
+                            className="h-[2px] flex-1 rounded-full transition-all duration-400"
+                            style={{
+                              background:
+                                strength >= i
+                                  ? strengthColors[strength]
+                                  : "rgba(255,255,255,0.08)",
+                            }}
+                          />
+                        ))}
+                      </div>
+                    )}
+                    {/* Interactive checklist */}
+                    <ul className="mt-2.5 space-y-1">
+                      {[
+                        { ok: checks.length, label: "At least 8 characters" },
+                        {
+                          ok: checks.cases,
+                          label: "Uppercase & lowercase letters",
+                        },
+                        { ok: checks.number, label: "At least 1 number (0-9)" },
+                        {
+                          ok: checks.special,
+                          label: "At least 1 special character (!@#$...)",
+                        },
+                      ].map(({ ok, label }) => (
+                        <li
+                          key={label}
+                          className="flex items-center gap-1.5 transition-colors duration-300"
+                          style={{
+                            color: ok ? "#EAB308" : "rgba(255,255,255,0.22)",
+                            fontSize: "10px",
+                          }}
+                        >
+                          {ok ? (
+                            <Check size={9} style={{ flexShrink: 0 }} />
+                          ) : (
+                            <span
+                              style={{
+                                width: 9,
+                                height: 9,
+                                display: "inline-block",
+                                borderRadius: "50%",
+                                border: "1px solid rgba(255,255,255,0.18)",
+                                flexShrink: 0,
+                              }}
+                            />
+                          )}
+                          {label}
+                        </li>
+                      ))}
+                      {cpForm.newPwd &&
+                        cpForm.current.trim() &&
+                        cpForm.newPwd === cpForm.current.trim() && (
+                          <li
+                            className="flex items-center gap-1.5"
+                            style={{
+                              color: "rgba(239,68,68,0.9)",
+                              fontSize: "10px",
+                            }}
+                          >
+                            <X size={9} style={{ flexShrink: 0 }} />
+                            Must differ from current password
+                          </li>
+                        )}
+                    </ul>
+                    {cpErrors.newPwd && (
+                      <p className="mt-0.5 text-[10px] text-red-400">
+                        {cpErrors.newPwd}
+                      </p>
+                    )}
+                  </div>
+                  {/* Confirm Password - slides in when all 4 criteria met */}
+                  {strength === 4 && newDiffersFromCurrent && (
+                    <div
+                      style={{
+                        animation:
+                          "cp-slideDown 0.35s cubic-bezier(0.22,1,0.36,1)",
+                      }}
+                    >
+                      <label
+                        style={{
+                          color: "rgba(234,179,8,0.65)",
+                          fontSize: "10px",
+                          fontWeight: 700,
+                          letterSpacing: "0.22em",
+                        }}
+                      >
+                        CONFIRM NEW PASSWORD
+                      </label>
+                      <div className="relative mt-1.5">
+                        <input
+                          type={cpShow.confirm ? "text" : "password"}
+                          value={cpForm.confirm}
+                          autoComplete="new-password"
+                          autoFocus
+                          onChange={(e) => {
+                            setCpForm((p) => ({
+                              ...p,
+                              confirm: e.target.value,
+                            }));
+                            if (cpErrors.confirm)
+                              setCpErrors((p) => ({ ...p, confirm: "" }));
+                          }}
+                          style={fieldStyle(!!cpErrors.confirm)}
+                          onFocus={onFocusGold}
+                          onBlur={onBlurGold(!!cpErrors.confirm)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setCpShow((p) => ({ ...p, confirm: !p.confirm }))
+                          }
+                          className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-600 hover:text-yellow-400 transition-colors"
+                        >
+                          {cpShow.confirm ? (
+                            <EyeOff size={14} />
+                          ) : (
+                            <Eye size={14} />
+                          )}
+                        </button>
+                      </div>
+                      {cpErrors.confirm && (
+                        <p className="mt-1 text-[10px] text-red-400">
+                          {cpErrors.confirm}
+                        </p>
+                      )}
+                      {cpForm.confirm && cpForm.confirm === cpForm.newPwd && (
+                        <p className="mt-1 text-[10px] text-green-400 flex items-center gap-1">
+                          <Check size={9} /> Passwords match
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {/* Actions */}
+                  <div className="flex items-center gap-3 pt-2">
+                    <button
+                      onClick={handleChangePwd}
+                      disabled={!cpIsValid || cpLoading}
+                      className="relative overflow-hidden flex items-center gap-2 px-6 py-2.5 rounded-full text-xs font-bold tracking-wider"
+                      style={{
+                        background: cpIsValid
+                          ? "#EAB308"
+                          : "rgba(234,179,8,0.12)",
+                        color: cpIsValid ? "#050505" : "rgba(234,179,8,0.35)",
+                        border: cpIsValid
+                          ? "none"
+                          : "1px solid rgba(234,179,8,0.15)",
+                        cursor:
+                          cpIsValid && !cpLoading ? "pointer" : "not-allowed",
+                        boxShadow: cpIsValid
+                          ? "0 0 22px rgba(234,179,8,0.35)"
+                          : "none",
+                        transition: "all 0.3s",
+                      }}
+                    >
+                      {cpRipple && (
+                        <span
+                          className="absolute inset-0 rounded-full pointer-events-none"
+                          style={{
+                            background: "rgba(255,255,255,0.25)",
+                            animation: "cp-ripple 0.7s ease-out forwards",
+                            transformOrigin: "center",
+                          }}
+                        />
+                      )}
+                      {cpLockOpen ? <LockOpen size={13} /> : <Lock size={13} />}
+                      <span>{cpLoading ? "Updating…" : "Update Password"}</span>
+                    </button>
+                    <button
+                      onClick={closeCpModal}
+                      className="px-5 py-2.5 rounded-full text-xs font-semibold tracking-wider transition-colors duration-200"
+                      style={{
+                        border: "1px solid rgba(255,255,255,0.1)",
+                        color: "rgba(255,255,255,0.35)",
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor =
+                          "rgba(255,255,255,0.25)";
+                        e.currentTarget.style.color = "rgba(255,255,255,0.65)";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor =
+                          "rgba(255,255,255,0.1)";
+                        e.currentTarget.style.color = "rgba(255,255,255,0.35)";
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              );
+            })()
+          )}
+        </div>
+      </section>
+
+      {/* ════════════════════ TOAST ════════════════════ */}
       {toast && (
         <div
           className={`
             fixed bottom-6 left-1/2 -translate-x-1/2 z-[200]
-            flex items-center gap-2.5 px-5 py-2.5 rounded-full text-sm font-semibold
-            shadow-2xl backdrop-blur-md border transition-all duration-300
+            flex items-center gap-2.5 px-5 py-2.5 rounded-full
+            text-sm font-semibold shadow-2xl backdrop-blur-md border
+            transition-all duration-300
             ${
               toast.type === "saving"
                 ? "bg-yellow-500/15 text-yellow-300 border-yellow-500/30"
