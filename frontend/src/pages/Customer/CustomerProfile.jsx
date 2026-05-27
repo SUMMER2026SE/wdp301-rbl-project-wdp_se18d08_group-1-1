@@ -253,11 +253,8 @@ export default function CustomerProfile() {
         const name  = session.name  ?? session.fullName  ?? DUMMY_USER.name;
         const email = session.email ?? DUMMY_USER.email;
         const phone = session.phone ?? session.phoneNumber ?? DUMMY_USER.phone;
-        // Avatar: prefer session value, then generate from actual name, fallback to DUMMY
-        const avatar =
-          session.avatar ??
-          session.avatarUrl ??
-          `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=1a1a1a&color=D4AF37&size=400&bold=true&font-size=0.38`;
+        // Use real avatar URL if provided; otherwise leave empty → initials div renders
+        const avatar = session.avatar ?? session.avatarUrl ?? "";
 
         setProfile({ ...DUMMY_USER, name, email, phone, avatar });
       } else {
@@ -283,7 +280,15 @@ export default function CustomerProfile() {
 
   // ── Save profile field (API skeleton) ─────────────────────────────────────
   const handleSaveProfile = (field, value) => {
+    // Update local state
     setProfile((prev) => ({ ...prev, [field]: value }));
+
+    // Persist to sessionStorage so sidebar & refreshes stay in sync
+    try {
+      const session = JSON.parse(sessionStorage.getItem("valo_user") || "{}");
+      sessionStorage.setItem("valo_user", JSON.stringify({ ...session, [field]: value }));
+    } catch { /* ignore storage errors */ }
+
     setToast({ msg: "Saving...", type: "saving" });
     // TODO: await api.patch("/user/profile", { [field]: value });
     setTimeout(() => {
