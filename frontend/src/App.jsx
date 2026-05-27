@@ -1,36 +1,38 @@
-import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import React from "react";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 // Layouts
-import MainLayout from './layouts/MainLayout';
-import DashboardLayout from './layouts/DashboardLayout';
+import MainLayout from "./layouts/MainLayout";
+import DashboardLayout from "./layouts/DashboardLayout";
 
 // Guard
-import ProtectedRoute from './components/ProtectedRoute';
+import ProtectedRoute from "./components/ProtectedRoute";
 
 // Pages – Guest
-import GuestHome from './pages/Guest/GuestHome';
-import LoginPage from './pages/Guest/LoginPage';
-import ParkingMap from './pages/Guest/ParkingMap';
-import OAuthCallback from './pages/OAuthCallback';
+import GuestHome from "./pages/Guest/GuestHome";
+import LoginPage from "./pages/Guest/LoginPage";
+import ParkingMap from "./pages/Guest/ParkingMap";
+import OAuthCallback from "./pages/OAuthCallback";
 
 // Pages - Kiosk
-import KioskFlow from './pages/Kiosk/KioskFlow';
+import KioskFlow from "./pages/Kiosk/KioskFlow";
 
 // Pages – Admin
-import AdminDashboard from './pages/Admin/Dashboard';
+import AdminDashboard from "./pages/Admin/Dashboard";
 
 // Pages – Manager
-import ManagerDashboard from './pages/Manager/Dashboard';
+import ManagerDashboard from "./pages/Manager/Dashboard";
+
+// Pages – Customer
+import CustomerProfile from "./pages/Customer/CustomerProfile";
 
 // Misc
-import UnauthorizedPage from './pages/UnauthorizedPage';
+import UnauthorizedPage from "./pages/UnauthorizedPage";
 
 export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-
         {/* ── Standalone Kiosk app ── */}
         <Route path="/kiosk/*" element={<KioskFlow />} />
 
@@ -51,7 +53,7 @@ export default function App() {
         ══════════════════════════════════════════ */}
         <Route
           element={
-            <ProtectedRoute allowedRoles={['admin']}>
+            <ProtectedRoute allowedRoles={["admin"]}>
               <DashboardLayout />
             </ProtectedRoute>
           }
@@ -65,7 +67,7 @@ export default function App() {
         ══════════════════════════════════════════ */}
         <Route
           element={
-            <ProtectedRoute allowedRoles={['manager']}>
+            <ProtectedRoute allowedRoles={["manager"]}>
               <DashboardLayout />
             </ProtectedRoute>
           }
@@ -73,9 +75,19 @@ export default function App() {
           <Route path="/manager/dashboard" element={<ManagerDashboard />} />
         </Route>
 
+        {/* ── Customer section ── */}
+        <Route
+          element={
+            <ProtectedRoute allowedRoles={["customer"]}>
+              <DashboardLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/profile" element={<CustomerProfile />} />
+        </Route>
+
         {/* ── 403 ── */}
         <Route path="/unauthorized" element={<UnauthorizedPage />} />
-
       </Routes>
     </BrowserRouter>
   );

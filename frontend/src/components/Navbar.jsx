@@ -7,11 +7,11 @@ import {
 } from 'lucide-react';
 import Logo from '../assets/images/logo.png';
 
-/* ═══════════════════════════════════════════════════════════════════
-   VALO PARKING – Premium Navbar
+/* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+   VALO PARKING ΓÇô Premium Navbar
    Phase 1: Expanded transparent bar at top
    Phase 2: Floating glass pill when scrolled
-   ═══════════════════════════════════════════════════════════════════ */
+   ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */
 
 const guestLinks = [
   { to: '/',            label: 'Home',        icon: Sparkles },
@@ -58,7 +58,7 @@ export default function Navbar() {
   const [scrollY, setScrollY] = useState(0);
   const profileRef = useRef(null);
 
-  // ── Sync user ──
+  // ΓöÇΓöÇ Sync user ΓöÇΓöÇ
   const syncUser = useCallback(() => {
     const raw = sessionStorage.getItem('valo_user');
     setUser(raw ? JSON.parse(raw) : null);
@@ -74,7 +74,7 @@ export default function Navbar() {
     };
   }, [syncUser]);
 
-  // ── Scroll detection ──
+  // ΓöÇΓöÇ Scroll detection ΓöÇΓöÇ
   useEffect(() => {
     const onScroll = () => {
       setScrollY(window.scrollY);
@@ -83,7 +83,7 @@ export default function Navbar() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  // ── Close on outside click ──
+  // ΓöÇΓöÇ Close on outside click ΓöÇΓöÇ
   useEffect(() => {
     const handler = (e) => {
       if (profileRef.current && !profileRef.current.contains(e.target)) setProfileOpen(false);
@@ -92,10 +92,10 @@ export default function Navbar() {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  // ── Close on route change ──
+  // ΓöÇΓöÇ Close on route change ΓöÇΓöÇ
   useEffect(() => { setMobileOpen(false); setProfileOpen(false); }, [location.pathname]);
 
-  // ── Logout ──
+  // ΓöÇΓöÇ Logout ΓöÇΓöÇ
   const handleLogout = () => {
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
@@ -119,7 +119,7 @@ export default function Navbar() {
         id="main-navbar"
         className="fixed top-0 left-0 right-0 z-50"
       >
-        {/* ─── Outer wrapper: adds margin + pill shape when scrolled ─── */}
+        {/* ΓöÇΓöÇΓöÇ Outer wrapper: adds margin + pill shape when scrolled ΓöÇΓöÇΓöÇ */}
         <div
           className="transition-all duration-700 ease-[cubic-bezier(0.4,0,0.2,1)]"
           style={{
@@ -143,7 +143,7 @@ export default function Navbar() {
             style={{ height: isScrolled ? '52px' : '72px' }}
           >
 
-            {/* ════════ LOGO ════════ */}
+            {/* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ LOGO ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */}
             <Link to="/" className="flex items-center gap-2.5 group shrink-0" id="nav-logo">
               <div className="relative">
                 <img
@@ -159,7 +159,7 @@ export default function Navbar() {
               </div>
             </Link>
 
-            {/* ════════ CENTER NAV ════════ */}
+            {/* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ CENTER NAV ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */}
             <div className="hidden lg:flex items-center">
               <div className="flex items-center gap-0.5 relative">
                 {navLinks.map((link) => (
@@ -205,7 +205,7 @@ export default function Navbar() {
               </div>
             </div>
 
-            {/* ════════ RIGHT ════════ */}
+            {/* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ RIGHT ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */}
             <div className="flex items-center gap-1.5">
 
               {user ? (
@@ -249,7 +249,7 @@ export default function Navbar() {
                       />
                     </button>
 
-                    {/* ─── DROPDOWN ─── */}
+                    {/* ΓöÇΓöÇΓöÇ DROPDOWN ΓöÇΓöÇΓöÇ */}
                     {profileOpen && (
                       <div className="absolute right-0 top-[calc(100%+8px)] w-[280px] bg-white/80 backdrop-blur-2xl rounded-2xl shadow-[0_16px_64px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.06)] border border-white/60 overflow-hidden nav-dropdown-enter">
 
@@ -280,7 +280,7 @@ export default function Navbar() {
                               </div>
                               <div>
                                 <p className="text-[10px] text-amber-600/70 font-semibold uppercase tracking-wider">Balance</p>
-                                <p className="text-sm font-extrabold text-gray-800">{(user.wallet || 0).toLocaleString('vi-VN')}₫</p>
+                                <p className="text-sm font-extrabold text-gray-800">{(user.wallet || 0).toLocaleString('vi-VN')}Γé½</p>
                               </div>
                             </div>
                             <Link
@@ -353,7 +353,7 @@ export default function Navbar() {
                   </div>
                 </>
               ) : (
-                /* ── GUEST ── */
+                /* ΓöÇΓöÇ GUEST ΓöÇΓöÇ */
                 <div className="flex items-center gap-2">
                   <Link
                     to="/login"
@@ -393,7 +393,7 @@ export default function Navbar() {
         </div>
       </nav>
 
-      {/* ════════ MOBILE OVERLAY ════════ */}
+      {/* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ MOBILE OVERLAY ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */}
       <div
         className={`fixed inset-0 z-40 transition-all duration-500 ${
           mobileOpen ? 'pointer-events-auto' : 'pointer-events-none'
