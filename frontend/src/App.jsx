@@ -25,6 +25,7 @@ import ManagerDashboard from "./pages/Manager/Dashboard";
 
 // Pages – Customer
 import CustomerProfile from "./pages/Customer/CustomerProfile";
+import MyVehicles from "./pages/Customer/MyVehicles";
 
 // Misc
 import UnauthorizedPage from "./pages/UnauthorizedPage";
@@ -84,6 +85,7 @@ export default function App() {
           }
         >
           <Route path="/profile" element={<CustomerProfile />} />
+          <Route path="/customer/vehicles" element={<MyVehicles />} />
         </Route>
 
         {/* ── 403 ── */}
