@@ -107,7 +107,7 @@ export default function LoginPage() {
 
         // ── Redirect theo role ──
         const roleRedirect = {
-          admin:   '/admin/dashboard',
+          admin: '/admin/dashboard',
           manager: '/manager/dashboard',
         };
         const dest = roleRedirect[user.role] || '/';
@@ -394,11 +394,10 @@ export default function LoginPage() {
       {/* ── Toast notification ── */}
       {toast && (
         <div
-          className={`fixed top-6 left-1/2 -translate-x-1/2 z-[999] flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-2xl text-sm font-semibold transition-all duration-300 ${
-            toast.type === 'success'
+          className={`fixed top-6 left-1/2 -translate-x-1/2 z-[999] flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-2xl text-sm font-semibold transition-all duration-300 ${toast.type === 'success'
               ? 'bg-green-900/90 border border-green-500/40 text-green-200'
               : 'bg-red-900/90 border border-red-500/40 text-red-200'
-          }`}
+            }`}
         >
           {toast.type === 'success'
             ? <CheckCircle size={18} className="text-green-400 shrink-0" />
@@ -409,11 +408,11 @@ export default function LoginPage() {
 
       {/* ── Decorative particles ── */}
       {[
-        { top: '10%',  left: '8%',  animationDelay: '0s',   animationDuration: '3s'  },
-        { top: '25%',  left: '15%', animationDelay: '0.8s', animationDuration: '4s'  },
-        { top: '70%',  left: '5%',  animationDelay: '1.5s', animationDuration: '2.5s'},
-        { top: '85%',  left: '20%', animationDelay: '0.3s', animationDuration: '3.5s'},
-        { top: '40%',  left: '3%',  animationDelay: '2s',   animationDuration: '5s'  },
+        { top: '10%', left: '8%', animationDelay: '0s', animationDuration: '3s' },
+        { top: '25%', left: '15%', animationDelay: '0.8s', animationDuration: '4s' },
+        { top: '70%', left: '5%', animationDelay: '1.5s', animationDuration: '2.5s' },
+        { top: '85%', left: '20%', animationDelay: '0.3s', animationDuration: '3.5s' },
+        { top: '40%', left: '3%', animationDelay: '2s', animationDuration: '5s' },
       ].map((s, i) => <Particle key={i} style={s} />)}
 
       {/* ════════════════════════════════════════════
@@ -502,7 +501,7 @@ export default function LoginPage() {
                   mode === m
                     ? 'bg-gold text-charcoal shadow-lg shadow-gold/20'
                     : 'text-gray-400 hover:text-white'
-                }`}
+                  }`}
               >
                 {m === 'login' ? 'Log In' : 'Sign Up'}
               </button>
@@ -523,22 +522,26 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* ── Google Button ── */}
-          <button
-            id="btn-google-auth"
-            onClick={handleGoogleAuth}
-            className="w-full flex items-center justify-center gap-3 bg-white hover:bg-gray-50 text-gray-800 font-bold py-3.5 rounded-xl transition-all duration-200 hover:shadow-xl hover:shadow-black/20 hover:-translate-y-0.5 active:scale-95 border border-gray-200 mb-6"
-          >
-            <GoogleIcon />
-            <span>{isLogin ? 'Continue with Google' : 'Sign up with Google'}</span>
-          </button>
+          {isLogin && !forgotStep && (
+            <>
+              {/* ── Google Button ── */}
+              <button
+                id="btn-google-auth"
+                onClick={handleGoogleAuth}
+                className="w-full flex items-center justify-center gap-3 bg-white hover:bg-gray-50 text-gray-800 font-bold py-3.5 rounded-xl transition-all duration-200 hover:shadow-xl hover:shadow-black/20 hover:-translate-y-0.5 active:scale-95 border border-gray-200 mb-6"
+              >
+                <GoogleIcon />
+                <span>{isLogin ? 'Continue with Google' : 'Sign up with Google'}</span>
+              </button>
 
-          {/* ── Divider ── */}
-          <div className="flex items-center gap-4 mb-6">
-            <div className="flex-1 h-px bg-white/10" />
-            <span className="text-gray-600 text-xs font-semibold uppercase tracking-wider">or continue with email</span>
-            <div className="flex-1 h-px bg-white/10" />
-          </div>
+              {/* ── Divider ── */}
+              <div className="flex items-center gap-4 mb-6">
+                <div className="flex-1 h-px bg-white/10" />
+                <span className="text-gray-600 text-xs font-semibold uppercase tracking-wider">or continue with email</span>
+                <div className="flex-1 h-px bg-white/10" />
+              </div>
+            </>
+          )}
 
           {/* ── Form / OTP Step / Forgot Password ── */}
           {isLogin && forgotStep === 'email' ? (

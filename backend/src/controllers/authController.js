@@ -568,11 +568,10 @@ const forgotPassword = async (req, res, next) => {
     const { email } = req.body;
     const user = await User.findOne({ email });
 
-    // Generic response to prevent email enumeration
     if (!user) {
-      return res.status(200).json({
-        success: true,
-        message: 'If an account with that email exists, an OTP has been sent.',
+      return res.status(404).json({
+        success: false,
+        message: 'Email does not exist.',
       });
     }
 

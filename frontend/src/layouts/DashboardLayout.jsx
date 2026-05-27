@@ -23,6 +23,8 @@ import {
   ClipboardList,
   BookOpen,
   SlidersHorizontal,
+  DoorOpen,
+  Activity,
   // Common
   Bell,
   LogOut,
@@ -225,7 +227,7 @@ export default function DashboardLayout() {
           ${collapsed ? "w-[72px]" : "w-60"}
           flex-shrink-0 bg-white dark:bg-[#111111] border-r border-gray-200 dark:border-white/5
           flex flex-col transition-all duration-300 ease-in-out relative
-          overflow-hidden
+          z-40
         `}
       >
         {/* Logo */}

@@ -3,3 +3,132 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ── Navbar animations ── */
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@layer utilities {
+  /* Màu sắc và viền kính */
+  .text-gold-gradient {
+    background: linear-gradient(to right, #C59A3F, #E5C058, #AA771C);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .bg-gold-gradient {
+    background: linear-gradient(135deg, #C59A3F, #E5C058, #AA771C);
+  }
+  .glass-nav {
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(16px);
+  }
+
+  /* Hiệu ứng xe lơ lửng/tiến lùi nhẹ */
+  .animate-float {
+    animation: float 4s ease-in-out infinite;
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0px) translateX(0px); }
+    50% { transform: translateY(-10px) translateX(5px); }
+  }
+
+  /* Hiệu ứng tia sáng lướt qua (cho cảm giác AI đang quét) */
+  .scan-line {
+    position: relative;
+    overflow: hidden;
+  }
+  .scan-line::after {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%; width: 50%; height: 100%;
+    background: linear-gradient(to right, transparent, rgba(212, 175, 55, 0.3), transparent);
+    animation: scan 3s infinite linear;
+  }
+  .animate-drive-in {
+    animation: driveIn 1.2s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  }
+  @keyframes driveIn {
+    0% { transform: translateX(100px); opacity: 0; }
+    100% { transform: translateX(0); opacity: 1; }
+  }
+
+  /* Hiệu ứng trôi nổi chậm cho hình ảnh xe */
+  .animate-hover-car {
+    animation: hoverCar 6s ease-in-out infinite;
+  }
+  @keyframes hoverCar {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-15px); }
+  }
+
+  /* Viền phát sáng nhẹ cho các thẻ tính năng */
+  .hover-glow:hover {
+    box-shadow: 0 0 25px rgba(212, 175, 55, 0.15);
+    border-color: rgba(212, 175, 55, 0.3);
+  }
+
+  /* Hiệu ứng viền chạy cho nét vẽ (Draw line effect) */
+  .wireframe-path {
+    stroke-dasharray: 300;
+    stroke-dashoffset: 300;
+    animation: drawPath 3s ease-in-out forwards infinite alternate;
+  }
+  @keyframes drawPath {
+    to { stroke-dashoffset: 0; }
+  }
+
+/* Tạo không gian 3D (Góc nhìn từ trên chéo xuống) */
+  .scene-3d {
+    perspective: 1200px;
+    transform-style: preserve-3d;
+  }
+  
+  .isometric-floor {
+    transform: rotateX(60deg) rotateZ(-30deg);
+    transform-style: preserve-3d;
+    box-shadow: 0 50px 50px -20px rgba(0,0,0,0.5);
+  }
+
+  /* 1. Hiệu ứng Xe chạy (Dừng lại -> Quét -> Chạy tiếp) */
+  .animate-car-3d {
+    animation: carDrive3D 8s cubic-bezier(0.25, 1, 0.5, 1) infinite;
+  }
+  @keyframes carDrive3D {
+    0% { transform: translateY(250px); opacity: 0; }
+    10% { transform: translateY(150px); opacity: 1; }
+    25% { transform: translateY(50px); opacity: 1; } /* Dừng trước barrier */
+    45% { transform: translateY(50px); opacity: 1; } /* Chờ quét & mở cổng */
+    60% { transform: translateY(-150px); opacity: 1; } /* Lướt qua */
+    70% { transform: translateY(-250px); opacity: 0; }
+    100% { transform: translateY(-250px); opacity: 0; }
+  }
+
+  /* 2. Hiệu ứng Thanh chắn Barrier (Mở lên 90 độ) */
+  .animate-barrier-3d {
+    transform-origin: bottom left;
+    animation: barrierLift3D 8s linear infinite;
+  }
+  @keyframes barrierLift3D {
+    0%, 25% { transform: rotateZ(0deg); }      /* Đóng */
+    35%, 50% { transform: rotateZ(-90deg); }   /* Mở */
+    60%, 100% { transform: rotateZ(0deg); }    /* Đóng lại */
+  }
+
+  /* 3. Hiệu ứng Camera AI quét tia Laser */
+  .animate-laser-scan {
+    transform-origin: top center;
+    animation: laserScan 8s linear infinite;
+  }
+  @keyframes laserScan {
+    0%, 25% { opacity: 0; transform: scaleY(0); }
+    28% { opacity: 1; transform: scaleY(1); } /* Nháy sáng */
+    33% { opacity: 1; transform: scaleY(1); }
+    35%, 100% { opacity: 0; transform: scaleY(0); }
+  }
+}
