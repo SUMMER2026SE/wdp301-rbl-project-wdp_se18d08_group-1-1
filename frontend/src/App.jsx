@@ -20,7 +20,7 @@ import AdminDashboard from "./pages/Admin/Dashboard";
 import ManagerDashboard from "./pages/Manager/Dashboard";
 
 // Pages – Customer
-import CustomerProfile from "./pages/Profile/CustomerProfile";
+import CustomerProfile from "./pages/Customer/CustomerProfile";
 
 // Misc
 import UnauthorizedPage from "./pages/UnauthorizedPage";
