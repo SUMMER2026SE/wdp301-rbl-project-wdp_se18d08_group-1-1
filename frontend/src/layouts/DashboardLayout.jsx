@@ -1,64 +1,142 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from "react";
+import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import {
-  LayoutDashboard, Users, ShieldCheck, ParkingCircle,
-  Ticket, Wrench, BarChart2, DollarSign,
+  LayoutDashboard,
+  Users,
+  ShieldCheck,
+  ParkingCircle,
+  Ticket,
+  Wrench,
+  BarChart2,
+  DollarSign,
   // Manager icons
-  MonitorCheck, Car, Gauge, FileWarning, ClipboardList,
-  BookOpen, SlidersHorizontal,
+  MonitorCheck,
+  Car,
+  Gauge,
+  FileWarning,
+  ClipboardList,
+  BookOpen,
+  SlidersHorizontal,
   // Common
-  Bell, LogOut, Menu, X, ChevronDown,
-} from 'lucide-react';
+  Bell,
+  LogOut,
+  Menu,
+  X,
+  ChevronDown,
+} from "lucide-react";
 
 // ─── Nav configs per role ─────────────────────────────────────────────────────
 const NAV_CONFIG = {
   admin: [
-    { label: 'Overview',          icon: <LayoutDashboard size={18} />, to: '/admin/dashboard'           },
-    { label: 'Manager Accounts',  icon: <Users size={18} />,           to: '/admin/managers'            },
-    { label: 'User Management',   icon: <ShieldCheck size={18} />,     to: '/admin/users'               },
-    { label: 'Parking Lots',      icon: <ParkingCircle size={18} />,   to: '/admin/parking-lots'        },
-    { label: 'Ticket Packages',   icon: <Ticket size={18} />,          to: '/admin/tickets'             },
-    { label: 'Services',          icon: <Wrench size={18} />,          to: '/admin/services'            },
-    { label: 'Revenue Analytics', icon: <BarChart2 size={18} />,       to: '/admin/revenue'             },
-    { label: 'Financial Export',  icon: <DollarSign size={18} />,      to: '/admin/financial'           },
+    {
+      label: "Overview",
+      icon: <LayoutDashboard size={18} />,
+      to: "/admin/dashboard",
+    },
+    {
+      label: "Manager Accounts",
+      icon: <Users size={18} />,
+      to: "/admin/managers",
+    },
+    {
+      label: "User Management",
+      icon: <ShieldCheck size={18} />,
+      to: "/admin/users",
+    },
+    {
+      label: "Parking Lots",
+      icon: <ParkingCircle size={18} />,
+      to: "/admin/parking-lots",
+    },
+    {
+      label: "Ticket Packages",
+      icon: <Ticket size={18} />,
+      to: "/admin/tickets",
+    },
+    { label: "Services", icon: <Wrench size={18} />, to: "/admin/services" },
+    {
+      label: "Revenue Analytics",
+      icon: <BarChart2 size={18} />,
+      to: "/admin/revenue",
+    },
+    {
+      label: "Financial Export",
+      icon: <DollarSign size={18} />,
+      to: "/admin/financial",
+    },
   ],
   manager: [
-    { label: 'Overview',          icon: <LayoutDashboard size={18} />, to: '/manager/dashboard'         },
-    { label: 'Live Grid Monitor', icon: <MonitorCheck size={18} />,    to: '/manager/live-grid'         },
-    { label: 'Gate Control',      icon: <Car size={18} />,             to: '/manager/gate'              },
-    { label: 'Occupancy Reports', icon: <Gauge size={18} />,           to: '/manager/reports'           },
-    { label: 'Booking Management',icon: <BookOpen size={18} />,        to: '/manager/bookings'          },
-    { label: 'Parking Violations',icon: <FileWarning size={18} />,     to: '/manager/violations'        },
-    { label: 'Task Status',       icon: <ClipboardList size={18} />,   to: '/manager/tasks'             },
-    { label: 'Overtime Rates',    icon: <SlidersHorizontal size={18}/>,to: '/manager/rates'             },
+    {
+      label: "Overview",
+      icon: <LayoutDashboard size={18} />,
+      to: "/manager/dashboard",
+    },
+    {
+      label: "Live Grid Monitor",
+      icon: <MonitorCheck size={18} />,
+      to: "/manager/live-grid",
+    },
+    { label: "Gate Control", icon: <Car size={18} />, to: "/manager/gate" },
+    {
+      label: "Occupancy Reports",
+      icon: <Gauge size={18} />,
+      to: "/manager/reports",
+    },
+    {
+      label: "Booking Management",
+      icon: <BookOpen size={18} />,
+      to: "/manager/bookings",
+    },
+    {
+      label: "Parking Violations",
+      icon: <FileWarning size={18} />,
+      to: "/manager/violations",
+    },
+    {
+      label: "Task Status",
+      icon: <ClipboardList size={18} />,
+      to: "/manager/tasks",
+    },
+    {
+      label: "Overtime Rates",
+      icon: <SlidersHorizontal size={18} />,
+      to: "/manager/rates",
+    },
   ],
 };
 
 const ROLE_THEME = {
   admin: {
-    accent: 'from-yellow-400 to-yellow-600',
-    activeBg: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
-    activeHover: 'hover:text-yellow-300',
-    badge: { cls: 'bg-red-900/50 text-red-400', label: 'Admin' },
-    panelLabel: 'Admin Panel',
-    headerBadgeCls: 'bg-red-500/10 border-red-500/20 text-red-400',
+    accent: "from-yellow-400 to-yellow-600",
+    activeBg: "bg-yellow-500/10 text-yellow-400 border-yellow-500/20",
+    activeHover: "hover:text-yellow-300",
+    badge: { cls: "bg-red-900/50 text-red-400", label: "Admin" },
+    panelLabel: "Admin Panel",
+    headerBadgeCls: "bg-red-500/10 border-red-500/20 text-red-400",
   },
   manager: {
-    accent: 'from-emerald-400 to-teal-600',
-    activeBg: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
-    activeHover: 'hover:text-emerald-300',
-    badge: { cls: 'bg-emerald-900/50 text-emerald-400', label: 'Manager' },
-    panelLabel: 'Manager Panel',
-    headerBadgeCls: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400',
+    accent: "from-emerald-400 to-teal-600",
+    activeBg: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+    activeHover: "hover:text-emerald-300",
+    badge: { cls: "bg-emerald-900/50 text-emerald-400", label: "Manager" },
+    panelLabel: "Manager Panel",
+    headerBadgeCls: "bg-emerald-500/10 border-emerald-500/20 text-emerald-400",
   },
 };
 
-const getInitials = (name = '') =>
-  name.split(' ').map((w) => w[0]).slice(-2).join('').toUpperCase();
+const getInitials = (name = "") =>
+  name
+    .split(" ")
+    .map((w) => w[0])
+    .slice(-2)
+    .join("")
+    .toUpperCase();
 
 export default function DashboardLayout() {
   const navigate = useNavigate();
-  const user = JSON.parse(sessionStorage.getItem('valo_user') || '{}');
+  const [user, setUser] = useState(() =>
+    JSON.parse(sessionStorage.getItem("valo_user") || "{}"),
+  );
   const [collapsed, setCollapsed] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef(null);
@@ -67,28 +145,38 @@ export default function DashboardLayout() {
   const navItems = NAV_CONFIG[role] || [];
   const theme = ROLE_THEME[role] || ROLE_THEME.admin;
 
+  // Listen for auth changes (including profile updates)
+  useEffect(() => {
+    const handleAuthChange = () => {
+      setUser(JSON.parse(sessionStorage.getItem("valo_user") || "{}"));
+    };
+    window.addEventListener("valo_auth_change", handleAuthChange);
+    return () =>
+      window.removeEventListener("valo_auth_change", handleAuthChange);
+  }, []);
+
   // Close notif dropdown on outside click
   useEffect(() => {
     const h = (e) => {
-      if (notifRef.current && !notifRef.current.contains(e.target)) setNotifOpen(false);
+      if (notifRef.current && !notifRef.current.contains(e.target))
+        setNotifOpen(false);
     };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
   }, []);
 
   const handleLogout = () => {
-    sessionStorage.removeItem('valo_user');
-    window.dispatchEvent(new Event('valo_auth_change'));
-    navigate('/login');
+    sessionStorage.removeItem("valo_user");
+    window.dispatchEvent(new Event("valo_auth_change"));
+    navigate("/login");
   };
 
   return (
     <div className="min-h-screen bg-[#0D0D0D] flex font-sans">
-
       {/* ══════════ SIDEBAR ══════════ */}
       <aside
         className={`
-          ${collapsed ? 'w-[72px]' : 'w-60'}
+          ${collapsed ? "w-[72px]" : "w-60"}
           flex-shrink-0 bg-[#111111] border-r border-white/5
           flex flex-col transition-all duration-300 ease-in-out relative
           overflow-hidden
@@ -105,8 +193,12 @@ export default function DashboardLayout() {
           </div>
           {!collapsed && (
             <div className="overflow-hidden">
-              <p className="text-white font-extrabold text-sm leading-tight whitespace-nowrap">VALO Parking</p>
-              <p className="text-[10px] text-gray-500 uppercase tracking-widest whitespace-nowrap">{theme.panelLabel}</p>
+              <p className="text-white font-extrabold text-sm leading-tight whitespace-nowrap">
+                VALO Parking
+              </p>
+              <p className="text-[10px] text-gray-500 uppercase tracking-widest whitespace-nowrap">
+                {theme.panelLabel}
+              </p>
             </div>
           )}
         </div>
@@ -117,13 +209,14 @@ export default function DashboardLayout() {
             <NavLink
               key={item.to}
               to={item.to}
-              end={item.to.split('/').length === 2}
+              end={item.to.split("/").length === 2}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold
                  transition-all duration-150 whitespace-nowrap overflow-hidden group
-                 ${isActive
-                   ? `${theme.activeBg} border`
-                   : `text-gray-500 hover:text-gray-300 hover:bg-white/5 border border-transparent`
+                 ${
+                   isActive
+                     ? `${theme.activeBg} border`
+                     : `text-gray-500 hover:text-gray-300 hover:bg-white/5 border border-transparent`
                  }`
               }
               title={collapsed ? item.label : undefined}
@@ -135,7 +228,9 @@ export default function DashboardLayout() {
         </nav>
 
         {/* User section */}
-        <div className={`border-t border-white/5 p-3 flex items-center gap-3 ${collapsed ? 'justify-center' : ''}`}>
+        <div
+          className={`border-t border-white/5 p-3 flex items-center gap-3 ${collapsed ? "justify-center" : ""}`}
+        >
           <div
             className={`w-9 h-9 rounded-full bg-gradient-to-br ${theme.accent}
               flex items-center justify-center text-black font-extrabold text-sm shrink-0`}
@@ -145,8 +240,12 @@ export default function DashboardLayout() {
           {!collapsed && (
             <>
               <div className="flex-1 min-w-0">
-                <p className="text-white font-bold text-xs truncate">{user.name}</p>
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${theme.badge.cls}`}>
+                <p className="text-white font-bold text-xs truncate">
+                  {user.name}
+                </p>
+                <span
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${theme.badge.cls}`}
+                >
                   {theme.badge.label}
                 </span>
               </div>
@@ -172,13 +271,16 @@ export default function DashboardLayout() {
             transition-all z-20
           "
         >
-          {collapsed ? <ChevronDown size={11} className="-rotate-90" /> : <ChevronDown size={11} className="rotate-90" />}
+          {collapsed ? (
+            <ChevronDown size={11} className="-rotate-90" />
+          ) : (
+            <ChevronDown size={11} className="rotate-90" />
+          )}
         </button>
       </aside>
 
       {/* ══════════ MAIN AREA ══════════ */}
       <div className="flex-1 flex flex-col overflow-hidden">
-
         {/* Topbar */}
         <header className="h-[70px] bg-[#111111] border-b border-white/5 flex items-center justify-between px-6 shrink-0">
           {/* Hamburger (mobile) */}
@@ -193,11 +295,14 @@ export default function DashboardLayout() {
 
           {/* Right zone */}
           <div className="flex items-center gap-3">
-
             {/* Role badge */}
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${theme.headerBadgeCls}`}>
+            <div
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${theme.headerBadgeCls}`}
+            >
               <ShieldCheck size={13} />
-              <span className="text-xs font-bold uppercase">{theme.badge.label}</span>
+              <span className="text-xs font-bold uppercase">
+                {theme.badge.label}
+              </span>
             </div>
 
             {/* Notifications */}
@@ -212,18 +317,41 @@ export default function DashboardLayout() {
               {notifOpen && (
                 <div className="absolute right-0 top-[calc(100%+8px)] w-72 bg-[#1A1A1A] border border-white/10 rounded-2xl shadow-2xl overflow-hidden z-50">
                   <div className="px-4 py-3 border-b border-white/5">
-                    <p className="text-white font-bold text-sm">Notifications</p>
+                    <p className="text-white font-bold text-sm">
+                      Notifications
+                    </p>
                   </div>
                   {[
-                    { text: 'Gate B camera offline',       time: '3m ago',  dot: 'bg-yellow-400' },
-                    { text: 'New booking #B-2041 created', time: '10m ago', dot: 'bg-green-400'  },
-                    { text: 'Payment timeout – Slot A-07', time: '1h ago',  dot: 'bg-red-400'    },
+                    {
+                      text: "Gate B camera offline",
+                      time: "3m ago",
+                      dot: "bg-yellow-400",
+                    },
+                    {
+                      text: "New booking #B-2041 created",
+                      time: "10m ago",
+                      dot: "bg-green-400",
+                    },
+                    {
+                      text: "Payment timeout – Slot A-07",
+                      time: "1h ago",
+                      dot: "bg-red-400",
+                    },
                   ].map((n, i) => (
-                    <div key={i} className="flex items-start gap-3 px-4 py-3 hover:bg-white/5 border-b border-white/5 last:border-0 cursor-pointer">
-                      <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${n.dot}`} />
+                    <div
+                      key={i}
+                      className="flex items-start gap-3 px-4 py-3 hover:bg-white/5 border-b border-white/5 last:border-0 cursor-pointer"
+                    >
+                      <div
+                        className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${n.dot}`}
+                      />
                       <div>
-                        <p className="text-gray-300 text-xs font-medium">{n.text}</p>
-                        <p className="text-gray-600 text-[10px] mt-0.5">{n.time}</p>
+                        <p className="text-gray-300 text-xs font-medium">
+                          {n.text}
+                        </p>
+                        <p className="text-gray-600 text-[10px] mt-0.5">
+                          {n.time}
+                        </p>
                       </div>
                     </div>
                   ))}

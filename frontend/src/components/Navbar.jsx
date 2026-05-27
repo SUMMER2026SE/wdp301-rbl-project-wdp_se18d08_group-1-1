@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { LogOut, User, Wallet, ChevronDown, ShieldCheck } from 'lucide-react';
-import Logo from '../assets/images/logo.png';
+import React, { useState, useEffect, useRef } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { LogOut, User, Wallet, ChevronDown, ShieldCheck } from "lucide-react";
+import Logo from "../assets/images/logo.png";
 
 export default function Navbar() {
   const navigate = useNavigate();
@@ -11,18 +11,18 @@ export default function Navbar() {
 
   // Đọc session mỗi khi component mount hoặc tab được focus lại
   const syncUser = () => {
-    const raw = sessionStorage.getItem('valo_user');
+    const raw = sessionStorage.getItem("valo_user");
     setUser(raw ? JSON.parse(raw) : null);
   };
 
   useEffect(() => {
     syncUser();
-    window.addEventListener('focus', syncUser);
+    window.addEventListener("focus", syncUser);
     // Custom event để LoginPage trigger ngay lập tức (không cần reload)
-    window.addEventListener('valo_auth_change', syncUser);
+    window.addEventListener("valo_auth_change", syncUser);
     return () => {
-      window.removeEventListener('focus', syncUser);
-      window.removeEventListener('valo_auth_change', syncUser);
+      window.removeEventListener("focus", syncUser);
+      window.removeEventListener("valo_auth_change", syncUser);
     };
   }, []);
 
@@ -33,43 +33,70 @@ export default function Navbar() {
         setDropdownOpen(false);
       }
     };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
   }, []);
 
   const handleLogout = () => {
-    sessionStorage.removeItem('valo_user');
+    sessionStorage.removeItem("valo_user");
     setUser(null);
     setDropdownOpen(false);
-    navigate('/');
+    navigate("/");
   };
 
   // Tạo chữ cái đầu từ tên user
-  const getInitials = (name = '') =>
-    name.split(' ').map((w) => w[0]).slice(-2).join('').toUpperCase();
+  const getInitials = (name = "") =>
+    name
+      .split(" ")
+      .map((w) => w[0])
+      .slice(-2)
+      .join("")
+      .toUpperCase();
 
   // Màu badge theo role
   const roleBadge = {
-    admin:    { label: 'Admin',    cls: 'bg-red-100 text-red-700'    },
-    staff:    { label: 'Staff',    cls: 'bg-blue-100 text-blue-700'  },
-    customer: { label: 'Customer', cls: 'bg-green-100 text-green-700'},
+    admin: { label: "Admin", cls: "bg-red-100 text-red-700" },
+    staff: { label: "Staff", cls: "bg-blue-100 text-blue-700" },
+    customer: { label: "Customer", cls: "bg-green-100 text-green-700" },
   };
 
   return (
-    <nav className="glass-nav fixed w-full top-0 z-50 border-b border-gray-100 transition-all duration-300">
+    <nav
+      className="fixed w-full top-0 z-50 border-b border-gray-100 transition-all duration-300"
+      style={{
+        background: "rgba(255,255,255,0.88)",
+        backdropFilter: "blur(16px)",
+      }}
+    >
       <div className="max-w-7xl mx-auto px-6 h-20 flex justify-between items-center">
-
         {/* LOGO */}
         <Link to="/" className="flex items-center gap-3">
           <img src={Logo} alt="VALO Logo" className="h-10 object-contain" />
-          <span className="text-xs font-bold tracking-widest text-gray-400 uppercase mt-1 hidden sm:block">Valo Parking</span>
+          <span className="text-xs font-bold tracking-widest text-gray-400 uppercase mt-1 hidden sm:block">
+            Valo Parking
+          </span>
         </Link>
 
         {/* MENU */}
         <div className="hidden md:flex space-x-8">
-          <Link to="/" className="text-black font-semibold border-b-2 border-black pb-1">Home</Link>
-          <a href="#ecosystem" className="text-gray-500 hover:text-black transition font-medium">Ecosystem</a>
-          <a href="#pricing" className="text-gray-500 hover:text-black transition font-medium">Pricing</a>
+          <Link
+            to="/"
+            className="text-black font-semibold border-b-2 border-black pb-1"
+          >
+            Home
+          </Link>
+          <a
+            href="#ecosystem"
+            className="text-gray-500 hover:text-black transition font-medium"
+          >
+            Ecosystem
+          </a>
+          <a
+            href="#pricing"
+            className="text-gray-500 hover:text-black transition font-medium"
+          >
+            Pricing
+          </a>
         </div>
 
         {/* AUTH ZONE */}
@@ -87,18 +114,17 @@ export default function Navbar() {
                   {getInitials(user.name)}
                 </div>
                 <span className="text-sm font-bold text-gray-800 hidden sm:block max-w-[120px] truncate">
-                  {user.name.split(' ').pop()}
+                  {user.name.split(" ").pop()}
                 </span>
                 <ChevronDown
                   size={14}
-                  className={`text-gray-500 transition-transform duration-200 ${dropdownOpen ? 'rotate-180' : ''}`}
+                  className={`text-gray-500 transition-transform duration-200 ${dropdownOpen ? "rotate-180" : ""}`}
                 />
               </button>
 
               {/* Dropdown panel */}
               {dropdownOpen && (
                 <div className="absolute right-0 top-[calc(100%+10px)] w-64 bg-white border border-gray-100 rounded-2xl shadow-2xl shadow-black/10 overflow-hidden animate-[fadeInDown_0.15s_ease]">
-
                   {/* Header */}
                   <div className="px-4 pt-4 pb-3 border-b border-gray-50">
                     <div className="flex items-center gap-3">
@@ -106,10 +132,16 @@ export default function Navbar() {
                         {getInitials(user.name)}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-bold text-gray-900 text-sm truncate">{user.name}</p>
-                        <p className="text-xs text-gray-400 truncate">{user.email}</p>
+                        <p className="font-bold text-gray-900 text-sm truncate">
+                          {user.name}
+                        </p>
+                        <p className="text-xs text-gray-400 truncate">
+                          {user.email}
+                        </p>
                         {roleBadge[user.role] && (
-                          <span className={`inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${roleBadge[user.role].cls}`}>
+                          <span
+                            className={`inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${roleBadge[user.role].cls}`}
+                          >
                             {roleBadge[user.role].label}
                           </span>
                         )}
@@ -124,9 +156,11 @@ export default function Navbar() {
                         <Wallet size={15} className="text-yellow-700" />
                       </div>
                       <div>
-                        <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">VALO Wallet</p>
+                        <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">
+                          VALO Wallet
+                        </p>
                         <p className="text-sm font-extrabold text-gray-800">
-                          {user.wallet.toLocaleString('vi-VN')}₫
+                          {user.wallet.toLocaleString("vi-VN")}₫
                         </p>
                       </div>
                     </div>
@@ -136,15 +170,19 @@ export default function Navbar() {
                   <div className="py-2">
                     <button
                       id="nav-dropdown-profile"
+                      onClick={() => {
+                        navigate("/profile");
+                        setDropdownOpen(false);
+                      }}
                       className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                     >
                       <User size={15} className="text-gray-400" />
                       My Profile
                     </button>
-                    {user.role === 'admin' && (
+                    {user.role === "admin" && (
                       <button
                         id="nav-dropdown-admin"
-                        onClick={() => navigate('/admin/dashboard')}
+                        onClick={() => navigate("/admin/dashboard")}
                         className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                       >
                         <ShieldCheck size={15} className="text-gray-400" />
@@ -187,8 +225,7 @@ export default function Navbar() {
             </>
           )}
         </div>
-
       </div>
     </nav>
   );
-}
+}
