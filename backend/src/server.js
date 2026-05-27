@@ -44,6 +44,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/wallet', require('./routes/walletRoutes'));
 app.use('/api/ai', require('./routes/aiRoutes'));
+app.use('/api/vehicles', require('./routes/vehicleRoutes'));
 
 // 404 handler
 app.use((req, res) => {
