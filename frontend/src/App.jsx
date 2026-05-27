@@ -15,7 +15,7 @@ import ParkingMap from "./pages/Guest/ParkingMap";
 import OAuthCallback from "./pages/OAuthCallback";
 
 // Pages - Kiosk
-import KioskFlow from './pages/Kiosk/KioskFlow';
+import KioskFlow from "./pages/Kiosk/KioskFlow";
 
 // Pages – Admin
 import AdminDashboard from "./pages/Admin/Dashboard";
@@ -33,7 +33,6 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-
         {/* ── Standalone Kiosk app ── */}
         <Route path="/kiosk/*" element={<KioskFlow />} />
 
