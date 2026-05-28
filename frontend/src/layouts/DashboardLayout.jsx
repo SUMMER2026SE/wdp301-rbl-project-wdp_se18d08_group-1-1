@@ -60,6 +60,11 @@ const NAV_CONFIG = {
     },
     { label: "Services", icon: <Wrench size={18} />, to: "/admin/services" },
     {
+      label: "Vehicle Models",
+      icon: <Car size={18} />,
+      to: "/admin/vehicle-models",
+    },
+    {
       label: "Revenue Analytics",
       icon: <BarChart2 size={18} />,
       to: "/admin/revenue",
