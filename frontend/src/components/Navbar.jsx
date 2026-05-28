@@ -6,6 +6,7 @@ import {
   CircleParking, ArrowUpRight, CreditCard
 } from 'lucide-react';
 import Logo from '../assets/images/logo.png';
+import { getWalletInfo } from '../services/walletService';
 
 /* ═══════════════════════════════════════════════════════════════════
    VALO PARKING – Premium Navbar
@@ -56,21 +57,46 @@ export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [notifCount] = useState(3);
   const [scrollY, setScrollY] = useState(0);
+  const [walletBalance, setWalletBalance] = useState(0);
   const profileRef = useRef(null);
 
-  // ── Sync user ──
-  const syncUser = useCallback(() => {
+  // ── Sync user and live balance ──
+  const syncUser = useCallback(async () => {
     const raw = sessionStorage.getItem('valo_user');
-    setUser(raw ? JSON.parse(raw) : null);
+    const parsedUser = raw ? JSON.parse(raw) : null;
+    setUser(parsedUser);
+
+    if (parsedUser) {
+      try {
+        const res = await getWalletInfo();
+        if (res.ok && res.data?.data) {
+          setWalletBalance(res.data.data.balance || 0);
+        }
+      } catch (err) {
+        console.error('Error fetching wallet balance in Navbar:', err);
+      }
+    } else {
+      setWalletBalance(0);
+    }
   }, []);
 
   useEffect(() => {
     syncUser();
+
+    const handleBalanceChange = (e) => {
+      if (e.detail !== undefined) {
+        setWalletBalance(e.detail);
+      }
+    };
+
     window.addEventListener('focus', syncUser);
     window.addEventListener('valo_auth_change', syncUser);
+    window.addEventListener('valo_balance_change', handleBalanceChange);
+
     return () => {
       window.removeEventListener('focus', syncUser);
       window.removeEventListener('valo_auth_change', syncUser);
+      window.removeEventListener('valo_balance_change', handleBalanceChange);
     };
   }, [syncUser]);
 
@@ -280,7 +306,7 @@ export default function Navbar() {
                               </div>
                               <div>
                                 <p className="text-[10px] text-amber-600/70 font-semibold uppercase tracking-wider">Balance</p>
-                                <p className="text-sm font-extrabold text-gray-800">{(user.wallet || 0).toLocaleString('vi-VN')}₫</p>
+                                <p className="text-sm font-extrabold text-gray-800">{walletBalance.toLocaleString('vi-VN')}₫</p>
                               </div>
                             </div>
                             <Link

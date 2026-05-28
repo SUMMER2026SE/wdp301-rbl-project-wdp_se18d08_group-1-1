@@ -253,34 +253,47 @@ const completePendingTopUp = async (payosOrderCode, payosReference) => {
     throw Object.assign(new Error('Transaction is not in PENDING status'), { statusCode: 400 });
   }
 
-  // Use creditWallet to atomically update balance
-  const result = await creditWallet(
-    transaction.userId,
-    transaction.amount,
-    'TOP_UP',
-    transaction.description,
-    {
-      payosOrderCode,
-      payosPaymentLinkId: transaction.payosPaymentLinkId,
-      payosReference,
+  // Use MongoDB transaction to atomically update wallet + transaction
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const wallet = await Wallet.findById(transaction.walletId).session(session);
+    if (!wallet) {
+      throw Object.assign(new Error('Wallet not found'), { statusCode: 404 });
     }
-  );
 
-  // Mark the original pending transaction as completed
-  transaction.status = 'COMPLETED';
-  transaction.balanceAfter = result.newBalance;
-  transaction.payosReference = payosReference;
-  await transaction.save();
+    const newBalance = wallet.balance + transaction.amount;
 
-  // Remove the duplicate completed transaction created by creditWallet
-  // since we already have the original pending one updated
-  await WalletTransaction.findByIdAndDelete(result.transaction._id);
+    // Update wallet balance and totalTopUp
+    await Wallet.findByIdAndUpdate(
+      wallet._id,
+      {
+        balance: newBalance,
+        totalTopUp: wallet.totalTopUp + transaction.amount,
+      },
+      { session }
+    );
 
-  return {
-    transaction,
-    newBalance: result.newBalance,
-    alreadyProcessed: false,
-  };
+    // Update the pending transaction to completed
+    transaction.status = 'COMPLETED';
+    transaction.balanceAfter = newBalance;
+    transaction.payosReference = payosReference || null;
+    await transaction.save({ session });
+
+    await session.commitTransaction();
+
+    return {
+      transaction,
+      newBalance,
+      alreadyProcessed: false,
+    };
+  } catch (error) {
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    session.endSession();
+  }
 };
 
 /**

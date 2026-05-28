@@ -22,6 +22,7 @@ import AdminDashboard from './pages/Admin/Dashboard';
 
 // Pages – Manager
 import ManagerDashboard from './pages/Manager/Dashboard';
+import WalletPage from './pages/Wallet/WalletPage';
 
 // Misc
 import UnauthorizedPage from './pages/UnauthorizedPage';
@@ -44,6 +45,7 @@ export default function App() {
         {/* ── Standalone auth page ── */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/oauth/callback" element={<OAuthCallback />} />
+        <Route path="/wallet" element={<WalletPage />} />
 
         {/* ══════════════════════════════════════════
             ADMIN section — DashboardLayout chung
