@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { apiFetch } from "../../services/api";
+import { apiFetch, API_BASE } from "../../services/api";
 import {
   forgotPassword as apiForgotPassword,
   verifyResetPasswordOTP as apiVerifyResetOTP,
@@ -204,6 +204,7 @@ export default function CustomerProfile() {
   const [cpLoading, setCpLoading] = useState(false);
   const [cpRipple, setCpRipple] = useState(false);
   const [cpLockOpen, setCpLockOpen] = useState(false);
+  const [avatarLoading, setAvatarLoading] = useState(false);
 
   // ── Forgot current password sub-flow ──────────────────────────────────────
   // fpStep: null | 'otp' | 'password'
@@ -302,11 +303,57 @@ export default function CustomerProfile() {
   };
 
   // ── Avatar upload ──────────────────────────────────────────────────────────
-  const handleAvatarChange = (e) => {
+  const handleAvatarChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setProfile((prev) => ({ ...prev, avatar: URL.createObjectURL(file) }));
-    showToast("Avatar updated ✓", "success");
+
+    if (file.size > 5 * 1024 * 1024) {
+      showToast("Image must be under 5 MB.", "error");
+      return;
+    }
+
+    // Instant preview while uploading
+    const previewUrl = URL.createObjectURL(file);
+    const prevAvatar = profile.avatar;
+    setProfile((prev) => ({ ...prev, avatar: previewUrl }));
+    setAvatarLoading(true);
+
+    const token = localStorage.getItem("accessToken");
+    const formData = new FormData();
+    formData.append("avatar", file);
+
+    try {
+      const res = await fetch(`${API_BASE}/profile/avatar`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const data = await res.json();
+
+      if (res.ok && data?.success) {
+        const cloudinaryUrl = data.data.avatarUrl;
+        setProfile((prev) => ({ ...prev, avatar: cloudinaryUrl }));
+        const cached = JSON.parse(sessionStorage.getItem("valo_user") || "null");
+        if (cached) {
+          sessionStorage.setItem(
+            "valo_user",
+            JSON.stringify({ ...cached, avatar: cloudinaryUrl })
+          );
+        }
+        window.dispatchEvent(new Event("valo_auth_change"));
+        showToast("Avatar updated ✓", "success");
+      } else {
+        setProfile((prev) => ({ ...prev, avatar: prevAvatar }));
+        showToast(data?.message || "Upload failed.", "error");
+      }
+    } catch {
+      setProfile((prev) => ({ ...prev, avatar: prevAvatar }));
+      showToast("Could not connect to server.", "error");
+    } finally {
+      setAvatarLoading(false);
+      URL.revokeObjectURL(previewUrl);
+      if (avatarInputRef.current) avatarInputRef.current.value = "";
+    }
   };
 
   // ── Edit mode handlers ─────────────────────────────────────────────────────
@@ -654,28 +701,47 @@ export default function CustomerProfile() {
               )}
             </div>
 
-            {/* Hover upload overlay */}
+            {/* Hover upload overlay — shows spinner when uploading */}
             <label
               htmlFor="avatar-upload"
-              className="absolute inset-0 rounded-full cursor-pointer flex flex-col items-center justify-center gap-1 transition-all duration-300 group"
-              style={{ background: "rgba(0,0,0,0)" }}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.background = "rgba(0,0,0,0.6)")
-              }
-              onMouseLeave={(e) =>
-                (e.currentTarget.style.background = "rgba(0,0,0,0)")
-              }
+              className="absolute inset-0 rounded-full flex flex-col items-center justify-center gap-1 transition-all duration-300 group"
+              style={{
+                background: avatarLoading ? "rgba(0,0,0,0.65)" : "rgba(0,0,0,0)",
+                cursor: avatarLoading ? "not-allowed" : "pointer",
+              }}
+              onMouseEnter={(e) => {
+                if (!avatarLoading) e.currentTarget.style.background = "rgba(0,0,0,0.6)";
+              }}
+              onMouseLeave={(e) => {
+                if (!avatarLoading) e.currentTarget.style.background = "rgba(0,0,0,0)";
+              }}
             >
-              <Camera
-                size={22}
-                className="text-yellow-400 opacity-0 group-hover:opacity-100 transition-opacity"
-              />
-              <span className="text-yellow-400 text-[9px] font-bold tracking-wider uppercase opacity-0 group-hover:opacity-100 transition-opacity">
-                Change
-              </span>
+              {avatarLoading ? (
+                <svg
+                  className="animate-spin"
+                  style={{ width: 28, height: 28, color: "#EAB308" }}
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+              ) : (
+                <>
+                  <Camera
+                    size={22}
+                    className="text-yellow-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                  />
+                  <span className="text-yellow-400 text-[9px] font-bold tracking-wider uppercase opacity-0 group-hover:opacity-100 transition-opacity">
+                    Change
+                  </span>
+                </>
+              )}
             </label>
             <input
               id="avatar-upload"
+              disabled={avatarLoading}
               ref={avatarInputRef}
               type="file"
               accept="image/*"
