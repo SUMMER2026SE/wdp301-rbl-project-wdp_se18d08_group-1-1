@@ -25,7 +25,6 @@ const customerLinks = [
   { to: '/',            label: 'Home',         icon: Sparkles },
   { to: '/booking',     label: 'Booking',      icon: CalendarCheck },
   { to: '/parking-map', label: 'Parking Map',  icon: Map },
-  { to: '/my-vehicles', label: 'My Vehicles',  icon: Car },
   { to: '/wallet',      label: 'Wallet',       icon: Wallet },
 ];
 
@@ -323,7 +322,6 @@ export default function Navbar() {
                         <div className="p-2 mt-1">
                           {[
                             { id: 'profile',       icon: User,    label: 'Profile',             to: '/profile' },
-                            { id: 'vehicles',      icon: Car,     label: 'My Vehicles',         to: '/my-vehicles' },
                             { id: 'transactions',  icon: History, label: 'Transaction History', to: '/wallet/history' },
                             { id: 'notifications', icon: Bell,    label: 'Notifications',       to: '/notifications' },
                             { id: 'policy',        icon: FileText,label: 'Policy',              to: '/policy' },

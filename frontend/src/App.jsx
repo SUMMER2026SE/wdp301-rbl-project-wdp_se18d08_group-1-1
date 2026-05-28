@@ -18,7 +18,8 @@ import OAuthCallback from "./pages/OAuthCallback";
 import KioskFlow from "./pages/Kiosk/KioskFlow";
 
 // Pages – Admin
-import AdminDashboard from "./pages/Admin/Dashboard";
+import AdminDashboard from './pages/Admin/Dashboard';
+import VehicleModels from './pages/Admin/VehicleModels';
 
 // Pages – Manager
 import ManagerDashboard from './pages/Manager/Dashboard';
@@ -26,6 +27,7 @@ import WalletPage from './pages/Wallet/WalletPage';
 
 // Pages – Customer
 import CustomerProfile from "./pages/Customer/CustomerProfile";
+import MyVehicles from "./pages/Customer/MyVehicles";
 
 // Misc
 import UnauthorizedPage from "./pages/UnauthorizedPage";
@@ -61,6 +63,7 @@ export default function App() {
           }
         >
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
+          <Route path="/admin/vehicle-models" element={<VehicleModels />} />
         </Route>
 
         {/* ══════════════════════════════════════════
@@ -86,6 +89,7 @@ export default function App() {
           }
         >
           <Route path="/profile" element={<CustomerProfile />} />
+          <Route path="/customer/vehicles" element={<MyVehicles />} />
         </Route>
 
         {/* ── 403 ── */}
