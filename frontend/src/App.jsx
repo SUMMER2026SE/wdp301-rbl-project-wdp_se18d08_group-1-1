@@ -18,7 +18,8 @@ import OAuthCallback from "./pages/OAuthCallback";
 import KioskFlow from "./pages/Kiosk/KioskFlow";
 
 // Pages – Admin
-import AdminDashboard from "./pages/Admin/Dashboard";
+import AdminDashboard from './pages/Admin/Dashboard';
+import VehicleModels from './pages/Admin/VehicleModels';
 
 // Pages – Manager
 import ManagerDashboard from "./pages/Manager/Dashboard";
@@ -60,6 +61,7 @@ export default function App() {
           }
         >
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
+          <Route path="/admin/vehicle-models" element={<VehicleModels />} />
         </Route>
 
         {/* ══════════════════════════════════════════

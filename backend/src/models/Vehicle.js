@@ -54,6 +54,17 @@ const vehicleSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    hexColor: {
+      type: String,
+      trim: true,
+      default: '#ffffff',
+      match: [/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/, 'Invalid hex color format'],
+    },
+    modelUrl: {
+      type: String,
+      trim: true,
+      default: '',
+    },
   },
   {
     timestamps: true,

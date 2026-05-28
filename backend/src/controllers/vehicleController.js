@@ -1,5 +1,29 @@
 const { validationResult } = require('express-validator');
 const Vehicle = require('../models/Vehicle');
+const cloudinary = require('../config/cloudinary');
+
+// ─── Cloudinary 3D model auto-discovery ──────────────────────────────────────
+const normalizeSlug = (str = '') =>
+  str.toLowerCase().trim().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+
+/**
+ * Look up a raw .glb file on Cloudinary at path:
+ *   vehicles/{normalizedBrand}/{normalizedModel}
+ * Returns the secure URL if found, otherwise empty string.
+ */
+const findVehicleModelUrl = async (brand, model) => {
+  try {
+    const nb = normalizeSlug(brand);
+    const nm = normalizeSlug(model || 'default');
+    const resource = await cloudinary.api.resource(
+      `vehicles/${nb}/${nm}`,
+      { resource_type: 'raw' },
+    );
+    return resource.secure_url || '';
+  } catch {
+    return ''; // resource not found → no 3D model yet
+  }
+};
 
 /**
  * @desc    Get all vehicles of current user
@@ -59,7 +83,7 @@ const addVehicle = async (req, res) => {
       return res.status(400).json({ success: false, errors: errors.array() });
     }
 
-    const { licensePlate, vehicleType, brand, model, color, nickname, isDefault } =
+    const { licensePlate, vehicleType, brand, model, color, nickname, isDefault, hexColor } =
       req.body;
 
     // Check duplicate license plate
@@ -77,6 +101,9 @@ const addVehicle = async (req, res) => {
     const count = await Vehicle.countDocuments({ owner: req.user._id });
     const setDefault = count === 0 ? true : !!isDefault;
 
+    // Auto-discover 3D model on Cloudinary by brand + model convention
+    const modelUrl = await findVehicleModelUrl(brand, model || '');
+
     const vehicle = await Vehicle.create({
       owner: req.user._id,
       licensePlate,
@@ -86,6 +113,8 @@ const addVehicle = async (req, res) => {
       color,
       nickname,
       isDefault: setDefault,
+      hexColor,
+      modelUrl,
     });
 
     res.status(201).json({
@@ -127,7 +156,7 @@ const updateVehicle = async (req, res) => {
         .json({ success: false, message: 'Vehicle not found' });
     }
 
-    const { licensePlate, vehicleType, brand, model, color, nickname, isDefault } =
+    const { licensePlate, vehicleType, brand, model, color, nickname, isDefault, hexColor } =
       req.body;
 
     // Check duplicate license plate (excluding this vehicle)
@@ -151,6 +180,14 @@ const updateVehicle = async (req, res) => {
     if (color !== undefined) vehicle.color = color;
     if (nickname !== undefined) vehicle.nickname = nickname;
     if (isDefault !== undefined) vehicle.isDefault = isDefault;
+    if (hexColor !== undefined) vehicle.hexColor = hexColor;
+    // Re-discover 3D model when brand or model changes
+    if (brand !== undefined || model !== undefined) {
+      vehicle.modelUrl = await findVehicleModelUrl(
+        brand !== undefined ? brand : vehicle.brand,
+        model !== undefined ? model : vehicle.model,
+      );
+    }
 
     await vehicle.save();
 

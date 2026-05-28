@@ -46,6 +46,12 @@ exports.addVehicleValidator = [
     .optional()
     .isBoolean()
     .withMessage('isDefault must be a boolean'),
+
+  body('hexColor')
+    .optional()
+    .trim()
+    .matches(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/)
+    .withMessage('Invalid hex color format (e.g. #fff or #ffffff)'),
 ];
 
 exports.updateVehicleValidator = [
@@ -88,4 +94,10 @@ exports.updateVehicleValidator = [
     .optional()
     .isBoolean()
     .withMessage('isDefault must be a boolean'),
+
+  body('hexColor')
+    .optional()
+    .trim()
+    .matches(/^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/)
+    .withMessage('Invalid hex color format (e.g. #fff or #ffffff)'),
 ];

@@ -2,11 +2,14 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Car, Zap, Plus, Trash2, Star, ScanLine,
   Upload, X, Check, Pencil, AlertCircle, Loader2,
+  ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import {
   getMyVehicles, addVehicle, updateVehicle,
   deleteVehicle, setDefaultVehicle, scanRegistrationCard,
 } from '../../services/vehicleService';
+import CarViewer from '../../components/CarViewer';
+import garageBg from '../../assets/images/garage-bg.png';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const VEHICLE_TYPES = [
@@ -20,6 +23,7 @@ const EMPTY_FORM = {
   brand: '',
   model: '',
   color: '',
+  hexColor: '#ffffff',
   nickname: '',
 };
 
@@ -60,6 +64,18 @@ function VehicleCard({ vehicle, onDelete, onSetDefault, onEdit }) {
         </span>
       )}
 
+      {/* 3D Model Preview */}
+      {vehicle.modelUrl && (
+        <div className="w-full h-44 rounded-xl overflow-hidden mb-4
+          bg-gray-100 dark:bg-black/30 border border-gray-200 dark:border-white/10">
+          <CarViewer
+            modelUrl={vehicle.modelUrl}
+            carColor={vehicle.hexColor || '#ffffff'}
+            height={176}
+          />
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-start gap-3 mb-4">
         <div className="w-10 h-10 rounded-xl bg-yellow-500/10 border border-yellow-500/20
@@ -70,7 +86,13 @@ function VehicleCard({ vehicle, onDelete, onSetDefault, onEdit }) {
           <p className="font-bold text-base text-gray-900 dark:text-white tracking-wide">
             {vehicle.licensePlate}
           </p>
-          <p className="text-sm text-gray-500 dark:text-gray-400 truncate">
+          <p className="text-sm text-gray-500 dark:text-gray-400 truncate flex items-center gap-1.5">
+            {vehicle.hexColor && vehicle.hexColor !== '#ffffff' && (
+              <span
+                className="inline-block w-3 h-3 rounded-full border border-gray-300 dark:border-white/20 shrink-0"
+                style={{ backgroundColor: vehicle.hexColor }}
+              />
+            )}
             {[vehicle.brand, vehicle.model, vehicle.color].filter(Boolean).join(' · ')}
           </p>
         </div>
@@ -141,6 +163,7 @@ function VehicleModal({ editVehicle, onClose, onSaved }) {
         brand: editVehicle.brand || '',
         model: editVehicle.model || '',
         color: editVehicle.color || '',
+        hexColor: editVehicle.hexColor || '#ffffff',
         nickname: editVehicle.nickname || '',
       }
     : { ...EMPTY_FORM });
@@ -370,6 +393,30 @@ function VehicleModal({ editVehicle, onClose, onSaved }) {
               </div>
             </div>
 
+            {/* Màu sơn 3D */}
+            <div>
+              <label className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-1 block">
+                Màu sơn 3D (HEX)
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="color"
+                  name="hexColor"
+                  value={form.hexColor}
+                  onChange={handleChange}
+                  className="h-9 w-9 cursor-pointer rounded-lg border border-gray-300 dark:border-white/15 bg-transparent p-0.5 shrink-0"
+                  title="Chọn màu sơn xe"
+                />
+                <input
+                  name="hexColor"
+                  value={form.hexColor}
+                  onChange={handleChange}
+                  placeholder="#ffffff"
+                  className={`${inputCls} flex-1`}
+                />
+              </div>
+            </div>
+
             {/* Actions */}
             <div className="flex gap-3 pt-1">
               <button type="button" onClick={onClose}
@@ -397,13 +444,41 @@ function VehicleModal({ editVehicle, onClose, onSaved }) {
   );
 }
 
+// ─── No 3D Model Placeholder ─────────────────────────────────────────────────
+function NoModelPlaceholder({ hexColor }) {
+  const accent = hexColor && hexColor !== '#ffffff' ? hexColor : null;
+  return (
+    <div className="w-full h-full flex flex-col items-center justify-center gap-3 select-none">
+      <div
+        className="w-20 h-20 rounded-2xl border-2 border-dashed flex items-center justify-center"
+        style={{
+          borderColor: accent ? accent + '55' : 'rgba(255,255,255,0.12)',
+          color:        accent ?? 'rgba(255,255,255,0.25)',
+        }}
+      >
+        <Car size={38} />
+      </div>
+      <p className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.35)' }}>
+        Model 3D chưa có sẵn
+      </p>
+      <p className="text-xs" style={{ color: 'rgba(255,255,255,0.2)' }}>
+        Admin sẽ thêm mô hình xe trong thời gian tới
+      </p>
+    </div>
+  );
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function MyVehicles() {
-  const [vehicles, setVehicles] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [modalOpen, setModalOpen] = useState(false);
+  const [vehicles, setVehicles]       = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [selectedIdx, setSelectedIdx] = useState(0);
+  const [modalOpen, setModalOpen]     = useState(false);
   const [editVehicle, setEditVehicle] = useState(null);
-  const [toast, setToast] = useState(null);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [toast, setToast]             = useState(null);
+  const [quickColor, setQuickColor]   = useState(null); // local hex while picking
+  const colorInputRef = useRef(null);
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -411,6 +486,7 @@ export default function MyVehicles() {
   };
 
   const fetchVehicles = async () => {
+    setLoading(true);
     const { ok, data } = await getMyVehicles();
     if (ok) setVehicles(data.data || []);
     setLoading(false);
@@ -418,102 +494,328 @@ export default function MyVehicles() {
 
   useEffect(() => { fetchVehicles(); }, []);
 
-  const handleSaved = (vehicle, action) => {
+  // Auto-select default vehicle whenever list reloads
+  useEffect(() => {
+    if (vehicles.length > 0) {
+      const defIdx = vehicles.findIndex((v) => v.isDefault);
+      setSelectedIdx(defIdx >= 0 ? defIdx : 0);
+    }
+  }, [vehicles]);
+
+  const clampedIdx = Math.min(selectedIdx, Math.max(0, vehicles.length - 1));
+  const selected   = vehicles[clampedIdx] ?? null;
+  const typeObj    = VEHICLE_TYPES.find((t) => t.value === selected?.vehicleType);
+
+  const handleSaved = async (_v, action) => {
     setModalOpen(false);
     setEditVehicle(null);
-    fetchVehicles();
+    await fetchVehicles();
     showToast(action === 'updated' ? 'Cập nhật xe thành công ✓' : 'Thêm xe thành công ✓');
   };
 
-  const handleDelete = async (id) => {
-    const { ok } = await deleteVehicle(id);
+  const handleDelete = async () => {
+    if (!selected) return;
+    if (!window.confirm(`Xóa xe "${selected.licensePlate}"?`)) return;
+    setActionLoading(true);
+    const { ok } = await deleteVehicle(selected._id);
+    setActionLoading(false);
     if (ok) {
-      fetchVehicles();
+      setSelectedIdx(0);
+      await fetchVehicles();
       showToast('Đã xóa xe ✓');
     } else {
       showToast('Xóa xe thất bại', 'error');
     }
   };
 
-  const handleSetDefault = async (id) => {
-    const { ok } = await setDefaultVehicle(id);
+  const handleSetDefault = async () => {
+    if (!selected || selected.isDefault) return;
+    setActionLoading(true);
+    const { ok } = await setDefaultVehicle(selected._id);
+    setActionLoading(false);
     if (ok) {
-      fetchVehicles();
+      await fetchVehicles();
       showToast('Đã đặt xe mặc định ✓');
     } else {
       showToast('Thao tác thất bại', 'error');
     }
   };
 
-  const openAdd = () => { setEditVehicle(null); setModalOpen(true); };
-  const openEdit = (v) => { setEditVehicle(v); setModalOpen(true); };
+  const openAdd  = () => { setEditVehicle(null); setModalOpen(true); };
+  const openEdit = () => { if (selected) { setEditVehicle(selected); setModalOpen(true); } };
+
+  // ── Inline quick-color ──
+  const handleQuickColorChange = async (hex) => {
+    if (!selected) return;
+    setQuickColor(hex);
+  };
+  const handleQuickColorCommit = async (hex) => {
+    if (!selected) return;
+    setActionLoading(true);
+    await updateVehicle(selected._id, { hexColor: hex, color: hex });
+    setActionLoading(false);
+    setQuickColor(null);
+    await fetchVehicles();
+    showToast('Đã cập nhật màu xe ✓');
+  };
+  const activeColor = quickColor ?? selected?.hexColor ?? '#ffffff';
+
+  const prev = () => { setQuickColor(null); setSelectedIdx((i) => (i - 1 + vehicles.length) % vehicles.length); };
+  const next = () => { setQuickColor(null); setSelectedIdx((i) => (i + 1) % vehicles.length); };
+
+  // Reset quickColor whenever selected vehicle changes
+  useEffect(() => { setQuickColor(null); }, [clampedIdx]);
+
+  // ── Keyboard arrow navigation ──
+  useEffect(() => {
+    if (vehicles.length <= 1) return;
+    const handler = (e) => {
+      if (e.key === 'ArrowLeft') prev();
+      if (e.key === 'ArrowRight') next();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [vehicles.length]);
 
   return (
-    <div className="max-w-3xl mx-auto px-4 sm:px-8 py-10 md:py-14">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+    // ── Full-screen garage ──────────────────────────────────────────────────
+    <div
+      className="relative w-full overflow-hidden"
+      style={{ minHeight: 'calc(100vh - 64px)' }}
+    >
+      {/* Background */}
+      <div
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: `url(${garageBg})` }}
+      />
+      {/* Dark overlay for readability */}
+      <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-black/80" />
+
+      {/* ── Top bar ── */}
+      <div className="relative z-10 flex items-center justify-between px-6 pt-5 pb-2">
         <div>
-          <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">
-            Xe của tôi
+          <h1 className="text-xl font-black text-white tracking-tight drop-shadow-lg">
+            Gara của tôi
           </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Quản lý danh sách phương tiện của bạn
+          <p className="text-sm text-white/55 mt-0.5">
+            {vehicles.length > 0 ? `${vehicles.length} phương tiện` : 'Chưa có xe nào'}
           </p>
         </div>
         <button
           onClick={openAdd}
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl
             bg-yellow-500 hover:bg-yellow-400 text-black
-            text-sm font-bold transition-colors shadow-lg shadow-yellow-500/20"
+            text-sm font-bold transition-colors shadow-lg shadow-yellow-500/30"
         >
           <Plus size={15} />
           Thêm xe
         </button>
       </div>
 
-      {/* Content */}
-      {loading ? (
-        <div className="flex justify-center py-20">
-          <Loader2 size={28} className="animate-spin text-yellow-500" />
-        </div>
-      ) : vehicles.length === 0 ? (
-        /* Empty state */
-        <div className="rounded-2xl border border-dashed
-          border-gray-300 dark:border-white/10
-          bg-gray-50 dark:bg-white/[0.02]
-          flex flex-col items-center justify-center py-16 px-8 text-center">
-          <div className="w-14 h-14 rounded-2xl bg-yellow-500/10 border border-yellow-500/20
-            flex items-center justify-center mb-4">
-            <Car size={24} className="text-yellow-500 dark:text-yellow-400" />
+      {/* ── Info sub-bar (below header) ── */}
+      {!loading && selected && (
+        <div className="relative z-10 mx-4 rounded-2xl
+          bg-black/45 backdrop-blur-xl border border-white/10
+          px-5 py-3 flex items-center gap-4">
+
+          {/* Color swatch — click to pick */}
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => colorInputRef.current?.click()}
+              className="w-9 h-9 rounded-full border-2 border-white/30
+                shadow-lg transition-transform hover:scale-110 cursor-pointer"
+              style={{ backgroundColor: activeColor }}
+              title="Đổi màu xe"
+            />
+            <input
+              ref={colorInputRef}
+              type="color"
+              value={activeColor}
+              onChange={(e) => handleQuickColorChange(e.target.value)}
+              className="absolute opacity-0 w-0 h-0 pointer-events-none"
+            />
+            {/* Save button — only shown when color has changed */}
+            {quickColor && quickColor !== selected?.hexColor && (
+              <button
+                onClick={() => handleQuickColorCommit(quickColor)}
+                disabled={actionLoading}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold
+                  bg-yellow-500 hover:bg-yellow-400 text-black transition-colors
+                  disabled:opacity-50 shadow-md"
+              >
+                {actionLoading ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                Lưu màu
+              </button>
+            )}
+            {quickColor && quickColor !== selected?.hexColor && (
+              <button
+                onClick={() => setQuickColor(null)}
+                className="p-1.5 rounded-lg text-white/40 hover:text-white/70
+                  border border-white/10 hover:border-white/20 transition-colors"
+                title="Huỷ"
+              >
+                <X size={12} />
+              </button>
+            )}
           </div>
-          <p className="font-bold text-gray-700 dark:text-gray-300 mb-1">
-            Chưa có xe nào
-          </p>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mb-5">
-            Thêm xe để đặt chỗ nhanh hơn
-          </p>
-          <button
-            onClick={openAdd}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-xl
-              bg-yellow-500 hover:bg-yellow-400 text-black
-              text-sm font-bold transition-colors"
-          >
-            <Plus size={14} />
+
+          {/* Name + big plate */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm font-bold text-white/80">
+                {[selected?.brand, selected?.model].filter(Boolean).join(' ') || 'Xe của tôi'}
+              </span>
+              {selected?.isDefault && (
+                <span className="text-[10px] font-bold bg-yellow-500/25 text-yellow-400
+                  border border-yellow-500/40 rounded-full px-2 py-0.5">
+                  ★ Mặc định
+                </span>
+              )}
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold
+                bg-white/10 text-gray-300 border border-white/15 rounded-full px-2.5 py-0.5">
+                {typeObj?.icon}
+                {typeObj?.label ?? selected?.vehicleType}
+              </span>
+            </div>
+            {/* Big license plate */}
+            <p className="text-2xl font-black text-white tracking-[0.18em] mt-0.5 leading-tight">
+              {selected?.licensePlate}
+            </p>
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-2 shrink-0">
+            {!selected?.isDefault && (
+              <button
+                onClick={handleSetDefault}
+                disabled={actionLoading}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold
+                  text-white/60 hover:text-yellow-400 border border-white/15
+                  hover:border-yellow-500/40 bg-white/5 hover:bg-yellow-500/10
+                  transition-all disabled:opacity-50"
+              >
+                <Star size={13} />
+                Mặc định
+              </button>
+            )}
+            <button
+              onClick={openEdit}
+              disabled={actionLoading}
+              className="p-2.5 rounded-xl text-white/60 hover:text-yellow-400
+                border border-white/15 hover:border-yellow-500/40
+                bg-white/5 hover:bg-yellow-500/10 transition-all disabled:opacity-50"
+              title="Chỉnh sửa"
+            >
+              <Pencil size={15} />
+            </button>
+            <button
+              onClick={handleDelete}
+              disabled={actionLoading}
+              className="p-2.5 rounded-xl text-white/60 hover:text-red-400
+                border border-white/15 hover:border-red-500/30
+                bg-white/5 hover:bg-red-500/10 transition-all disabled:opacity-50"
+              title="Xóa xe"
+            >
+              {actionLoading
+                ? <Loader2 size={15} className="animate-spin" />
+                : <Trash2 size={15} />}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Loading ── */}
+      {loading && (
+        <div className="relative z-10 flex justify-center items-center" style={{ height: 'calc(100vh - 180px)' }}>
+          <Loader2 size={36} className="animate-spin text-yellow-400" />
+        </div>
+      )}
+
+      {/* ── Empty ── */}
+      {!loading && vehicles.length === 0 && (
+        <div className="relative z-10 flex flex-col items-center justify-center gap-5 text-center px-8"
+          style={{ height: 'calc(100vh - 180px)' }}>
+          <div className="w-20 h-20 rounded-2xl bg-yellow-500/15 border border-yellow-500/30
+            flex items-center justify-center">
+            <Car size={32} className="text-yellow-400" />
+          </div>
+          <div>
+            <p className="font-bold text-white text-lg mb-1">Chưa có xe nào</p>
+            <p className="text-white/50 text-sm">Thêm xe để sử dụng tính năng gara 3D</p>
+          </div>
+          <button onClick={openAdd}
+            className="flex items-center gap-2 px-6 py-3 rounded-xl
+              bg-yellow-500 hover:bg-yellow-400 text-black font-bold transition-colors">
+            <Plus size={15} />
             Thêm xe đầu tiên
           </button>
         </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {vehicles.map((v) => (
-            <VehicleCard
-              key={v._id}
-              vehicle={v}
-              onDelete={handleDelete}
-              onSetDefault={handleSetDefault}
-              onEdit={openEdit}
-            />
-          ))}
-        </div>
+      )}
+
+      {/* ── Main garage scene ── */}
+      {!loading && vehicles.length > 0 && (
+        <>
+          {/* 3D viewer — fills remaining height below info bar */}
+          <div className="relative z-10 flex items-center justify-center"
+            style={{ height: 'calc(100vh - 220px)', minHeight: 300 }}>
+
+            {/* Left arrow */}
+            {vehicles.length > 1 && (
+              <button
+                onClick={prev}
+                className="absolute left-4 z-20 w-12 h-12 rounded-full
+                  bg-black/40 hover:bg-black/70 border border-white/20
+                  flex items-center justify-center text-white
+                  transition-all hover:scale-110 backdrop-blur-sm shadow-xl"
+              >
+                <ChevronLeft size={22} />
+              </button>
+            )}
+
+            {/* 3D canvas or placeholder */}
+            <div className="w-full h-full">
+              {selected?.modelUrl ? (
+                <CarViewer
+                  modelUrl={selected.modelUrl}
+                  carColor={activeColor}
+                  height="100%"
+                />
+              ) : (
+                <NoModelPlaceholder hexColor={selected?.hexColor} />
+              )}
+            </div>
+
+            {/* Right arrow */}
+            {vehicles.length > 1 && (
+              <button
+                onClick={next}
+                className="absolute right-4 z-20 w-12 h-12 rounded-full
+                  bg-black/40 hover:bg-black/70 border border-white/20
+                  flex items-center justify-center text-white
+                  transition-all hover:scale-110 backdrop-blur-sm shadow-xl"
+              >
+                <ChevronRight size={22} />
+              </button>
+            )}
+          </div>
+
+          {/* ── Dot indicators — absolute bottom-center ── */}
+          {vehicles.length > 1 && (
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 flex gap-2">
+              {vehicles.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => { setQuickColor(null); setSelectedIdx(i); }}
+                  className={`rounded-full transition-all duration-300 ${
+                    i === clampedIdx
+                      ? 'bg-yellow-400 w-6 h-2'
+                      : 'bg-white/30 hover:bg-white/50 w-2 h-2'
+                  }`}
+                />
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       {/* Modal */}
