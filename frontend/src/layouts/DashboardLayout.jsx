@@ -74,6 +74,11 @@ const NAV_CONFIG = {
       icon: <DollarSign size={18} />,
       to: "/admin/financial",
     },
+    {
+      label: "Profile",
+      icon: <User size={18} />,
+      to: "/admin/profile",
+    },
   ],
   manager: [
     {
@@ -111,6 +116,11 @@ const NAV_CONFIG = {
       label: "Overtime Rates",
       icon: <SlidersHorizontal size={18} />,
       to: "/manager/rates",
+    },
+    {
+      label: "Profile",
+      icon: <User size={18} />,
+      to: "/manager/profile",
     },
   ],
   customer: [
