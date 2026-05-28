@@ -65,11 +65,6 @@ const NAV_CONFIG = {
       to: "/admin/vehicle-models",
     },
     {
-      label: "My Profile",
-      icon: <User size={18} />,
-      to: "/admin/profile",
-    },
-    {
       label: "Revenue Analytics",
       icon: <BarChart2 size={18} />,
       to: "/admin/revenue",
@@ -78,6 +73,11 @@ const NAV_CONFIG = {
       label: "Financial Export",
       icon: <DollarSign size={18} />,
       to: "/admin/financial",
+    },
+    {
+      label: "Profile",
+      icon: <User size={18} />,
+      to: "/admin/profile",
     },
   ],
   manager: [
@@ -118,7 +118,7 @@ const NAV_CONFIG = {
       to: "/manager/rates",
     },
     {
-      label: "My Profile",
+      label: "Profile",
       icon: <User size={18} />,
       to: "/manager/profile",
     },
