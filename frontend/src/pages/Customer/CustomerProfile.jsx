@@ -249,7 +249,12 @@ export default function CustomerProfile() {
 
       if (ok && data?.success) {
         setProfile(buildProfile(data.data));
-        sessionStorage.setItem("valo_user", JSON.stringify(data.data));
+        // Flatten avatar to top-level so Navbar can read user.avatar directly
+        sessionStorage.setItem(
+          "valo_user",
+          JSON.stringify({ ...data.data, avatar: data.data.profile?.avatar || "" })
+        );
+        window.dispatchEvent(new Event("valo_auth_change"));
       }
     };
     fetchUserData();

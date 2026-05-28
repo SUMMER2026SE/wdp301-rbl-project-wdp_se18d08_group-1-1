@@ -236,8 +236,11 @@ export default function Navbar() {
                           : 'hover:bg-black/[0.04]'}
                       `}
                     >
-                      <div className={`w-8 h-8 rounded-[10px] bg-gradient-to-br ${grad} flex items-center justify-center text-white font-bold text-[11px] shadow-sm select-none shrink-0`}>
-                        {getInitials(user.name)}
+                      <div className={`w-8 h-8 rounded-[10px] overflow-hidden ${user.avatar ? '' : `bg-gradient-to-br ${grad}`} flex items-center justify-center text-white font-bold text-[11px] shadow-sm select-none shrink-0`}>
+                        {user.avatar
+                          ? <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
+                          : getInitials(user.name)
+                        }
                       </div>
                       <span className="hidden sm:block text-[13px] font-semibold text-gray-700 max-w-[90px] truncate">
                         {user.name?.split(' ').pop()}
@@ -255,8 +258,11 @@ export default function Navbar() {
                         {/* User card */}
                         <div className="p-4 border-b border-gray-100/80">
                           <div className="flex items-center gap-3">
-                            <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${grad} flex items-center justify-center text-white font-bold text-sm shadow-lg select-none`}>
-                              {getInitials(user.name)}
+                            <div className={`w-11 h-11 rounded-xl overflow-hidden ${user.avatar ? '' : `bg-gradient-to-br ${grad}`} flex items-center justify-center text-white font-bold text-sm shadow-lg select-none`}>
+                              {user.avatar
+                                ? <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
+                                : getInitials(user.name)
+                              }
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="font-bold text-gray-900 text-sm truncate">{user.name}</p>
@@ -477,8 +483,11 @@ export default function Navbar() {
           {user && (
             <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-100 bg-white/80 backdrop-blur-xl">
               <div className="flex items-center gap-3 mb-3">
-                <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${grad} flex items-center justify-center text-white font-bold text-xs shadow-md`}>
-                  {getInitials(user.name)}
+                <div className={`w-10 h-10 rounded-xl overflow-hidden ${user.avatar ? '' : `bg-gradient-to-br ${grad}`} flex items-center justify-center text-white font-bold text-xs shadow-md`}>
+                  {user.avatar
+                    ? <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
+                    : getInitials(user.name)
+                  }
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-gray-900 text-sm truncate">{user.name}</p>
