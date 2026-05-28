@@ -62,6 +62,7 @@ export default function App() {
         >
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
           <Route path="/admin/vehicle-models" element={<VehicleModels />} />
+          <Route path="/admin/profile" element={<CustomerProfile />} />
         </Route>
 
         {/* ══════════════════════════════════════════
@@ -76,6 +77,7 @@ export default function App() {
           }
         >
           <Route path="/manager/dashboard" element={<ManagerDashboard />} />
+          <Route path="/manager/profile" element={<CustomerProfile />} />
         </Route>
 
         {/* ── Customer section ── */}

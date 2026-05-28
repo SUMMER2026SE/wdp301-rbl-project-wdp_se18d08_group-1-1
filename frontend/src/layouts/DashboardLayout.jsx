@@ -65,6 +65,11 @@ const NAV_CONFIG = {
       to: "/admin/vehicle-models",
     },
     {
+      label: "My Profile",
+      icon: <User size={18} />,
+      to: "/admin/profile",
+    },
+    {
       label: "Revenue Analytics",
       icon: <BarChart2 size={18} />,
       to: "/admin/revenue",
@@ -111,6 +116,11 @@ const NAV_CONFIG = {
       label: "Overtime Rates",
       icon: <SlidersHorizontal size={18} />,
       to: "/manager/rates",
+    },
+    {
+      label: "My Profile",
+      icon: <User size={18} />,
+      to: "/manager/profile",
     },
   ],
   customer: [
