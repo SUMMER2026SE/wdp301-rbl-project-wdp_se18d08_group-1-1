@@ -1,6 +1,7 @@
 const { validationResult } = require('express-validator');
 const User = require('../models/User');
 const UserDetail = require('../models/UserDetail');
+const { uploadToCloudinary } = require('../middlewares/uploadMiddleware');
 
 /**
  * @desc    Get user profile (User + UserDetail)
@@ -158,8 +159,53 @@ const changePassword = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Upload / update avatar via Cloudinary
+ * @route   POST /api/profile/avatar
+ * @access  Private
+ */
+const uploadAvatar = async (req, res, next) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'No image file provided.',
+      });
+    }
+
+    // Upload buffer to Cloudinary
+    const result = await uploadToCloudinary(req.file.buffer, {
+      folder: 'valo_parking/avatars',
+      public_id: `user_${req.user._id}`,
+      overwrite: true,
+      transformation: [
+        { width: 400, height: 400, crop: 'fill', gravity: 'face' },
+        { quality: 'auto', fetch_format: 'auto' },
+      ],
+    });
+
+    // Save Cloudinary secure_url to UserDetail
+    const userDetail = await UserDetail.findOneAndUpdate(
+      { userId: req.user._id },
+      { avatar: result.secure_url },
+      { new: true, upsert: true }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'Avatar uploaded successfully',
+      data: {
+        avatarUrl: userDetail.avatar,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getProfile,
   updateProfile,
   changePassword,
+  uploadAvatar,
 };
