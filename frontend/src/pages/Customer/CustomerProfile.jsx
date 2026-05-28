@@ -252,7 +252,10 @@ export default function CustomerProfile() {
         // Flatten avatar to top-level so Navbar can read user.avatar directly
         sessionStorage.setItem(
           "valo_user",
-          JSON.stringify({ ...data.data, avatar: data.data.profile?.avatar || "" })
+          JSON.stringify({
+            ...data.data,
+            avatar: data.data.profile?.avatar || "",
+          }),
         );
         window.dispatchEvent(new Event("valo_auth_change"));
       }
@@ -338,11 +341,13 @@ export default function CustomerProfile() {
       if (res.ok && data?.success) {
         const cloudinaryUrl = data.data.avatarUrl;
         setProfile((prev) => ({ ...prev, avatar: cloudinaryUrl }));
-        const cached = JSON.parse(sessionStorage.getItem("valo_user") || "null");
+        const cached = JSON.parse(
+          sessionStorage.getItem("valo_user") || "null",
+        );
         if (cached) {
           sessionStorage.setItem(
             "valo_user",
-            JSON.stringify({ ...cached, avatar: cloudinaryUrl })
+            JSON.stringify({ ...cached, avatar: cloudinaryUrl }),
           );
         }
         window.dispatchEvent(new Event("valo_auth_change"));
@@ -711,14 +716,18 @@ export default function CustomerProfile() {
               htmlFor="avatar-upload"
               className="absolute inset-0 rounded-full flex flex-col items-center justify-center gap-1 transition-all duration-300 group"
               style={{
-                background: avatarLoading ? "rgba(0,0,0,0.65)" : "rgba(0,0,0,0)",
+                background: avatarLoading
+                  ? "rgba(0,0,0,0.65)"
+                  : "rgba(0,0,0,0)",
                 cursor: avatarLoading ? "not-allowed" : "pointer",
               }}
               onMouseEnter={(e) => {
-                if (!avatarLoading) e.currentTarget.style.background = "rgba(0,0,0,0.6)";
+                if (!avatarLoading)
+                  e.currentTarget.style.background = "rgba(0,0,0,0.6)";
               }}
               onMouseLeave={(e) => {
-                if (!avatarLoading) e.currentTarget.style.background = "rgba(0,0,0,0)";
+                if (!avatarLoading)
+                  e.currentTarget.style.background = "rgba(0,0,0,0)";
               }}
             >
               {avatarLoading ? (
@@ -729,8 +738,19 @@ export default function CustomerProfile() {
                   fill="none"
                   viewBox="0 0 24 24"
                 >
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                  />
                 </svg>
               ) : (
                 <>
