@@ -469,6 +469,14 @@ export default function AdminProfile() {
   const ACCENT_BORDER = "rgba(239,68,68,0.25)";
   const ACCENT_TEXT = "#ffd0d0";
 
+  // ── Gold Accent for Content Sections ─────────────────────────────────────
+  const GOLD = "#EAB308";
+  const GOLD_DIM = "rgba(234,179,8,0.7)";
+  const GOLD_GLOW = "rgba(234,179,8,0.3)";
+  const GOLD_BG = "rgba(234,179,8,0.08)";
+  const GOLD_BORDER = "rgba(234,179,8,0.25)";
+  const GOLD_TEXT = "#ffdea8";
+
   // ───────────────────────────────────────────────────────────────────────────
   // RENDER
   // ───────────────────────────────────────────────────────────────────────────
@@ -584,7 +592,7 @@ export default function AdminProfile() {
       <section className="px-8 py-8 grid grid-cols-12 gap-8 flex-1">
         {/* ── Left: Personal Records ── */}
         <div className="col-span-12 md:col-span-7">
-          <h3 className="text-2xl font-bold mt-1 mb-10" style={{ color: ACCENT_TEXT }}>
+          <h3 className="text-2xl font-bold mt-1 mb-10" style={{ color: "#ffdea8" }}>
             Personal Records
           </h3>
 
@@ -592,7 +600,7 @@ export default function AdminProfile() {
             <div className="space-y-5">
               <div className="grid grid-cols-2 gap-6">
                 <div>
-                  <label className="flex items-center gap-1 mb-1 tracking-[0.2em] text-[10px] font-semibold" style={{ color: ACCENT_DIM }}>
+                  <label className="flex items-center gap-1 mb-1 tracking-[0.2em] text-[10px] font-semibold" style={{ color: "rgba(234,179,8,0.7)" }}>
                     <User size={10} /> NAME
                   </label>
                   <input
@@ -601,12 +609,12 @@ export default function AdminProfile() {
                     onChange={(e) => { setFormDraft((p) => ({ ...p, name: e.target.value })); if (formErrors.name) setFormErrors((p) => ({ ...p, name: "" })); }}
                     onKeyDown={(e) => e.key === "Enter" && saveAll()}
                     className="w-full bg-transparent pb-1.5 text-sm outline-none"
-                    style={{ borderBottom: formErrors.name ? "1px solid rgba(239,68,68,0.7)" : `1px solid ${ACCENT}`, color: "#e2e1eb" }}
+                    style={{ borderBottom: formErrors.name ? "1px solid rgba(239,68,68,0.7)" : `1px solid ${GOLD}`, color: "#e2e1eb" }}
                   />
                   {formErrors.name && <p className="mt-1 text-[10px] text-red-400">{formErrors.name}</p>}
                 </div>
                 <div>
-                  <label className="flex items-center gap-1 mb-1 tracking-[0.2em] text-[10px] font-semibold" style={{ color: ACCENT_DIM }}>
+                  <label className="flex items-center gap-1 mb-1 tracking-[0.2em] text-[10px] font-semibold" style={{ color: "rgba(234,179,8,0.7)" }}>
                     <Phone size={10} /> PHONE
                   </label>
                   <input
@@ -614,7 +622,7 @@ export default function AdminProfile() {
                     onChange={(e) => { setFormDraft((p) => ({ ...p, phone: e.target.value })); if (formErrors.phone) setFormErrors((p) => ({ ...p, phone: "" })); }}
                     onKeyDown={(e) => e.key === "Enter" && saveAll()}
                     className="w-full bg-transparent pb-1.5 text-sm outline-none"
-                    style={{ borderBottom: formErrors.phone ? "1px solid rgba(239,68,68,0.7)" : `1px solid ${ACCENT}`, color: "#e2e1eb" }}
+                    style={{ borderBottom: formErrors.phone ? "1px solid rgba(239,68,68,0.7)" : `1px solid ${GOLD}`, color: "#e2e1eb" }}
                   />
                   {formErrors.phone && <p className="mt-1 text-[10px] text-red-400">{formErrors.phone}</p>}
                 </div>
@@ -647,9 +655,9 @@ export default function AdminProfile() {
               <button
                 onClick={saveAll}
                 className="px-6 py-2 rounded-full text-xs font-semibold tracking-wider transition-colors duration-200"
-                style={{ background: ACCENT, color: "#ffffff" }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "#dc2626")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = ACCENT)}
+                style={{ background: GOLD, color: "#ffffff" }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = "#CA8A04")}
+                onMouseLeave={(e) => (e.currentTarget.style.background = GOLD)}
               >
                 Save Changes
               </button>
@@ -661,20 +669,20 @@ export default function AdminProfile() {
               onClick={editMode ? cancelEdit : enterEdit}
               className="group relative px-5 py-2 overflow-hidden rounded-full"
               style={{
-                border: editMode ? "1px solid rgba(239,68,68,0.6)" : `1px solid ${ACCENT}`,
+                border: editMode ? "1px solid rgba(234,179,8,0.6)" : `1px solid ${GOLD}`,
                 transition: "transform 0.2s cubic-bezier(0.23,1,0.32,1)",
                 background: "transparent",
               }}
             >
               <span
                 className="relative z-10 font-semibold tracking-wider text-xs transition-colors duration-300"
-                style={{ color: editMode ? "rgba(239,68,68,0.8)" : ACCENT }}
+                style={{ color: editMode ? "rgba(234,179,8,0.8)" : GOLD }}
               >
                 {editMode ? "Cancel" : "Edit Profile"}
               </span>
               <div
                 className="absolute inset-0 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out"
-                style={{ background: editMode ? "rgba(239,68,68,0.1)" : ACCENT }}
+                style={{ background: editMode ? "rgba(234,179,8,0.1)" : GOLD }}
               />
             </button>
           </div>
@@ -682,7 +690,7 @@ export default function AdminProfile() {
 
         {/* ── Right: Security ── */}
         <div className="col-span-12 md:col-span-5">
-          <h3 className="text-2xl font-bold mb-10" style={{ color: ACCENT_TEXT }}>
+          <h3 className="text-2xl font-bold mb-10" style={{ color: "#ffdea8" }}>
             Security
           </h3>
 
@@ -690,12 +698,12 @@ export default function AdminProfile() {
             <button
               onClick={() => setCpOpen(true)}
               className="flex items-center gap-2.5 px-5 py-2.5 rounded-full transition-all duration-300"
-              style={{ border: `1px solid ${ACCENT_BORDER}`, background: "transparent" }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = ACCENT_BG; e.currentTarget.style.borderColor = ACCENT; e.currentTarget.style.boxShadow = `0 0 16px ${ACCENT_GLOW}`; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = ACCENT_BORDER; e.currentTarget.style.boxShadow = "none"; }}
+              style={{ border: `1px solid ${GOLD}`, background: "transparent" }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = GOLD_BG; e.currentTarget.style.borderColor = GOLD; e.currentTarget.style.boxShadow = `0 0 16px ${GOLD_GLOW}`; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.borderColor = GOLD; e.currentTarget.style.boxShadow = "none"; }}
             >
-              <Key size={14} className="text-red-500 shrink-0" />
-              <span className="font-semibold tracking-widest text-xs" style={{ color: ACCENT_TEXT }}>Change Password</span>
+              <Key size={14} style={{ color: GOLD }} className="shrink-0" />
+              <span className="font-semibold tracking-widest text-xs" style={{ color: GOLD_TEXT }}>Change Password</span>
             </button>
           ) : (
             (() => {
@@ -708,29 +716,29 @@ export default function AdminProfile() {
                 width: "100%",
                 background: "transparent",
                 border: "none",
-                borderBottom: hasError ? "1px solid rgba(239,68,68,0.7)" : `1px solid ${ACCENT_BORDER}`,
+                borderBottom: hasError ? "1px solid rgba(239,68,68,0.7)" : `1px solid ${GOLD}`,
                 padding: "8px 36px 8px 0",
                 color: "#e2e1eb",
                 fontSize: "13px",
                 outline: "none",
-                caretColor: ACCENT,
+                caretColor: GOLD,
                 transition: "border-color 0.2s",
               });
-              const onFocusRed = (e) => (e.currentTarget.style.borderColor = ACCENT);
-              const onBlurRed = (hasErr) => (e) => { e.currentTarget.style.borderColor = hasErr ? "rgba(239,68,68,0.7)" : ACCENT_BORDER; };
-              const strengthColors = ["rgba(255,255,255,0.08)", "rgba(239,68,68,0.7)", "rgba(249,115,22,0.8)", "rgba(234,179,8,0.6)", ACCENT];
+              const onFocusRed = (e) => (e.currentTarget.style.borderColor = GOLD);
+              const onBlurRed = (hasErr) => (e) => { e.currentTarget.style.borderColor = hasErr ? "rgba(239,68,68,0.7)" : GOLD; };
+              const strengthColors = ["rgba(255,255,255,0.08)", "rgba(239,68,68,0.7)", "rgba(249,115,22,0.8)", "rgba(234,179,8,0.6)", GOLD];
 
               /* ── Forgot password: OTP step ── */
               if (fpStep === "otp")
                 return (
                   <div className="space-y-6" style={{ animation: "cp-slideDown 0.3s ease-out" }}>
                     <div className="text-center">
-                      <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3" style={{ background: ACCENT_BG, border: `1px solid ${ACCENT_BORDER}` }}>
-                        <Mail size={20} style={{ color: ACCENT }} />
+                      <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3" style={{ background: GOLD_BG, border: `1px solid ${GOLD}` }}>
+                        <Mail size={20} style={{ color: GOLD }} />
                       </div>
-                      <p className="font-bold mb-1" style={{ color: ACCENT_TEXT, fontSize: "14px" }}>Enter OTP</p>
+                      <p className="font-bold mb-1" style={{ color: GOLD_TEXT, fontSize: "14px" }}>Enter OTP</p>
                       <p style={{ color: "rgba(255,255,255,0.4)", fontSize: "11px" }}>
-                        Code sent to <span style={{ color: ACCENT }}>{profile.email}</span>
+                        Code sent to <span style={{ color: GOLD }}>{profile.email}</span>
                       </p>
                     </div>
                     <div className="flex gap-2 justify-center">
@@ -762,9 +770,9 @@ export default function AdminProfile() {
                             if (e.key === "ArrowRight" && i < 5) fpOtpRefs.current[i + 1]?.focus();
                           }}
                           className="w-10 h-12 text-center text-lg font-bold rounded-lg outline-none transition-all duration-200"
-                          style={{ background: "rgba(255,255,255,0.04)", border: `1px solid ${ACCENT_BORDER}`, color: "#e2e1eb", caretColor: ACCENT }}
-                          onFocus={(e) => (e.currentTarget.style.borderColor = ACCENT)}
-                          onBlur={(e) => (e.currentTarget.style.borderColor = ACCENT_BORDER)}
+                          style={{ background: "rgba(255,255,255,0.04)", border: `1px solid ${GOLD}`, color: "#e2e1eb", caretColor: GOLD }}
+                          onFocus={(e) => (e.currentTarget.style.borderColor = GOLD)}
+                          onBlur={(e) => (e.currentTarget.style.borderColor = GOLD)}
                         />
                       ))}
                     </div>
@@ -774,8 +782,8 @@ export default function AdminProfile() {
                       disabled={fpLoading || fpOtpDigits.join("").length !== 6}
                       className="w-full flex items-center justify-center gap-2 rounded-full text-xs font-bold tracking-wider py-2.5 transition-all duration-300"
                       style={{
-                        background: fpOtpDigits.join("").length === 6 ? ACCENT : ACCENT_BG,
-                        color: fpOtpDigits.join("").length === 6 ? "#ffffff" : ACCENT_DIM,
+                        background: fpOtpDigits.join("").length === 6 ? GOLD : GOLD_BG,
+                        color: fpOtpDigits.join("").length === 6 ? "#ffffff" : GOLD_DIM,
                         cursor: fpLoading || fpOtpDigits.join("").length !== 6 ? "not-allowed" : "pointer",
                       }}
                     >
@@ -788,9 +796,9 @@ export default function AdminProfile() {
                       >
                         <ArrowLeft size={11} /> Back
                       </button>
-                      <button type="button" onClick={handleFpResendOTP} disabled={fpLoading} className="text-[11px] font-semibold transition-colors disabled:opacity-40" style={{ color: ACCENT_DIM }}
-                        onMouseEnter={(e) => (e.currentTarget.style.color = ACCENT)}
-                        onMouseLeave={(e) => (e.currentTarget.style.color = ACCENT_DIM)}
+                      <button type="button" onClick={handleFpResendOTP} disabled={fpLoading} className="text-[11px] font-semibold transition-colors disabled:opacity-40" style={{ color: GOLD_DIM }}
+                        onMouseEnter={(e) => (e.currentTarget.style.color = GOLD)}
+                        onMouseLeave={(e) => (e.currentTarget.style.color = GOLD_DIM)}
                       >
                         <RotateCw size={10} className="inline mr-1" />
                         Resend OTP
@@ -803,24 +811,24 @@ export default function AdminProfile() {
               if (fpStep === "password") {
                 const fpChecks = getPwdChecks(fpNewPwd);
                 const fpStrength = [fpChecks.length, fpChecks.cases, fpChecks.number, fpChecks.special].filter(Boolean).length;
-                const fpFieldStyle = (hasErr) => ({ width: "100%", background: "transparent", border: "none", borderBottom: hasErr ? "1px solid rgba(239,68,68,0.7)" : `1px solid ${ACCENT_BORDER}`, padding: "8px 36px 8px 0", color: "#e2e1eb", fontSize: "13px", outline: "none", caretColor: ACCENT, transition: "border-color 0.2s" });
+                const fpFieldStyle = (hasErr) => ({ width: "100%", background: "transparent", border: "none", borderBottom: hasErr ? "1px solid rgba(239,68,68,0.7)" : `1px solid ${GOLD}`, padding: "8px 36px 8px 0", color: "#e2e1eb", fontSize: "13px", outline: "none", caretColor: GOLD, transition: "border-color 0.2s" });
                 return (
                   <div className="space-y-6" style={{ animation: "cp-slideDown 0.3s ease-out" }}>
                     <div className="text-center">
-                      <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3" style={{ background: ACCENT_BG, border: `1px solid ${ACCENT_BORDER}` }}>
-                        <Lock size={20} style={{ color: ACCENT }} />
+                      <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3" style={{ background: GOLD_BG, border: `1px solid ${GOLD}` }}>
+                        <Lock size={20} style={{ color: GOLD }} />
                       </div>
-                      <p className="font-bold mb-1" style={{ color: ACCENT_TEXT, fontSize: "14px" }}>Set New Password</p>
+                      <p className="font-bold mb-1" style={{ color: GOLD_TEXT, fontSize: "14px" }}>Set New Password</p>
                       <p style={{ color: "rgba(255,255,255,0.4)", fontSize: "11px" }}>OTP verified. Choose a strong password.</p>
                     </div>
                     <div>
-                      <label style={{ color: ACCENT_DIM, fontSize: "10px", fontWeight: 700, letterSpacing: "0.22em" }}>NEW PASSWORD</label>
+                      <label style={{ color: "rgba(234,179,8,0.7)", fontSize: "10px", fontWeight: 700, letterSpacing: "0.22em" }}>NEW PASSWORD</label>
                       <div className="relative mt-1.5">
-                        <input type={fpShow.newPwd ? "text" : "password"} value={fpNewPwd} autoComplete="new-password" autoFocus onChange={(e) => { setFpNewPwd(e.target.value); setFpError(""); setFpConfirmPwd(""); }} style={fpFieldStyle(false)} onFocus={(e) => (e.currentTarget.style.borderColor = ACCENT)} onBlur={(e) => (e.currentTarget.style.borderColor = ACCENT_BORDER)} />
-                        <button type="button" onClick={() => setFpShow((p) => ({ ...p, newPwd: !p.newPwd }))} className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-600 hover:text-red-400 transition-colors">
+                        <input type={fpShow.newPwd ? "text" : "password"} value={fpNewPwd} autoComplete="new-password" autoFocus onChange={(e) => { setFpNewPwd(e.target.value); setFpError(""); setFpConfirmPwd(""); }} style={fpFieldStyle(false)} onFocus={(e) => (e.currentTarget.style.borderColor = GOLD)} onBlur={(e) => (e.currentTarget.style.borderColor = GOLD)} />
+                        <button type="button" onClick={() => setFpShow((p) => ({ ...p, newPwd: !p.newPwd }))} className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-600 hover:text-yellow-500 transition-colors">
                           {fpShow.newPwd ? <EyeOff size={14} /> : <Eye size={14} />}
                         </button>
-                        <Shield size={15} className="absolute right-0 top-1/2 -translate-y-1/2 transition-all duration-500" style={{ color: strengthColors[fpStrength], filter: fpStrength === 4 ? `drop-shadow(0 0 6px ${ACCENT_GLOW})` : "none" }} />
+                        <Shield size={15} className="absolute right-0 top-1/2 -translate-y-1/2 transition-all duration-500" style={{ color: strengthColors[fpStrength], filter: fpStrength === 4 ? `drop-shadow(0 0 6px ${GOLD_GLOW})` : "none" }} />
                       </div>
                       {fpNewPwd && (
                         <div className="flex gap-1 mt-2">
@@ -829,7 +837,7 @@ export default function AdminProfile() {
                       )}
                       <ul className="mt-2.5 space-y-1">
                         {[{ ok: fpChecks.length, label: "At least 8 characters" }, { ok: fpChecks.cases, label: "Uppercase & lowercase letters" }, { ok: fpChecks.number, label: "At least 1 number (0-9)" }, { ok: fpChecks.special, label: "At least 1 special character (!@#$...)" }].map(({ ok, label }) => (
-                          <li key={label} className="flex items-center gap-1.5 transition-colors duration-300" style={{ color: ok ? ACCENT : "rgba(255,255,255,0.22)", fontSize: "10px" }}>
+                          <li key={label} className="flex items-center gap-1.5 transition-colors duration-300" style={{ color: ok ? GOLD : "rgba(255,255,255,0.22)", fontSize: "10px" }}>
                             {ok ? <Check size={9} style={{ flexShrink: 0 }} /> : <span style={{ width: 9, height: 9, display: "inline-block", borderRadius: "50%", border: "1px solid rgba(255,255,255,0.18)", flexShrink: 0 }} />}
                             {label}
                           </li>
@@ -838,10 +846,10 @@ export default function AdminProfile() {
                     </div>
                     {fpStrength === 4 && (
                       <div style={{ animation: "cp-slideDown 0.35s cubic-bezier(0.22,1,0.36,1)" }}>
-                        <label style={{ color: ACCENT_DIM, fontSize: "10px", fontWeight: 700, letterSpacing: "0.22em" }}>CONFIRM NEW PASSWORD</label>
+                        <label style={{ color: "rgba(234,179,8,0.7)", fontSize: "10px", fontWeight: 700, letterSpacing: "0.22em" }}>CONFIRM NEW PASSWORD</label>
                         <div className="relative mt-1.5">
-                          <input type={fpShow.confirm ? "text" : "password"} value={fpConfirmPwd} autoComplete="new-password" autoFocus onChange={(e) => { setFpConfirmPwd(e.target.value); setFpError(""); }} style={fpFieldStyle(!!fpError && fpConfirmPwd !== fpNewPwd)} onFocus={(e) => (e.currentTarget.style.borderColor = ACCENT)} onBlur={(e) => (e.currentTarget.style.borderColor = ACCENT_BORDER)} />
-                          <button type="button" onClick={() => setFpShow((p) => ({ ...p, confirm: !p.confirm }))} className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-600 hover:text-red-400 transition-colors">
+                          <input type={fpShow.confirm ? "text" : "password"} value={fpConfirmPwd} autoComplete="new-password" autoFocus onChange={(e) => { setFpConfirmPwd(e.target.value); setFpError(""); }} style={fpFieldStyle(!!fpError && fpConfirmPwd !== fpNewPwd)} onFocus={(e) => (e.currentTarget.style.borderColor = GOLD)} onBlur={(e) => (e.currentTarget.style.borderColor = GOLD)} />
+                          <button type="button" onClick={() => setFpShow((p) => ({ ...p, confirm: !p.confirm }))} className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-600 hover:text-yellow-500 transition-colors">
                             {fpShow.confirm ? <EyeOff size={14} /> : <Eye size={14} />}
                           </button>
                         </div>
@@ -856,7 +864,7 @@ export default function AdminProfile() {
                         onClick={handleFpReset}
                         disabled={fpLoading || fpStrength < 4 || fpNewPwd !== fpConfirmPwd}
                         className="relative overflow-hidden flex items-center gap-2 px-6 py-2.5 rounded-full text-xs font-bold tracking-wider"
-                        style={{ background: fpStrength === 4 && fpNewPwd === fpConfirmPwd && fpConfirmPwd ? ACCENT : ACCENT_BG, color: fpStrength === 4 && fpNewPwd === fpConfirmPwd && fpConfirmPwd ? "#ffffff" : ACCENT_DIM, border: fpStrength === 4 && fpNewPwd === fpConfirmPwd && fpConfirmPwd ? "none" : `1px solid ${ACCENT_BORDER}`, cursor: fpLoading || fpStrength < 4 || fpNewPwd !== fpConfirmPwd ? "not-allowed" : "pointer", boxShadow: fpStrength === 4 && fpNewPwd === fpConfirmPwd && fpConfirmPwd ? `0 0 22px ${ACCENT_GLOW}` : "none", transition: "all 0.3s" }}
+                        style={{ background: fpStrength === 4 && fpNewPwd === fpConfirmPwd && fpConfirmPwd ? GOLD : GOLD_BG, color: fpStrength === 4 && fpNewPwd === fpConfirmPwd && fpConfirmPwd ? "#ffffff" : GOLD_DIM, border: fpStrength === 4 && fpNewPwd === fpConfirmPwd && fpConfirmPwd ? "none" : `1px solid ${GOLD}`, cursor: fpLoading || fpStrength < 4 || fpNewPwd !== fpConfirmPwd ? "not-allowed" : "pointer", boxShadow: fpStrength === 4 && fpNewPwd === fpConfirmPwd && fpConfirmPwd ? `0 0 22px ${GOLD_GLOW}` : "none", transition: "all 0.3s" }}
                       >
                         <Lock size={13} />
                         <span>{fpLoading ? "Resetting…" : "Reset Password"}</span>
@@ -876,8 +884,8 @@ export default function AdminProfile() {
               return (
                 <div className="space-y-6" style={{ animation: "cp-slideDown 0.3s ease-out" }}>
                   {isGoogleUser && (
-                    <div className="flex items-start gap-2.5 rounded-xl px-4 py-3" style={{ background: ACCENT_BG, border: `1px solid ${ACCENT_BORDER}` }}>
-                      <Shield size={14} className="shrink-0 mt-0.5" style={{ color: ACCENT }} />
+                    <div className="flex items-start gap-2.5 rounded-xl px-4 py-3" style={{ background: GOLD_BG, border: `1px solid ${GOLD}` }}>
+                      <Shield size={14} className="shrink-0 mt-0.5" style={{ color: GOLD }} />
                       <p style={{ color: "rgba(255,200,200,0.85)", fontSize: "11px", lineHeight: "1.5" }}>
                         Your account is linked to Google. You can set a password below to also enable standard login.
                       </p>
@@ -885,36 +893,36 @@ export default function AdminProfile() {
                   )}
                   {!isGoogleUser && (
                     <div>
-                      <label style={{ color: ACCENT_DIM, fontSize: "10px", fontWeight: 700, letterSpacing: "0.22em" }}>CURRENT PASSWORD</label>
+                      <label style={{ color: "rgba(234,179,8,0.7)", fontSize: "10px", fontWeight: 700, letterSpacing: "0.22em" }}>CURRENT PASSWORD</label>
                       <div className="relative mt-1.5">
                         <input type={cpShow.current ? "text" : "password"} value={cpForm.current} autoComplete="current-password"
                           onChange={(e) => { setCpForm((p) => ({ ...p, current: e.target.value })); if (cpErrors.current) setCpErrors((p) => ({ ...p, current: "" })); }}
                           style={fieldStyle(!!cpErrors.current)} onFocus={onFocusRed} onBlur={onBlurRed(!!cpErrors.current)}
                         />
-                        <button type="button" onClick={() => setCpShow((p) => ({ ...p, current: !p.current }))} className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-600 hover:text-red-400 transition-colors">
+                        <button type="button" onClick={() => setCpShow((p) => ({ ...p, current: !p.current }))} className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-600 hover:text-yellow-500 transition-colors">
                           {cpShow.current ? <EyeOff size={14} /> : <Eye size={14} />}
                         </button>
                       </div>
                       {cpErrors.current && <p className="mt-1 text-[10px] text-red-400">{cpErrors.current}</p>}
-                      <button type="button" onClick={handleForgotClick} disabled={fpLoading} className="mt-1 text-[10px] transition-colors disabled:opacity-40" style={{ color: ACCENT_DIM }}
-                        onMouseEnter={(e) => !fpLoading && (e.currentTarget.style.color = ACCENT)}
-                        onMouseLeave={(e) => (e.currentTarget.style.color = ACCENT_DIM)}
+                      <button type="button" onClick={handleForgotClick} disabled={fpLoading} className="mt-1 text-[10px] transition-colors disabled:opacity-40" style={{ color: GOLD_DIM }}
+                        onMouseEnter={(e) => !fpLoading && (e.currentTarget.style.color = GOLD)}
+                        onMouseLeave={(e) => (e.currentTarget.style.color = GOLD_DIM)}
                       >
                         {fpLoading ? "Sending OTP…" : "Forgot current password?"}
                       </button>
                     </div>
                   )}
                   <div>
-                    <label style={{ color: ACCENT_DIM, fontSize: "10px", fontWeight: 700, letterSpacing: "0.22em" }}>NEW PASSWORD</label>
+                    <label style={{ color: "rgba(234,179,8,0.7)", fontSize: "10px", fontWeight: 700, letterSpacing: "0.22em" }}>NEW PASSWORD</label>
                     <div className="relative mt-1.5">
                       <input type={cpShow.newPwd ? "text" : "password"} value={cpForm.newPwd} autoComplete="new-password"
                         onChange={(e) => { setCpForm((p) => ({ ...p, newPwd: e.target.value, confirm: "" })); if (cpErrors.newPwd) setCpErrors((p) => ({ ...p, newPwd: "", confirm: "" })); }}
                         style={{ ...fieldStyle(!!cpErrors.newPwd), paddingRight: "56px" }} onFocus={onFocusRed} onBlur={onBlurRed(!!cpErrors.newPwd)}
                       />
-                      <button type="button" onClick={() => setCpShow((p) => ({ ...p, newPwd: !p.newPwd }))} className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-600 hover:text-red-400 transition-colors">
+                      <button type="button" onClick={() => setCpShow((p) => ({ ...p, newPwd: !p.newPwd }))} className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-600 hover:text-yellow-500 transition-colors">
                         {cpShow.newPwd ? <EyeOff size={14} /> : <Eye size={14} />}
                       </button>
-                      <Shield size={15} className="absolute right-0 top-1/2 -translate-y-1/2 transition-all duration-500" style={{ color: strengthColors[strength], filter: strength === 4 ? `drop-shadow(0 0 6px ${ACCENT_GLOW})` : "none", animation: strength === 4 ? "cp-shield-pulse 1.8s ease-in-out infinite" : "none" }} />
+                      <Shield size={15} className="absolute right-0 top-1/2 -translate-y-1/2 transition-all duration-500" style={{ color: strengthColors[strength], filter: strength === 4 ? `drop-shadow(0 0 6px ${GOLD_GLOW})` : "none", animation: strength === 4 ? "cp-shield-pulse 1.8s ease-in-out infinite" : "none" }} />
                     </div>
                     {cpForm.newPwd && (
                       <div className="flex gap-1 mt-2">
@@ -923,7 +931,7 @@ export default function AdminProfile() {
                     )}
                     <ul className="mt-2.5 space-y-1">
                       {[{ ok: checks.length, label: "At least 8 characters" }, { ok: checks.cases, label: "Uppercase & lowercase letters" }, { ok: checks.number, label: "At least 1 number (0-9)" }, { ok: checks.special, label: "At least 1 special character (!@#$...)" }].map(({ ok, label }) => (
-                        <li key={label} className="flex items-center gap-1.5 transition-colors duration-300" style={{ color: ok ? ACCENT : "rgba(255,255,255,0.22)", fontSize: "10px" }}>
+                        <li key={label} className="flex items-center gap-1.5 transition-colors duration-300" style={{ color: ok ? GOLD : "rgba(255,255,255,0.22)", fontSize: "10px" }}>
                           {ok ? <Check size={9} style={{ flexShrink: 0 }} /> : <span style={{ width: 9, height: 9, display: "inline-block", borderRadius: "50%", border: "1px solid rgba(255,255,255,0.18)", flexShrink: 0 }} />}
                           {label}
                         </li>
@@ -938,13 +946,13 @@ export default function AdminProfile() {
                   </div>
                   {strength === 4 && newDiffersFromCurrent && (
                     <div style={{ animation: "cp-slideDown 0.35s cubic-bezier(0.22,1,0.36,1)" }}>
-                      <label style={{ color: ACCENT_DIM, fontSize: "10px", fontWeight: 700, letterSpacing: "0.22em" }}>CONFIRM NEW PASSWORD</label>
+                      <label style={{ color: "rgba(234,179,8,0.7)", fontSize: "10px", fontWeight: 700, letterSpacing: "0.22em" }}>CONFIRM NEW PASSWORD</label>
                       <div className="relative mt-1.5">
                         <input type={cpShow.confirm ? "text" : "password"} value={cpForm.confirm} autoComplete="new-password" autoFocus
                           onChange={(e) => { setCpForm((p) => ({ ...p, confirm: e.target.value })); if (cpErrors.confirm) setCpErrors((p) => ({ ...p, confirm: "" })); }}
                           style={fieldStyle(!!cpErrors.confirm)} onFocus={onFocusRed} onBlur={onBlurRed(!!cpErrors.confirm)}
                         />
-                        <button type="button" onClick={() => setCpShow((p) => ({ ...p, confirm: !p.confirm }))} className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-600 hover:text-red-400 transition-colors">
+                        <button type="button" onClick={() => setCpShow((p) => ({ ...p, confirm: !p.confirm }))} className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-600 hover:text-yellow-500 transition-colors">
                           {cpShow.confirm ? <EyeOff size={14} /> : <Eye size={14} />}
                         </button>
                       </div>
@@ -959,7 +967,7 @@ export default function AdminProfile() {
                       onClick={handleChangePwd}
                       disabled={!cpIsValid || cpLoading}
                       className="relative overflow-hidden flex items-center gap-2 px-6 py-2.5 rounded-full text-xs font-bold tracking-wider"
-                      style={{ background: cpIsValid ? ACCENT : ACCENT_BG, color: cpIsValid ? "#ffffff" : ACCENT_DIM, border: cpIsValid ? "none" : `1px solid ${ACCENT_BORDER}`, cursor: cpIsValid && !cpLoading ? "pointer" : "not-allowed", boxShadow: cpIsValid ? `0 0 22px ${ACCENT_GLOW}` : "none", transition: "all 0.3s" }}
+                      style={{ background: cpIsValid ? GOLD : GOLD_BG, color: cpIsValid ? "#ffffff" : GOLD_DIM, border: cpIsValid ? "none" : `1px solid ${GOLD}`, cursor: cpIsValid && !cpLoading ? "pointer" : "not-allowed", boxShadow: cpIsValid ? `0 0 22px ${GOLD_GLOW}` : "none", transition: "all 0.3s" }}
                     >
                       {cpRipple && (<span className="absolute inset-0 rounded-full pointer-events-none" style={{ background: "rgba(255,255,255,0.25)", animation: "cp-ripple 0.7s ease-out forwards", transformOrigin: "center" }} />)}
                       {cpLockOpen ? <LockOpen size={13} /> : <Lock size={13} />}
