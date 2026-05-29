@@ -34,10 +34,41 @@ export default {
           from: { maxHeight: "0", opacity: "0" },
           to: { maxHeight: "400px", opacity: "1" },
         },
+        flowDown: {
+          '0%': { transform: 'translateY(-100%)' },
+          '100%': { transform: 'translateY(100%)' },
+        },
+        flowUp: {
+          '0%': { transform: 'translateY(100%)' },
+          '100%': { transform: 'translateY(-100%)' },
+        },
+        flowRight: {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(100%)' },
+        },
+        pulseGlow: {
+          '0%, 100%': { opacity: 1, boxShadow: '0 0 10px rgba(245, 158, 11, 0.5)' },
+          '50%': { opacity: .7, boxShadow: '0 0 20px rgba(245, 158, 11, 0.8)' },
+        },
+        scanLine: {
+          '0%': { top: '0%' },
+          '50%': { top: '100%' },
+          '100%': { top: '0%' },
+        },
+        chargePulse: {
+          '0%, 100%': { color: '#10b981', textShadow: '0 0 5px #10b981' },
+          '50%': { color: '#34d399', textShadow: '0 0 15px #34d399' },
+        },
       },
       animation: {
         ringGlow: "ringGlow 3s ease-in-out infinite",
         float: "float 3s ease-in-out infinite",
+        'flow-down': 'flowDown 2s linear infinite',
+        'flow-up': 'flowUp 2s linear infinite',
+        'flow-right': 'flowRight 3s linear infinite',
+        'pulse-glow': 'pulseGlow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'scan': 'scanLine 2s linear infinite',
+        'charge': 'chargePulse 1.5s ease-in-out infinite',
       },
     },
   },
