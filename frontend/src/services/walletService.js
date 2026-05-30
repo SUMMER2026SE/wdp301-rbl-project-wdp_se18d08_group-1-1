@@ -17,11 +17,13 @@ export const createTopUpUrl = (amount) =>
     body: JSON.stringify({ amount: Number(amount) }),
   });
 
-export const getTopUpStatus = (orderCode) =>
-  apiFetch(`/wallet/top-up/${orderCode}/status`, {
+export const getTopUpStatus = (orderCode, cancel = false) => {
+  const query = cancel ? '?cancel=true' : '';
+  return apiFetch(`/wallet/top-up/${orderCode}/status${query}`, {
     method: 'GET',
     headers: getAuthHeaders(),
   });
+};
 
 export const getTransactionsHistory = (params = {}) => {
   const query = new URLSearchParams(params).toString();

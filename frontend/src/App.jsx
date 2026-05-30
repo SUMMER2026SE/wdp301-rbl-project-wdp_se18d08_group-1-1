@@ -49,7 +49,6 @@ export default function App() {
         {/* ── Standalone auth page ── */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/oauth/callback" element={<OAuthCallback />} />
-        <Route path="/wallet" element={<WalletPage />} />
 
         {/* ══════════════════════════════════════════
             ADMIN section — DashboardLayout chung
@@ -90,6 +89,7 @@ export default function App() {
         >
           <Route path="/profile" element={<CustomerProfile />} />
           <Route path="/customer/vehicles" element={<MyVehicles />} />
+          <Route path="/customer/wallet" element={<WalletPage />} />
         </Route>
 
         {/* ── 403 ── */}

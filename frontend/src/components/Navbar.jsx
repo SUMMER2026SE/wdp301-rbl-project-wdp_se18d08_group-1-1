@@ -25,7 +25,7 @@ const customerLinks = [
   { to: '/',            label: 'Home',         icon: Sparkles },
   { to: '/booking',     label: 'Booking',      icon: CalendarCheck },
   { to: '/parking-map', label: 'Parking Map',  icon: Map },
-  { to: '/wallet',      label: 'Wallet',       icon: Wallet },
+  { to: '/customer/wallet', label: 'Wallet',       icon: Wallet },
 ];
 
 const roleBadge = {
@@ -309,7 +309,7 @@ export default function Navbar() {
                               </div>
                             </div>
                             <Link
-                              to="/wallet"
+                              to="/customer/wallet"
                               onClick={() => setProfileOpen(false)}
                               className="text-[10px] font-bold text-amber-600 hover:text-amber-800 bg-amber-100 hover:bg-amber-200 px-2.5 py-1 rounded-lg transition-all duration-200 uppercase tracking-wide flex items-center gap-1"
                             >

@@ -53,8 +53,8 @@ const createTopUp = async (req, res, next) => {
       orderCode,
       amount: parseInt(amount),
       description: `VALO NapVi`,
-      returnUrl: process.env.PAYOS_RETURN_URL || `${process.env.CLIENT_URL}/wallet`,
-      cancelUrl: process.env.PAYOS_CANCEL_URL || `${process.env.CLIENT_URL}/wallet?cancel=true`,
+      returnUrl: process.env.PAYOS_RETURN_URL || `${process.env.CLIENT_URL}/customer/wallet`,
+      cancelUrl: process.env.PAYOS_CANCEL_URL || `${process.env.CLIENT_URL}/customer/wallet?cancel=true`,
       items: [
         {
           name: 'Nạp tiền ví VALO',
@@ -112,6 +112,23 @@ const getTopUpStatus = async (req, res, next) => {
       return res.status(404).json({
         success: false,
         message: 'Transaction not found',
+      });
+    }
+
+    const { cancel } = req.query;
+
+    // Explicitly cancel if requested by frontend
+    if (cancel === 'true' && transaction.status === 'PENDING') {
+      await walletService.cancelPendingTopUp(parseInt(orderCode));
+      transaction.status = 'CANCELLED';
+      try {
+        await payos.paymentRequests.cancel(parseInt(orderCode));
+      } catch (err) {
+        // Ignore errors if already cancelled on payOS
+      }
+      return res.json({
+        success: true,
+        data: { status: 'CANCELLED' }
       });
     }
 
