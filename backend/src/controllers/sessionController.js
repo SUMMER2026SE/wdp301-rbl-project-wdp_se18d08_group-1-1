@@ -1,4 +1,5 @@
 const Session = require('../models/Session');
+const UserDetail = require('../models/UserDetail');
 const cloudinary = require('../config/cloudinary');
 
 /**
@@ -29,9 +30,19 @@ exports.createKioskSession = async (req, res, next) => {
       }
     }
 
+    // Auto-link session if the phone number belongs to a registered user
+    let userId = null;
+    if (phone) {
+      const userDetail = await UserDetail.findOne({ phone });
+      if (userDetail) {
+        userId = userDetail.userId;
+      }
+    }
+
     // Create session in database
     const newSession = await Session.create({
       licensePlate,
+      userId,
       phone: phone || null,
       vehicleType: vehicleType || 'car',
       parkingSlot: parkingSlot || null,
