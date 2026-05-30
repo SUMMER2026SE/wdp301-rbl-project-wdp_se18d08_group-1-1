@@ -57,7 +57,7 @@ const buildProfile = (raw) => {
     phone: p.phone || raw.phone || "",
     email: raw.email || "",
     avatar: p.avatar || raw.avatar || "",
-    role: raw.role || "Manager",
+    role: raw.role || "Staff",
     createdAt: raw.createdAt || null,
     isGoogleUser: !!raw.isGoogleUser,
   };
@@ -115,7 +115,7 @@ function EmeraldUnderlineField({ field, label, value, readOnly = false, onSave, 
 }
 
 // ─── Main Component ───────────────────────────────────────────────────────────
-export default function ManagerProfile() {
+export default function StaffProfile() {
   const avatarInputRef = useRef(null);
   const spotlightRef = useRef(null);
   const orbRef = useRef(null);
@@ -130,7 +130,7 @@ export default function ManagerProfile() {
     phone: "",
     email: "",
     avatar: "",
-    role: "Manager",
+    role: "Staff",
     createdAt: null,
     isGoogleUser: false,
   });
@@ -452,7 +452,7 @@ export default function ManagerProfile() {
     if (magneticRef.current) magneticRef.current.style.transform = "translate(0, 0)";
   };
 
-  // ── Accent colour for Manager: emerald ───────────────────────────────────
+  // ── Accent colour for Staff: emerald ───────────────────────────────────
   const ACCENT = "#10b981";          // emerald-500
   const ACCENT_DIM = "rgba(52,211,153,0.7)";
   const ACCENT_GLOW = "rgba(16,185,129,0.3)";
@@ -503,7 +503,7 @@ export default function ManagerProfile() {
             </div>
 
             <label
-              htmlFor="manager-avatar-upload"
+              htmlFor="staff-avatar-upload"
               className="absolute inset-0 rounded-full flex flex-col items-center justify-center gap-1 transition-all duration-300 group"
               style={{ background: avatarLoading ? "rgba(0,0,0,0.65)" : "rgba(0,0,0,0)", cursor: avatarLoading ? "not-allowed" : "pointer" }}
               onMouseEnter={(e) => { if (!avatarLoading) e.currentTarget.style.background = "rgba(0,0,0,0.6)"; }}
@@ -521,7 +521,7 @@ export default function ManagerProfile() {
                 </>
               )}
             </label>
-            <input id="manager-avatar-upload" disabled={avatarLoading} ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
+            <input id="staff-avatar-upload" disabled={avatarLoading} ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarChange} />
 
             <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-500 rounded-full animate-ping" />
           </div>

@@ -63,10 +63,13 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
         let success = false;
         for (let i = 0; i < 3; i++) {
           const rawResult = await captureAndAnalyze();
-          if (rawResult) {
-            const formatted = formatVietnamesePlate(rawResult);
+          if (rawResult && rawResult.plate) {
+            const formatted = formatVietnamesePlate(rawResult.plate);
             if (formatted) {
-              updateFormData({ licensePlate: formatted });
+              updateFormData({ 
+                licensePlate: formatted,
+                entryImageBase64: rawResult.imageBase64
+              });
               success = true;
               break;
             }
@@ -106,7 +109,7 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
       
       const data = await response.json();
       if (response.ok && data.success && data.plate) {
-        return data.plate;
+        return { plate: data.plate, imageBase64 };
       }
     } catch (error) {
       console.error('Scan error:', error);

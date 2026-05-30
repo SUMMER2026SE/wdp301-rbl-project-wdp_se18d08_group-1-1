@@ -44,7 +44,7 @@ const customerLinks = [
 
 const roleBadge = {
   admin: { label: "Admin", bg: "bg-red-500", text: "text-white" },
-  manager: { label: "Manager", bg: "bg-blue-500", text: "text-white" },
+  staff: { label: "Staff", bg: "bg-blue-500", text: "text-white" },
   customer: { label: "Customer", bg: "bg-emerald-500", text: "text-white" },
 };
 
@@ -401,7 +401,7 @@ export default function Navbar() {
                           ))}
 
                           {(user.role === "admin" ||
-                            user.role === "manager") && (
+                            user.role === "staff") && (
                               <>
                                 <div className="h-px bg-gray-100 my-1 mx-3" />
                                 <Link
@@ -414,7 +414,7 @@ export default function Navbar() {
                                     <Shield size={14} className="text-blue-500" />
                                   </div>
                                   <span className="font-medium">
-                                    {user.role === "admin" ? "Admin" : "Manager"}{" "}
+                                    {user.role === "admin" ? "Admin" : "Staff"}{" "}
                                     Panel
                                   </span>
                                   <ArrowUpRight
