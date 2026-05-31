@@ -39,14 +39,9 @@ const NAV_CONFIG = {
       to: "/admin/dashboard",
     },
     {
-      label: "Staff Accounts",
+      label: "Account Management",
       icon: <Users size={18} />,
-      to: "/admin/staff",
-    },
-    {
-      label: "User Management",
-      icon: <ShieldCheck size={18} />,
-      to: "/admin/users",
+      to: "/admin/accounts",
     },
     {
       label: "Parking Lots",

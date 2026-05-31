@@ -2,6 +2,9 @@ const cloudinary = require('../config/cloudinary');
 const streamifier = require('streamifier');
 const Vehicle = require('../models/Vehicle');
 
+const User = require('../models/User');
+const UserDetail = require('../models/UserDetail');
+
 // Same normalizer as vehicleController – must stay in sync
 const normalizeSlug = (str = '') =>
   str.toLowerCase().trim().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
@@ -199,3 +202,54 @@ exports.syncAllVehicleModels = async (req, res, next) => {
     next(err);
   }
 };
+
+/**
+ * @desc  List all users with their profiles
+ * @route GET /api/admin/users
+ * @access Admin only
+ */
+exports.listUsers = async (req, res, next) => {
+  try {
+    const users = await User.aggregate([
+      {
+        $lookup: {
+          from: 'userdetails',
+          localField: '_id',
+          foreignField: 'userId',
+          as: 'profile'
+        }
+      },
+      {
+        $unwind: {
+          path: '$profile',
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      {
+        $sort: { createdAt: -1 }
+      }
+    ]);
+    res.status(200).json({ success: true, data: users });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * @desc  Update user status (block/unblock)
+ * @route PUT /api/admin/users/:id/status
+ * @access Admin only
+ */
+exports.updateUserStatus = async (req, res, next) => {
+  try {
+    const { status } = req.body;
+    const user = await User.findByIdAndUpdate(req.params.id, { status }, { new: true });
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    res.status(200).json({ success: true, data: user });
+  } catch (err) {
+    next(err);
+  }
+};
+

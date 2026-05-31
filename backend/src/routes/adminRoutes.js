@@ -32,4 +32,8 @@ router.post('/vehicles/upload-model', upload.single('file'), uploadVehicleModel)
 router.delete('/vehicles/upload-model', deleteVehicleModel);
 router.post('/vehicles/sync-models', syncAllVehicleModels);
 
+// Users
+router.get('/users', require('../controllers/adminController').listUsers);
+router.put('/users/:id/status', require('../controllers/adminController').updateUserStatus);
+
 module.exports = router;
