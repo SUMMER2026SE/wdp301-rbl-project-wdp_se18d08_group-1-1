@@ -8,7 +8,7 @@ export default function KioskOutInvoice({ sessionData, exitImage, onCheckoutSucc
   const handleCheckout = async (paymentMethod) => {
     setIsProcessing(true);
     try {
-      const res = await fetch('http://localhost:5001/api/sessions/kiosk-checkout', {
+      const res = await fetch('http://localhost:5000/api/sessions/kiosk-checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -178,10 +178,10 @@ export default function ParkingLots() {
 
           {/* TOP ROW ZONES */}
           <div className="absolute left-[108px] right-[108px] top-[80px] h-[190px] flex gap-8 z-20">
-            <div className="glass-panel flex-1 p-4 relative border-amber-500/30 transition-all shadow-[0_0_40px_rgba(245,158,11,0.15)]">
+            <div className="glass-panel flex-1 p-4 relative border-purple-500/20 transition-all shadow-[0_0_40px_rgba(168,85,247,0.1)]">
               <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2 text-amber-500"><Star size={16} /><h3 className="font-bold tracking-widest text-xs uppercase text-amber-400 drop-shadow-[0_0_5px_rgba(245,158,11,0.5)]">Zone A • VIP</h3></div>
-                <span className="text-[9px] font-semibold bg-amber-500/10 text-amber-400 px-2 py-1 rounded-full border border-amber-500/30">Occ: 80%</span>
+                <div className="flex items-center gap-2 text-purple-400"><Car size={16} /><h3 className="font-bold tracking-widest text-xs uppercase text-purple-400 drop-shadow-[0_0_5px_rgba(168,85,247,0.5)]">Zone A • Mixed</h3></div>
+                <span className="text-[9px] font-semibold bg-purple-500/10 text-purple-400 px-2 py-1 rounded-full border border-purple-500/20">Occ: 80%</span>
               </div>
               <div className="grid grid-cols-7 gap-2">
                 {[...Array(14)].map((_, i) => {
@@ -194,8 +194,8 @@ export default function ParkingLots() {
                   else if ([0, 2, 4, 7, 8, 9, 10, 11, 12].includes(i)) type = 'monthly';
                   
                   return (
-                    <div key={id} onClick={() => handleSlotClick(id, type, i, '30A', timeStatus)} className={`slot-card p-1 flex flex-col items-center justify-center h-12 relative group ${type !== 'empty' ? 'border-white/5 bg-white/5 cursor-pointer hover:bg-white/10 hover:border-white/10' : 'border-amber-500 bg-amber-500/5 shadow-[0_0_10px_rgba(245,158,11,0.1)_inset]'}`}>
-                      {renderSlotContent(id, type, i, '30A', 'text-amber-400', timeStatus)}
+                    <div key={id} onClick={() => handleSlotClick(id, type, i, '30A', timeStatus)} className={`slot-card p-1 flex flex-col items-center justify-center h-12 relative group ${type !== 'empty' ? 'border-white/5 bg-white/5 cursor-pointer hover:bg-white/10 hover:border-white/10' : 'border-purple-500 bg-purple-500/5 shadow-[0_0_10px_rgba(168,85,247,0.1)_inset]'}`}>
+                      {renderSlotContent(id, type, i, '30A', 'text-purple-400', timeStatus)}
                     </div>
                   );
                 })}

@@ -34,7 +34,7 @@ export default function KioskOutWelcome({ onScanSuccess }) {
 
   const handlePlateDetected = async (plate, imageBase64) => {
     try {
-      const res = await fetch('http://localhost:5001/api/sessions/kiosk-exit-scan', {
+      const res = await fetch('http://localhost:5000/api/sessions/kiosk-exit-scan', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ licensePlate: plate })
