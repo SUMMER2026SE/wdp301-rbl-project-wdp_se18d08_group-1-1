@@ -40,6 +40,10 @@ const sessionSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    expectedDurationHours: {
+      type: Number,
+      default: 1,
+    },
     entryImage_url: {
       type: String,
       default: null,

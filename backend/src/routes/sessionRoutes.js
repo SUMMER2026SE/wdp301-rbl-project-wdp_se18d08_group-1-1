@@ -13,4 +13,10 @@ router.get('/my-history', protect, authorize('customer', 'admin'), sessionContro
 // GET /api/sessions
 router.get('/', sessionController.getAllSessions);
 
+// POST /api/sessions/kiosk-exit-scan
+router.post('/kiosk-exit-scan', sessionController.kioskExitScan);
+
+// POST /api/sessions/kiosk-checkout
+router.post('/kiosk-checkout', sessionController.kioskCheckout);
+
 module.exports = router;

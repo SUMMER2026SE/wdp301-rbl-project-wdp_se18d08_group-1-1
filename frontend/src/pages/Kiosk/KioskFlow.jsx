@@ -42,6 +42,7 @@ export default function KioskFlow() {
           licensePlate: formData.licensePlate,
           phone: formData.phone,
           parkingSlot: formData.selectedSlot,
+          durationHours: formData.durationHours,
           entryImageBase64: formData.entryImageBase64
         })
       });

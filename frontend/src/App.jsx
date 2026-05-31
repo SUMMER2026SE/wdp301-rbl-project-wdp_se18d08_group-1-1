@@ -16,6 +16,7 @@ import OAuthCallback from "./pages/OAuthCallback";
 
 // Pages - Kiosk
 import KioskFlow from "./pages/Kiosk/KioskFlow";
+import KioskOutFlow from "./pages/KioskOut/KioskOutFlow";
 
 // Pages – Admin
 import AdminDashboard from './pages/Admin/Dashboard';
@@ -41,6 +42,7 @@ export default function App() {
       <Routes>
         {/* ── Standalone Kiosk app ── */}
         <Route path="/kiosk/*" element={<KioskFlow />} />
+        <Route path="/kiosk-out/*" element={<KioskOutFlow />} />
 
         {/* ── Public: Navbar + Footer ── */}
         <Route element={<MainLayout />}>
