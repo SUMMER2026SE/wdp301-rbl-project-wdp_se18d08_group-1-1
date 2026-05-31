@@ -36,15 +36,15 @@ const guestLinks = [
 ];
 
 const customerLinks = [
-  { to: "/", label: "Home", icon: Sparkles },
-  { to: "/booking", label: "Booking", icon: CalendarCheck },
-  { to: "/parking-map", label: "Parking Map", icon: Map },
-  { to: "/wallet", label: "Wallet", icon: Wallet },
+  { to: '/', label: 'Home', icon: Sparkles },
+  { to: '/services', label: 'Services', icon: Settings },
+  { to: '/parking-map', label: 'Parking Map', icon: Map },
+  { to: '/wallet', label: 'Wallet', icon: Wallet },
 ];
 
 const roleBadge = {
   admin: { label: "Admin", bg: "bg-red-500", text: "text-white" },
-  manager: { label: "Manager", bg: "bg-blue-500", text: "text-white" },
+  staff: { label: "Staff", bg: "bg-blue-500", text: "text-white" },
   customer: { label: "Customer", bg: "bg-emerald-500", text: "text-white" },
 };
 
@@ -207,10 +207,9 @@ export default function Navbar() {
                         className={`
                           relative flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold
                           transition-all duration-300 ease-out cursor-pointer select-none
-                          ${
-                            isActive
-                              ? "text-gray-900"
-                              : "text-gray-500 hover:text-gray-800"
+                          ${isActive
+                            ? "text-gray-900"
+                            : "text-gray-500 hover:text-gray-800"
                           }
                         `}
                       >
@@ -222,9 +221,8 @@ export default function Navbar() {
                         <link.icon
                           size={14}
                           strokeWidth={2.2}
-                          className={`relative z-10 transition-colors duration-300 ${
-                            isActive ? "text-gold" : "text-gray-400"
-                          }`}
+                          className={`relative z-10 transition-colors duration-300 ${isActive ? "text-gold" : "text-gray-400"
+                            }`}
                         />
                         <span className="relative z-10">{link.label}</span>
 
@@ -265,10 +263,9 @@ export default function Navbar() {
                       className={`
                         flex items-center gap-2 pl-[3px] pr-2.5 py-[3px] rounded-2xl
                         transition-all duration-300 nav-btn-hover
-                        ${
-                          profileOpen
-                            ? "bg-black/[0.06] ring-1 ring-black/[0.08]"
-                            : "hover:bg-black/[0.04]"
+                        ${profileOpen
+                          ? "bg-black/[0.06] ring-1 ring-black/[0.08]"
+                          : "hover:bg-black/[0.04]"
                         }
                       `}
                     >
@@ -404,29 +401,29 @@ export default function Navbar() {
                           ))}
 
                           {(user.role === "admin" ||
-                            user.role === "manager") && (
-                            <>
-                              <div className="h-px bg-gray-100 my-1 mx-3" />
-                              <Link
-                                id="nav-dd-dashboard"
-                                to={`/${user.role}/dashboard`}
-                                onClick={() => setProfileOpen(false)}
-                                className="flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] text-gray-600 hover:text-gray-900 hover:bg-black/[0.04] transition-all duration-200 group"
-                              >
-                                <div className="w-7 h-7 rounded-lg bg-blue-50 group-hover:bg-blue-100 flex items-center justify-center transition-all duration-200">
-                                  <Shield size={14} className="text-blue-500" />
-                                </div>
-                                <span className="font-medium">
-                                  {user.role === "admin" ? "Admin" : "Manager"}{" "}
-                                  Panel
-                                </span>
-                                <ArrowUpRight
-                                  size={12}
-                                  className="text-gray-300 ml-auto"
-                                />
-                              </Link>
-                            </>
-                          )}
+                            user.role === "staff") && (
+                              <>
+                                <div className="h-px bg-gray-100 my-1 mx-3" />
+                                <Link
+                                  id="nav-dd-dashboard"
+                                  to={`/${user.role}/dashboard`}
+                                  onClick={() => setProfileOpen(false)}
+                                  className="flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] text-gray-600 hover:text-gray-900 hover:bg-black/[0.04] transition-all duration-200 group"
+                                >
+                                  <div className="w-7 h-7 rounded-lg bg-blue-50 group-hover:bg-blue-100 flex items-center justify-center transition-all duration-200">
+                                    <Shield size={14} className="text-blue-500" />
+                                  </div>
+                                  <span className="font-medium">
+                                    {user.role === "admin" ? "Admin" : "Staff"}{" "}
+                                    Panel
+                                  </span>
+                                  <ArrowUpRight
+                                    size={12}
+                                    className="text-gray-300 ml-auto"
+                                  />
+                                </Link>
+                              </>
+                            )}
                         </div>
 
                         {/* Logout */}
@@ -498,23 +495,20 @@ export default function Navbar() {
 
       {/* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ MOBILE OVERLAY ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */}
       <div
-        className={`fixed inset-0 z-40 transition-all duration-500 ${
-          mobileOpen ? "pointer-events-auto" : "pointer-events-none"
-        }`}
+        className={`fixed inset-0 z-40 transition-all duration-500 ${mobileOpen ? "pointer-events-auto" : "pointer-events-none"
+          }`}
       >
         {/* Backdrop */}
         <div
-          className={`absolute inset-0 bg-black/20 backdrop-blur-sm transition-opacity duration-500 ${
-            mobileOpen ? "opacity-100" : "opacity-0"
-          }`}
+          className={`absolute inset-0 bg-black/20 backdrop-blur-sm transition-opacity duration-500 ${mobileOpen ? "opacity-100" : "opacity-0"
+            }`}
           onClick={() => setMobileOpen(false)}
         />
 
         {/* Panel */}
         <div
-          className={`absolute top-0 right-0 w-[300px] h-full bg-white/95 backdrop-blur-2xl shadow-2xl transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${
-            mobileOpen ? "translate-x-0" : "translate-x-full"
-          }`}
+          className={`absolute top-0 right-0 w-[300px] h-full bg-white/95 backdrop-blur-2xl shadow-2xl transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${mobileOpen ? "translate-x-0" : "translate-x-full"
+            }`}
         >
           {/* Close */}
           <div className="flex items-center justify-between p-5 border-b border-gray-100">
@@ -542,10 +536,9 @@ export default function Navbar() {
                 id={`nav-m-${link.label.replace(/\s+/g, "-").toLowerCase()}`}
                 onClick={() => setMobileOpen(false)}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-300 ${
-                    isActive
-                      ? "bg-gold/10 text-gray-900"
-                      : "text-gray-500 hover:bg-gray-50 hover:text-gray-800"
+                  `flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-300 ${isActive
+                    ? "bg-gold/10 text-gray-900"
+                    : "text-gray-500 hover:bg-gray-50 hover:text-gray-800"
                   }`
                 }
                 style={{ animationDelay: `${i * 50}ms` }}

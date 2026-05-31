@@ -34,10 +34,15 @@ export default {
           from: { maxHeight: "0", opacity: "0" },
           to: { maxHeight: "400px", opacity: "1" },
         },
+        scan: {
+          "0%, 100%": { top: "0%" },
+          "50%": { top: "100%" },
+        },
       },
       animation: {
         ringGlow: "ringGlow 3s ease-in-out infinite",
         float: "float 3s ease-in-out infinite",
+        scan: "scan 2.5s ease-in-out infinite",
       },
     },
   },
