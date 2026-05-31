@@ -67,7 +67,7 @@ export default function AdminDashboard() {
         <StatCard
           icon={<Users size={18} className="text-yellow-400" />}
           color="bg-yellow-500/10"
-          label="Total Managers"
+          label="Total Staff"
           value="8"
           sub="↑ 1 added this week"
         />
@@ -103,8 +103,8 @@ export default function AdminDashboard() {
           <div className="space-y-2.5">
             <QuickAction
               icon={<Users size={16} className="text-yellow-400" />}
-              label="Create Manager Account"
-              desc="Add a new parking lot manager"
+              label="Create Staff Account"
+              desc="Add a new parking lot staff"
               color="bg-yellow-500/5 border-yellow-500/10"
             />
             <QuickAction
@@ -140,10 +140,10 @@ export default function AdminDashboard() {
             <h3 className="text-white font-bold text-sm">Recent Admin Actions</h3>
             <span className="text-[10px] text-gray-600 bg-white/5 px-2.5 py-1 rounded-full">Last 24h</span>
           </div>
-          <ActionRow action="Created Manager Account" target="Nguyen Thi Lan • manager@lot-b.vn" time="5m ago"  type="create" />
+          <ActionRow action="Created Staff Account" target="Nguyen Thi Lan • staff@lot-b.vn" time="5m ago"  type="create" />
           <ActionRow action="Blocked User Account"    target="ID #4421 • khach01@gmail.com"       time="22m ago" type="block"  />
           <ActionRow action="Deleted Ticket Package"  target="Monthly Basic – expired plan"        time="1h ago"  type="delete" />
-          <ActionRow action="Updated Manager Privileges" target="Tran Van Minh • Lot C manager"   time="2h ago"  type="update" />
+          <ActionRow action="Updated Staff Privileges" target="Tran Van Minh • Lot C staff"   time="2h ago"  type="update" />
           <ActionRow action="Unblocked User Account"  target="ID #3302 • appeal approved"          time="3h ago"  type="update" />
           <ActionRow action="Created Parking Lot"     target="Lot D – District 7, 200 slots"       time="5h ago"  type="create" />
         </div>

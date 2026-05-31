@@ -302,7 +302,11 @@ export default function CustomerProfile() {
       setProfile(fresh);
       sessionStorage.setItem("valo_user", JSON.stringify(merged));
       window.dispatchEvent(new Event("valo_auth_change"));
-      setToast({ msg: "Profile updated ✓", type: "success" });
+      if (data.data.claimedSessions > 0) {
+        setToast({ msg: "🎉 Thành công! Đã gom và đây là tất cả lịch sử đỗ xe của bạn!", type: "success" });
+      } else {
+        setToast({ msg: "Profile updated ✓", type: "success" });
+      }
       setTimeout(() => setToast(null), 2000);
     } else {
       setProfile(profile);
@@ -428,7 +432,11 @@ export default function CustomerProfile() {
       setProfile(fresh);
       sessionStorage.setItem("valo_user", JSON.stringify(merged));
       window.dispatchEvent(new Event("valo_auth_change"));
-      setToast({ msg: "Profile updated ✓", type: "success" });
+      if (data.data.claimedSessions > 0) {
+        setToast({ msg: "🎉 Thành công! Đã gom và đây là tất cả lịch sử đỗ xe của bạn!", type: "success" });
+      } else {
+        setToast({ msg: "Profile updated ✓", type: "success" });
+      }
       setTimeout(() => setToast(null), 2000);
     } else {
       setProfile(profile);
@@ -803,6 +811,28 @@ export default function CustomerProfile() {
       <section className="px-8 py-8 grid grid-cols-12 gap-8 flex-1">
         {/* ── Left: Personal Records ── */}
         <div className="col-span-12 md:col-span-7">
+          {!profile.phone && !editMode && (
+            <div 
+              className="mb-8 rounded-2xl p-5 border cursor-pointer transition-all duration-300 hover:scale-[1.02]"
+              style={{ background: "rgba(234, 179, 8, 0.1)", borderColor: "rgba(234, 179, 8, 0.3)" }}
+              onClick={enterEdit}
+            >
+              <div className="flex items-start gap-4">
+                <div className="p-3 rounded-xl bg-yellow-500/20 text-yellow-400">
+                  <Phone size={24} />
+                </div>
+                <div>
+                  <h4 className="text-yellow-400 font-bold text-base mb-1">
+                    🎁 Bạn từng đỗ xe tại ValoParking?
+                  </h4>
+                  <p className="text-sm text-yellow-500/80 leading-relaxed">
+                    Cập nhật ngay Số điện thoại để xem lại toàn bộ lịch sử đỗ xe về bạn nhé!
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           <h3
             className="text-2xl font-bold mt-1 mb-10"
             style={{ color: "#ffdea8" }}
@@ -1046,7 +1076,7 @@ export default function CustomerProfile() {
                 border: "none",
                 borderBottom: hasError
                   ? "1px solid rgba(239,68,68,0.7)"
-                  : "1px solid rgba(234,179,8,0.3)",
+                  : "1px solid #EAB308",
                 padding: "8px 36px 8px 0",
                 color: "#e2e1eb",
                 fontSize: "13px",
@@ -1059,7 +1089,7 @@ export default function CustomerProfile() {
               const onBlurGold = (hasErr) => (e) => {
                 e.currentTarget.style.borderColor = hasErr
                   ? "rgba(239,68,68,0.7)"
-                  : "rgba(234,179,8,0.3)";
+                  : "#EAB308";
               };
               const strengthColors = [
                 "rgba(255,255,255,0.08)",
@@ -1164,7 +1194,7 @@ export default function CustomerProfile() {
                           className="w-10 h-12 text-center text-lg font-bold rounded-lg outline-none transition-all duration-200"
                           style={{
                             background: "rgba(255,255,255,0.04)",
-                            border: "1px solid rgba(234,179,8,0.25)",
+                            border: "1px solid #EAB308",
                             color: "#e2e1eb",
                             caretColor: "#EAB308",
                           }}
@@ -1173,7 +1203,7 @@ export default function CustomerProfile() {
                           }
                           onBlur={(e) =>
                             (e.currentTarget.style.borderColor =
-                              "rgba(234,179,8,0.25)")
+                              "#EAB308")
                           }
                         />
                       ))}
@@ -1461,7 +1491,7 @@ export default function CustomerProfile() {
                             }
                             onBlur={(e) =>
                               (e.currentTarget.style.borderColor =
-                                "rgba(234,179,8,0.3)")
+                                "#EAB308")
                             }
                           />
                           <button
@@ -1516,7 +1546,7 @@ export default function CustomerProfile() {
                             fpNewPwd === fpConfirmPwd &&
                             fpConfirmPwd
                               ? "none"
-                              : "1px solid rgba(234,179,8,0.15)",
+                              : "1px solid #EAB308",
                           cursor:
                             fpLoading ||
                             fpStrength < 4 ||

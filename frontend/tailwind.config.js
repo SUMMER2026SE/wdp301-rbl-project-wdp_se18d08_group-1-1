@@ -50,10 +50,9 @@ export default {
           '0%, 100%': { opacity: 1, boxShadow: '0 0 10px rgba(245, 158, 11, 0.5)' },
           '50%': { opacity: .7, boxShadow: '0 0 20px rgba(245, 158, 11, 0.8)' },
         },
-        scanLine: {
-          '0%': { top: '0%' },
-          '50%': { top: '100%' },
-          '100%': { top: '0%' },
+        scan: {
+          "0%, 100%": { top: "0%" },
+          "50%": { top: "100%" },
         },
         chargePulse: {
           '0%, 100%': { color: '#10b981', textShadow: '0 0 5px #10b981' },
@@ -67,7 +66,7 @@ export default {
         'flow-up': 'flowUp 2s linear infinite',
         'flow-right': 'flowRight 3s linear infinite',
         'pulse-glow': 'pulseGlow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        'scan': 'scanLine 2s linear infinite',
+        scan: "scan 2.5s ease-in-out infinite",
         'charge': 'chargePulse 1.5s ease-in-out infinite',
       },
     },
