@@ -1,4 +1,3 @@
-import React from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 // Layouts
@@ -20,14 +19,16 @@ import KioskFlow from "./pages/Kiosk/KioskFlow";
 // Pages – Admin
 import AdminDashboard from './pages/Admin/Dashboard';
 import VehicleModels from './pages/Admin/VehicleModels';
+import AdminProfile from './pages/Admin/AdminProfile';
 
 // Pages – Manager
-import ManagerDashboard from './pages/Manager/Dashboard';
-import WalletPage from './pages/Wallet/WalletPage';
+import ManagerDashboard from "./pages/Manager/Dashboard";
+import ManagerProfile from "./pages/Manager/ManagerProfile";
 
 // Pages – Customer
 import CustomerProfile from "./pages/Customer/CustomerProfile";
 import MyVehicles from "./pages/Customer/MyVehicles";
+import WalletPage from "./pages/Wallet/WalletPage";
 
 // Misc
 import UnauthorizedPage from "./pages/UnauthorizedPage";
@@ -63,6 +64,7 @@ export default function App() {
         >
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
           <Route path="/admin/vehicle-models" element={<VehicleModels />} />
+          <Route path="/admin/profile" element={<AdminProfile />} />
         </Route>
 
         {/* ══════════════════════════════════════════
@@ -77,6 +79,7 @@ export default function App() {
           }
         >
           <Route path="/manager/dashboard" element={<ManagerDashboard />} />
+          <Route path="/manager/profile" element={<ManagerProfile />} />
         </Route>
 
         {/* ── Customer section ── */}

@@ -1,7 +1,7 @@
-const { validationResult } = require('express-validator');
-const User = require('../models/User');
-const UserDetail = require('../models/UserDetail');
-const { uploadToCloudinary } = require('../middlewares/uploadMiddleware');
+const { validationResult } = require("express-validator");
+const User = require("../models/User");
+const UserDetail = require("../models/UserDetail");
+const { uploadToCloudinary } = require("../middlewares/uploadMiddleware");
 
 /**
  * @desc    Get user profile (User + UserDetail)
@@ -16,7 +16,7 @@ const getProfile = async (req, res, next) => {
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: 'User not found.',
+        message: "User not found.",
       });
     }
 
@@ -28,14 +28,15 @@ const getProfile = async (req, res, next) => {
         email: user.email,
         role: user.role,
         status: user.status,
+        isGoogleUser: !!user.googleId,
         createdAt: user.createdAt,
         profile: {
-          firstName: userDetail?.firstName || '',
-          lastName: userDetail?.lastName || '',
-          phone: userDetail?.phone || '',
+          firstName: userDetail?.firstName || "",
+          lastName: userDetail?.lastName || "",
+          phone: userDetail?.phone || "",
           dob: userDetail?.dob || null,
-          gender: userDetail?.gender || '',
-          avatar: userDetail?.avatar || '',
+          gender: userDetail?.gender || "",
+          avatar: userDetail?.avatar || "",
         },
       },
     });
@@ -65,17 +66,17 @@ const updateProfile = async (req, res, next) => {
         avatar,
       },
       {
-        new: true,          // Return updated document
-        upsert: true,       // Create if not exists
+        new: true, // Return updated document
+        upsert: true, // Create if not exists
         runValidators: true, // Run schema validators
-      }
+      },
     );
 
     const user = await User.findById(req.user._id);
 
     res.status(200).json({
       success: true,
-      message: 'Profile updated successfully',
+      message: "Profile updated successfully",
       data: {
         id: user._id,
         username: user.username,
@@ -108,7 +109,7 @@ const changePassword = async (req, res, next) => {
     if (!errors.isEmpty()) {
       return res.status(400).json({
         success: false,
-        message: 'Validation failed',
+        message: "Validation failed",
         errors: errors.array().map((err) => ({
           field: err.path,
           message: err.msg,
@@ -119,31 +120,43 @@ const changePassword = async (req, res, next) => {
     const { currentPassword, newPassword } = req.body;
 
     // Get user with password
-    const user = await User.findById(req.user._id).select('+password');
+    const user = await User.findById(req.user._id).select("+password");
 
     if (!user) {
       return res.status(404).json({
         success: false,
-        message: 'User not found.',
+        message: "User not found.",
       });
     }
 
-    // Check current password
-    const isMatch = await user.comparePassword(currentPassword);
+    const isGoogleUser = !!user.googleId && !user.password;
 
-    if (!isMatch) {
-      return res.status(400).json({
-        success: false,
-        message: 'Current password is incorrect.',
-      });
-    }
+    if (!isGoogleUser) {
+      // Regular user: current password is required
+      if (!currentPassword) {
+        return res.status(400).json({
+          success: false,
+          message: "Current password is required.",
+        });
+      }
 
-    // Check new password is different from current
-    if (currentPassword === newPassword) {
-      return res.status(400).json({
-        success: false,
-        message: 'New password must be different from current password.',
-      });
+      // Check current password
+      const isMatch = await user.comparePassword(currentPassword);
+
+      if (!isMatch) {
+        return res.status(400).json({
+          success: false,
+          message: "Current password is incorrect.",
+        });
+      }
+
+      // Check new password is different from current
+      if (currentPassword === newPassword) {
+        return res.status(400).json({
+          success: false,
+          message: "New password must be different from current password.",
+        });
+      }
     }
 
     // Update password (will be hashed by pre-save hook)
@@ -152,7 +165,7 @@ const changePassword = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      message: 'Password changed successfully.',
+      message: "Password changed successfully.",
     });
   } catch (error) {
     next(error);
@@ -169,18 +182,18 @@ const uploadAvatar = async (req, res, next) => {
     if (!req.file) {
       return res.status(400).json({
         success: false,
-        message: 'No image file provided.',
+        message: "No image file provided.",
       });
     }
 
     // Upload buffer to Cloudinary
     const result = await uploadToCloudinary(req.file.buffer, {
-      folder: 'valo_parking/avatars',
+      folder: "valo_parking/avatars",
       public_id: `user_${req.user._id}`,
       overwrite: true,
       transformation: [
-        { width: 400, height: 400, crop: 'fill', gravity: 'face' },
-        { quality: 'auto', fetch_format: 'auto' },
+        { width: 400, height: 400, crop: "fill", gravity: "face" },
+        { quality: "auto", fetch_format: "auto" },
       ],
     });
 
@@ -188,12 +201,12 @@ const uploadAvatar = async (req, res, next) => {
     const userDetail = await UserDetail.findOneAndUpdate(
       { userId: req.user._id },
       { avatar: result.secure_url },
-      { new: true, upsert: true }
+      { new: true, upsert: true },
     );
 
     res.status(200).json({
       success: true,
-      message: 'Avatar uploaded successfully',
+      message: "Avatar uploaded successfully",
       data: {
         avatarUrl: userDetail.avatar,
       },

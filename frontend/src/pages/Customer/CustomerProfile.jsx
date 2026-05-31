@@ -1,5 +1,10 @@
 import { useState, useEffect, useRef } from "react";
-import { apiFetch } from "../../services/api";
+import { apiFetch, API_BASE } from "../../services/api";
+import {
+  forgotPassword as apiForgotPassword,
+  verifyResetPasswordOTP as apiVerifyResetOTP,
+  resetPassword as apiResetPassword,
+} from "../../services/authService";
 import {
   Camera,
   Check,
@@ -14,6 +19,8 @@ import {
   Shield,
   Lock,
   LockOpen,
+  ArrowLeft,
+  RotateCw,
 } from "lucide-react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -54,6 +61,7 @@ const buildProfile = (raw) => {
     wallet: raw.wallet || { balance: 0 },
     vehicles: raw.vehicles || [],
     createdAt: raw.createdAt || null,
+    isGoogleUser: !!raw.isGoogleUser,
   };
 };
 
@@ -155,6 +163,7 @@ export default function CustomerProfile() {
   const spotlightRef = useRef(null);
   const orbRef = useRef(null);
   const magneticRef = useRef(null);
+  const fpOtpRefs = useRef([]);
 
   // ── Profile state ──────────────────────────────────────────────────────────
   const [profile, setProfile] = useState({
@@ -168,6 +177,7 @@ export default function CustomerProfile() {
     wallet: { balance: 0 },
     vehicles: [],
     createdAt: null,
+    isGoogleUser: false,
   });
   const [toast, setToast] = useState(null);
   const [editMode, setEditMode] = useState(false);
@@ -194,6 +204,18 @@ export default function CustomerProfile() {
   const [cpLoading, setCpLoading] = useState(false);
   const [cpRipple, setCpRipple] = useState(false);
   const [cpLockOpen, setCpLockOpen] = useState(false);
+  const [avatarLoading, setAvatarLoading] = useState(false);
+
+  // ── Forgot current password sub-flow ──────────────────────────────────────
+  // fpStep: null | 'otp' | 'password'
+  const [fpStep, setFpStep] = useState(null);
+  const [fpOtpDigits, setFpOtpDigits] = useState(Array(6).fill(""));
+  const [fpVerifiedOTP, setFpVerifiedOTP] = useState("");
+  const [fpNewPwd, setFpNewPwd] = useState("");
+  const [fpConfirmPwd, setFpConfirmPwd] = useState("");
+  const [fpLoading, setFpLoading] = useState(false);
+  const [fpShow, setFpShow] = useState({ newPwd: false, confirm: false });
+  const [fpError, setFpError] = useState("");
 
   // ── Spotlight + orb parallax ───────────────────────────────────────────────
   useEffect(() => {
@@ -227,7 +249,15 @@ export default function CustomerProfile() {
 
       if (ok && data?.success) {
         setProfile(buildProfile(data.data));
-        sessionStorage.setItem("valo_user", JSON.stringify(data.data));
+        // Flatten avatar to top-level so Navbar can read user.avatar directly
+        sessionStorage.setItem(
+          "valo_user",
+          JSON.stringify({
+            ...data.data,
+            avatar: data.data.profile?.avatar || "",
+          }),
+        );
+        window.dispatchEvent(new Event("valo_auth_change"));
       }
     };
     fetchUserData();
@@ -281,11 +311,59 @@ export default function CustomerProfile() {
   };
 
   // ── Avatar upload ──────────────────────────────────────────────────────────
-  const handleAvatarChange = (e) => {
+  const handleAvatarChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setProfile((prev) => ({ ...prev, avatar: URL.createObjectURL(file) }));
-    showToast("Avatar updated ✓", "success");
+
+    if (file.size > 5 * 1024 * 1024) {
+      showToast("Image must be under 5 MB.", "error");
+      return;
+    }
+
+    // Instant preview while uploading
+    const previewUrl = URL.createObjectURL(file);
+    const prevAvatar = profile.avatar;
+    setProfile((prev) => ({ ...prev, avatar: previewUrl }));
+    setAvatarLoading(true);
+
+    const token = localStorage.getItem("accessToken");
+    const formData = new FormData();
+    formData.append("avatar", file);
+
+    try {
+      const res = await fetch(`${API_BASE}/profile/avatar`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const data = await res.json();
+
+      if (res.ok && data?.success) {
+        const cloudinaryUrl = data.data.avatarUrl;
+        setProfile((prev) => ({ ...prev, avatar: cloudinaryUrl }));
+        const cached = JSON.parse(
+          sessionStorage.getItem("valo_user") || "null",
+        );
+        if (cached) {
+          sessionStorage.setItem(
+            "valo_user",
+            JSON.stringify({ ...cached, avatar: cloudinaryUrl }),
+          );
+        }
+        window.dispatchEvent(new Event("valo_auth_change"));
+        showToast("Avatar updated ✓", "success");
+      } else {
+        setProfile((prev) => ({ ...prev, avatar: prevAvatar }));
+        showToast(data?.message || "Upload failed.", "error");
+      }
+    } catch {
+      setProfile((prev) => ({ ...prev, avatar: prevAvatar }));
+      showToast("Could not connect to server.", "error");
+    } finally {
+      setAvatarLoading(false);
+      URL.revokeObjectURL(previewUrl);
+      if (avatarInputRef.current) avatarInputRef.current.value = "";
+    }
   };
 
   // ── Edit mode handlers ─────────────────────────────────────────────────────
@@ -359,17 +437,110 @@ export default function CustomerProfile() {
   };
 
   // ── Change Password handler ──────────────────────────────────────────────────
+  const resetFp = () => {
+    setFpStep(null);
+    setFpOtpDigits(Array(6).fill(""));
+    setFpVerifiedOTP("");
+    setFpNewPwd("");
+    setFpConfirmPwd("");
+    setFpShow({ newPwd: false, confirm: false });
+    setFpError("");
+  };
+
   const closeCpModal = () => {
     setCpOpen(false);
     setCpForm({ current: "", newPwd: "", confirm: "" });
     setCpErrors({ current: "", newPwd: "", confirm: "" });
     setCpShow({ current: false, newPwd: false, confirm: false });
+    resetFp();
+  };
+
+  const handleForgotClick = async () => {
+    setFpError("");
+    setFpLoading(true);
+    const { ok, data } = await apiForgotPassword(profile.email);
+    setFpLoading(false);
+    if (!ok) {
+      setFpError(data?.message || "Could not send OTP. Please try again.");
+      return;
+    }
+    setFpOtpDigits(Array(6).fill(""));
+    setFpStep("otp");
+  };
+
+  const handleFpResendOTP = async () => {
+    setFpError("");
+    setFpLoading(true);
+    const { ok, data } = await apiForgotPassword(profile.email);
+    setFpLoading(false);
+    if (!ok) {
+      setFpError(data?.message || "Could not resend OTP.");
+      return;
+    }
+    setFpOtpDigits(Array(6).fill(""));
+    showToast("New OTP sent ✓", "success");
+  };
+
+  const handleFpVerifyOTP = async () => {
+    const code = fpOtpDigits.join("");
+    if (code.length !== 6) {
+      setFpError("Please enter all 6 digits.");
+      return;
+    }
+    setFpError("");
+    setFpLoading(true);
+    const { ok, data } = await apiVerifyResetOTP(profile.email, code);
+    setFpLoading(false);
+    if (!ok) {
+      setFpError(data?.message || "Invalid OTP. Please try again.");
+      return;
+    }
+    setFpVerifiedOTP(code);
+    setFpOtpDigits(Array(6).fill(""));
+    setFpStep("password");
+  };
+
+  const handleFpReset = async () => {
+    const checks = getPwdChecks(fpNewPwd);
+    const strength = [
+      checks.length,
+      checks.cases,
+      checks.number,
+      checks.special,
+    ].filter(Boolean).length;
+    if (strength < 4) {
+      setFpError("Password does not meet all requirements.");
+      return;
+    }
+    if (fpNewPwd !== fpConfirmPwd) {
+      setFpError("Passwords do not match.");
+      return;
+    }
+    setFpError("");
+    setFpLoading(true);
+    const { ok, data } = await apiResetPassword(
+      profile.email,
+      fpVerifiedOTP,
+      fpNewPwd,
+    );
+    setFpLoading(false);
+    if (!ok) {
+      setFpError(data?.message || "Reset failed. Please try again.");
+      return;
+    }
+    showToast("Password reset ✓", "success");
+    closeCpModal();
   };
 
   const handleChangePwd = async () => {
     const { current, newPwd, confirm } = cpForm;
+    const isGoogleUser = profile.isGoogleUser;
     const errs = { current: "", newPwd: "", confirm: "" };
-    if (!current.trim()) errs.current = "Current password is required.";
+
+    // Only validate current password for non-Google users
+    if (!isGoogleUser && !current.trim())
+      errs.current = "Current password is required.";
+
     if (!newPwd) errs.newPwd = "New password is required.";
     else if (newPwd.length < 8) errs.newPwd = "Minimum 8 characters required.";
     else if (!/[A-Z]/.test(newPwd) || !/[a-z]/.test(newPwd))
@@ -378,8 +549,9 @@ export default function CustomerProfile() {
       errs.newPwd = "Must contain at least 1 number.";
     else if (!/[^a-zA-Z0-9]/.test(newPwd))
       errs.newPwd = "Must contain at least 1 special character.";
-    else if (newPwd === current.trim())
+    else if (!isGoogleUser && newPwd === current.trim())
       errs.newPwd = "New password must differ from current password.";
+
     const strength = getPwdStrength(newPwd);
     if (strength === 4) {
       if (!confirm) errs.confirm = "Please confirm your new password.";
@@ -397,10 +569,18 @@ export default function CustomerProfile() {
     setCpLoading(true);
 
     const token = localStorage.getItem("accessToken");
+    const payload = isGoogleUser
+      ? { newPassword: newPwd, confirmNewPassword: confirm }
+      : {
+          currentPassword: current,
+          newPassword: newPwd,
+          confirmNewPassword: confirm,
+        };
+
     const { ok, data } = await apiFetch("/profile/change-password", {
       method: "PUT",
       headers: { Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ currentPassword: current, newPassword: newPwd }),
+      body: JSON.stringify(payload),
     });
     setCpLoading(false);
 
@@ -531,28 +711,62 @@ export default function CustomerProfile() {
               )}
             </div>
 
-            {/* Hover upload overlay */}
+            {/* Hover upload overlay — shows spinner when uploading */}
             <label
               htmlFor="avatar-upload"
-              className="absolute inset-0 rounded-full cursor-pointer flex flex-col items-center justify-center gap-1 transition-all duration-300 group"
-              style={{ background: "rgba(0,0,0,0)" }}
-              onMouseEnter={(e) =>
-                (e.currentTarget.style.background = "rgba(0,0,0,0.6)")
-              }
-              onMouseLeave={(e) =>
-                (e.currentTarget.style.background = "rgba(0,0,0,0)")
-              }
+              className="absolute inset-0 rounded-full flex flex-col items-center justify-center gap-1 transition-all duration-300 group"
+              style={{
+                background: avatarLoading
+                  ? "rgba(0,0,0,0.65)"
+                  : "rgba(0,0,0,0)",
+                cursor: avatarLoading ? "not-allowed" : "pointer",
+              }}
+              onMouseEnter={(e) => {
+                if (!avatarLoading)
+                  e.currentTarget.style.background = "rgba(0,0,0,0.6)";
+              }}
+              onMouseLeave={(e) => {
+                if (!avatarLoading)
+                  e.currentTarget.style.background = "rgba(0,0,0,0)";
+              }}
             >
-              <Camera
-                size={22}
-                className="text-yellow-400 opacity-0 group-hover:opacity-100 transition-opacity"
-              />
-              <span className="text-yellow-400 text-[9px] font-bold tracking-wider uppercase opacity-0 group-hover:opacity-100 transition-opacity">
-                Change
-              </span>
+              {avatarLoading ? (
+                <svg
+                  className="animate-spin"
+                  style={{ width: 28, height: 28, color: "#EAB308" }}
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                  />
+                </svg>
+              ) : (
+                <>
+                  <Camera
+                    size={22}
+                    className="text-yellow-400 opacity-0 group-hover:opacity-100 transition-opacity"
+                  />
+                  <span className="text-yellow-400 text-[9px] font-bold tracking-wider uppercase opacity-0 group-hover:opacity-100 transition-opacity">
+                    Change
+                  </span>
+                </>
+              )}
             </label>
             <input
               id="avatar-upload"
+              disabled={avatarLoading}
               ref={avatarInputRef}
               type="file"
               accept="image/*"
@@ -815,10 +1029,13 @@ export default function CustomerProfile() {
             (() => {
               const strength = getPwdStrength(cpForm.newPwd);
               const checks = getPwdChecks(cpForm.newPwd);
+              const isGoogleUser = profile.isGoogleUser;
               const newDiffersFromCurrent =
-                !cpForm.newPwd || cpForm.newPwd !== cpForm.current.trim();
+                isGoogleUser ||
+                !cpForm.newPwd ||
+                cpForm.newPwd !== cpForm.current.trim();
               const cpIsValid =
-                !!cpForm.current.trim() &&
+                (isGoogleUser || !!cpForm.current.trim()) &&
                 strength === 4 &&
                 newDiffersFromCurrent &&
                 !!cpForm.confirm &&
@@ -829,7 +1046,7 @@ export default function CustomerProfile() {
                 border: "none",
                 borderBottom: hasError
                   ? "1px solid rgba(239,68,68,0.7)"
-                  : "1px solid rgba(234,179,8,0.3)",
+                  : "1px solid #EAB308",
                 padding: "8px 36px 8px 0",
                 color: "#e2e1eb",
                 fontSize: "13px",
@@ -842,7 +1059,7 @@ export default function CustomerProfile() {
               const onBlurGold = (hasErr) => (e) => {
                 e.currentTarget.style.borderColor = hasErr
                   ? "rgba(239,68,68,0.7)"
-                  : "rgba(234,179,8,0.3)";
+                  : "#EAB308";
               };
               const strengthColors = [
                 "rgba(255,255,255,0.08)",
@@ -851,70 +1068,604 @@ export default function CustomerProfile() {
                 "rgba(234,179,8,0.6)",
                 "#EAB308",
               ];
+
+              /* ── Forgot password: OTP step ──────────────────────── */
+              if (fpStep === "otp")
+                return (
+                  <div
+                    className="space-y-6"
+                    style={{ animation: "cp-slideDown 0.3s ease-out" }}
+                  >
+                    {/* Header */}
+                    <div className="text-center">
+                      <div
+                        className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3"
+                        style={{
+                          background: "rgba(234,179,8,0.08)",
+                          border: "1px solid rgba(234,179,8,0.2)",
+                        }}
+                      >
+                        <Mail size={20} style={{ color: "#EAB308" }} />
+                      </div>
+                      <p
+                        className="font-bold mb-1"
+                        style={{ color: "#ffdea8", fontSize: "14px" }}
+                      >
+                        Enter OTP
+                      </p>
+                      <p
+                        style={{
+                          color: "rgba(255,255,255,0.4)",
+                          fontSize: "11px",
+                        }}
+                      >
+                        Code sent to{" "}
+                        <span style={{ color: "#EAB308" }}>
+                          {profile.email}
+                        </span>
+                      </p>
+                    </div>
+                    {/* 6-digit boxes */}
+                    <div className="flex gap-2 justify-center">
+                      {fpOtpDigits.map((digit, i) => (
+                        <input
+                          key={i}
+                          ref={(el) => {
+                            fpOtpRefs.current[i] = el;
+                          }}
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={6}
+                          value={digit}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (!/^\d*$/.test(val)) return;
+                            if (val.length > 1) {
+                              const digits = val
+                                .replace(/\D/g, "")
+                                .slice(0, 6)
+                                .split("");
+                              const next = [...fpOtpDigits];
+                              digits.forEach((d, j) => {
+                                if (i + j < 6) next[i + j] = d;
+                              });
+                              setFpOtpDigits(next);
+                              const focusIdx = Math.min(i + digits.length, 5);
+                              setTimeout(
+                                () => fpOtpRefs.current[focusIdx]?.focus(),
+                                0,
+                              );
+                              return;
+                            }
+                            const next = [...fpOtpDigits];
+                            next[i] = val;
+                            setFpOtpDigits(next);
+                            if (val && i < 5)
+                              setTimeout(
+                                () => fpOtpRefs.current[i + 1]?.focus(),
+                                0,
+                              );
+                          }}
+                          onKeyDown={(e) => {
+                            if (
+                              e.key === "Backspace" &&
+                              !fpOtpDigits[i] &&
+                              i > 0
+                            )
+                              setTimeout(
+                                () => fpOtpRefs.current[i - 1]?.focus(),
+                                0,
+                              );
+                            if (e.key === "ArrowLeft" && i > 0)
+                              fpOtpRefs.current[i - 1]?.focus();
+                            if (e.key === "ArrowRight" && i < 5)
+                              fpOtpRefs.current[i + 1]?.focus();
+                          }}
+                          className="w-10 h-12 text-center text-lg font-bold rounded-lg outline-none transition-all duration-200"
+                          style={{
+                            background: "rgba(255,255,255,0.04)",
+                            border: "1px solid #EAB308",
+                            color: "#e2e1eb",
+                            caretColor: "#EAB308",
+                          }}
+                          onFocus={(e) =>
+                            (e.currentTarget.style.borderColor = "#EAB308")
+                          }
+                          onBlur={(e) =>
+                            (e.currentTarget.style.borderColor =
+                              "#EAB308")
+                          }
+                        />
+                      ))}
+                    </div>
+                    {fpError && (
+                      <p className="text-[10px] text-red-400 text-center">
+                        {fpError}
+                      </p>
+                    )}
+                    {/* Verify button */}
+                    <button
+                      onClick={handleFpVerifyOTP}
+                      disabled={fpLoading || fpOtpDigits.join("").length !== 6}
+                      className="w-full flex items-center justify-center gap-2 rounded-full text-xs font-bold tracking-wider py-2.5 transition-all duration-300"
+                      style={{
+                        background:
+                          fpOtpDigits.join("").length === 6
+                            ? "#EAB308"
+                            : "rgba(234,179,8,0.12)",
+                        color:
+                          fpOtpDigits.join("").length === 6
+                            ? "#050505"
+                            : "rgba(234,179,8,0.35)",
+                        cursor:
+                          fpLoading || fpOtpDigits.join("").length !== 6
+                            ? "not-allowed"
+                            : "pointer",
+                      }}
+                    >
+                      {fpLoading ? "Verifying…" : "Verify OTP"}
+                    </button>
+                    {/* Actions row */}
+                    <div className="flex items-center justify-between">
+                      <button
+                        type="button"
+                        onClick={() => setFpStep(null)}
+                        className="flex items-center gap-1 text-[11px] transition-colors"
+                        style={{ color: "rgba(255,255,255,0.3)" }}
+                        onMouseEnter={(e) =>
+                          (e.currentTarget.style.color =
+                            "rgba(255,255,255,0.65)")
+                        }
+                        onMouseLeave={(e) =>
+                          (e.currentTarget.style.color =
+                            "rgba(255,255,255,0.3)")
+                        }
+                      >
+                        <ArrowLeft size={11} /> Back
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleFpResendOTP}
+                        disabled={fpLoading}
+                        className="text-[11px] font-semibold transition-colors disabled:opacity-40"
+                        style={{ color: "rgba(234,179,8,0.6)" }}
+                        onMouseEnter={(e) =>
+                          (e.currentTarget.style.color = "#EAB308")
+                        }
+                        onMouseLeave={(e) =>
+                          (e.currentTarget.style.color = "rgba(234,179,8,0.6)")
+                        }
+                      >
+                        <RotateCw size={10} className="inline mr-1" />
+                        Resend OTP
+                      </button>
+                    </div>
+                  </div>
+                );
+
+              /* ── Forgot password: new password step ───────────────── */
+              if (fpStep === "password") {
+                const fpChecks = getPwdChecks(fpNewPwd);
+                const fpStrength = [
+                  fpChecks.length,
+                  fpChecks.cases,
+                  fpChecks.number,
+                  fpChecks.special,
+                ].filter(Boolean).length;
+                const fpStrengthColors = [
+                  "rgba(255,255,255,0.08)",
+                  "rgba(239,68,68,0.7)",
+                  "rgba(249,115,22,0.8)",
+                  "rgba(234,179,8,0.6)",
+                  "#EAB308",
+                ];
+                const fpFieldStyle = (hasErr) => ({
+                  width: "100%",
+                  background: "transparent",
+                  border: "none",
+                  borderBottom: hasErr
+                    ? "1px solid rgba(239,68,68,0.7)"
+                    : "1px solid rgba(234,179,8,0.3)",
+                  padding: "8px 36px 8px 0",
+                  color: "#e2e1eb",
+                  fontSize: "13px",
+                  outline: "none",
+                  caretColor: "#EAB308",
+                  transition: "border-color 0.2s",
+                });
+                return (
+                  <div
+                    className="space-y-6"
+                    style={{ animation: "cp-slideDown 0.3s ease-out" }}
+                  >
+                    {/* Header */}
+                    <div className="text-center">
+                      <div
+                        className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3"
+                        style={{
+                          background: "rgba(234,179,8,0.08)",
+                          border: "1px solid rgba(234,179,8,0.2)",
+                        }}
+                      >
+                        <Lock size={20} style={{ color: "#EAB308" }} />
+                      </div>
+                      <p
+                        className="font-bold mb-1"
+                        style={{ color: "#ffdea8", fontSize: "14px" }}
+                      >
+                        Set New Password
+                      </p>
+                      <p
+                        style={{
+                          color: "rgba(255,255,255,0.4)",
+                          fontSize: "11px",
+                        }}
+                      >
+                        OTP verified. Choose a strong password.
+                      </p>
+                    </div>
+                    {/* New password */}
+                    <div>
+                      <label
+                        style={{
+                          color: "rgba(234,179,8,0.65)",
+                          fontSize: "10px",
+                          fontWeight: 700,
+                          letterSpacing: "0.22em",
+                        }}
+                      >
+                        NEW PASSWORD
+                      </label>
+                      <div className="relative mt-1.5">
+                        <input
+                          type={fpShow.newPwd ? "text" : "password"}
+                          value={fpNewPwd}
+                          autoComplete="new-password"
+                          autoFocus
+                          onChange={(e) => {
+                            setFpNewPwd(e.target.value);
+                            setFpError("");
+                            setFpConfirmPwd("");
+                          }}
+                          style={fpFieldStyle(false)}
+                          onFocus={(e) =>
+                            (e.currentTarget.style.borderColor = "#EAB308")
+                          }
+                          onBlur={(e) =>
+                            (e.currentTarget.style.borderColor =
+                              "rgba(234,179,8,0.3)")
+                          }
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setFpShow((p) => ({ ...p, newPwd: !p.newPwd }))
+                          }
+                          className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-600 hover:text-yellow-400 transition-colors"
+                        >
+                          {fpShow.newPwd ? (
+                            <EyeOff size={14} />
+                          ) : (
+                            <Eye size={14} />
+                          )}
+                        </button>
+                        <Shield
+                          size={15}
+                          className="absolute right-0 top-1/2 -translate-y-1/2 transition-all duration-500"
+                          style={{
+                            color: fpStrengthColors[fpStrength],
+                            filter:
+                              fpStrength === 4
+                                ? "drop-shadow(0 0 6px rgba(255,184,0,0.9))"
+                                : "none",
+                          }}
+                        />
+                      </div>
+                      {/* Strength bars */}
+                      {fpNewPwd && (
+                        <div className="flex gap-1 mt-2">
+                          {[1, 2, 3, 4].map((i) => (
+                            <div
+                              key={i}
+                              className="h-[2px] flex-1 rounded-full transition-all duration-400"
+                              style={{
+                                background:
+                                  fpStrength >= i
+                                    ? fpStrengthColors[fpStrength]
+                                    : "rgba(255,255,255,0.08)",
+                              }}
+                            />
+                          ))}
+                        </div>
+                      )}
+                      {/* Checklist */}
+                      <ul className="mt-2.5 space-y-1">
+                        {[
+                          {
+                            ok: fpChecks.length,
+                            label: "At least 8 characters",
+                          },
+                          {
+                            ok: fpChecks.cases,
+                            label: "Uppercase & lowercase letters",
+                          },
+                          {
+                            ok: fpChecks.number,
+                            label: "At least 1 number (0-9)",
+                          },
+                          {
+                            ok: fpChecks.special,
+                            label: "At least 1 special character (!@#$...)",
+                          },
+                        ].map(({ ok, label }) => (
+                          <li
+                            key={label}
+                            className="flex items-center gap-1.5 transition-colors duration-300"
+                            style={{
+                              color: ok ? "#EAB308" : "rgba(255,255,255,0.22)",
+                              fontSize: "10px",
+                            }}
+                          >
+                            {ok ? (
+                              <Check size={9} style={{ flexShrink: 0 }} />
+                            ) : (
+                              <span
+                                style={{
+                                  width: 9,
+                                  height: 9,
+                                  display: "inline-block",
+                                  borderRadius: "50%",
+                                  border: "1px solid rgba(255,255,255,0.18)",
+                                  flexShrink: 0,
+                                }}
+                              />
+                            )}
+                            {label}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    {/* Confirm — only when strength 4 */}
+                    {fpStrength === 4 && (
+                      <div
+                        style={{
+                          animation:
+                            "cp-slideDown 0.35s cubic-bezier(0.22,1,0.36,1)",
+                        }}
+                      >
+                        <label
+                          style={{
+                            color: "rgba(234,179,8,0.65)",
+                            fontSize: "10px",
+                            fontWeight: 700,
+                            letterSpacing: "0.22em",
+                          }}
+                        >
+                          CONFIRM NEW PASSWORD
+                        </label>
+                        <div className="relative mt-1.5">
+                          <input
+                            type={fpShow.confirm ? "text" : "password"}
+                            value={fpConfirmPwd}
+                            autoComplete="new-password"
+                            autoFocus
+                            onChange={(e) => {
+                              setFpConfirmPwd(e.target.value);
+                              setFpError("");
+                            }}
+                            style={fpFieldStyle(
+                              !!fpError && fpConfirmPwd !== fpNewPwd,
+                            )}
+                            onFocus={(e) =>
+                              (e.currentTarget.style.borderColor = "#EAB308")
+                            }
+                            onBlur={(e) =>
+                              (e.currentTarget.style.borderColor =
+                                "#EAB308")
+                            }
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setFpShow((p) => ({ ...p, confirm: !p.confirm }))
+                            }
+                            className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-600 hover:text-yellow-400 transition-colors"
+                          >
+                            {fpShow.confirm ? (
+                              <EyeOff size={14} />
+                            ) : (
+                              <Eye size={14} />
+                            )}
+                          </button>
+                        </div>
+                        {fpConfirmPwd && fpConfirmPwd === fpNewPwd && (
+                          <p className="mt-1 text-[10px] text-green-400 flex items-center gap-1">
+                            <Check size={9} /> Passwords match
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {fpError && (
+                      <p className="text-[10px] text-red-400">{fpError}</p>
+                    )}
+                    {/* Actions */}
+                    <div className="flex items-center gap-3 pt-2">
+                      <button
+                        onClick={handleFpReset}
+                        disabled={
+                          fpLoading ||
+                          fpStrength < 4 ||
+                          fpNewPwd !== fpConfirmPwd
+                        }
+                        className="relative overflow-hidden flex items-center gap-2 px-6 py-2.5 rounded-full text-xs font-bold tracking-wider"
+                        style={{
+                          background:
+                            fpStrength === 4 &&
+                            fpNewPwd === fpConfirmPwd &&
+                            fpConfirmPwd
+                              ? "#EAB308"
+                              : "rgba(234,179,8,0.12)",
+                          color:
+                            fpStrength === 4 &&
+                            fpNewPwd === fpConfirmPwd &&
+                            fpConfirmPwd
+                              ? "#050505"
+                              : "rgba(234,179,8,0.35)",
+                          border:
+                            fpStrength === 4 &&
+                            fpNewPwd === fpConfirmPwd &&
+                            fpConfirmPwd
+                              ? "none"
+                              : "1px solid #EAB308",
+                          cursor:
+                            fpLoading ||
+                            fpStrength < 4 ||
+                            fpNewPwd !== fpConfirmPwd
+                              ? "not-allowed"
+                              : "pointer",
+                          boxShadow:
+                            fpStrength === 4 &&
+                            fpNewPwd === fpConfirmPwd &&
+                            fpConfirmPwd
+                              ? "0 0 22px rgba(234,179,8,0.35)"
+                              : "none",
+                          transition: "all 0.3s",
+                        }}
+                      >
+                        <Lock size={13} />
+                        <span>
+                          {fpLoading ? "Resetting…" : "Reset Password"}
+                        </span>
+                      </button>
+                      <button
+                        onClick={closeCpModal}
+                        className="px-5 py-2.5 rounded-full text-xs font-semibold tracking-wider transition-colors duration-200"
+                        style={{
+                          border: "1px solid rgba(255,255,255,0.1)",
+                          color: "rgba(255,255,255,0.35)",
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.borderColor =
+                            "rgba(255,255,255,0.25)";
+                          e.currentTarget.style.color =
+                            "rgba(255,255,255,0.65)";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.borderColor =
+                            "rgba(255,255,255,0.1)";
+                          e.currentTarget.style.color =
+                            "rgba(255,255,255,0.35)";
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                );
+              }
+
+              /* ── Normal change-password form ──────────────────────── */
               return (
                 <div
                   className="space-y-6"
                   style={{ animation: "cp-slideDown 0.3s ease-out" }}
                 >
-                  {/* Current Password */}
-                  <div>
-                    <label
+                  {/* Google user notice */}
+                  {isGoogleUser && (
+                    <div
+                      className="flex items-start gap-2.5 rounded-xl px-4 py-3"
                       style={{
-                        color: "rgba(234,179,8,0.65)",
-                        fontSize: "10px",
-                        fontWeight: 700,
-                        letterSpacing: "0.22em",
+                        background: "rgba(234,179,8,0.07)",
+                        border: "1px solid rgba(234,179,8,0.2)",
                       }}
                     >
-                      CURRENT PASSWORD
-                    </label>
-                    <div className="relative mt-1.5">
-                      <input
-                        type={cpShow.current ? "text" : "password"}
-                        value={cpForm.current}
-                        autoComplete="current-password"
-                        onChange={(e) => {
-                          setCpForm((p) => ({ ...p, current: e.target.value }));
-                          if (cpErrors.current)
-                            setCpErrors((p) => ({ ...p, current: "" }));
-                        }}
-                        style={fieldStyle(!!cpErrors.current)}
-                        onFocus={onFocusGold}
-                        onBlur={onBlurGold(!!cpErrors.current)}
+                      <Shield
+                        size={14}
+                        className="shrink-0 mt-0.5"
+                        style={{ color: "#EAB308" }}
                       />
+                      <p
+                        style={{
+                          color: "rgba(255,220,120,0.85)",
+                          fontSize: "11px",
+                          lineHeight: "1.5",
+                        }}
+                      >
+                        Your account is linked to Google. You can set a password
+                        below to also enable standard login.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Current Password — hidden for Google users */}
+                  {!isGoogleUser && (
+                    <div>
+                      <label
+                        style={{
+                          color: "rgba(234,179,8,0.65)",
+                          fontSize: "10px",
+                          fontWeight: 700,
+                          letterSpacing: "0.22em",
+                        }}
+                      >
+                        CURRENT PASSWORD
+                      </label>
+                      <div className="relative mt-1.5">
+                        <input
+                          type={cpShow.current ? "text" : "password"}
+                          value={cpForm.current}
+                          autoComplete="current-password"
+                          onChange={(e) => {
+                            setCpForm((p) => ({
+                              ...p,
+                              current: e.target.value,
+                            }));
+                            if (cpErrors.current)
+                              setCpErrors((p) => ({ ...p, current: "" }));
+                          }}
+                          style={fieldStyle(!!cpErrors.current)}
+                          onFocus={onFocusGold}
+                          onBlur={onBlurGold(!!cpErrors.current)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setCpShow((p) => ({ ...p, current: !p.current }))
+                          }
+                          className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-600 hover:text-yellow-400 transition-colors"
+                        >
+                          {cpShow.current ? (
+                            <EyeOff size={14} />
+                          ) : (
+                            <Eye size={14} />
+                          )}
+                        </button>
+                      </div>
+                      {cpErrors.current && (
+                        <p className="mt-1 text-[10px] text-red-400">
+                          {cpErrors.current}
+                        </p>
+                      )}
                       <button
                         type="button"
-                        onClick={() =>
-                          setCpShow((p) => ({ ...p, current: !p.current }))
+                        onClick={handleForgotClick}
+                        disabled={fpLoading}
+                        className="mt-1 text-[10px] transition-colors disabled:opacity-40"
+                        style={{ color: "rgba(234,179,8,0.35)" }}
+                        onMouseEnter={(e) =>
+                          !fpLoading &&
+                          (e.currentTarget.style.color = "rgba(234,179,8,0.8)")
                         }
-                        className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-600 hover:text-yellow-400 transition-colors"
+                        onMouseLeave={(e) =>
+                          (e.currentTarget.style.color = "rgba(234,179,8,0.35)")
+                        }
                       >
-                        {cpShow.current ? (
-                          <EyeOff size={14} />
-                        ) : (
-                          <Eye size={14} />
-                        )}
+                        {fpLoading
+                          ? "Sending OTP…"
+                          : "Forgot current password?"}
                       </button>
                     </div>
-                    {cpErrors.current && (
-                      <p className="mt-1 text-[10px] text-red-400">
-                        {cpErrors.current}
-                      </p>
-                    )}
-                    <button
-                      type="button"
-                      className="mt-1 text-[10px] transition-colors"
-                      style={{ color: "rgba(234,179,8,0.35)" }}
-                      onMouseEnter={(e) =>
-                        (e.currentTarget.style.color = "rgba(234,179,8,0.8)")
-                      }
-                      onMouseLeave={(e) =>
-                        (e.currentTarget.style.color = "rgba(234,179,8,0.35)")
-                      }
-                    >
-                      Forgot current password?
-                    </button>
-                  </div>
+                  )}
                   {/* New Password */}
                   <div>
                     <label
@@ -1037,7 +1788,8 @@ export default function CustomerProfile() {
                           {label}
                         </li>
                       ))}
-                      {cpForm.newPwd &&
+                      {!isGoogleUser &&
+                        cpForm.newPwd &&
                         cpForm.current.trim() &&
                         cpForm.newPwd === cpForm.current.trim() && (
                           <li
