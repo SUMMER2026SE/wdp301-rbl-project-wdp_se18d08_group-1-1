@@ -73,7 +73,7 @@ const AlertPill = ({ icon, text, time, level }) => (
   </div>
 );
 
-export default function ManagerDashboard() {
+export default function StaffDashboard() {
   const [gateOpen, setGateOpen] = useState(false);
 
   return (
@@ -81,7 +81,7 @@ export default function ManagerDashboard() {
 
       {/* Page header */}
       <div>
-        <h1 className="text-2xl font-extrabold text-white">Manager Overview</h1>
+        <h1 className="text-2xl font-extrabold text-white">Staff Overview</h1>
         <p className="text-gray-500 text-sm mt-1">Monitor and operate your assigned parking lots</p>
       </div>
 
