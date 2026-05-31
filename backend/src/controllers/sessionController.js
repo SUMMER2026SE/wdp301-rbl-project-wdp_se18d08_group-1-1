@@ -2,7 +2,7 @@ const Session = require('../models/Session');
 const UserDetail = require('../models/UserDetail');
 const User = require('../models/User');
 const cloudinary = require('../config/cloudinary');
-const { sendKioskCheckInEmail } = require('../utils/emailUtils');
+const { sendKioskCheckInEmail, sendCheckoutEmail } = require('../utils/emailUtils');
 
 /**
  * Create a new parking session from Kiosk
@@ -273,6 +273,34 @@ exports.kioskCheckout = async (req, res, next) => {
     }
 
     await session.save();
+
+    // Send checkout email if linked to user
+    if (session.userId) {
+      try {
+        const user = await User.findById(session.userId);
+        if (user && user.email) {
+          const formattedCheckIn = new Date(session.checkInTime).toLocaleString('en-US', { 
+            timeZone: 'Asia/Ho_Chi_Minh', dateStyle: 'medium', timeStyle: 'short'
+          });
+          const formattedCheckOut = new Date(session.checkOutTime).toLocaleString('en-US', { 
+            timeZone: 'Asia/Ho_Chi_Minh', dateStyle: 'medium', timeStyle: 'short'
+          });
+          
+          sendCheckoutEmail(user.email, {
+            sessionId: session._id.toString().slice(-6).toUpperCase(),
+            checkInTime: formattedCheckIn,
+            checkOutTime: formattedCheckOut,
+            duration: `${durationHours} hr(s)`,
+            parkingSlot: session.parkingSlot || 'Assigned by Kiosk',
+            licensePlate: session.licensePlate,
+            vehicleType: session.vehicleType,
+            totalPrice: session.totalPrice.toLocaleString('vi-VN') + ' VND'
+          }).catch(err => console.error('Failed to send Checkout email:', err));
+        }
+      } catch (err) {
+        console.error('Error fetching user for checkout email:', err);
+      }
+    }
 
     res.status(200).json({
       success: true,
