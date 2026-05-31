@@ -83,6 +83,7 @@ export default function WalletPage() {
   const [modal, setModal] = useState(null);
   const [wallet, setWallet] = useState(null);
   const [txs, setTxs] = useState([]);
+  const [showAllTransactions, setShowAllTransactions] = useState(false);
   const [loading, setLoading] = useState(true);
   const [verifyingPayment, setVerifyingPayment] = useState(false);
   const [pollingOrderCode, setPollingOrderCode] = useState(null);
@@ -108,11 +109,11 @@ export default function WalletPage() {
 
 
 
-  const fetchWalletData = useCallback(async () => {
+  const fetchWalletData = useCallback(async (transactionLimit = 5) => {
     try {
       const [walletRes, txsRes] = await Promise.all([
         getWalletInfo(),
-        getTransactionsHistory({ limit: 5 })
+        getTransactionsHistory({ limit: transactionLimit })
       ]);
       
       if (walletRes.status === 401 || txsRes.status === 401) {
@@ -135,6 +136,12 @@ export default function WalletPage() {
       setLoading(false);
     }
   }, []);
+
+  const handleToggleTransactions = useCallback(async () => {
+    const nextShowAll = !showAllTransactions;
+    setShowAllTransactions(nextShowAll);
+    await fetchWalletData(nextShowAll ? 9999 : 5);
+  }, [fetchWalletData, showAllTransactions]);
 
   // Polling checks status payOS top-up order
   useEffect(() => {
@@ -331,10 +338,16 @@ export default function WalletPage() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <h2 className="text-base font-semibold text-gray-900 dark:text-white">Recent Transactions</h2>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Last 30 days of parking activity</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    {showAllTransactions ? 'All available transactions' : 'Last 30 days of parking activity'}
+                  </p>
                 </div>
-                <button className="text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white flex items-center gap-1 transition-colors">
-                  View all <ChevronRight className="w-3 h-3" />
+                <button
+                  type="button"
+                  onClick={handleToggleTransactions}
+                  className="text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white flex items-center gap-1 transition-colors"
+                >
+                  {showAllTransactions ? 'View less' : 'View all'} <ChevronRight className={`w-3 h-3 transition-transform ${showAllTransactions ? 'rotate-180' : ''}`} />
                 </button>
               </div>
               <table className="w-full">
@@ -503,11 +516,11 @@ function ActionModal({ type, onClose, walletDetails, onStartPolling }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-md rounded-[28px] bg-white text-neutral-900 shadow-xl border border-neutral-200 overflow-hidden animate-in zoom-in-95 fade-in duration-200"
+        className="relative w-full max-w-md rounded-[28px] bg-gradient-to-br from-black via-[#111111] to-[#1A1A1A] text-white shadow-2xl border border-white/10 overflow-hidden animate-in zoom-in-95 fade-in duration-200"
       >
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 z-10 w-9 h-9 rounded-xl hover:bg-neutral-100 text-neutral-500 flex items-center justify-center transition"
+          className="absolute top-4 right-4 z-10 w-9 h-9 rounded-xl hover:bg-white/10 text-white/60 hover:text-white flex items-center justify-center transition"
         >
           <X className="w-4 h-4" />
         </button>
@@ -560,26 +573,26 @@ function TopUpForm({ onClose, walletDetails, onStartPolling }) {
           <Plus className="w-6 h-6 text-white" />
         </div>
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-white">Top Up Wallet</h2>
-          <p className="text-[13px] text-neutral-500 font-medium">Add funds to your VALO wallet</p>
+          <h2 className="text-xl font-bold tracking-tight text-white">Top Up Wallet</h2>
+          <p className="text-[13px] text-white/65 font-medium">Add funds to your VALO wallet</p>
         </div>
       </div>
 
       {/* Amount */}
-      <div className="mt-7 rounded-[24px] bg-gradient-to-br from-[#2A1B0A] to-[#0A0602] border border-[#D49526]/20 p-6 relative overflow-hidden shadow-2xl shadow-black/20">
-        <div className="absolute -top-16 -right-16 w-56 h-56 rounded-full bg-[#D49526] opacity-20 blur-3xl pointer-events-none" />
+      <div className="mt-7 rounded-[24px] bg-black border border-white/10 p-6 relative overflow-hidden shadow-2xl shadow-black/40">
+        <div className="absolute -top-16 -right-16 w-56 h-56 rounded-full bg-[#D49526] opacity-12 blur-3xl pointer-events-none" />
         <div className="relative">
-          <div className="text-[11px] uppercase tracking-widest text-neutral-400 font-semibold mb-1">Amount</div>
+          <div className="text-[11px] uppercase tracking-widest text-white/60 font-semibold mb-1">Amount</div>
           <div className="mt-1 flex items-baseline gap-2">
             <input
               value={amount}
               onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
-              className="flex-1 bg-transparent text-[44px] font-bold tracking-tight text-[#EAB308] outline-none w-full min-w-0"
+              className="flex-1 bg-transparent text-[44px] font-bold tracking-tight text-white outline-none w-full min-w-0 placeholder:text-white/25"
               placeholder="0"
             />
-            <span className="text-2xl font-bold text-[#EAB308]">VND</span>
+            <span className="text-2xl font-bold text-white">VND</span>
           </div>
-          <div className="text-[12px] text-neutral-400 mt-2 font-medium">Current balance: {walletDetails?.balance?.toLocaleString()} VND</div>
+          <div className="text-[12px] text-white/65 mt-2 font-medium">Current balance: {walletDetails?.balance?.toLocaleString()} VND</div>
         </div>
       </div>
 
@@ -590,8 +603,8 @@ function TopUpForm({ onClose, walletDetails, onStartPolling }) {
             onClick={() => setAmount(String(q))}
             className={`py-3 rounded-2xl text-[14px] font-bold transition-all ${
               amount === String(q)
-                ? "bg-[#1A1A1A] text-white shadow-md dark:bg-white dark:text-black"
-                : "bg-neutral-100 hover:bg-neutral-200 text-neutral-900 dark:bg-white/5 dark:text-white/80 dark:hover:bg-white/10"
+                ? "bg-[#D49526] text-white shadow-md"
+                : "bg-white/5 hover:bg-white/10 text-white border border-white/10"
             }`}
           >
             {(q / 1000)}k
@@ -601,8 +614,8 @@ function TopUpForm({ onClose, walletDetails, onStartPolling }) {
 
       <div className="mt-7">
         <div className="flex items-center gap-3 mb-4">
-          <div className="text-[11px] uppercase tracking-widest text-neutral-500 font-semibold">Payment method</div>
-          <div className="flex-1 h-px bg-neutral-200 dark:bg-white/10"></div>
+          <div className="text-[11px] uppercase tracking-widest text-white/60 font-semibold">Payment method</div>
+          <div className="flex-1 h-px bg-white/10"></div>
         </div>
         <div className="space-y-3">
           {methods.map((m) => (
@@ -611,16 +624,16 @@ function TopUpForm({ onClose, walletDetails, onStartPolling }) {
               onClick={() => setMethod(m.id)}
               className={`w-full flex items-center gap-4 p-4 rounded-[20px] border transition-all text-left ${
                 method === m.id
-                  ? "border-[#D49526] bg-[#D49526]/5 shadow-sm"
-                  : "border-neutral-200 hover:border-neutral-300 dark:border-white/10 dark:hover:border-white/20"
+                  ? "border-[#D49526] bg-white/10 shadow-sm"
+                  : "border-white/10 bg-white/5 hover:bg-white/10"
               }`}
             >
-              <div className="w-12 h-12 rounded-xl bg-neutral-100 dark:bg-white/5 flex items-center justify-center text-neutral-700 dark:text-neutral-300">
+              <div className="w-12 h-12 rounded-xl bg-white/10 flex items-center justify-center text-white">
                 <m.icon className="w-5 h-5" />
               </div>
               <div className="flex-1">
-                <div className="text-[15px] font-bold text-neutral-900 dark:text-white">{m.label}</div>
-                <div className="text-[12px] text-neutral-500 font-medium mt-0.5">{m.sub}</div>
+                <div className="text-[15px] font-bold text-white">{m.label}</div>
+                <div className="text-[12px] text-white/65 font-medium mt-0.5">{m.sub}</div>
               </div>
               <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
                 method === m.id ? "border-[#D49526] bg-[#D49526]" : "border-neutral-300 dark:border-neutral-600"
@@ -640,7 +653,7 @@ function TopUpForm({ onClose, walletDetails, onStartPolling }) {
         {loading ? 'Processing...' : `Confirm Top Up · ${amount ? Number(amount).toLocaleString() : "0"} VND`}
       </button>
 
-      <p className="mt-4 text-[11px] text-neutral-500 font-medium text-center flex items-center justify-center gap-1.5">
+      <p className="mt-4 text-[11px] text-white/55 font-medium text-center flex items-center justify-center gap-1.5">
         <Shield className="w-3.5 h-3.5" /> Secured with 256-bit encryption
       </p>
     </div>
@@ -658,64 +671,64 @@ function PayParkingForm({ onClose, walletDetails }) {
           <ScanLine className="w-5 h-5 text-white" />
         </div>
         <div>
-          <h2 className="text-lg font-semibold tracking-tight text-neutral-900 dark:text-white">Pay Parking</h2>
-          <p className="text-xs text-neutral-500">Active session detected</p>
+          <h2 className="text-lg font-semibold tracking-tight text-white">Pay Parking</h2>
+          <p className="text-xs text-white/65">Active session detected</p>
         </div>
       </div>
 
       {/* Active ticket */}
-      <div className="mt-6 rounded-3xl bg-gradient-to-br from-[#2A1B0A] to-[#0A0602] border border-[#D49526]/20 text-white p-6 relative overflow-hidden shadow-2xl shadow-black/20">
-        <div className="absolute -top-16 -right-16 w-56 h-56 rounded-full bg-[#D49526] opacity-20 blur-3xl" />
+      <div className="mt-6 rounded-3xl bg-black border border-white/10 text-white p-6 relative overflow-hidden shadow-2xl shadow-black/40">
+        <div className="absolute -top-16 -right-16 w-56 h-56 rounded-full bg-[#D49526] opacity-12 blur-3xl" />
         <div className="relative">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-[#D49526] font-semibold">
+            <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-white/65 font-semibold">
               <span className="w-1.5 h-1.5 rounded-full bg-[#D49526] animate-pulse" /> Live session
             </div>
-            <div className="text-[10px] font-mono text-neutral-400 font-medium">#VL-8821</div>
+            <div className="text-[10px] font-mono text-white/55 font-medium">#VL-8821</div>
           </div>
 
           <div className="mt-4 flex items-center gap-2 text-sm font-semibold">
-            <MapPin className="w-4 h-4 text-[#D49526]" /> Sunset Plaza · Slot B-204
+            <MapPin className="w-4 h-4 text-[#FFD54A]" /> <span className="text-white">Sunset Plaza · Slot B-204</span>
           </div>
 
           <div className="mt-5 grid grid-cols-3 gap-3 text-xs">
             <div>
-              <div className="text-neutral-400 text-[10px] uppercase tracking-wider font-medium">Vehicle</div>
-              <div className="mt-1 font-semibold text-white/90">51F-892.45</div>
+              <div className="text-white/55 text-[10px] uppercase tracking-wider font-medium">Vehicle</div>
+              <div className="mt-1 font-semibold text-white">51F-892.45</div>
             </div>
             <div>
-              <div className="text-neutral-400 text-[10px] uppercase tracking-wider flex items-center gap-1 font-medium"><Clock className="w-3 h-3" /> Duration</div>
-              <div className="mt-1 font-semibold text-white/90">2h 14m</div>
+              <div className="text-white/55 text-[10px] uppercase tracking-wider flex items-center gap-1 font-medium"><Clock className="w-3 h-3" /> Duration</div>
+              <div className="mt-1 font-semibold text-white">2h 14m</div>
             </div>
             <div>
-              <div className="text-neutral-400 text-[10px] uppercase tracking-wider font-medium">Rate</div>
-              <div className="mt-1 font-semibold text-white/90">38,000 / hr</div>
+              <div className="text-white/55 text-[10px] uppercase tracking-wider font-medium">Rate</div>
+              <div className="mt-1 font-semibold text-white">38,000 / hr</div>
             </div>
           </div>
 
           <div className="mt-6 pt-5 border-t border-white/10 flex items-end justify-between">
-            <div className="text-[10px] uppercase tracking-wider text-neutral-400 font-medium">Total</div>
-            <div className="text-3xl font-bold text-[#EAB308]">85,000 VND</div>
+            <div className="text-[10px] uppercase tracking-wider text-white/55 font-medium">Total</div>
+            <div className="text-3xl font-bold text-[#FFD54A]">85,000 VND</div>
           </div>
         </div>
       </div>
 
       {/* Payment method */}
       <div className="mt-6">
-        <div className="text-[11px] uppercase tracking-wider text-neutral-500 mb-3 font-medium">Pay with</div>
+        <div className="text-[11px] uppercase tracking-wider text-white/60 mb-3 font-medium">Pay with</div>
         <div className="grid grid-cols-1 gap-2">
           <button
             onClick={() => setMethod("wallet")}
-            className="p-4 rounded-2xl border transition text-left border-[#D49526] bg-[#D49526]/5"
+            className="p-4 rounded-2xl border transition text-left border-[#D49526] bg-white/8"
           >
             <WalletIcon className="w-5 h-5 mb-2 text-[#D49526]" />
-            <div className="text-sm font-bold text-neutral-900 dark:text-white">VALO Wallet</div>
-            <div className="text-[12px] text-neutral-500 font-medium mt-0.5">{walletDetails?.balance?.toLocaleString()} VND</div>
+            <div className="text-sm font-bold text-white">VALO Wallet</div>
+            <div className="text-[12px] text-white/65 font-medium mt-0.5">{walletDetails?.balance?.toLocaleString()} VND</div>
           </button>
         </div>
       </div>
 
-      <div className="mt-5 flex items-center gap-2 text-[11px] text-neutral-500 bg-neutral-100 dark:bg-neutral-800/50 rounded-xl p-3.5 font-medium">
+      <div className="mt-5 flex items-center gap-2 text-[11px] text-white/65 bg-white/5 rounded-xl p-3.5 font-medium border border-white/10">
         <Zap className="w-4 h-4 text-[#D49526] shrink-0" />
         Auto-pay is enabled for this lot. Future visits charge instantly.
       </div>
