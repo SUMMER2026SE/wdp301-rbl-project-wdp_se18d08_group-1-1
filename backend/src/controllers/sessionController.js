@@ -1,6 +1,8 @@
 const Session = require('../models/Session');
 const UserDetail = require('../models/UserDetail');
+const User = require('../models/User');
 const cloudinary = require('../config/cloudinary');
+const { sendKioskCheckInEmail } = require('../utils/emailUtils');
 
 /**
  * Create a new parking session from Kiosk
@@ -41,10 +43,25 @@ exports.createKioskSession = async (req, res, next) => {
 
     // Auto-link session if the phone number belongs to a registered user
     let userId = null;
+    let userEmail = null;
+    console.log('--- KIOSK CHECK-IN DEBUG ---');
+    console.log('Received phone:', phone);
+    
     if (phone) {
-      const userDetail = await UserDetail.findOne({ phone });
-      if (userDetail) {
-        userId = userDetail.userId;
+      // Fetch ALL UserDetails with this phone, sorted by newest first
+      const userDetails = await UserDetail.find({ phone }).sort({ createdAt: -1 });
+      console.log(`Found ${userDetails.length} UserDetail(s) for this phone.`);
+      
+      for (const detail of userDetails) {
+        const user = await User.findById(detail.userId);
+        if (user) {
+          userId = user._id;
+          userEmail = user.email;
+          console.log(`Successfully matched with valid User: ${user.email} (ID: ${user._id})`);
+          break; // Stop at the first VALID user we find
+        } else {
+          console.log(`Orphaned UserDetail found for ID: ${detail.userId} (No matching User)`);
+        }
       }
     }
 
@@ -60,6 +77,38 @@ exports.createKioskSession = async (req, res, next) => {
       checkInTime: new Date(),
       status: 'active',
     });
+
+    // Send check-in notification email if user has a registered email
+    console.log('Will send check-in email?', userEmail ? 'YES (' + userEmail + ')' : 'NO');
+    if (userEmail) {
+      // Format time for email
+      const formattedTime = new Date(newSession.checkInTime).toLocaleString('en-US', { 
+        timeZone: 'Asia/Ho_Chi_Minh',
+        dateStyle: 'medium',
+        timeStyle: 'short'
+      });
+
+      // Calculate expected checkout time
+      const expectedCheckoutDate = new Date(newSession.checkInTime);
+      expectedCheckoutDate.setHours(expectedCheckoutDate.getHours() + newSession.expectedDurationHours);
+      const formattedCheckoutTime = expectedCheckoutDate.toLocaleString('en-US', {
+        timeZone: 'Asia/Ho_Chi_Minh',
+        dateStyle: 'medium',
+        timeStyle: 'short'
+      });
+
+      console.log('Sending email...');
+      sendKioskCheckInEmail(userEmail, {
+        sessionId: newSession._id.toString().slice(-6).toUpperCase(),
+        checkInTime: formattedTime,
+        expectedCheckoutTime: formattedCheckoutTime,
+        duration: newSession.expectedDurationHours,
+        parkingSlot: newSession.parkingSlot || 'Assigned by Kiosk',
+        licensePlate: newSession.licensePlate,
+        vehicleType: newSession.vehicleType
+      }).then(() => console.log('Email sent successfully!'))
+        .catch(err => console.error('Failed to send Kiosk check-in email:', err));
+    }
 
     res.status(201).json({
       success: true,
