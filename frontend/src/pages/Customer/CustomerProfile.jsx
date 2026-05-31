@@ -1076,7 +1076,7 @@ export default function CustomerProfile() {
                 border: "none",
                 borderBottom: hasError
                   ? "1px solid rgba(239,68,68,0.7)"
-                  : "1px solid rgba(234,179,8,0.3)",
+                  : "1px solid #EAB308",
                 padding: "8px 36px 8px 0",
                 color: "#e2e1eb",
                 fontSize: "13px",
@@ -1089,7 +1089,7 @@ export default function CustomerProfile() {
               const onBlurGold = (hasErr) => (e) => {
                 e.currentTarget.style.borderColor = hasErr
                   ? "rgba(239,68,68,0.7)"
-                  : "rgba(234,179,8,0.3)";
+                  : "#EAB308";
               };
               const strengthColors = [
                 "rgba(255,255,255,0.08)",
@@ -1194,7 +1194,7 @@ export default function CustomerProfile() {
                           className="w-10 h-12 text-center text-lg font-bold rounded-lg outline-none transition-all duration-200"
                           style={{
                             background: "rgba(255,255,255,0.04)",
-                            border: "1px solid rgba(234,179,8,0.25)",
+                            border: "1px solid #EAB308",
                             color: "#e2e1eb",
                             caretColor: "#EAB308",
                           }}
@@ -1203,7 +1203,7 @@ export default function CustomerProfile() {
                           }
                           onBlur={(e) =>
                             (e.currentTarget.style.borderColor =
-                              "rgba(234,179,8,0.25)")
+                              "#EAB308")
                           }
                         />
                       ))}
@@ -1491,7 +1491,7 @@ export default function CustomerProfile() {
                             }
                             onBlur={(e) =>
                               (e.currentTarget.style.borderColor =
-                                "rgba(234,179,8,0.3)")
+                                "#EAB308")
                             }
                           />
                           <button
@@ -1546,7 +1546,7 @@ export default function CustomerProfile() {
                             fpNewPwd === fpConfirmPwd &&
                             fpConfirmPwd
                               ? "none"
-                              : "1px solid rgba(234,179,8,0.15)",
+                              : "1px solid #EAB308",
                           cursor:
                             fpLoading ||
                             fpStrength < 4 ||
