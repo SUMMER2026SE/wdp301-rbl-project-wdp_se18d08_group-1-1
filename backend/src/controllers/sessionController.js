@@ -14,6 +14,15 @@ exports.createKioskSession = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'License plate is required' });
     }
 
+    // TÌM XEM XE CÓ ĐANG Ở TRONG BÃI KHÔNG (Phòng trường hợp xe bám đuôi đi ra, giờ quay lại)
+    const existingSession = await Session.findOne({ licensePlate, status: 'active' });
+    if (existingSession) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'This vehicle is currently recorded as being in the parking lot. Please contact security to resolve system error.' 
+      });
+    }
+
     let entryImage_url = null;
 
     // If an image was captured, upload to Cloudinary
