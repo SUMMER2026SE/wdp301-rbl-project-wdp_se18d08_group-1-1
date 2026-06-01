@@ -1,6 +1,7 @@
 const { validationResult } = require("express-validator");
 const User = require("../models/User");
 const UserDetail = require("../models/UserDetail");
+const Session = require("../models/Session");
 const { uploadToCloudinary } = require("../middlewares/uploadMiddleware");
 
 /**
@@ -74,6 +75,17 @@ const updateProfile = async (req, res, next) => {
 
     const user = await User.findById(req.user._id);
 
+
+    let claimedSessions = 0;
+    // Claim History Logic: If phone is provided, link all orphan sessions
+    if (phone) {
+      const result = await Session.updateMany(
+        { phone: phone, userId: null },
+        { userId: req.user._id }
+      );
+      claimedSessions = result.modifiedCount || 0;
+    }
+
     res.status(200).json({
       success: true,
       message: "Profile updated successfully",
@@ -82,6 +94,7 @@ const updateProfile = async (req, res, next) => {
         username: user.username,
         email: user.email,
         role: user.role,
+        claimedSessions,
         profile: {
           firstName: userDetail.firstName,
           lastName: userDetail.lastName,

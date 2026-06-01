@@ -9,13 +9,15 @@ import KioskLayout from './KioskLayout';
 export default function KioskFlow() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Shared State across steps
   const [formData, setFormData] = useState({
     licensePlate: '',
     phone: '',
     selectedSlot: null,
-    durationHours: 1
+    durationHours: 1,
+    entryImageBase64: null,
   });
 
   const updateFormData = (data) => {
@@ -30,8 +32,51 @@ export default function KioskFlow() {
     navigate(step === 0 ? '/kiosk' : `/kiosk/step${step}`);
   };
 
+  const handleConfirm = async () => {
+    setIsSubmitting(true);
+    try {
+      const response = await fetch('http://localhost:5001/api/sessions/kiosk-entry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          licensePlate: formData.licensePlate,
+          phone: formData.phone,
+          parkingSlot: formData.selectedSlot,
+          durationHours: formData.durationHours,
+          entryImageBase64: formData.entryImageBase64
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        alert('Welcome! Your session has started.');
+        // Reset and go back to start
+        setFormData({
+          licensePlate: '',
+          phone: '',
+          selectedSlot: null,
+          durationHours: 1,
+          entryImageBase64: null,
+        });
+        navigate('/kiosk');
+      } else {
+        alert(data.message || 'Something went wrong.');
+      }
+    } catch (error) {
+      console.error('Submission error:', error);
+      alert('Network error. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <div className="w-screen h-screen overflow-hidden bg-white selection:bg-gold/30">
+      {isSubmitting && (
+        <div className="fixed inset-0 bg-white/80 z-[100] flex items-center justify-center">
+          <div className="text-2xl font-bold text-[#0f172a] animate-pulse">CREATING SESSION...</div>
+        </div>
+      )}
       <Routes>
         {/* Step 0: Welcome Screen (Full width, no split layout) */}
         <Route path="/" element={<KioskWelcome onStart={() => handleNext(1)} updateFormData={updateFormData} />} />
@@ -48,7 +93,7 @@ export default function KioskFlow() {
           />
           <Route 
             path="step3" 
-            element={<KioskStep3 formData={formData} onConfirm={() => alert('Confirmed!')} onBack={() => handleBack(2)} />} 
+            element={<KioskStep3 formData={formData} onConfirm={handleConfirm} onBack={() => handleBack(2)} />} 
           />
         </Route>
       </Routes>
