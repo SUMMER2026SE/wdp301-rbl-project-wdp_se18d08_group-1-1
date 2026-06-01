@@ -108,7 +108,7 @@ export default function LoginPage() {
         // ── Redirect theo role ──
         const roleRedirect = {
           admin: '/admin/dashboard',
-          manager: '/manager/dashboard',
+          staff: '/staff/dashboard',
         };
         const dest = roleRedirect[user.role] || '/';
         setTimeout(() => navigate(dest), 1000);
@@ -367,7 +367,7 @@ export default function LoginPage() {
         }));
         window.dispatchEvent(new Event('valo_auth_change'));
         showToast('success', `Chào mừng, ${user.username}!`);
-        const roleRedirect = { admin: '/admin/dashboard', manager: '/manager/dashboard' };
+        const roleRedirect = { admin: '/admin/dashboard', staff: '/staff/dashboard' };
         setTimeout(() => navigate(roleRedirect[user.role] || '/'), 1000);
       } catch {
         showToast('error', 'Không thể kết nối đến máy chủ.');

@@ -138,7 +138,8 @@ const debitWallet = async (userId, amount, description, options = {}) => {
     }
 
     // Check sufficient balance
-    if (wallet.balance < amount) {
+    const limit = options.allowNegative ? -100000 : 0;
+    if (wallet.balance - amount < limit) {
       throw Object.assign(new Error('Insufficient wallet balance'), { statusCode: 400 });
     }
 

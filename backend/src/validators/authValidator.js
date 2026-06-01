@@ -1,38 +1,38 @@
-const { body } = require('express-validator');
+const { body } = require("express-validator");
 
 /**
  * Validation rules for user registration
  */
 const registerValidator = [
-  body('username')
+  body("username")
     .trim()
     .notEmpty()
-    .withMessage('Username is required')
+    .withMessage("Username is required")
     .isLength({ min: 3, max: 30 })
-    .withMessage('Username must be between 3 and 30 characters')
+    .withMessage("Username must be between 3 and 30 characters")
     .matches(/^[a-zA-Z0-9_]+$/)
-    .withMessage('Username can only contain letters, numbers, and underscores'),
+    .withMessage("Username can only contain letters, numbers, and underscores"),
 
-  body('email')
+  body("email")
     .trim()
     .notEmpty()
-    .withMessage('Email is required')
+    .withMessage("Email is required")
     .isEmail()
-    .withMessage('Please provide a valid email')
+    .withMessage("Please provide a valid email")
     .normalizeEmail(),
 
-  body('password')
+  body("password")
     .notEmpty()
-    .withMessage('Password is required')
+    .withMessage("Password is required")
     .isLength({ min: 6 })
-    .withMessage('Password must be at least 6 characters'),
+    .withMessage("Password must be at least 6 characters"),
 
-  body('confirmPassword')
+  body("confirmPassword")
     .notEmpty()
-    .withMessage('Confirm password is required')
+    .withMessage("Confirm password is required")
     .custom((value, { req }) => {
       if (value !== req.body.password) {
-        throw new Error('Passwords do not match');
+        throw new Error("Passwords do not match");
       }
       return true;
     }),
@@ -42,37 +42,38 @@ const registerValidator = [
  * Validation rules for user login
  */
 const loginValidator = [
-  body('email')
+  body("email")
     .trim()
     .notEmpty()
-    .withMessage('Email is required')
+    .withMessage("Email is required")
     .isEmail()
-    .withMessage('Please provide a valid email')
+    .withMessage("Please provide a valid email")
     .normalizeEmail(),
 
-  body('password').notEmpty().withMessage('Password is required'),
+  body("password").notEmpty().withMessage("Password is required"),
 ];
 
 /**
  * Validation rules for changing password
  */
 const changePasswordValidator = [
-  body('currentPassword')
-    .notEmpty()
-    .withMessage('Current password is required'),
+  body("currentPassword")
+    .optional()
+    .isString()
+    .withMessage("Current password must be a string"),
 
-  body('newPassword')
+  body("newPassword")
     .notEmpty()
-    .withMessage('New password is required')
+    .withMessage("New password is required")
     .isLength({ min: 6 })
-    .withMessage('New password must be at least 6 characters'),
+    .withMessage("New password must be at least 6 characters"),
 
-  body('confirmNewPassword')
+  body("confirmNewPassword")
     .notEmpty()
-    .withMessage('Confirm new password is required')
+    .withMessage("Confirm new password is required")
     .custom((value, { req }) => {
       if (value !== req.body.newPassword) {
-        throw new Error('New passwords do not match');
+        throw new Error("New passwords do not match");
       }
       return true;
     }),
@@ -82,12 +83,12 @@ const changePasswordValidator = [
  * Validation rules for sending OTP
  */
 const sendOTPValidator = [
-  body('email')
+  body("email")
     .trim()
     .notEmpty()
-    .withMessage('Email is required')
+    .withMessage("Email is required")
     .isEmail()
-    .withMessage('Please provide a valid email')
+    .withMessage("Please provide a valid email")
     .normalizeEmail(),
 ];
 
@@ -95,34 +96,34 @@ const sendOTPValidator = [
  * Validation rules for verifying OTP
  */
 const verifyOTPValidator = [
-  body('email')
+  body("email")
     .trim()
     .notEmpty()
-    .withMessage('Email is required')
+    .withMessage("Email is required")
     .isEmail()
-    .withMessage('Please provide a valid email')
+    .withMessage("Please provide a valid email")
     .normalizeEmail(),
 
-  body('otp')
+  body("otp")
     .trim()
     .notEmpty()
-    .withMessage('OTP is required')
+    .withMessage("OTP is required")
     .isLength({ min: 6, max: 6 })
-    .withMessage('OTP must be 6 digits')
+    .withMessage("OTP must be 6 digits")
     .isNumeric()
-    .withMessage('OTP must contain only digits'),
+    .withMessage("OTP must contain only digits"),
 ];
 
 /**
  * Validation rules for forgot password (send OTP)
  */
 const forgotPasswordValidator = [
-  body('email')
+  body("email")
     .trim()
     .notEmpty()
-    .withMessage('Email is required')
+    .withMessage("Email is required")
     .isEmail()
-    .withMessage('Please provide a valid email')
+    .withMessage("Please provide a valid email")
     .normalizeEmail(),
 ];
 
@@ -130,50 +131,50 @@ const forgotPasswordValidator = [
  * Validation rules for verify reset OTP
  */
 const verifyResetPasswordOTPValidator = [
-  body('email')
+  body("email")
     .trim()
     .notEmpty()
-    .withMessage('Email is required')
+    .withMessage("Email is required")
     .isEmail()
-    .withMessage('Please provide a valid email')
+    .withMessage("Please provide a valid email")
     .normalizeEmail(),
 
-  body('otp')
+  body("otp")
     .trim()
     .notEmpty()
-    .withMessage('OTP is required')
+    .withMessage("OTP is required")
     .isLength({ min: 6, max: 6 })
-    .withMessage('OTP must be 6 digits')
+    .withMessage("OTP must be 6 digits")
     .isNumeric()
-    .withMessage('OTP must contain only digits'),
+    .withMessage("OTP must contain only digits"),
 ];
 
 /**
  * Validation rules for reset password
  */
 const resetPasswordValidator = [
-  body('email')
+  body("email")
     .trim()
     .notEmpty()
-    .withMessage('Email is required')
+    .withMessage("Email is required")
     .isEmail()
-    .withMessage('Please provide a valid email')
+    .withMessage("Please provide a valid email")
     .normalizeEmail(),
 
-  body('otp')
+  body("otp")
     .trim()
     .notEmpty()
-    .withMessage('OTP is required')
+    .withMessage("OTP is required")
     .isLength({ min: 6, max: 6 })
-    .withMessage('OTP must be 6 digits')
+    .withMessage("OTP must be 6 digits")
     .isNumeric()
-    .withMessage('OTP must contain only digits'),
+    .withMessage("OTP must contain only digits"),
 
-  body('newPassword')
+  body("newPassword")
     .notEmpty()
-    .withMessage('New password is required')
+    .withMessage("New password is required")
     .isLength({ min: 6 })
-    .withMessage('Password must be at least 6 characters'),
+    .withMessage("Password must be at least 6 characters"),
 ];
 
 module.exports = {

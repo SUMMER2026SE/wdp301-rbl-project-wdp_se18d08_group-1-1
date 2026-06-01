@@ -16,17 +16,22 @@ import OAuthCallback from "./pages/OAuthCallback";
 
 // Pages - Kiosk
 import KioskFlow from "./pages/Kiosk/KioskFlow";
+import KioskOutFlow from "./pages/KioskOut/KioskOutFlow";
 
 // Pages – Admin
 import AdminDashboard from './pages/Admin/Dashboard';
 import VehicleModels from './pages/Admin/VehicleModels';
+import AdminProfile from './pages/Admin/AdminProfile';
 
-// Pages – Manager
-import ManagerDashboard from "./pages/Manager/Dashboard";
+// Pages – Staff
+import StaffDashboard from "./pages/Staff/Dashboard";
+import StaffProfile from "./pages/Staff/StaffProfile";
+import StaffSessionManagement from "./pages/Staff/SessionManagement";
 
 // Pages – Customer
 import CustomerProfile from "./pages/Customer/CustomerProfile";
 import MyVehicles from "./pages/Customer/MyVehicles";
+import ParkingHistory from "./pages/Customer/ParkingHistory";
 
 // Misc
 import UnauthorizedPage from "./pages/UnauthorizedPage";
@@ -37,6 +42,7 @@ export default function App() {
       <Routes>
         {/* ── Standalone Kiosk app ── */}
         <Route path="/kiosk/*" element={<KioskFlow />} />
+        <Route path="/kiosk-out/*" element={<KioskOutFlow />} />
 
         {/* ── Public: Navbar + Footer ── */}
         <Route element={<MainLayout />}>
@@ -62,20 +68,23 @@ export default function App() {
         >
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
           <Route path="/admin/vehicle-models" element={<VehicleModels />} />
+          <Route path="/admin/profile" element={<AdminProfile />} />
         </Route>
 
         {/* ══════════════════════════════════════════
-            MANAGER section — DashboardLayout chung
-            Chỉ role "manager" được vào
+            STAFF section — DashboardLayout chung
+            Chỉ role "staff" được vào
         ══════════════════════════════════════════ */}
         <Route
           element={
-            <ProtectedRoute allowedRoles={["manager"]}>
+            <ProtectedRoute allowedRoles={["staff"]}>
               <DashboardLayout />
             </ProtectedRoute>
           }
         >
-          <Route path="/manager/dashboard" element={<ManagerDashboard />} />
+          <Route path="/staff/dashboard" element={<StaffDashboard />} />
+          <Route path="/staff/sessions" element={<StaffSessionManagement />} />
+          <Route path="/staff/profile" element={<StaffProfile />} />
         </Route>
 
         {/* ── Customer section ── */}
@@ -88,6 +97,7 @@ export default function App() {
         >
           <Route path="/profile" element={<CustomerProfile />} />
           <Route path="/customer/vehicles" element={<MyVehicles />} />
+          <Route path="/customer/history" element={<ParkingHistory />} />
         </Route>
 
         {/* ── 403 ── */}
