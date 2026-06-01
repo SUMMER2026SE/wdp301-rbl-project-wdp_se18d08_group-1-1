@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Link, NavLink, useNavigate, useLocation } from "react-router-dom";
 import {
   LogOut,
@@ -6,17 +6,14 @@ import {
   Wallet,
   ChevronDown,
   Bell,
-  Car,
   CalendarCheck,
   Map,
   FileText,
-  Menu,
   X,
   Shield,
   History,
   Sparkles,
   Settings,
-  CircleParking,
   ArrowUpRight,
   CreditCard,
 } from "lucide-react";
@@ -65,7 +62,10 @@ const getGradient = (name = "") => {
 export default function Navbar() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    const raw = sessionStorage.getItem("valo_user");
+    return raw ? JSON.parse(raw) : null;
+  });
   const [profileOpen, setProfileOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [notifCount] = useState(3);
@@ -79,7 +79,6 @@ export default function Navbar() {
   }, []);
 
   useEffect(() => {
-    syncUser();
     window.addEventListener("focus", syncUser);
     window.addEventListener("valo_auth_change", syncUser);
     return () => {
@@ -109,8 +108,10 @@ export default function Navbar() {
 
   // ΓöÇΓöÇ Close on route change ΓöÇΓöÇ
   useEffect(() => {
-    setMobileOpen(false);
-    setProfileOpen(false);
+    window.requestAnimationFrame(() => {
+      setMobileOpen(false);
+      setProfileOpen(false);
+    });
   }, [location.pathname]);
 
   // ΓöÇΓöÇ Logout ΓöÇΓöÇ
@@ -346,7 +347,7 @@ export default function Navbar() {
                               </div>
                             </div>
                             <Link
-                              to="/wallet"
+                              to="/customer/wallet"
                               onClick={() => setProfileOpen(false)}
                               className="text-[10px] font-bold text-amber-600 hover:text-amber-800 bg-amber-100 hover:bg-amber-200 px-2.5 py-1 rounded-lg transition-all duration-200 uppercase tracking-wide flex items-center gap-1"
                             >

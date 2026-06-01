@@ -53,8 +53,8 @@ const createTopUp = async (req, res, next) => {
       orderCode,
       amount: parseInt(amount),
       description: `VALO NapVi`,
-      returnUrl: process.env.PAYOS_RETURN_URL || `${process.env.CLIENT_URL}/wallet/top-up/success`,
-      cancelUrl: process.env.PAYOS_CANCEL_URL || `${process.env.CLIENT_URL}/wallet/top-up/cancel`,
+      returnUrl: process.env.PAYOS_RETURN_URL || `${process.env.CLIENT_URL}/customer/wallet`,
+      cancelUrl: process.env.PAYOS_CANCEL_URL || `${process.env.CLIENT_URL}/customer/wallet?cancel=true`,
       items: [
         {
           name: 'Nạp tiền ví VALO',
@@ -115,11 +115,28 @@ const getTopUpStatus = async (req, res, next) => {
       });
     }
 
+    const { cancel } = req.query;
+
+    // Explicitly cancel if requested by frontend
+    if (cancel === 'true' && transaction.status === 'PENDING') {
+      await walletService.cancelPendingTopUp(parseInt(orderCode));
+      transaction.status = 'CANCELLED';
+      try {
+        await payos.paymentRequests.cancel(parseInt(orderCode));
+      } catch (err) {
+        // Ignore errors if already cancelled on payOS
+      }
+      return res.json({
+        success: true,
+        data: { status: 'CANCELLED' }
+      });
+    }
+
     // If still pending, check with payOS
     let payosStatus = null;
     if (transaction.status === 'PENDING') {
       try {
-        const payosInfo = await payos.paymentRequests.getPaymentRequestByOrderCode(parseInt(orderCode));
+        const payosInfo = await payos.paymentRequests.get(parseInt(orderCode));
         payosStatus = payosInfo.status;
 
         // If payOS says PAID but we haven't processed yet, process it
@@ -165,7 +182,7 @@ const handleWebhook = async (req, res, next) => {
     // Verify webhook signature using payOS SDK v2
     let webhookData;
     try {
-      webhookData = payos.webhooks.verify(req.body);
+      webhookData = await payos.webhooks.verify(req.body);
     } catch (verifyError) {
       console.error('❌ Webhook signature verification failed:', verifyError.message);
       return res.status(400).json({ message: 'Invalid signature' });
