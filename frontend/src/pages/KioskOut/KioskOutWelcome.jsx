@@ -5,6 +5,7 @@ export default function KioskOutWelcome({ onScanSuccess }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const [isScanning, setIsScanning] = useState(false);
+  const isScanningRef = useRef(false);
   const [streamError, setStreamError] = useState(false);
   const [recognizedText, setRecognizedText] = useState('');
   const [manualInput, setManualInput] = useState('');
@@ -112,10 +113,11 @@ export default function KioskOutWelcome({ onScanSuccess }) {
     let interval;
     if (!streamError && videoRef.current) {
       interval = setInterval(async () => {
-        if (isScanning) return; // Skip if already processing
+        if (isScanningRef.current) return; // Skip if already processing
 
         const video = videoRef.current;
         if (video.readyState === video.HAVE_ENOUGH_DATA) {
+          isScanningRef.current = true;
           setIsScanning(true);
           try {
             const result = await captureAndAnalyze();
@@ -130,6 +132,7 @@ export default function KioskOutWelcome({ onScanSuccess }) {
           } catch (err) {
             console.error("OCR Error:", err);
           } finally {
+            isScanningRef.current = false;
             setIsScanning(false);
           }
         }
@@ -139,7 +142,7 @@ export default function KioskOutWelcome({ onScanSuccess }) {
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [streamError, isScanning]);
+  }, [streamError]);
 
   // Manual fallback for Tester
   const handleManualSubmit = (e) => {
