@@ -101,7 +101,7 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
       ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
       const imageBase64 = canvas.toDataURL('image/jpeg', 0.8);
       
-      const response = await fetch('http://localhost:5001/api/ai/scan-plate', {
+      const response = await fetch('http://localhost:5000/api/ai/scan-plate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: imageBase64 })

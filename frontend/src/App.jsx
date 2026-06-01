@@ -21,6 +21,7 @@ import KioskOutFlow from "./pages/KioskOut/KioskOutFlow";
 import AdminDashboard from './pages/Admin/Dashboard';
 import VehicleModels from './pages/Admin/VehicleModels';
 import AdminProfile from './pages/Admin/AdminProfile';
+import ParkingLots from './pages/Admin/ParkingLots';
 
 // Pages – Staff
 import StaffDashboard from "./pages/Staff/Dashboard";
@@ -68,6 +69,7 @@ export default function App() {
         >
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
           <Route path="/admin/vehicle-models" element={<VehicleModels />} />
+          <Route path="/admin/parking-lots" element={<ParkingLots />} />
           <Route path="/admin/profile" element={<AdminProfile />} />
         </Route>
 

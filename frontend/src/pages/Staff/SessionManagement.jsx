@@ -12,7 +12,7 @@ export default function SessionManagement() {
 
   const fetchSessions = async () => {
     try {
-      const response = await fetch('http://localhost:5001/api/sessions');
+      const response = await fetch('http://localhost:5000/api/sessions');
       const data = await response.json();
       if (data.success) {
         setSessions(data.data);
