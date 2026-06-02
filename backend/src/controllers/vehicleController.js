@@ -1,6 +1,7 @@
 const { validationResult } = require('express-validator');
 const Vehicle = require('../models/Vehicle');
 const cloudinary = require('../config/cloudinary');
+const streamifier = require('streamifier');
 
 // ─── Cloudinary 3D model auto-discovery ──────────────────────────────────────
 const normalizeSlug = (str = '') =>
@@ -25,11 +26,19 @@ const findVehicleModelUrl = async (brand, model) => {
   }
 };
 
-/**
- * @desc    Get all vehicles of current user
- * @route   GET /api/vehicles
- * @access  Private
- */
+// ─── Upload base64 image to Cloudinary ───────────────────────────────────────
+const uploadBase64ToCloudinary = (base64, folder) =>
+  new Promise((resolve, reject) => {
+    const data = base64.replace(/^data:image\/\w+;base64,/, '');
+    const buffer = Buffer.from(data, 'base64');
+    const stream = cloudinary.uploader.upload_stream(
+      { folder, resource_type: 'image' },
+      (err, result) => (err ? reject(err) : resolve(result.secure_url)),
+    );
+    streamifier.createReadStream(buffer).pipe(stream);
+  });
+
+
 const getMyVehicles = async (req, res) => {
   try {
     const vehicles = await Vehicle.find({ owner: req.user._id }).sort({
@@ -83,7 +92,7 @@ const addVehicle = async (req, res) => {
       return res.status(400).json({ success: false, errors: errors.array() });
     }
 
-    const { licensePlate, vehicleType, brand, model, color, nickname, isDefault, hexColor } =
+    const { licensePlate, vehicleType, brand, model, color, nickname, isDefault, hexColor, registrationCardImage } =
       req.body;
 
     // Check duplicate license plate
@@ -101,6 +110,20 @@ const addVehicle = async (req, res) => {
     const count = await Vehicle.countDocuments({ owner: req.user._id });
     const setDefault = count === 0 ? true : !!isDefault;
 
+    // Upload registration card image to Cloudinary
+    let cardImageUrl = '';
+    if (registrationCardImage) {
+      try {
+        cardImageUrl = await uploadBase64ToCloudinary(
+          registrationCardImage,
+          `registrations/${req.user._id}`,
+        );
+      } catch (uploadErr) {
+        console.error('Registration card upload failed:', uploadErr.message);
+        // non-fatal: continue without image
+      }
+    }
+
     // Auto-discover 3D model on Cloudinary by brand + model convention
     const modelUrl = await findVehicleModelUrl(brand, model || '');
 
@@ -110,11 +133,13 @@ const addVehicle = async (req, res) => {
       vehicleType,
       brand,
       model,
-      color,
+      color: color || '',
       nickname,
       isDefault: setDefault,
-      hexColor,
+      hexColor: hexColor || '#ffffff',
       modelUrl,
+      registrationCardImage: cardImageUrl,
+      status: 'pending',
     });
 
     res.status(201).json({

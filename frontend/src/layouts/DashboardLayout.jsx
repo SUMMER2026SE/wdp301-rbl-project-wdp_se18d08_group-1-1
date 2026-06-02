@@ -15,7 +15,7 @@ import {
   User,
   Wallet,
   Settings,
-  // Staff icons
+  // Manager icons
   MonitorCheck,
   Car,
   Gauge,
@@ -28,6 +28,7 @@ import {
   LogOut,
   Menu,
   ChevronDown,
+  Clock,
 } from "lucide-react";
 
 // ─── Nav configs per role ─────────────────────────────────────────────────────
@@ -39,9 +40,9 @@ const NAV_CONFIG = {
       to: "/admin/dashboard",
     },
     {
-      label: "Staff Accounts",
+      label: "Manager Accounts",
       icon: <Users size={18} />,
-      to: "/admin/staff",
+      to: "/admin/managers",
     },
     {
       label: "User Management",
@@ -60,7 +61,7 @@ const NAV_CONFIG = {
     },
     { label: "Services", icon: <Wrench size={18} />, to: "/admin/services" },
     {
-      label: "Vehicle Models",
+      label: "Quản lý xe & 3D",
       icon: <Car size={18} />,
       to: "/admin/vehicle-models",
     },
@@ -74,60 +75,49 @@ const NAV_CONFIG = {
       icon: <DollarSign size={18} />,
       to: "/admin/financial",
     },
-    {
-      label: "Profile",
-      icon: <User size={18} />,
-      to: "/admin/profile",
-    },
   ],
-  staff: [
+  manager: [
     {
       label: "Overview",
       icon: <LayoutDashboard size={18} />,
-      to: "/staff/dashboard",
+      to: "/manager/dashboard",
     },
     {
-      label: "Session Management",
+      label: "Live Grid Monitor",
       icon: <MonitorCheck size={18} />,
-      to: "/staff/sessions",
+      to: "/manager/live-grid",
     },
-    { label: "Gate Control", icon: <Car size={18} />, to: "/staff/gate" },
+    { label: "Gate Control", icon: <Car size={18} />, to: "/manager/gate" },
     {
       label: "Occupancy Reports",
       icon: <Gauge size={18} />,
-      to: "/staff/reports",
+      to: "/manager/reports",
     },
     {
       label: "Booking Management",
       icon: <BookOpen size={18} />,
-      to: "/staff/bookings",
+      to: "/manager/bookings",
     },
     {
       label: "Parking Violations",
       icon: <FileWarning size={18} />,
-      to: "/staff/violations",
+      to: "/manager/violations",
     },
     {
       label: "Task Status",
       icon: <ClipboardList size={18} />,
-      to: "/staff/tasks",
+      to: "/manager/tasks",
     },
     {
       label: "Overtime Rates",
       icon: <SlidersHorizontal size={18} />,
-      to: "/staff/rates",
-    },
-    {
-      label: "Profile",
-      icon: <User size={18} />,
-      to: "/staff/profile",
+      to: "/manager/rates",
     },
   ],
   customer: [
     { label: "Home", icon: <Home size={18} />, to: "/" },
     { label: "Profile", icon: <User size={18} />, to: "/profile" },
     { label: "My Vehicles", icon: <Car size={18} />, to: "/customer/vehicles" },
-    { label: "Parking History", icon: <ClipboardList size={18} />, to: "/customer/history" },
     { label: "Wallet", icon: <Wallet size={18} />, to: "/customer/wallet" },
     {
       label: "Settings",
@@ -146,12 +136,12 @@ const ROLE_THEME = {
     panelLabel: "Admin Panel",
     headerBadgeCls: "bg-red-500/10 border-red-500/20 text-red-400",
   },
-  staff: {
+  manager: {
     accent: "from-emerald-400 to-teal-600",
     activeBg: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
     activeHover: "hover:text-emerald-300",
-    badge: { cls: "bg-emerald-900/50 text-emerald-400", label: "Staff" },
-    panelLabel: "Staff Panel",
+    badge: { cls: "bg-emerald-900/50 text-emerald-400", label: "Manager" },
+    panelLabel: "Manager Panel",
     headerBadgeCls: "bg-emerald-500/10 border-emerald-500/20 text-emerald-400",
   },
   customer: {
@@ -226,7 +216,7 @@ export default function DashboardLayout() {
   };
 
   return (
-    <div className="h-[100dvh] overflow-hidden w-full bg-gray-100 dark:bg-[#0D0D0D] flex font-sans transition-colors duration-300">
+    <div className="min-h-screen bg-gray-100 dark:bg-[#0D0D0D] flex font-sans transition-colors duration-300">
       {/* ══════════ SIDEBAR ══════════ */}
       <aside
         className={`

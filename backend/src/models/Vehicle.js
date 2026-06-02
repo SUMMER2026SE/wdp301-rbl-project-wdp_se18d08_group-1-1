@@ -40,9 +40,19 @@ const vehicleSchema = new mongoose.Schema(
     },
     color: {
       type: String,
-      required: [true, 'Color is required'],
       trim: true,
       maxlength: [30, 'Color must not exceed 30 characters'],
+      default: '',
+    },
+    registrationCardImage: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    status: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected'],
+      default: 'pending',
     },
     nickname: {
       type: String,
