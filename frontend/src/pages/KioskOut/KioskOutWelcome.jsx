@@ -5,6 +5,7 @@ export default function KioskOutWelcome({ onScanSuccess }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const [isScanning, setIsScanning] = useState(false);
+  const isScanningRef = useRef(false);
   const [streamError, setStreamError] = useState(false);
   const [recognizedText, setRecognizedText] = useState('');
   const [manualInput, setManualInput] = useState('');
@@ -15,12 +16,12 @@ export default function KioskOutWelcome({ onScanSuccess }) {
     let stream = null;
     const startCamera = async () => {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { 
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
             facingMode: 'environment',
             width: { ideal: 1280 },
             height: { ideal: 720 }
-          } 
+          }
         });
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
@@ -72,7 +73,7 @@ export default function KioskOutWelcome({ onScanSuccess }) {
     }
     if (province && series && numbers) {
       let formattedNumbers = numbers;
-      if (numbers.length === 5) { formattedNumbers = `${numbers.slice(0,3)}.${numbers.slice(3)}`; }
+      if (numbers.length === 5) { formattedNumbers = `${numbers.slice(0, 3)}.${numbers.slice(3)}`; }
       const isMotorbike = /\d/.test(series);
       if (isMotorbike) return `${province}-${series} ${formattedNumbers}`;
       else return `${province}${series} - ${formattedNumbers}`;
@@ -90,13 +91,13 @@ export default function KioskOutWelcome({ onScanSuccess }) {
       const ctx = canvas.getContext('2d');
       ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
       const imageBase64 = canvas.toDataURL('image/jpeg', 0.8);
-      
+
       const response = await fetch('http://localhost:5001/api/ai/scan-plate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: imageBase64 })
       });
-      
+
       const data = await response.json();
       if (response.ok && data.success && data.plate) {
         return { plate: data.plate, imageBase64 };
@@ -112,10 +113,11 @@ export default function KioskOutWelcome({ onScanSuccess }) {
     let interval;
     if (!streamError && videoRef.current) {
       interval = setInterval(async () => {
-        if (isScanning) return; // Skip if already processing
+        if (isScanningRef.current) return; // Skip if already processing
 
         const video = videoRef.current;
         if (video.readyState === video.HAVE_ENOUGH_DATA) {
+          isScanningRef.current = true;
           setIsScanning(true);
           try {
             const result = await captureAndAnalyze();
@@ -130,16 +132,17 @@ export default function KioskOutWelcome({ onScanSuccess }) {
           } catch (err) {
             console.error("OCR Error:", err);
           } finally {
+            isScanningRef.current = false;
             setIsScanning(false);
           }
         }
       }, 2000); // Scan every 2 seconds to avoid spamming API
     }
-    
+
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [streamError, isScanning]);
+  }, [streamError]);
 
   // Manual fallback for Tester
   const handleManualSubmit = (e) => {
@@ -165,7 +168,7 @@ export default function KioskOutWelcome({ onScanSuccess }) {
 
   return (
     <div className="relative w-full h-full flex flex-col items-center justify-center bg-black overflow-hidden">
-      
+
       {/* Live Camera Background */}
       {streamError ? (
         <div className="flex flex-col items-center justify-center text-red-400 z-10">
@@ -173,15 +176,15 @@ export default function KioskOutWelcome({ onScanSuccess }) {
           <p>Cannot access Camera.</p>
         </div>
       ) : (
-        <video 
-          ref={videoRef} 
-          autoPlay 
-          playsInline 
-          muted 
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
           className="absolute inset-0 w-full h-full object-cover opacity-80"
         />
       )}
-      
+
       {/* Hidden Canvas for OCR */}
       <canvas ref={canvasRef} className="hidden" />
 
@@ -201,7 +204,7 @@ export default function KioskOutWelcome({ onScanSuccess }) {
         <div className="relative w-72 h-40 md:w-96 md:h-56 border-2 border-yellow-400/50 rounded-2xl flex items-center justify-center overflow-hidden">
           {/* Scanning Line Animation */}
           <div className="absolute top-0 left-0 w-full h-1 bg-yellow-400 shadow-[0_0_15px_3px_rgba(250,204,21,0.6)] animate-scan" />
-          
+
           {/* Corner accents */}
           <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-yellow-400 rounded-tl-xl" />
           <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-yellow-400 rounded-tr-xl" />
@@ -227,20 +230,20 @@ export default function KioskOutWelcome({ onScanSuccess }) {
       </div>
 
       {/* Tester Fallback Input (Subtle) */}
-      <form 
+      <form
         onSubmit={handleManualSubmit}
         className="absolute bottom-10 z-20 flex flex-col items-center opacity-30 hover:opacity-100 transition-opacity"
       >
         <p className="text-[10px] text-gray-400 mb-1 font-mono uppercase tracking-widest">Tester / Fallback Input</p>
         <div className="flex items-center gap-2">
-          <input 
+          <input
             type="text"
             value={manualInput}
             onChange={(e) => setManualInput(e.target.value.toUpperCase())}
             placeholder="e.g. 51H-595.65"
             className="bg-white/10 border border-white/20 text-white rounded-lg px-4 py-2 text-sm focus:outline-none focus:border-yellow-400"
           />
-          <button 
+          <button
             type="submit"
             className="bg-yellow-500 hover:bg-yellow-400 text-black p-2 rounded-lg transition-colors"
           >
