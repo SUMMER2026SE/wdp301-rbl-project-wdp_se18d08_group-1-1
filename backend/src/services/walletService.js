@@ -25,15 +25,23 @@ const getOrCreateWallet = async (userId) => {
 /**
  * Get wallet balance
  * @param {string} userId - User's ObjectId
- * @returns {Object} { balance, totalTopUp, totalSpent, totalRefunded }
+ * @returns {Object} { balance, totalTopUp, totalSpent, totalRefunded, totalTransactions, totalParkingPayments }
  */
 const getBalance = async (userId) => {
   const wallet = await getOrCreateWallet(userId);
+
+  const [totalTransactions, totalParkingPayments] = await Promise.all([
+    WalletTransaction.countDocuments({ userId }),
+    WalletTransaction.countDocuments({ userId, type: 'PAYMENT' }),
+  ]);
+
   return {
     balance: wallet.balance,
     totalTopUp: wallet.totalTopUp,
     totalSpent: wallet.totalSpent,
     totalRefunded: wallet.totalRefunded,
+    totalTransactions,
+    totalParkingPayments,
     status: wallet.status,
   };
 };

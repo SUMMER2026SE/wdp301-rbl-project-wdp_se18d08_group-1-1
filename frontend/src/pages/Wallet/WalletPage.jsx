@@ -26,8 +26,6 @@ import {
   Building2,
   Apple,
   Check,
-  MapPin,
-  Clock,
   Shield,
   User,
   Zap,
@@ -79,6 +77,9 @@ const formatTransactionDescription = (transaction) => {
   }
 };
 
+const DEFAULT_TRANSACTION_LIMIT = 5;
+const ALL_TRANSACTION_LIMIT = 50;
+
 export default function WalletPage() {
   const [modal, setModal] = useState(null);
   const [wallet, setWallet] = useState(null);
@@ -109,7 +110,7 @@ export default function WalletPage() {
 
 
 
-  const fetchWalletData = useCallback(async (transactionLimit = 5) => {
+  const fetchWalletData = useCallback(async (transactionLimit = DEFAULT_TRANSACTION_LIMIT) => {
     try {
       const [walletRes, txsRes] = await Promise.all([
         getWalletInfo(),
@@ -140,7 +141,7 @@ export default function WalletPage() {
   const handleToggleTransactions = useCallback(async () => {
     const nextShowAll = !showAllTransactions;
     setShowAllTransactions(nextShowAll);
-    await fetchWalletData(nextShowAll ? 9999 : 5);
+    await fetchWalletData(nextShowAll ? ALL_TRANSACTION_LIMIT : DEFAULT_TRANSACTION_LIMIT);
   }, [fetchWalletData, showAllTransactions]);
 
   // Polling checks status payOS top-up order
@@ -285,31 +286,28 @@ export default function WalletPage() {
                 </div>
               </div>
               
-              <div className="relative grid grid-cols-2 gap-4 z-10 mt-12">
-                {[
-                  { icon: Plus, label: 'Top Up', key: "topup" },
-                  { icon: ScanLine, label: 'Pay Parking', key: "pay" },
-                ].map((b) => (
-                  <button
-                    key={b.label}
-                    onClick={() => setModal(b.key)}
-                    className="rounded-[20px] py-4 flex flex-col items-center justify-center gap-3 bg-white/5 hover:bg-white/10 border border-white/5 transition-all duration-300"
-                  >
-                    <div className="w-8 h-8 rounded-full border border-[#D49526]/30 flex items-center justify-center text-[#D49526]">
-                      <b.icon className="w-4 h-4" />
+              <div className="relative flex justify-center z-10 mt-10">
+                <button
+                  onClick={() => setModal('topup')}
+                  className="w-[85%] max-w-[680px] min-h-[76px] rounded-[24px] px-5 py-3 flex items-center justify-between gap-4 border border-[#D49526]/25 bg-[#0B0906]/70 hover:border-[#FFD676]/80 hover:bg-white/10 hover:scale-[1.02] transition-transform duration-300 ease-out shadow-[0_20px_60px_rgba(0,0,0,0.18)]"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-full border border-[#D49526]/30 bg-[#13100D]/80 flex items-center justify-center text-[#D49526]">
+                      <Plus className="w-5 h-5" />
                     </div>
-                    <span className="text-[11px] font-semibold text-white/90">{b.label}</span>
-                  </button>
-                ))}
+                    <span className="text-lg font-semibold text-white">Top Up</span>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-[#D49526]" />
+                </button>
               </div>
             </div>
 
             <div className="col-span-5 grid grid-cols-2 gap-4">
               {[
-                { icon: WalletIcon, label: 'Total Balance', value: `${wallet?.balance?.toLocaleString() || '0'} VNĐ`, change: '+12.4%', up: true },
-                { icon: TrendingDown, label: 'Monthly Spending', value: `${(wallet?.totalSpent || 0).toLocaleString()} VNĐ`, change: '-3.2%', up: false },
-                { icon: Car, label: 'Parking Payments', value: txs.length.toString(), change: '+8 this week', up: true },
-                { icon: Sparkles, label: 'Cashback Rewards', value: '84,200 VNĐ', change: '+12,000 earned', up: true },
+                { icon: WalletIcon, label: 'Total Balance', value: `${wallet?.balance?.toLocaleString() || '0'} VNĐ`, change: '', up: true },
+                { icon: TrendingDown, label: 'Monthly Spending', value: `${(wallet?.totalSpent || 0).toLocaleString()} VNĐ`, change: '', up: false },
+                { icon: Car, label: 'Parking Payments', value: `${wallet?.totalParkingPayments?.toString() || '0'}`, change: '', up: true },
+                { icon: Sparkles, label: 'Cashback Rewards', value: `${(wallet?.totalRefunded || 0).toLocaleString()} VNĐ`, change: '', up: true },
               ].map((s, i) => (
                 <div
                   key={i}
@@ -324,9 +322,11 @@ export default function WalletPage() {
                   <div>
                     <div className="text-[11px] font-medium text-gray-500 dark:text-gray-400 mb-1">{s.label}</div>
                     <div className="text-[17px] font-bold text-gray-900 dark:text-white tracking-tight">{s.value}</div>
-                    <div className={`mt-1 text-[11px] font-semibold ${s.up ? 'text-emerald-500' : 'text-rose-500'}`}>
-                      {s.change}
-                    </div>
+                    {s.change && (
+                      <div className={`mt-1 text-[11px] font-semibold ${s.up ? 'text-emerald-500' : 'text-rose-500'}`}>
+                        {s.change}
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -453,14 +453,10 @@ export default function WalletPage() {
                         </div>
                       ))}
                     </div>
-                    <div className="mt-5 pt-5 border-t border-gray-100 dark:border-white/5 grid grid-cols-3 gap-3">
+                    <div className="mt-5 pt-5 border-t border-gray-100 dark:border-white/5 grid grid-cols-2 gap-3">
                       <div>
                         <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wider">Total spent</div>
                         <div className="text-sm font-semibold mt-0.5 text-gray-900 dark:text-white">{(wallet?.totalSpent || 0).toLocaleString()} VND</div>
-                      </div>
-                      <div>
-                        <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wider">Transactions</div>
-                        <div className="text-sm font-semibold mt-0.5 text-gray-900 dark:text-white">{txs.length}</div>
                       </div>
                       <div>
                         <div className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-wider">Balance</div>
@@ -525,7 +521,7 @@ function ActionModal({ type, onClose, walletDetails, onStartPolling }) {
           <X className="w-4 h-4" />
         </button>
         {type === "topup" && <TopUpForm onClose={onClose} walletDetails={walletDetails} onStartPolling={onStartPolling} />}
-        {type === "pay" && <PayParkingForm onClose={onClose} walletDetails={walletDetails} />}
+           {/* Removed PayParkingForm rendering */}
       </div>
     </div>
   );
@@ -660,82 +656,4 @@ function TopUpForm({ onClose, walletDetails, onStartPolling }) {
   );
 }
 
-/* ---------------- Pay Parking ---------------- */
-function PayParkingForm({ onClose, walletDetails }) {
-  const [method, setMethod] = useState("wallet");
-
-  return (
-    <div className="p-7">
-      <div className="flex items-center gap-3">
-        <div className="w-11 h-11 rounded-full bg-[#D49526] flex items-center justify-center shadow-lg shadow-[#D49526]/40">
-          <ScanLine className="w-5 h-5 text-white" />
-        </div>
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight text-white">Pay Parking</h2>
-          <p className="text-xs text-white/65">Active session detected</p>
-        </div>
-      </div>
-
-      {/* Active ticket */}
-      <div className="mt-6 rounded-3xl bg-black border border-white/10 text-white p-6 relative overflow-hidden shadow-2xl shadow-black/40">
-        <div className="absolute -top-16 -right-16 w-56 h-56 rounded-full bg-[#D49526] opacity-12 blur-3xl" />
-        <div className="relative">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-white/65 font-semibold">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#D49526] animate-pulse" /> Live session
-            </div>
-            <div className="text-[10px] font-mono text-white/55 font-medium">#VL-8821</div>
-          </div>
-
-          <div className="mt-4 flex items-center gap-2 text-sm font-semibold">
-            <MapPin className="w-4 h-4 text-[#FFD54A]" /> <span className="text-white">Sunset Plaza · Slot B-204</span>
-          </div>
-
-          <div className="mt-5 grid grid-cols-3 gap-3 text-xs">
-            <div>
-              <div className="text-white/55 text-[10px] uppercase tracking-wider font-medium">Vehicle</div>
-              <div className="mt-1 font-semibold text-white">51F-892.45</div>
-            </div>
-            <div>
-              <div className="text-white/55 text-[10px] uppercase tracking-wider flex items-center gap-1 font-medium"><Clock className="w-3 h-3" /> Duration</div>
-              <div className="mt-1 font-semibold text-white">2h 14m</div>
-            </div>
-            <div>
-              <div className="text-white/55 text-[10px] uppercase tracking-wider font-medium">Rate</div>
-              <div className="mt-1 font-semibold text-white">38,000 / hr</div>
-            </div>
-          </div>
-
-          <div className="mt-6 pt-5 border-t border-white/10 flex items-end justify-between">
-            <div className="text-[10px] uppercase tracking-wider text-white/55 font-medium">Total</div>
-            <div className="text-3xl font-bold text-[#FFD54A]">85,000 VND</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Payment method */}
-      <div className="mt-6">
-        <div className="text-[11px] uppercase tracking-wider text-white/60 mb-3 font-medium">Pay with</div>
-        <div className="grid grid-cols-1 gap-2">
-          <button
-            onClick={() => setMethod("wallet")}
-            className="p-4 rounded-2xl border transition text-left border-[#D49526] bg-white/8"
-          >
-            <WalletIcon className="w-5 h-5 mb-2 text-[#D49526]" />
-            <div className="text-sm font-bold text-white">VALO Wallet</div>
-            <div className="text-[12px] text-white/65 font-medium mt-0.5">{walletDetails?.balance?.toLocaleString()} VND</div>
-          </button>
-        </div>
-      </div>
-
-      <div className="mt-5 flex items-center gap-2 text-[11px] text-white/65 bg-white/5 rounded-xl p-3.5 font-medium border border-white/10">
-        <Zap className="w-4 h-4 text-[#D49526] shrink-0" />
-        Auto-pay is enabled for this lot. Future visits charge instantly.
-      </div>
-
-      <button onClick={onClose} className="mt-6 w-full bg-gradient-to-r from-[#D99A29] to-[#4A3111] text-white py-4 rounded-2xl text-[15px] font-bold shadow-lg shadow-[#D49526]/20 hover:opacity-95 transition-all">
-        Pay 85,000 VND Now
-      </button>
-    </div>
-  );
-}
+/* PayParkingForm removed - feature deprecated */

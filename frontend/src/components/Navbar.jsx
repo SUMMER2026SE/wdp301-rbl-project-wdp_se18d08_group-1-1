@@ -37,7 +37,7 @@ const customerLinks = [
   { to: '/', label: 'Home', icon: Sparkles },
   { to: '/services', label: 'Services', icon: Settings },
   { to: '/parking-map', label: 'Parking Map', icon: Map },
-  { to: '/wallet', label: 'Wallet', icon: Wallet },
+  { to: '/customer/wallet', label: 'Wallet', icon: Wallet },
 ];
 
 const roleBadge = {

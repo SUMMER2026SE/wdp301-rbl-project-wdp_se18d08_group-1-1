@@ -53,8 +53,12 @@ const createTopUp = async (req, res, next) => {
       orderCode,
       amount: parseInt(amount),
       description: `VALO NapVi`,
-      returnUrl: process.env.PAYOS_RETURN_URL || `${process.env.CLIENT_URL}/customer/wallet`,
-      cancelUrl: process.env.PAYOS_CANCEL_URL || `${process.env.CLIENT_URL}/customer/wallet?cancel=true`,
+      returnUrl:
+        process.env.PAYOS_RETURN_URL ||
+        `${process.env.CLIENT_URL}/customer/wallet?orderCode=${orderCode}`,
+      cancelUrl:
+        process.env.PAYOS_CANCEL_URL ||
+        `${process.env.CLIENT_URL}/customer/wallet?orderCode=${orderCode}&cancel=true`,
       items: [
         {
           name: 'Nạp tiền ví VALO',
