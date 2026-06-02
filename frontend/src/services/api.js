@@ -36,9 +36,9 @@ async function refreshToken() {
       }
 
       const data = await response.json();
-      if (data.accessToken) {
-        localStorage.setItem("accessToken", data.accessToken);
-        return data.accessToken;
+      if (data.data && data.data.accessToken) {
+        localStorage.setItem("accessToken", data.data.accessToken);
+        return data.data.accessToken;
       }
       throw new Error("No access token in response");
     } catch (error) {

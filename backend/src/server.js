@@ -40,12 +40,14 @@ app.get('/api/health', (req, res) => {
 });
 
 // Mount routes
-app.use('/api/auth', authRoutes);
-app.use('/api/profile', profileRoutes);
-app.use('/api/wallet', require('./routes/walletRoutes'));
-app.use('/api/ai', require('./routes/aiRoutes'));
-app.use('/api/vehicles', require('./routes/vehicleRoutes'));
-app.use('/api/admin',   require('./routes/adminRoutes'));
+app.use("/api/auth", authRoutes);
+app.use("/api/profile", profileRoutes);
+app.use("/api/wallet", require("./routes/walletRoutes"));
+app.use("/api/ai", require("./routes/aiRoutes"));
+app.use("/api/vehicles", require("./routes/vehicleRoutes"));
+app.use("/api/admin", require("./routes/adminRoutes"));
+app.use("/api/sessions", require("./routes/sessionRoutes"));
+app.use("/api/parking-floors", require("./routes/parkingFloorRoutes"));
 
 // 404 handler
 app.use((req, res) => {
