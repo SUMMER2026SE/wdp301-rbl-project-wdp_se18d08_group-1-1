@@ -8,7 +8,7 @@ exports.addVehicleValidator = [
     .notEmpty()
     .withMessage('License plate is required')
     .matches(/^[A-Za-z0-9\-]{4,12}$/)
-    .withMessage('License plate must be 4-12 alphanumeric characters'),
+    .withMessage('License plate must be 4-12 alphanumeric characters'),  
 
   body('vehicleType')
     .notEmpty()
@@ -30,9 +30,8 @@ exports.addVehicleValidator = [
     .withMessage('Model must not exceed 50 characters'),
 
   body('color')
+    .optional()
     .trim()
-    .notEmpty()
-    .withMessage('Color is required')
     .isLength({ max: 30 })
     .withMessage('Color must not exceed 30 characters'),
 
@@ -59,7 +58,7 @@ exports.updateVehicleValidator = [
     .optional()
     .trim()
     .matches(/^[A-Za-z0-9\-]{4,12}$/)
-    .withMessage('License plate must be 4-12 alphanumeric characters'),
+    .withMessage('License plate must be 4-12 alphanumeric characters'),  
 
   body('vehicleType')
     .optional()

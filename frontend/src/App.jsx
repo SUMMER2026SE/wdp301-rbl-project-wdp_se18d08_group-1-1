@@ -15,18 +15,15 @@ import OAuthCallback from "./pages/OAuthCallback";
 
 // Pages - Kiosk
 import KioskFlow from "./pages/Kiosk/KioskFlow";
-import KioskOutFlow from "./pages/KioskOut/KioskOutFlow";
 
 // Pages – Admin
 import AdminDashboard from './pages/Admin/Dashboard';
-import VehicleModels from './pages/Admin/VehicleModels';
+import VehicleManagement from './pages/Admin/VehicleManagement';
 import AdminProfile from './pages/Admin/AdminProfile';
 import ParkingLots from './pages/Admin/ParkingLots';
 
-// Pages – Staff
-import StaffDashboard from "./pages/Staff/Dashboard";
-import StaffProfile from "./pages/Staff/StaffProfile";
-import StaffSessionManagement from "./pages/Staff/SessionManagement";
+// Pages – Staff (Manager)
+import ManagerDashboard from "./pages/Staff/Dashboard";
 
 // Pages – Customer
 import CustomerProfile from "./pages/Customer/CustomerProfile";
@@ -43,7 +40,6 @@ export default function App() {
       <Routes>
         {/* ── Standalone Kiosk app ── */}
         <Route path="/kiosk/*" element={<KioskFlow />} />
-        <Route path="/kiosk-out/*" element={<KioskOutFlow />} />
 
         {/* ── Public: Navbar + Footer ── */}
         <Route element={<MainLayout />}>
@@ -68,25 +64,23 @@ export default function App() {
           }
         >
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
-          <Route path="/admin/vehicle-models" element={<VehicleModels />} />
+          <Route path="/admin/vehicle-models" element={<VehicleManagement />} />
           <Route path="/admin/parking-lots" element={<ParkingLots />} />
           <Route path="/admin/profile" element={<AdminProfile />} />
         </Route>
 
         {/* ══════════════════════════════════════════
-            STAFF section — DashboardLayout chung
-            Chỉ role "staff" được vào
+            MANAGER section — DashboardLayout chung
+            Chỉ role "manager" được vào
         ══════════════════════════════════════════ */}
         <Route
           element={
-            <ProtectedRoute allowedRoles={["staff"]}>
+            <ProtectedRoute allowedRoles={["manager"]}>
               <DashboardLayout />
             </ProtectedRoute>
           }
         >
-          <Route path="/staff/dashboard" element={<StaffDashboard />} />
-          <Route path="/staff/sessions" element={<StaffSessionManagement />} />
-          <Route path="/staff/profile" element={<StaffProfile />} />
+          <Route path="/manager/dashboard" element={<ManagerDashboard />} />
         </Route>
 
         {/* ── Customer section ── */}

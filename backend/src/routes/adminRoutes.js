@@ -6,6 +6,9 @@ const {
   deleteVehicleModel,
   listVehicleModels,
   syncAllVehicleModels,
+  getPendingVehicles,
+  approveVehicle,
+  rejectVehicle,
 } = require('../controllers/adminController');
 
 const router = express.Router();
@@ -31,5 +34,10 @@ router.get('/vehicles/models', listVehicleModels);
 router.post('/vehicles/upload-model', upload.single('file'), uploadVehicleModel);
 router.delete('/vehicles/upload-model', deleteVehicleModel);
 router.post('/vehicles/sync-models', syncAllVehicleModels);
+
+// Vehicle approval
+router.get('/vehicles/pending', getPendingVehicles);
+router.patch('/vehicles/:id/approve', approveVehicle);
+router.delete('/vehicles/:id/reject', rejectVehicle);
 
 module.exports = router;

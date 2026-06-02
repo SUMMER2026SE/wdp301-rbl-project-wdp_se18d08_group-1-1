@@ -1,6 +1,9 @@
 const cloudinary = require('../config/cloudinary');
 const streamifier = require('streamifier');
 const Vehicle = require('../models/Vehicle');
+// ─── Draco compression ────────────────────────────────────────────────────────
+// npm install gltf-pipeline
+const { processGlb } = require('gltf-pipeline');
 
 // Same normalizer as vehicleController – must stay in sync
 const normalizeSlug = (str = '') =>
@@ -61,7 +64,28 @@ exports.uploadVehicleModel = async (req, res, next) => {
     const nm = normalizeSlug(model || 'default');
     const publicId = `vehicles/${nb}/${nm}`;
 
-    // Upload buffer → Cloudinary as a raw resource
+    // ── Step 1: Compress GLB in-memory with Draco ─────────────────────────────
+    // Processes the raw buffer — no temp files written to disk.
+    // If gltf-pipeline fails (e.g. model already compressed), fall back to original.
+    let uploadBuffer = req.file.buffer;
+    try {
+      const compressResult = await processGlb(req.file.buffer, {
+        dracoOptions: { compressionLevel: 7 },
+      });
+      uploadBuffer = compressResult.glb;
+      console.log(
+        `[uploadVehicleModel] Draco compressed: ${req.file.buffer.length} → ${uploadBuffer.length} bytes`,
+      );
+    } catch (compressErr) {
+      // Non-fatal: upload uncompressed if Draco step fails
+      console.warn('[uploadVehicleModel] Draco compression skipped:', compressErr.message);
+      // uploadBuffer stays as req.file.buffer (original)
+    }
+    // NOTE: We use multer memoryStorage so there are NO temp files on disk.
+    // If you ever switch to diskStorage, add fs.unlinkSync(req.file.path) in
+    // a try/finally block here to clean up the temp file.
+
+    // ── Step 2: Upload compressed buffer → Cloudinary as raw resource ─────────
     const uploadResult = await new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
@@ -75,7 +99,7 @@ exports.uploadVehicleModel = async (req, res, next) => {
           resolve(result);
         },
       );
-      streamifier.createReadStream(req.file.buffer).pipe(uploadStream);
+      streamifier.createReadStream(uploadBuffer).pipe(uploadStream);
     });
 
     const synced = await syncVehiclesForModel(brand, model || 'default', uploadResult.secure_url);
@@ -112,11 +136,18 @@ exports.deleteVehicleModel = async (req, res, next) => {
     const nb = normalizeSlug(brand);
     const nm = normalizeSlug(model || 'default');
 
+    // Step 1: Remove the file from Cloudinary
     await cloudinary.uploader.destroy(`vehicles/${nb}/${nm}`, { resource_type: 'raw' });
+
+    // Step 2: Clear modelUrl on all Vehicle documents that pointed to this model.
+    // Without this, existing vehicles still hold the old URL and keep rendering
+    // the 3D model even after deletion.
+    const vehiclesSynced = await syncVehiclesForModel(brand, model || 'default', '');
 
     res.status(200).json({
       success: true,
       message: `Deleted vehicles/${nb}/${nm}`,
+      data: { vehiclesSynced },
     });
   } catch (err) {
     next(err);
@@ -195,6 +226,59 @@ exports.syncAllVehicleModels = async (req, res, next) => {
       message: `Synced ${updated} vehicle(s)`,
       data: { total: vehicles.length, updated },
     });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// ─── Vehicle Approval ─────────────────────────────────────────────────────────
+
+/**
+ * @desc  List all pending vehicles (with owner info)
+ * @route GET /api/admin/vehicles/pending
+ * @access Admin only
+ */
+exports.getPendingVehicles = async (req, res, next) => {
+  try {
+    const vehicles = await Vehicle.find({ status: 'pending' })
+      .populate('owner', 'name email')
+      .sort({ createdAt: 1 });
+    res.status(200).json({ success: true, count: vehicles.length, data: vehicles });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * @desc  Approve a vehicle (optionally assign modelUrl)
+ * @route PATCH /api/admin/vehicles/:id/approve
+ * @access Admin only
+ */
+exports.approveVehicle = async (req, res, next) => {
+  try {
+    const vehicle = await Vehicle.findById(req.params.id);
+    if (!vehicle) return res.status(404).json({ success: false, message: 'Vehicle not found' });
+
+    vehicle.status = 'approved';
+    if (req.body.modelUrl !== undefined) vehicle.modelUrl = req.body.modelUrl;
+    await vehicle.save();
+
+    res.status(200).json({ success: true, message: 'Vehicle approved', data: vehicle });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * @desc  Reject (delete) a pending vehicle
+ * @route DELETE /api/admin/vehicles/:id/reject
+ * @access Admin only
+ */
+exports.rejectVehicle = async (req, res, next) => {
+  try {
+    const vehicle = await Vehicle.findByIdAndDelete(req.params.id);
+    if (!vehicle) return res.status(404).json({ success: false, message: 'Vehicle not found' });
+    res.status(200).json({ success: true, message: 'Vehicle rejected and removed' });
   } catch (err) {
     next(err);
   }
