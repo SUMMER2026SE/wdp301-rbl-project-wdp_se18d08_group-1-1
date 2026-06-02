@@ -180,7 +180,9 @@ export default function VehicleModels() {
     const { ok, data } = await deleteModel(parts[1] ?? '', parts[2] ?? 'default');
     setDeleteTarget(null);
     if (ok) {
-      showToast('Đã xóa model');
+      // Show how many vehicle documents had their modelUrl cleared
+      const synced = data?.data?.vehiclesSynced ?? 0;
+      showToast(`Đã xóa model${synced ? ` · xóa 3D trên ${synced} xe` : ''}`);
       await loadModels();
     } else {
       showToast(data?.message || 'Xóa thất bại', 'error');
