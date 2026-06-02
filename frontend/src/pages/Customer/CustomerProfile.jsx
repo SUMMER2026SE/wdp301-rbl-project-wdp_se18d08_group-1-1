@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import Logo from "../../assets/images/logo.png";
 import { apiFetch, API_BASE } from "../../services/api";
 import {
   forgotPassword as apiForgotPassword,
@@ -303,7 +304,7 @@ export default function CustomerProfile() {
       sessionStorage.setItem("valo_user", JSON.stringify(merged));
       window.dispatchEvent(new Event("valo_auth_change"));
       if (data.data.claimedSessions > 0) {
-        setToast({ msg: "🎉 Thành công! Đã gom và đây là tất cả lịch sử đỗ xe của bạn!", type: "success" });
+        setToast({ msg: "🎉 Success! We've collected your full parking history!", type: "success" });
       } else {
         setToast({ msg: "Profile updated ✓", type: "success" });
       }
@@ -433,7 +434,7 @@ export default function CustomerProfile() {
       sessionStorage.setItem("valo_user", JSON.stringify(merged));
       window.dispatchEvent(new Event("valo_auth_change"));
       if (data.data.claimedSessions > 0) {
-        setToast({ msg: "🎉 Thành công! Đã gom và đây là tất cả lịch sử đỗ xe của bạn!", type: "success" });
+        setToast({ msg: "🎉 Success! We've collected your full parking history!", type: "success" });
       } else {
         setToast({ msg: "Profile updated ✓", type: "success" });
       }
@@ -713,8 +714,8 @@ export default function CustomerProfile() {
                   className="w-full h-full rounded-full object-cover"
                 />
               ) : (
-                <div className="w-full h-full rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 flex items-center justify-center text-black font-extrabold text-2xl">
-                  {getInitials(profile.name)}
+                <div className="w-full h-full rounded-full bg-white flex items-center justify-center">
+                  <img src={Logo} alt="VALO" className="w-[60%] h-[60%] object-contain" />
                 </div>
               )}
             </div>
@@ -823,10 +824,10 @@ export default function CustomerProfile() {
                 </div>
                 <div>
                   <h4 className="text-yellow-400 font-bold text-base mb-1">
-                    🎁 Bạn từng đỗ xe tại ValoParking?
+                    🎁 Have you parked at ValoParking before?
                   </h4>
                   <p className="text-sm text-yellow-500/80 leading-relaxed">
-                    Cập nhật ngay Số điện thoại để xem lại toàn bộ lịch sử đỗ xe về bạn nhé!
+                    Update your phone number now to see your full parking history!
                   </p>
                 </div>
               </div>

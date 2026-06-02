@@ -1,11 +1,27 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom';
+import { useState, useEffect, useRef, useCallback } from "react";
+import { Link, NavLink, useNavigate, useLocation } from "react-router-dom";
 import {
-  LogOut, User, Wallet, ChevronDown, Bell, Car, CalendarCheck,
-  Map, FileText, Menu, X, Shield, History, Sparkles, Settings,
-  CircleParking, ArrowUpRight, CreditCard
-} from 'lucide-react';
-import Logo from '../assets/images/logo.png';
+  LogOut,
+  User,
+  Wallet,
+  ChevronDown,
+  Bell,
+  CalendarCheck,
+  Map,
+  FileText,
+  X,
+  Car,
+  Menu,
+  Shield,
+  History,
+  Sparkles,
+  Settings,
+  CircleParking,
+  ArrowUpRight,
+  CreditCard,
+  ChevronRight,
+} from "lucide-react";
+import Logo from "../assets/images/logo.png";
 
 /* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
    VALO PARKING ΓÇô Premium Navbar
@@ -50,7 +66,10 @@ const getGradient = (name = '') => {
 export default function Navbar() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    const raw = sessionStorage.getItem("valo_user");
+    return raw ? JSON.parse(raw) : null;
+  });
   const [profileOpen, setProfileOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [notifCount] = useState(3);
@@ -92,7 +111,12 @@ export default function Navbar() {
   }, []);
 
   // ΓöÇΓöÇ Close on route change ΓöÇΓöÇ
-  useEffect(() => { setMobileOpen(false); setProfileOpen(false); }, [location.pathname]);
+  useEffect(() => {
+    window.requestAnimationFrame(() => {
+      setMobileOpen(false);
+      setProfileOpen(false);
+    });
+  }, [location.pathname]);
 
   // ΓöÇΓöÇ Logout ΓöÇΓöÇ
   const handleLogout = () => {
@@ -236,8 +260,18 @@ export default function Navbar() {
                           : 'hover:bg-black/[0.04]'}
                       `}
                     >
-                      <div className={`w-8 h-8 rounded-[10px] bg-gradient-to-br ${grad} flex items-center justify-center text-white font-bold text-[11px] shadow-sm select-none shrink-0`}>
-                        {getInitials(user.name)}
+                      <div
+                        className={`w-8 h-8 rounded-[10px] overflow-hidden ${user.avatar ? "" : "bg-[#050505] border border-gold/20"} flex items-center justify-center shadow-sm select-none shrink-0`}
+                      >
+                        {user.avatar ? (
+                          <img
+                            src={user.avatar}
+                            alt={user.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <img src={Logo} alt="VALO" className="w-[65%] h-[65%] object-contain" />
+                        )}
                       </div>
                       <span className="hidden sm:block text-[13px] font-semibold text-gray-700 max-w-[90px] truncate">
                         {user.name?.split(' ').pop()}
@@ -255,8 +289,18 @@ export default function Navbar() {
                         {/* User card */}
                         <div className="p-4 border-b border-gray-100/80">
                           <div className="flex items-center gap-3">
-                            <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${grad} flex items-center justify-center text-white font-bold text-sm shadow-lg select-none`}>
-                              {getInitials(user.name)}
+                            <div
+                              className={`w-11 h-11 rounded-xl overflow-hidden ${user.avatar ? "" : "bg-[#050505] border border-gold/20"} flex items-center justify-center shadow-lg select-none`}
+                            >
+                              {user.avatar ? (
+                                <img
+                                  src={user.avatar}
+                                  alt={user.name}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <img src={Logo} alt="VALO" className="w-[65%] h-[65%] object-contain" />
+                              )}
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="font-bold text-gray-900 text-sm truncate">{user.name}</p>
@@ -270,27 +314,6 @@ export default function Navbar() {
                           </div>
                         </div>
 
-                        {/* Wallet card */}
-                        <div className="mx-3 mt-3 p-3 rounded-xl bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-100/60">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2.5">
-                              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-md shadow-amber-200/60">
-                                <CreditCard size={14} className="text-white" />
-                              </div>
-                              <div>
-                                <p className="text-[10px] text-amber-600/70 font-semibold uppercase tracking-wider">Balance</p>
-                                <p className="text-sm font-extrabold text-gray-800">{(user.wallet || 0).toLocaleString('vi-VN')}Γé½</p>
-                              </div>
-                            </div>
-                            <Link
-                              to="/wallet"
-                              onClick={() => setProfileOpen(false)}
-                              className="text-[10px] font-bold text-amber-600 hover:text-amber-800 bg-amber-100 hover:bg-amber-200 px-2.5 py-1 rounded-lg transition-all duration-200 uppercase tracking-wide flex items-center gap-1"
-                            >
-                              Top Up <ArrowUpRight size={10} />
-                            </Link>
-                          </div>
-                        </div>
 
                         {/* Menu */}
                         <div className="p-2 mt-1">
@@ -305,32 +328,43 @@ export default function Navbar() {
                               id={`nav-dd-${item.id}`}
                               to={item.to}
                               onClick={() => setProfileOpen(false)}
-                              className="flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] text-gray-600 hover:text-gray-900 hover:bg-black/[0.04] transition-all duration-200 group"
+                              className="flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-[13px] text-gray-600 hover:text-gray-900 hover:bg-gradient-to-r hover:from-gold/5 hover:to-transparent transition-all duration-300 group"
                             >
-                              <div className="w-7 h-7 rounded-lg bg-gray-100 group-hover:bg-gold/10 flex items-center justify-center transition-all duration-200">
-                                <item.icon size={14} className="text-gray-400 group-hover:text-gold transition-colors duration-200" />
+                              <div className="w-8 h-8 rounded-[10px] bg-gray-50 border border-gray-100/80 group-hover:bg-white group-hover:border-gold/30 group-hover:shadow-[0_2px_8px_rgba(212,175,55,0.15)] flex items-center justify-center transition-all duration-300">
+                                <item.icon
+                                  size={15}
+                                  className="text-gray-400 group-hover:text-gold transition-colors duration-300"
+                                />
                               </div>
-                              <span className="font-medium">{item.label}</span>
+                              <span className="font-semibold tracking-wide">{item.label}</span>
+                              <ChevronRight size={14} className="ml-auto text-gray-300 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300" />
                             </Link>
                           ))}
 
-                          {(user.role === 'admin' || user.role === 'manager') && (
-                            <>
-                              <div className="h-px bg-gray-100 my-1 mx-3" />
-                              <Link
-                                id="nav-dd-dashboard"
-                                to={`/${user.role}/dashboard`}
-                                onClick={() => setProfileOpen(false)}
-                                className="flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] text-gray-600 hover:text-gray-900 hover:bg-black/[0.04] transition-all duration-200 group"
-                              >
-                                <div className="w-7 h-7 rounded-lg bg-blue-50 group-hover:bg-blue-100 flex items-center justify-center transition-all duration-200">
-                                  <Shield size={14} className="text-blue-500" />
-                                </div>
-                                <span className="font-medium">{user.role === 'admin' ? 'Admin' : 'Manager'} Panel</span>
-                                <ArrowUpRight size={12} className="text-gray-300 ml-auto" />
-                              </Link>
-                            </>
-                          )}
+                          {(user.role === "admin" ||
+                            user.role === "staff") && (
+                              <>
+                                <div className="h-px bg-gray-100 my-1 mx-3" />
+                                <Link
+                                  id="nav-dd-dashboard"
+                                  to={`/${user.role}/dashboard`}
+                                  onClick={() => setProfileOpen(false)}
+                                  className="flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-[13px] text-gray-600 hover:text-gray-900 hover:bg-gradient-to-r hover:from-blue-50/50 hover:to-transparent transition-all duration-300 group"
+                                >
+                                  <div className="w-8 h-8 rounded-[10px] bg-blue-50 border border-blue-100/50 group-hover:bg-white group-hover:border-blue-300/40 group-hover:shadow-[0_2px_8px_rgba(59,130,246,0.15)] flex items-center justify-center transition-all duration-300">
+                                    <Shield size={15} className="text-blue-500" />
+                                  </div>
+                                  <span className="font-semibold tracking-wide">
+                                    {user.role === "admin" ? "Admin" : "Staff"}{" "}
+                                    Panel
+                                  </span>
+                                  <ChevronRight
+                                    size={14}
+                                    className="ml-auto text-gray-300 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300"
+                                  />
+                                </Link>
+                              </>
+                            )}
                         </div>
 
                         {/* Logout */}
@@ -338,12 +372,12 @@ export default function Navbar() {
                           <button
                             id="nav-btn-logout"
                             onClick={handleLogout}
-                            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-[13px] text-red-500 hover:text-red-600 hover:bg-red-50/80 transition-all duration-200 font-semibold"
+                            className="w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-[13px] text-red-500 hover:text-red-600 hover:bg-red-50/80 transition-all duration-300 font-semibold group"
                           >
-                            <div className="w-7 h-7 rounded-lg bg-red-50 flex items-center justify-center">
-                              <LogOut size={14} className="text-red-400" />
+                            <div className="w-8 h-8 rounded-[10px] bg-red-50 border border-red-100/50 group-hover:bg-white group-hover:border-red-300/40 group-hover:shadow-[0_2px_8px_rgba(239,68,68,0.15)] flex items-center justify-center transition-all duration-300">
+                              <LogOut size={15} className="text-red-400 group-hover:text-red-500 transition-colors" />
                             </div>
-                            Sign Out
+                            <span className="tracking-wide">Sign Out</span>
                           </button>
                         </div>
                       </div>
@@ -477,8 +511,18 @@ export default function Navbar() {
           {user && (
             <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-100 bg-white/80 backdrop-blur-xl">
               <div className="flex items-center gap-3 mb-3">
-                <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${grad} flex items-center justify-center text-white font-bold text-xs shadow-md`}>
-                  {getInitials(user.name)}
+                <div
+                  className={`w-10 h-10 rounded-xl overflow-hidden ${user.avatar ? "" : "bg-[#050505] border border-gold/20"} flex items-center justify-center shadow-md`}
+                >
+                  {user.avatar ? (
+                    <img
+                      src={user.avatar}
+                      alt={user.name}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <img src={Logo} alt="VALO" className="w-[65%] h-[65%] object-contain" />
+                  )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-bold text-gray-900 text-sm truncate">{user.name}</p>

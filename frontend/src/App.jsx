@@ -1,4 +1,3 @@
-import React from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 // Layouts
@@ -20,6 +19,8 @@ import KioskFlow from "./pages/Kiosk/KioskFlow";
 // Pages – Admin
 import AdminDashboard from './pages/Admin/Dashboard';
 import VehicleManagement from './pages/Admin/VehicleManagement';
+import AdminProfile from './pages/Admin/AdminProfile';
+import ParkingLots from './pages/Admin/ParkingLots';
 
 // Pages – Staff (Manager)
 import ManagerDashboard from "./pages/Staff/Dashboard";
@@ -27,6 +28,8 @@ import ManagerDashboard from "./pages/Staff/Dashboard";
 // Pages – Customer
 import CustomerProfile from "./pages/Customer/CustomerProfile";
 import MyVehicles from "./pages/Customer/MyVehicles";
+import WalletPage from "./pages/Wallet/WalletPage";
+import ParkingHistory from "./pages/Customer/ParkingHistory";
 
 // Misc
 import UnauthorizedPage from "./pages/UnauthorizedPage";
@@ -62,6 +65,8 @@ export default function App() {
         >
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
           <Route path="/admin/vehicle-models" element={<VehicleManagement />} />
+          <Route path="/admin/parking-lots" element={<ParkingLots />} />
+          <Route path="/admin/profile" element={<AdminProfile />} />
         </Route>
 
         {/* ══════════════════════════════════════════
@@ -88,6 +93,8 @@ export default function App() {
         >
           <Route path="/profile" element={<CustomerProfile />} />
           <Route path="/customer/vehicles" element={<MyVehicles />} />
+          <Route path="/customer/wallet" element={<WalletPage />} />
+          <Route path="/customer/history" element={<ParkingHistory />} />
         </Route>
 
         {/* ── 403 ── */}
