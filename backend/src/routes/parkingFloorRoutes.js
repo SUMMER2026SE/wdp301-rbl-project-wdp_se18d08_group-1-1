@@ -9,8 +9,10 @@ const {
 
 const router = express.Router();
 
-router.use(protect);
+// Public route: get all floors (for Kiosk and users)
 router.get("/", getAllFloors);
+
+router.use(protect);
 
 // Restrict modifications to admin and staff using the correct authorize middleware
 router.use(authorize("admin", "staff"));

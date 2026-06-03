@@ -27,8 +27,10 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
   const [guides, setGuides] = useState([]);
 
   // Undo/Redo State
-  const [history, setHistory] = useState([floor?.layoutData?.elements || []]);
-  const [historyIndex, setHistoryIndex] = useState(0);
+  const [historyState, setHistoryState] = useState({
+    history: [floor?.layoutData?.elements || []],
+    index: 0
+  });
   const isUndoRedoRef = useRef(false);
 
   useEffect(() => {
@@ -37,41 +39,46 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
       return;
     }
     
-    setHistory(prev => {
-      const newHistory = prev.slice(0, historyIndex + 1);
+    setHistoryState(prev => {
+      const newHistory = prev.history.slice(0, prev.index + 1);
       const lastState = newHistory[newHistory.length - 1];
       if (JSON.stringify(lastState) === JSON.stringify(elements)) {
-        return newHistory;
+        return prev; // No change, don't increment index
       }
       
       newHistory.push(elements);
       if (newHistory.length > 50) {
         newHistory.shift();
+        return { history: newHistory, index: 49 };
       }
-      return newHistory;
+      return { history: newHistory, index: newHistory.length - 1 };
     });
-    
-    setHistoryIndex(prev => Math.min(prev + 1, 49));
   }, [elements]);
 
   const handleUndo = () => {
-    if (historyIndex > 0) {
-      isUndoRedoRef.current = true;
-      const newIndex = historyIndex - 1;
-      setHistoryIndex(newIndex);
-      setElements(history[newIndex]);
-      setSelectedElementIds([]);
-    }
+    setHistoryState(prev => {
+      if (prev.index > 0) {
+        isUndoRedoRef.current = true;
+        const newIndex = prev.index - 1;
+        setElements(prev.history[newIndex]);
+        setSelectedElementIds([]);
+        return { ...prev, index: newIndex };
+      }
+      return prev;
+    });
   };
 
   const handleRedo = () => {
-    if (historyIndex < history.length - 1) {
-      isUndoRedoRef.current = true;
-      const newIndex = historyIndex + 1;
-      setHistoryIndex(newIndex);
-      setElements(history[newIndex]);
-      setSelectedElementIds([]);
-    }
+    setHistoryState(prev => {
+      if (prev.index < prev.history.length - 1) {
+        isUndoRedoRef.current = true;
+        const newIndex = prev.index + 1;
+        setElements(prev.history[newIndex]);
+        setSelectedElementIds([]);
+        return { ...prev, index: newIndex };
+      }
+      return prev;
+    });
   };
 
   const handleAddElement = (type, x = 50, y = 50) => {
@@ -313,7 +320,7 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedElementIds, elements, history, historyIndex]);
+  }, [selectedElementIds, elements]);
 
   // Sidebar Resizing logic
   useEffect(() => {
@@ -402,7 +409,13 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
         if (el.shape === 'triangle') {
           return <div className="w-full h-full flex items-center justify-center bg-black/50 text-xs font-bold text-cyan-200" style={{ clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)', paddingTop: '20%' }}>{el.name || el.type}</div>;
         }
-        return <span className="text-xs font-bold bg-black/50 px-2 py-1 rounded text-cyan-200">{el.name || el.type}</span>;
+        return (
+          <div className="w-full h-full rounded border-2 border-dashed border-cyan-500/30 bg-black/20 pointer-events-none">
+            <div className="absolute -top-3 left-4 bg-[#181c23] border border-cyan-500/50 rounded-full px-3 shadow-md">
+              <span className="text-[10px] font-bold text-cyan-300 uppercase tracking-widest">{el.name || el.type}</span>
+            </div>
+          </div>
+        );
       default: return <span className="text-xs font-bold bg-black/50 px-2 py-1 rounded">{el.name || el.type}</span>;
     }
   };
@@ -609,7 +622,7 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
               }}
             >
               <div 
-                className="w-full h-full flex items-center justify-center pointer-events-none overflow-hidden"
+                className={`w-full h-full flex items-center justify-center pointer-events-none ${el.type === 'zone' ? '' : 'overflow-hidden'}`}
                 style={{ transform: `rotate(${el.rot || 0}deg)` }}
               >
                 {renderElementContent(el)}

@@ -1,7 +1,9 @@
-import React, { useEffect, useState, useRef } from "react";
-import { Car, Zap, ZoomIn, ZoomOut, Maximize, TreePine, X, Plus, Edit, Phone, ArrowRight, Accessibility, Bike, Navigation, Layers, MonitorSmartphone, Copy, Trash2 } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { Plus, Edit, Copy, Trash2, X } from "lucide-react";
 import ParkingLotsBuilder from "./ParkingLotsBuilder/ParkingLotsBuilder";
+import ParkingMapGrid from "../../components/ParkingMapGrid";
 import { getAllFloors, createFloor, updateFloorLayout, deleteFloor } from "../../services/parkingFloorService";
+import { apiFetch } from "../../services/api";
 
 export default function ParkingLots() {
   const [floors, setFloors] = useState([]);
@@ -10,40 +12,15 @@ export default function ParkingLots() {
   const [loading, setLoading] = useState(true);
   const [selectedSlot, setSelectedSlot] = useState(null);
 
-  // 3D Camera Controls
-  const [camera, setCamera] = useState({ rotX: 60, rotZ: -30, panX: 0, panY: 0, zoom: 0.7 });
-  const [dragStart, setDragStart] = useState(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [hoveredSlotId, setHoveredSlotId] = useState(null);
-
-  // Reference for the container to prevent default scroll
-  const containerRef = useRef(null);
+  // activeSessions to track live cars - mock or fetch if admin wants live too
+  const [activeSessions, setActiveSessions] = useState([]);
 
   useEffect(() => {
     document.body.classList.add("bg-[#0b0e16]");
     return () => document.body.classList.remove("bg-[#0b0e16]");
   }, []);
 
-  // Prevent default scroll on wheel in the container
-  useEffect(() => {
-    const container = containerRef.current;
-    const handleWheelNative = (e) => {
-      if (isEditMode) return;
-      e.preventDefault();
-      setCamera((prev) => ({
-        ...prev,
-        zoom: Math.max(0.1, Math.min(prev.zoom - e.deltaY * 0.002, 3))
-      }));
-    };
-    if (container) {
-      container.addEventListener("wheel", handleWheelNative, { passive: false });
-    }
-    return () => {
-      if (container) {
-        container.removeEventListener("wheel", handleWheelNative);
-      }
-    };
-  }, [isEditMode]);
+  const currentFloor = floors.find(f => f._id === currentFloorId);
 
   const seedDefaultFloor = async () => {
     const defaultLayout = {
@@ -106,9 +83,86 @@ export default function ParkingLots() {
     const currentFloor = floors.find(f => f._id === currentFloorId);
     if (!currentFloor) return;
 
+    // 1. Find max char code used across ALL floors to determine next available letters
+    let maxCharCode = 64; // '@' is before 'A'
+    floors.forEach(f => {
+      f.layoutData?.elements?.forEach(el => {
+        if (el.type.startsWith('slot') && el.name) {
+          const match = el.name.match(/^([a-zA-Z])/);
+          if (match) {
+            const charCode = match[1].toUpperCase().charCodeAt(0);
+            if (charCode > maxCharCode && charCode <= 90) { // A-Z
+              maxCharCode = charCode;
+            }
+          }
+        }
+      });
+    });
+
+    // 2. Find unique prefixes used in CURRENT floor
+    const sourcePrefixes = new Set();
+    currentFloor.layoutData?.elements?.forEach(el => {
+      if (el.type.startsWith('slot') && el.name) {
+        const match = el.name.match(/^([a-zA-Z])/);
+        if (match) {
+          sourcePrefixes.add(match[1].toUpperCase());
+        }
+      }
+    });
+    const sortedSourcePrefixes = Array.from(sourcePrefixes).sort();
+
+    // 3. Create mapping from old prefix to new prefix
+    const prefixMapping = {};
+    let nextCharCode = maxCharCode + 1;
+    sortedSourcePrefixes.forEach(prefix => {
+      if (nextCharCode <= 90) {
+        prefixMapping[prefix] = String.fromCharCode(nextCharCode);
+        nextCharCode++;
+      } else {
+        prefixMapping[prefix] = prefix; // fallback if out of alphabet
+      }
+    });
+
+    // 4. Duplicate elements with renamed prefixes and new unique IDs
+    const idMapping = {};
+    const renamedElements = (currentFloor.layoutData?.elements || []).map(el => {
+      const newId = `${el.type}-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+      idMapping[el.id] = newId;
+
+      let newName = el.name;
+      if (newName) {
+        if (el.type.startsWith('slot')) {
+          const match = newName.match(/^([a-zA-Z])/);
+          if (match && prefixMapping[match[1].toUpperCase()]) {
+            const oldChar = match[1];
+            const newChar = prefixMapping[oldChar.toUpperCase()];
+            newName = newName.replace(oldChar, newChar);
+          }
+        } else if (el.type === 'zone') {
+          newName = newName.replace(/\b([a-zA-Z])\b/g, (match) => {
+            return prefixMapping[match.toUpperCase()] || match;
+          });
+        }
+      }
+      return { ...el, id: newId, name: newName };
+    });
+
+    // 5. Update parentIds to maintain group structures
+    const finalElements = renamedElements.map(el => {
+      if (el.parentId && idMapping[el.parentId]) {
+        return { ...el, parentId: idMapping[el.parentId] };
+      }
+      return el;
+    });
+
+    const newLayoutData = {
+      ...currentFloor.layoutData,
+      elements: finalElements
+    };
+
     const floorNumber = floors.length + 1;
     const name = `Floor ${floorNumber}`;
-    const res = await createFloor({ floorNumber, name, layoutData: currentFloor.layoutData });
+    const res = await createFloor({ floorNumber, name, layoutData: newLayoutData });
     if (res.ok && res.data.data) {
       setFloors([...floors, res.data.data]);
       setCurrentFloorId(res.data.data._id);
@@ -152,56 +206,27 @@ export default function ParkingLots() {
     }
   };
 
-  // --- MOUSE CONTROLS ---
-  const handleMouseDown = (e) => {
-    if (isEditMode) return;
-    setIsDragging(true);
-    let action = 'orbit';
-    if (e.button === 2 || e.button === 1 || e.shiftKey) {
-      action = 'pan';
-    }
-    setDragStart({
-      x: e.clientX,
-      y: e.clientY,
-      action,
-      startCamera: { ...camera }
-    });
-  };
+  // Fetch Active Sessions so Admin also sees live cars
+  useEffect(() => {
+    const fetchLiveStatus = async () => {
+      try {
+        const token = localStorage.getItem("accessToken");
+        const res = await apiFetch("/sessions/active-status", {
+          method: "GET",
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        });
+        if (res.ok && res.data.success) {
+          setActiveSessions(res.data.data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch active status", err);
+      }
+    };
+    fetchLiveStatus();
+    const interval = setInterval(fetchLiveStatus, 15000);
+    return () => clearInterval(interval);
+  }, []);
 
-  const handleMouseMove = (e) => {
-    if (!isDragging || !dragStart || isEditMode) return;
-    const deltaX = e.clientX - dragStart.x;
-    const deltaY = e.clientY - dragStart.y;
-    
-    if (dragStart.action === 'orbit') {
-      // Left click = Orbit
-      setCamera({
-        ...dragStart.startCamera,
-        rotZ: dragStart.startCamera.rotZ + deltaX * 0.5,
-        rotX: Math.max(0, Math.min(90, dragStart.startCamera.rotX - deltaY * 0.5))
-      });
-    } else if (dragStart.action === 'pan') {
-      // Right/Middle/Shift click = Pan
-      setCamera({
-        ...dragStart.startCamera,
-        panX: dragStart.startCamera.panX + deltaX,
-        panY: dragStart.startCamera.panY + deltaY
-      });
-    }
-  };
-
-  const handleMouseUp = () => {
-    setIsDragging(false);
-    setDragStart(null);
-  };
-
-  const handleContextMenu = (e) => {
-    if (!isEditMode) e.preventDefault();
-  };
-
-  const currentFloor = floors.find(f => f._id === currentFloorId);
-
-  // In Edit Mode, render the 2D Builder directly
   if (isEditMode && currentFloor) {
     return (
       <ParkingLotsBuilder 
@@ -211,207 +236,6 @@ export default function ParkingLots() {
       />
     );
   }
-
-  const renderDynamicElements = (elements) => {
-    if (!elements) return null;
-    return elements.map(el => {
-      const style = {
-        position: 'absolute',
-        left: `${el.x}px`,
-        top: `${el.y}px`,
-        width: `${el.w}px`,
-        height: `${el.h}px`,
-        transform: `translateZ(1px) rotateZ(${el.rot || 0}deg)`, // Slight pop out from floor
-        transformStyle: 'preserve-3d'
-      };
-
-      if (el.type === 'zone') {
-        const themeColor = el.color || 'purple';
-        const borderColors = { purple: '#a855f7', emerald: '#10b981', blue: '#3b82f6', amber: '#f59e0b' };
-        const bgColors = { purple: 'rgba(168,85,247,0.1)', emerald: 'rgba(16,185,129,0.1)', blue: 'rgba(59,130,246,0.1)', amber: 'rgba(245,158,11,0.1)' };
-        
-        return (
-          <div key={el.id} style={{...style, transform: `translateZ(2px) rotateZ(${el.rot || 0}deg)`, borderColor: borderColors[themeColor] || '#a855f7', backgroundColor: bgColors[themeColor] || 'rgba(168,85,247,0.1)' }} className="p-4 border-[2px] border-solid shadow-md rounded-xl flex flex-col pointer-events-none">
-             <div className="flex items-center justify-between mb-3 border-b-2 pb-2" style={{ borderColor: borderColors[themeColor] || '#a855f7' }}>
-                <div className="flex items-center gap-2" style={{ color: borderColors[themeColor] || '#a855f7' }}><h3 className="font-bold tracking-widest text-xs uppercase">{el.name}</h3></div>
-             </div>
-          </div>
-        );
-      }
-      
-      const isHovered = hoveredSlotId === el.id;
-
-      // Base Z and effect styles for slots
-      const slotZ = 5;
-      const slotTransition = 'all 0.2s ease-in-out';
-
-      if (el.type === 'slot') {
-        const bgColor = isHovered ? '#67e8f9' : '#ffffff'; // cyan-300 : white
-        return (
-          <div key={el.id} style={{...style, transform: `translateZ(${slotZ}px) rotateZ(${el.rot || 0}deg)`, borderColor: isHovered ? '#06b6d4' : '#94a3b8', backgroundColor: bgColor, transition: slotTransition }} className="border-[2px] border-solid rounded-lg cursor-pointer shadow-sm flex flex-col items-center justify-center group"
-               onMouseEnter={() => setHoveredSlotId(el.id)}
-               onMouseLeave={() => setHoveredSlotId(null)}
-               onClick={(e) => {
-                 e.stopPropagation();
-                 setSelectedSlot({ id: el.name || el.id, type: 'hourly' });
-               }}>
-            <span className="text-[10px] font-bold text-slate-500 mb-1 group-hover:text-[#0891b2]" style={{ transform: 'translateZ(2px)' }}>{el.name || el.id}</span>
-            <Car size={20} className="text-slate-400 group-hover:text-[#06b6d4]" style={{ transform: 'translateZ(5px)' }} />
-          </div>
-        );
-      }
-
-      if (el.type === 'slot-ev') {
-        const bgColor = isHovered ? '#6ee7b7' : '#ecfdf5'; // emerald-300 : emerald-50
-        return (
-          <div key={el.id} style={{...style, transform: `translateZ(${slotZ}px) rotateZ(${el.rot || 0}deg)`, borderColor: isHovered ? '#059669' : '#10b981', backgroundColor: bgColor, transition: slotTransition }} className="border-[2px] border-solid rounded-lg cursor-pointer shadow-sm flex flex-col items-center justify-center group"
-               onMouseEnter={() => setHoveredSlotId(el.id)}
-               onMouseLeave={() => setHoveredSlotId(null)}
-               onClick={(e) => {
-                 e.stopPropagation();
-                 setSelectedSlot({ id: el.name || el.id, type: 'ev' });
-               }}>
-            <span className="text-[10px] font-bold text-emerald-600 mb-1" style={{ transform: 'translateZ(2px)' }}>{el.name || 'EV'}</span>
-            <Zap size={20} className="text-emerald-500" style={{ transform: 'translateZ(5px)' }} />
-          </div>
-        );
-      }
-
-      if (el.type === 'slot-handicap') {
-        const bgColor = isHovered ? '#93c5fd' : '#eff6ff'; // blue-300 : blue-50
-        return (
-          <div key={el.id} style={{...style, transform: `translateZ(${slotZ}px) rotateZ(${el.rot || 0}deg)`, borderColor: isHovered ? '#2563eb' : '#3b82f6', backgroundColor: bgColor, transition: slotTransition }} className="border-[2px] border-solid rounded-lg cursor-pointer shadow-sm flex flex-col items-center justify-center group"
-               onMouseEnter={() => setHoveredSlotId(el.id)}
-               onMouseLeave={() => setHoveredSlotId(null)}
-               onClick={(e) => {
-                 e.stopPropagation();
-                 setSelectedSlot({ id: el.name || el.id, type: 'handicap' });
-               }}>
-            <span className="text-[10px] font-bold text-blue-600 mb-1" style={{ transform: 'translateZ(2px)' }}>{el.name || '♿'}</span>
-            <Accessibility size={20} className="text-blue-500" style={{ transform: 'translateZ(5px)' }} />
-          </div>
-        );
-      }
-
-      if (el.type === 'slot-moto') {
-        const bgColor = isHovered ? '#fcd34d' : '#fffbeb'; // amber-300 : amber-50
-        return (
-          <div key={el.id} style={{...style, transform: `translateZ(${slotZ}px) rotateZ(${el.rot || 0}deg)`, borderColor: isHovered ? '#d97706' : '#f59e0b', backgroundColor: bgColor, transition: slotTransition }} className="border-[2px] border-solid rounded-lg cursor-pointer shadow-sm flex flex-col items-center justify-center group"
-               onMouseEnter={() => setHoveredSlotId(el.id)}
-               onMouseLeave={() => setHoveredSlotId(null)}
-               onClick={(e) => {
-                 e.stopPropagation();
-                 setSelectedSlot({ id: el.name || el.id, type: 'moto' });
-               }}>
-            <span className="text-[8px] font-bold text-amber-600 mb-1" style={{ transform: 'translateZ(2px)' }}>{el.name || 'MOTO'}</span>
-            <Bike size={16} className="text-amber-500" style={{ transform: 'translateZ(5px)' }} />
-          </div>
-        );
-      }
-
-      if (el.type === 'gate') {
-         return (
-           <div key={el.id} style={{...style, transform: `translateZ(10px) rotateZ(${el.rot || 0}deg)`, borderColor: '#22c55e', backgroundColor: '#dcfce7', color: '#15803d' }} className="flex items-center justify-center text-xs font-black rounded border-[2px] border-solid shadow-md tracking-wider">
-             {el.name || 'GATE'}
-           </div>
-         );
-      }
-
-      if (el.type === 'planter') {
-        return (
-          <div key={el.id} style={{...style, transform: `translateZ(15px) rotateZ(${el.rot || 0}deg)`, borderColor: '#34d399', backgroundColor: '#d1fae5' }} className="flex flex-col items-center justify-evenly border-[2px] border-solid rounded-full shadow-md">
-            <TreePine size={18} className="text-[#059669]" style={{ transform: 'translateZ(10px)' }} />
-            <TreePine size={18} className="text-[#059669]" style={{ transform: 'translateZ(15px)' }} />
-          </div>
-        );
-      }
-
-      if (el.type === 'wall') {
-        return (
-          <div key={el.id} style={{...style, transform: `translateZ(15px) rotateZ(${el.rot || 0}deg)`, backgroundColor: '#475569', borderColor: '#334155'}} className="border-[2px] border-solid shadow-md flex items-center justify-center overflow-hidden rounded">
-             <div className="w-full h-full" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(0,0,0,0.2) 10px, rgba(0,0,0,0.2) 20px)' }}></div>
-          </div>
-        );
-      }
-
-      if (el.type === 'road') {
-        return (
-          <div key={el.id} style={{...style, transform: `translateZ(1px) rotateZ(${el.rot || 0}deg)`}} className="flex items-center justify-center opacity-60 pointer-events-none">
-             <div className="text-[#f59e0b] font-black tracking-widest text-xl flex items-center gap-2 drop-shadow-md">
-                <ArrowRight size={32} />
-                <span className="uppercase">{el.name}</span>
-             </div>
-          </div>
-        );
-      }
-      
-      if (el.type === 'bump') {
-        return (
-          <div key={el.id} style={{...style, transform: `translateZ(2px) rotateZ(${el.rot || 0}deg)`}} className="flex items-center justify-center rounded overflow-hidden shadow-sm">
-             <div className="w-full h-full" style={{ backgroundImage: 'repeating-linear-gradient(45deg, #fbbf24, #fbbf24 10px, #000 10px, #000 20px)' }}></div>
-          </div>
-        );
-      }
-
-      if (el.type === 'pillar') {
-         return (
-           <div key={el.id} style={{...style, transform: `translateZ(40px) rotateZ(${el.rot || 0}deg)`, backgroundColor: '#cbd5e1', borderColor: '#94a3b8'}} className="border-[2px] border-solid shadow-2xl flex items-center justify-center text-[10px] font-bold text-slate-600 rounded-sm">
-             {el.name}
-           </div>
-         );
-      }
-
-      if (el.type === 'sign') {
-         return (
-           <div key={el.id} style={{...style, transform: `translateZ(30px) rotateZ(${el.rot || 0}deg)`}} className="flex flex-col items-center justify-center">
-             <div className="w-full h-full bg-[#ef4444] rounded-full border-[3px] border-white flex items-center justify-center shadow-lg text-white font-black text-[10px] text-center p-1 leading-tight z-10">
-                {el.name}
-             </div>
-             <div className="w-1 h-8 bg-slate-400 absolute -bottom-6 z-0"></div>
-           </div>
-         );
-      }
-      
-      if (el.type === 'ramp') {
-         return (
-           <div key={el.id} style={{...style, transform: `translateZ(5px) rotateZ(${el.rot || 0}deg)`, backgroundImage: 'linear-gradient(to top, #94a3b8, #cbd5e1)'}} className="border-[2px] border-[#64748b] border-solid shadow-md flex items-center justify-center text-xs font-bold text-slate-700 rounded-sm overflow-hidden">
-             <div className="flex flex-col items-center gap-2">
-                <Navigation size={24} className="text-slate-600" />
-                <span>{el.name}</span>
-             </div>
-           </div>
-         );
-      }
-      
-      if (el.type === 'elevator') {
-         return (
-           <div key={el.id} style={{...style, transform: `translateZ(50px) rotateZ(${el.rot || 0}deg)`, backgroundColor: '#f8fafc', borderColor: '#cbd5e1'}} className="border-[4px] border-double shadow-2xl flex flex-col items-center justify-center text-[10px] font-bold text-slate-500 rounded">
-             <Layers size={24} className="text-slate-400 mb-1" />
-             {el.name}
-           </div>
-         );
-      }
-      
-      if (el.type === 'kiosk') {
-         return (
-           <div key={el.id} style={{...style, transform: `translateZ(20px) rotateZ(${el.rot || 0}deg)`, backgroundColor: '#1e293b', borderColor: '#0ea5e9'}} className="border-[2px] border-solid shadow-xl flex flex-col items-center justify-center text-[8px] font-bold text-sky-400 rounded-sm">
-             <MonitorSmartphone size={16} className="text-sky-400 mb-1" />
-             {el.name}
-           </div>
-         );
-      }
-      
-      if (el.type === 'group') {
-         return (
-           <div key={el.id} style={{...style, transform: `translateZ(0px) rotateZ(${el.rot || 0}deg)`, transformStyle: 'preserve-3d'}} className="pointer-events-none">
-             {el.children && renderDynamicElements(el.children)}
-           </div>
-         );
-      }
-      
-      return null;
-    });
-  };
 
   return (
     <div className="flex flex-col h-[calc(100vh-70px)] bg-[#0b0e16] text-gray-200 font-sans relative overflow-hidden"
@@ -450,133 +274,17 @@ export default function ParkingLots() {
         )}
       </div>
 
-      <div className="absolute top-4 right-8 z-50 text-white/40 text-xs text-right pointer-events-none">
-        <p><strong>Left Click + Drag</strong>: Orbit 3D Space</p>
-        <p><strong>Shift + Drag / Right Click</strong>: Pan</p>
-        <p><strong>Mouse Wheel</strong>: Zoom</p>
-      </div>
-
-      {/* Main Map Container for Orbit Controls */}
-      <div 
-        ref={containerRef}
-        className={`flex-1 overflow-hidden relative p-8 ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
-        onMouseDown={handleMouseDown}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-        onContextMenu={handleContextMenu}
-      >
-        <style dangerouslySetInnerHTML={{__html: `
-          .glass-panel { background: rgba(24, 28, 35, 0.4); backdrop-filter: blur(4px); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 1rem; }
-          .slot-card { border-width: 1px; border-style: solid; border-radius: 0.5rem; transition: all 0.2s; }
-          .planter { display: flex; align-items: center; justify-content: space-evenly; }
-          .scene-container { perspective: 2000px; }
-          .scene-world { transform-style: preserve-3d; transition: transform 0.1s ease-out; }
-          .floor-plane { transform-style: preserve-3d; transition: filter 0.3s; }
-        `}} />
-
-        {/* 3D SCENE ROOT */}
-        <div 
-          className="absolute top-1/2 left-1/2" 
-          style={{ perspective: '2000px', transformStyle: 'preserve-3d' }}
-        >
-          {/* CAMERA TRANSFORMER */}
-          <div 
-             style={{
-                transformStyle: 'preserve-3d',
-                transform: `translate(${camera.panX}px, ${camera.panY}px) scale(${camera.zoom}) rotateX(${camera.rotX}deg) rotateZ(${camera.rotZ}deg)`,
-                transition: isDragging ? 'none' : 'transform 0.1s ease-out'
-             }}
-          >
-            {loading ? (
-              <div className="absolute top-0 left-0 -translate-x-1/2 -translate-y-1/2 text-cyan-400 font-bold text-xl">Loading layout...</div>
-            ) : (
-              <>
-                {/* RENDER STACKED FLOORS */}
-                {floors.map((floor, idx) => {
-                  const currentFloorIndex = currentFloorId ? floors.findIndex(f => f._id === currentFloorId) : -1;
-                  const isOverview = currentFloorIndex === -1;
-                  const isCurrent = idx === currentFloorIndex;
-                  const isAbove = !isOverview && idx > currentFloorIndex;
-                  const isBelow = !isOverview && idx < currentFloorIndex;
-                  
-                  let targetZ;
-                  let targetOpacity = 1;
-                  let pointerEvents = 'auto'; // Default allow clicking
-
-                  if (isOverview) {
-                      // Center the entire building stack
-                      const centerIndex = (floors.length - 1) / 2;
-                      targetZ = (idx - centerIndex) * 300;
-                  } else {
-                      // We shift all floors so that the currentFloor is ALWAYS at Z=0 (focal point).
-                      targetZ = (idx - currentFloorIndex) * 300;
-                      if (isAbove) {
-                          // Floors above fly up into the sky and fade out
-                          targetZ += 1200;
-                          targetOpacity = 0;
-                          pointerEvents = 'none';
-                      } else if (isBelow) {
-                          // Floors below just dim out
-                          targetOpacity = 0.2;
-                      }
-                  }
-                  
-                  return (
-                    <div 
-                      key={floor._id}
-                      className="absolute floor-plane group"
-                      style={{
-                        transformStyle: 'preserve-3d',
-                        transform: `translate(-50%, -50%) translateZ(${targetZ}px)`,
-                        width: floor.layoutData?.width || 1000,
-                        height: floor.layoutData?.height || 600,
-                        backgroundColor: isCurrent ? 'rgba(255, 255, 255, 0.95)' : 'rgba(255, 255, 255, 0.7)',
-                        border: isCurrent ? '2px solid rgba(6,182,212,0.8)' : '1px solid rgba(255,255,255,0.5)',
-                        borderRadius: '2rem',
-                        boxShadow: isCurrent ? '0 0 50px rgba(6,182,212,0.2)' : '0 0 30px rgba(0,0,0,0.2)',
-                        backdropFilter: 'blur(8px)',
-                        opacity: targetOpacity,
-                        pointerEvents: pointerEvents,
-                        transition: 'transform 1.2s cubic-bezier(0.4, 0, 0.2, 1), opacity 1.2s ease, background-color 1s ease'
-                      }}
-                      onClick={(e) => {
-                         if (e.target === e.currentTarget) {
-                            setCurrentFloorId(floor._id);
-                         }
-                      }}
-                    >
-                      {/* Floor Name Tag */}
-                      <div className="absolute -top-12 left-10 text-cyan-400/80 font-black text-3xl tracking-widest uppercase drop-shadow-xl transition-all duration-1000" 
-                           style={{ transform: 'translateZ(20px)', opacity: isCurrent ? 1 : 0.5 }}>
-                        {floor.name} {isCurrent && <span className="text-sm bg-cyan-500/20 text-cyan-400 px-3 py-1 rounded-full ml-4">SELECTED</span>}
-                      </div>
-                      
-                      {/* Grid overlay for aesthetic */}
-                      <div className="absolute inset-0 rounded-[2rem] pointer-events-none opacity-20"
-                           style={{ backgroundImage: `linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)`, backgroundSize: '40px 40px' }} />
-
-                      {/* User Defined Elements from JSON */}
-                      {renderDynamicElements(floor.layoutData?.elements)}
-                      
-                      {/* Fallback instruction if empty */}
-                      {floor.layoutData?.elements?.length === 0 && (
-                        <div className="absolute inset-0 flex items-center justify-center text-white/30 font-bold text-xl tracking-widest uppercase pointer-events-none">
-                          <p>Empty Layout</p>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Floating Zoom UI Reset */}
-        <div className="absolute bottom-14 right-8 flex flex-row gap-2 z-50">
-          <button onClick={() => setCamera({ rotX: 60, rotZ: -30, panX: 0, panY: 0, zoom: 0.7 })} className="p-3 bg-[#181c23]/80 hover:bg-white/10 backdrop-blur border border-white/10 rounded-xl text-white shadow-xl transition-all"><Maximize size={20} /></button>
-        </div>
+      {/* Main Map Container using reusable component */}
+      <div className="flex-1 overflow-hidden relative">
+        <ParkingMapGrid
+          floors={floors}
+          currentFloorId={currentFloorId}
+          onFloorSelect={setCurrentFloorId}
+          onSlotClick={setSelectedSlot}
+          activeSessions={activeSessions}
+          loading={loading}
+          isEditMode={isEditMode}
+        />
       </div>
 
       {/* Slide-over panel for slots */}
@@ -584,24 +292,44 @@ export default function ParkingLots() {
       <div className={`absolute top-0 right-0 bottom-0 w-[420px] bg-[#0f172a]/80 backdrop-blur-2xl border-l border-cyan-500/20 p-8 flex flex-col shadow-[-20px_0_50px_rgba(8,145,178,0.1)] text-slate-200 z-50 transform transition-transform duration-300 ease-in-out ${selectedSlot ? 'translate-x-0' : 'translate-x-full'}`}>
         {selectedSlot && (
            <>
-              <div className="flex justify-between items-start mb-8">
+              <div className="flex justify-between items-start mb-6 flex-shrink-0">
                 <div>
                     <span className="text-cyan-400 text-xs font-bold uppercase tracking-[0.2em] mb-1 block">{selectedSlot.type} Ticket</span>
                     <h2 className="text-4xl font-extrabold text-white flex items-center gap-2">
                         SLOT <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">{selectedSlot.id}</span>
                     </h2>
                 </div>
-                <button onClick={() => setSelectedSlot(null)} className="text-slate-400 hover:text-white bg-slate-800/50 hover:bg-slate-700/50 w-8 h-8 rounded-full flex items-center justify-center transition-all border border-white/5">
+                <button onClick={() => setSelectedSlot(null)} className="text-slate-400 hover:text-white bg-slate-800/50 hover:bg-slate-700/50 w-8 h-8 rounded-full flex items-center justify-center transition-all border border-white/5 flex-shrink-0">
                     <X size={16} strokeWidth={2} />
                 </button>
             </div>
-            {/* Some mock info just for display */}
-            <div className="mb-8">
-                <h3 className="text-slate-500 text-[11px] font-bold uppercase tracking-[0.15em] mb-4">Customer Info</h3>
-                <div className="flex flex-col gap-4">
-                    <div className="flex justify-between items-center"><span className="text-slate-400 text-sm">License Plate</span><span className="font-mono text-base font-semibold text-white bg-slate-800/80 px-3 py-1 rounded border border-slate-700/50">{selectedSlot.plate}</span></div>
-                    <div className="flex justify-between items-center"><span className="text-slate-400 text-sm">Owner</span><span className="font-medium text-white">{selectedSlot.owner}</span></div>
-                </div>
+            <div className="mb-4 flex-1 overflow-y-auto pr-2">
+                <h3 className="text-slate-500 text-[11px] font-bold uppercase tracking-[0.15em] mb-4">Slot Details</h3>
+                {selectedSlot.session ? (
+                  <div className="flex flex-col gap-4">
+                      <div className="bg-rose-900/20 border border-rose-500/30 rounded-xl p-4 flex flex-col items-center justify-center mb-2">
+                          <span className="text-xs text-rose-400 uppercase tracking-widest font-bold mb-1">Status</span>
+                          <span className="text-lg text-white font-black uppercase">Occupied</span>
+                      </div>
+                      <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">License Plate</span><span className="font-mono text-base font-semibold text-white bg-slate-800/80 px-3 py-1 rounded border border-slate-700/50">{selectedSlot.session.licensePlate}</span></div>
+                      <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Phone</span><span className="font-medium text-white">{selectedSlot.session.phone || <span className="text-slate-500 italic">Guest</span>}</span></div>
+                      {selectedSlot.session.userId?.email && (
+                          <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Email</span><span className="font-medium text-cyan-400">{selectedSlot.session.userId.email}</span></div>
+                      )}
+                      <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Vehicle Type</span><span className="font-medium text-white uppercase">{selectedSlot.session.vehicleType || 'Unknown'}</span></div>
+                      <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Check-in Time</span><span className="font-medium text-white">{new Date(selectedSlot.session.checkInTime).toLocaleString('vi-VN')}</span></div>
+                      <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Expected Duration</span><span className="font-medium text-white">{selectedSlot.session.expectedDurationHours} hr(s)</span></div>
+                      <div className="flex justify-between items-center"><span className="text-slate-400 text-sm">Expiration Time</span><span className="font-bold text-rose-400">{new Date(new Date(selectedSlot.session.checkInTime).getTime() + (selectedSlot.session.expectedDurationHours || 0) * 3600000).toLocaleString('vi-VN')}</span></div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-4 h-full items-center justify-center text-center py-10 opacity-70">
+                      <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center border border-slate-700 mb-2">
+                          <span className="text-slate-500 font-bold text-2xl">P</span>
+                      </div>
+                      <p className="text-slate-400 font-bold uppercase tracking-widest">Slot is Empty</p>
+                      <p className="text-xs text-slate-500 max-w-[200px]">Ready for next incoming vehicle assignment.</p>
+                  </div>
+                )}
             </div>
            </>
         )}
