@@ -9,6 +9,7 @@ const {
   verifyRefreshToken,
 } = require('../utils/tokenUtils');
 const { generateOTP, sendOTPEmail, sendResetPasswordEmail } = require('../utils/emailUtils');
+const notifTriggers = require('../services/notificationTriggers');
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -74,6 +75,9 @@ const register = async (req, res, next) => {
       tokenValue: refreshToken,
       expiresAt: refreshExpiry,
     });
+
+    // Fire-and-forget: send welcome notification
+    notifTriggers.notifyRegistrationSuccess(req.app, user._id);
 
     res.status(201).json({
       success: true,
@@ -540,6 +544,9 @@ const verifyOTP = async (req, res, next) => {
     await user.save();
     await otpRecord.deleteOne();
 
+    // Fire-and-forget: send verification notification
+    notifTriggers.notifyEmailVerified(req.app, user._id);
+
     res.status(200).json({
       success: true,
       message: 'Email verified successfully.',
@@ -683,6 +690,9 @@ const resetPassword = async (req, res, next) => {
     // Clean up OTP and all refresh tokens (force re-login)
     await otpRecord.deleteOne();
     await UserToken.deleteMany({ userId: user._id, type: 'refresh' });
+
+    // Fire-and-forget: send password change notification
+    notifTriggers.notifyPasswordChanged(req.app, user._id);
 
     res.status(200).json({
       success: true,
