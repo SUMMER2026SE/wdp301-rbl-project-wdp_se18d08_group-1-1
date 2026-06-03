@@ -30,6 +30,7 @@
     "mongoose": "^8.15.1",
     "multer": "^2.0.1",
     "nodemailer": "^8.0.8",
+    "socket.io": "^4.8.3",
     "streamifier": "^0.1.1"
   },
   "devDependencies": {

@@ -2,6 +2,7 @@ const { validationResult } = require('express-validator');
 const payos = require('../config/payos');
 const walletService = require('../services/walletService');
 const WalletTransaction = require('../models/WalletTransaction');
+const notifTriggers = require('../services/notificationTriggers');
 
 /**
  * @desc    Get wallet info (balance, totals)
@@ -206,6 +207,11 @@ const handleWebhook = async (req, res, next) => {
           console.log(`ℹ️ OrderCode ${orderCode} already processed (idempotent)`);
         } else {
           console.log(`✅ Top-up completed - orderCode: ${orderCode}, newBalance: ${result.newBalance}`);
+
+          // Fire-and-forget: notify user of successful top-up
+          if (result.transaction && result.transaction.userId) {
+            notifTriggers.notifyTopUpSuccess(req.app, result.transaction.userId, amount, result.newBalance);
+          }
         }
       } catch (processError) {
         console.error(`❌ Error processing webhook for orderCode ${orderCode}:`, processError.message);
