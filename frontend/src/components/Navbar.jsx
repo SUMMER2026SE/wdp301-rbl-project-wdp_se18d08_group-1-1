@@ -39,6 +39,7 @@ const guestLinks = [
 const customerLinks = [
   { to: '/',            label: 'Home',         icon: Sparkles },
   { to: '/booking',     label: 'Booking',      icon: CalendarCheck },
+  { to: '/services',    label: 'Services',     icon: Settings },
   { to: '/parking-map', label: 'Parking Map',  icon: Map },
   { to: '/wallet',      label: 'Wallet',       icon: Wallet },
 ];

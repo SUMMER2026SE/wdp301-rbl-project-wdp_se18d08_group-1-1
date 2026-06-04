@@ -11,6 +11,8 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import GuestHome from "./pages/Guest/GuestHome";
 import LoginPage from "./pages/Guest/LoginPage";
 import ParkingMap from "./pages/Guest/ParkingMap";
+import ServiceList from "./pages/Guest/ServiceList";
+import ServiceDetail from "./pages/Guest/ServiceDetail";
 import OAuthCallback from "./pages/OAuthCallback";
 
 // Pages - Kiosk
@@ -21,6 +23,7 @@ import AdminDashboard from './pages/Admin/Dashboard';
 import VehicleManagement from './pages/Admin/VehicleManagement';
 import AdminProfile from './pages/Admin/AdminProfile';
 import ParkingLots from './pages/Admin/ParkingLots';
+import AdminServiceManager from "./pages/Admin/AdminServiceManager";
 
 // Pages – Staff (Manager)
 import ManagerDashboard from "./pages/Staff/Dashboard";
@@ -45,6 +48,8 @@ export default function App() {
         <Route element={<MainLayout />}>
           <Route path="/" element={<GuestHome />} />
           <Route path="/parking-map" element={<ParkingMap />} />
+          <Route path="/services" element={<ServiceList />} />
+          <Route path="/services/:id" element={<ServiceDetail />} />
           {/* /pricing, /about... thêm vào đây */}
         </Route>
 
@@ -67,6 +72,7 @@ export default function App() {
           <Route path="/admin/vehicle-models" element={<VehicleManagement />} />
           <Route path="/admin/parking-lots" element={<ParkingLots />} />
           <Route path="/admin/profile" element={<AdminProfile />} />
+          <Route path="/admin/services" element={<AdminServiceManager />} />
         </Route>
 
         {/* ══════════════════════════════════════════
