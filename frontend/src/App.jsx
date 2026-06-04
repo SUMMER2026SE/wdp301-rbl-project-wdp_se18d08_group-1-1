@@ -22,10 +22,12 @@ import AdminDashboard from './pages/Admin/Dashboard';
 import VehicleManagement from './pages/Admin/VehicleManagement';
 import AdminProfile from './pages/Admin/AdminProfile';
 import ParkingLots from './pages/Admin/ParkingLots';
+import NotificationManagement from './pages/Admin/NotificationManagement';
 
-// Pages – Staff (Manager)
-import ManagerDashboard from "./pages/Staff/Dashboard";
-import LiveGridMonitor from "./pages/Staff/LiveGridMonitor";
+
+// Pages – Staff
+import StaffDashboard from "./pages/Staff/Dashboard";
+
 
 // Pages – Customer
 import CustomerProfile from "./pages/Customer/CustomerProfile";
@@ -86,8 +88,10 @@ export default function App() {
             </ProtectedRoute>
           }
         >
-          <Route path="/staff/dashboard" element={<ManagerDashboard />} />
-          <Route path="/staff/live-grid" element={<LiveGridMonitor />} />
+
+          <Route path="/staff/dashboard" element={<StaffDashboard />} />
+          <Route path="/staff/notifications" element={<NotificationManagement />} />
+
         </Route>
 
         {/* ── Customer section ── */}
