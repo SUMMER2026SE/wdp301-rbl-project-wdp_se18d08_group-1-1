@@ -21,9 +21,10 @@ import AdminDashboard from './pages/Admin/Dashboard';
 import VehicleManagement from './pages/Admin/VehicleManagement';
 import AdminProfile from './pages/Admin/AdminProfile';
 import ParkingLots from './pages/Admin/ParkingLots';
+import NotificationManagement from './pages/Admin/NotificationManagement';
 
-// Pages – Staff (Manager)
-import ManagerDashboard from "./pages/Staff/Dashboard";
+// Pages – Staff
+import StaffDashboard from "./pages/Staff/Dashboard";
 
 // Pages – Customer
 import CustomerProfile from "./pages/Customer/CustomerProfile";
@@ -70,17 +71,18 @@ export default function App() {
         </Route>
 
         {/* ══════════════════════════════════════════
-            MANAGER section — DashboardLayout chung
-            Chỉ role "manager" được vào
+            STAFF section — DashboardLayout chung
+            Chỉ role "staff" được vào
         ══════════════════════════════════════════ */}
         <Route
           element={
-            <ProtectedRoute allowedRoles={["manager"]}>
+            <ProtectedRoute allowedRoles={["staff"]}>
               <DashboardLayout />
             </ProtectedRoute>
           }
         >
-          <Route path="/manager/dashboard" element={<ManagerDashboard />} />
+          <Route path="/staff/dashboard" element={<StaffDashboard />} />
+          <Route path="/staff/notifications" element={<NotificationManagement />} />
         </Route>
 
         {/* ── Customer section ── */}

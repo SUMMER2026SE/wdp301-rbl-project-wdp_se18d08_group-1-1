@@ -28,7 +28,6 @@ import {
   LogOut,
   Menu,
   ChevronDown,
-  Clock,
 } from "lucide-react";
 
 // ─── Nav configs per role ─────────────────────────────────────────────────────
@@ -114,6 +113,49 @@ const NAV_CONFIG = {
       to: "/manager/rates",
     },
   ],
+  staff: [
+    {
+      label: "Overview",
+      icon: <LayoutDashboard size={18} />,
+      to: "/staff/dashboard",
+    },
+    {
+      label: "Live Grid Monitor",
+      icon: <MonitorCheck size={18} />,
+      to: "/staff/live-grid",
+    },
+    { label: "Gate Control", icon: <Car size={18} />, to: "/staff/gate" },
+    {
+      label: "Occupancy Reports",
+      icon: <Gauge size={18} />,
+      to: "/staff/reports",
+    },
+    {
+      label: "Booking Management",
+      icon: <BookOpen size={18} />,
+      to: "/staff/bookings",
+    },
+    {
+      label: "Parking Violations",
+      icon: <FileWarning size={18} />,
+      to: "/staff/violations",
+    },
+    {
+      label: "Quản lý thông báo",
+      icon: <Bell size={18} />,
+      to: "/staff/notifications",
+    },
+    {
+      label: "Task Status",
+      icon: <ClipboardList size={18} />,
+      to: "/staff/tasks",
+    },
+    {
+      label: "Overtime Rates",
+      icon: <SlidersHorizontal size={18} />,
+      to: "/staff/rates",
+    },
+  ],
   customer: [
     { label: "Home", icon: <Home size={18} />, to: "/" },
     { label: "Profile", icon: <User size={18} />, to: "/profile" },
@@ -142,6 +184,14 @@ const ROLE_THEME = {
     activeHover: "hover:text-emerald-300",
     badge: { cls: "bg-emerald-900/50 text-emerald-400", label: "Manager" },
     panelLabel: "Manager Panel",
+    headerBadgeCls: "bg-emerald-500/10 border-emerald-500/20 text-emerald-400",
+  },
+  staff: {
+    accent: "from-emerald-400 to-teal-600",
+    activeBg: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+    activeHover: "hover:text-emerald-300",
+    badge: { cls: "bg-emerald-900/50 text-emerald-400", label: "Staff" },
+    panelLabel: "Staff Panel",
     headerBadgeCls: "bg-emerald-500/10 border-emerald-500/20 text-emerald-400",
   },
   customer: {
