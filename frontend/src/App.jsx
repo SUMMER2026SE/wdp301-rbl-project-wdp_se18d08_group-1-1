@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 // Layouts
 import MainLayout from "./layouts/MainLayout";
@@ -15,6 +15,7 @@ import OAuthCallback from "./pages/OAuthCallback";
 
 // Pages - Kiosk
 import KioskFlow from "./pages/Kiosk/KioskFlow";
+import KioskOutFlow from "./pages/KioskOut/KioskOutFlow";
 
 // Pages – Admin
 import AdminDashboard from './pages/Admin/Dashboard';
@@ -23,8 +24,10 @@ import AdminProfile from './pages/Admin/AdminProfile';
 import ParkingLots from './pages/Admin/ParkingLots';
 import NotificationManagement from './pages/Admin/NotificationManagement';
 
+
 // Pages – Staff
 import StaffDashboard from "./pages/Staff/Dashboard";
+
 
 // Pages – Customer
 import CustomerProfile from "./pages/Customer/CustomerProfile";
@@ -41,6 +44,10 @@ export default function App() {
       <Routes>
         {/* ── Standalone Kiosk app ── */}
         <Route path="/kiosk/*" element={<KioskFlow />} />
+        <Route path="/kiosk-out/*" element={<KioskOutFlow />} />
+        {/* Typo Catchers */}
+        <Route path="/kiost-out/*" element={<Navigate to="/kiosk-out" replace />} />
+        <Route path="/kiost/*" element={<Navigate to="/kiosk" replace />} />
 
         {/* ── Public: Navbar + Footer ── */}
         <Route element={<MainLayout />}>
@@ -81,8 +88,10 @@ export default function App() {
             </ProtectedRoute>
           }
         >
+
           <Route path="/staff/dashboard" element={<StaffDashboard />} />
           <Route path="/staff/notifications" element={<NotificationManagement />} />
+
         </Route>
 
         {/* ── Customer section ── */}

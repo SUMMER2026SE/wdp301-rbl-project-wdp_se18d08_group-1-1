@@ -2,8 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Delete } from 'lucide-react';
 
 export default function KioskStep1({ formData, updateFormData, onNext }) {
-  const [activeField, setActiveField] = useState('phone');
+  const [activeField, setActiveField] = useState('plate'); // Default to plate
   const [isScanning, setIsScanning] = useState(false);
+  const isScanningRef = useRef(false);
+  const [isVerifying, setIsVerifying] = useState(false);
   const videoRef = useRef(null);
   const streamRef = useRef(null);
 
@@ -37,7 +39,7 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
     }
     if (province && series && numbers) {
       let formattedNumbers = numbers;
-      if (numbers.length === 5) { formattedNumbers = `${numbers.slice(0,3)}.${numbers.slice(3)}`; }
+      if (numbers.length === 5) { formattedNumbers = `${numbers.slice(0, 3)}.${numbers.slice(3)}`; }
       const isMotorbike = /\d/.test(series);
       if (isMotorbike) return `${province}-${series} ${formattedNumbers}`;
       else return `${province}${series} - ${formattedNumbers}`;
@@ -47,9 +49,10 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
 
   const startSilentScan = async () => {
     setIsScanning(true);
+    isScanningRef.current = true;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } 
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
       });
       streamRef.current = stream;
       if (videoRef.current) {
@@ -57,37 +60,90 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
         await new Promise((resolve) => {
           videoRef.current.onloadedmetadata = () => {
             videoRef.current.play();
-            setTimeout(resolve, 1500); 
+            setTimeout(resolve, 1500);
           };
         });
         let success = false;
         for (let i = 0; i < 3; i++) {
+          if (!isScanningRef.current) return; // Abort if user started typing manually
+
           const rawResult = await captureAndAnalyze();
           if (rawResult && rawResult.plate) {
             const formatted = formatVietnamesePlate(rawResult.plate);
             if (formatted) {
-              updateFormData({ 
-                licensePlate: formatted,
-                entryImageBase64: rawResult.imageBase64
-              });
-              success = true;
-              break;
+              try {
+                const response = await fetch('http://localhost:5001/api/sessions/verify-plate', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ licensePlate: formatted })
+                });
+                const data = await response.json();
+
+                if (data.success && data.data.isActive) {
+                  alert('This vehicle is already inside the parking lot!');
+                  updateFormData({ licensePlate: formatted, entryImageBase64: rawResult.imageBase64 });
+                  stopCamera(); setIsScanning(false); return;
+                } else if (data.success && (data.data.isMonthly || data.data.hasPreBooking)) {
+                  updateFormData({
+                    licensePlate: formatted, entryImageBase64: rawResult.imageBase64,
+                    isMonthly: data.data.isMonthly, hasPreBooking: data.data.hasPreBooking, selectedSlot: data.data.assignedSlot
+                  });
+                  stopCamera(); setIsScanning(false); onNext('fastpass'); return;
+                } else if (data.success && data.data.isVIP) {
+                  updateFormData({
+                    licensePlate: formatted,
+                    entryImageBase64: rawResult.imageBase64,
+                    phone: data.data.phone || formData.phone,
+                    isVIP: true
+                  });
+                  stopCamera(); setIsScanning(false); onNext('2'); return;
+                } else if (data.success && data.data.isKnownGuest && data.data.phone && data.data.phone.length >= 10) {
+                  updateFormData({
+                    licensePlate: formatted,
+                    entryImageBase64: rawResult.imageBase64,
+                    phone: data.data.phone
+                  });
+                  stopCamera(); setIsScanning(false); onNext('2'); return;
+                } else {
+                  // Guest -> Auto-fill plate and phone (if known), but stay on Step 1
+                  updateFormData({
+                    licensePlate: formatted,
+                    entryImageBase64: rawResult.imageBase64,
+                    phone: data.data.phone || formData.phone
+                  });
+                  if (!data.data.phone || data.data.phone.length < 10) {
+                    setActiveField('phone'); // focus phone so they can type it
+                  }
+                  success = true;
+                  break;
+                }
+              } catch (e) {
+                console.error("verify-plate error", e);
+                updateFormData({ licensePlate: formatted, entryImageBase64: rawResult.imageBase64 });
+                setActiveField('phone');
+                success = true;
+                break;
+              }
             }
           }
           await new Promise(r => setTimeout(r, 1000));
         }
+
+        if (!isScanningRef.current) return; // Abort if user started typing manually
+
         if (!success) {
           updateFormData({ licensePlate: '' }); // Let user type manually
         }
         stopCamera();
         setIsScanning(false);
+        isScanningRef.current = false;
       }
     } catch (err) {
       console.error("Camera access error:", err);
-      // Fallback
       updateFormData({ licensePlate: '' });
       stopCamera();
       setIsScanning(false);
+      isScanningRef.current = false;
     }
   };
 
@@ -100,13 +156,13 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
       const ctx = canvas.getContext('2d');
       ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
       const imageBase64 = canvas.toDataURL('image/jpeg', 0.8);
-      
+
       const response = await fetch('http://localhost:5001/api/ai/scan-plate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: imageBase64 })
       });
-      
+
       const data = await response.json();
       if (response.ok && data.success && data.plate) {
         return { plate: data.plate, imageBase64 };
@@ -120,11 +176,11 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
   const handleKeyClick = (key) => {
     if (activeField === 'phone') {
       const currentPhone = formData.phone || '';
-      
+
       // Validation for Vietnamese mobile phone numbers
       if (currentPhone.length === 0 && key !== '0') return; // Must start with 0
       if (currentPhone.length === 1 && !['3', '5', '7', '8', '9'].includes(key)) return; // Valid 2nd digits
-      
+
       if (currentPhone.length < 10) {
         updateFormData({ phone: currentPhone + key });
       }
@@ -133,13 +189,14 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
         const currentRaw = (formData.licensePlate || '') + key;
         const clean = currentRaw.replace(/[^A-Z0-9]/g, '');
         const formatted = formatVietnamesePlate(clean);
-        
+
         if (formatted) {
           updateFormData({ licensePlate: formatted });
         } else {
           updateFormData({ licensePlate: currentRaw.toUpperCase() });
         }
         setIsScanning(false);
+        isScanningRef.current = false;
       }
     }
   };
@@ -154,8 +211,8 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
 
   const handleSpace = () => {
     if (activeField === 'plate') {
-       updateFormData({ licensePlate: (formData.licensePlate || '') + ' ' });
-       setIsScanning(false);
+      updateFormData({ licensePlate: (formData.licensePlate || '') + ' ' });
+      setIsScanning(false);
     }
   };
 
@@ -194,10 +251,10 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
   );
 
   const qwertyRows = [
-    ['1','2','3','4','5','6','7','8','9','0'],
-    ['Q','W','E','R','T','Y','U','I','O','P'],
-    ['A','S','D','F','G','H','J','K','L'],
-    ['Z','X','C','V','B','N','M','-','.']
+    ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'],
+    ['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
+    ['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
+    ['Z', 'X', 'C', 'V', 'B', 'N', 'M', '-', '.']
   ];
 
   const renderKeyboard = () => (
@@ -214,12 +271,12 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
             </button>
           ))}
           {i === 3 && (
-             <button
-               onClick={handleDelete}
-               className="bg-white border-2 border-[#0f172a] text-[#0f172a] text-sm font-bold rounded-lg h-[44px] px-3 flex items-center justify-center active:bg-gray-100 active:scale-95 transition-all shadow-sm ml-1"
-             >
-               <Delete size={20} strokeWidth={2} />
-             </button>
+            <button
+              onClick={handleDelete}
+              className="bg-white border-2 border-[#0f172a] text-[#0f172a] text-sm font-bold rounded-lg h-[44px] px-3 flex items-center justify-center active:bg-gray-100 active:scale-95 transition-all shadow-sm ml-1"
+            >
+              <Delete size={20} strokeWidth={2} />
+            </button>
           )}
         </div>
       ))}
@@ -234,6 +291,44 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
     </div>
   );
 
+  const handleManualNext = async () => {
+    setIsVerifying(true);
+    try {
+      const response = await fetch('http://localhost:5001/api/sessions/verify-plate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ licensePlate: formData.licensePlate })
+      });
+      const data = await response.json();
+
+      if (data.success && data.data.isActive) {
+        alert('This vehicle is already inside the parking lot!');
+        setIsVerifying(false);
+        return;
+      }
+      else if (data.success && (data.data.isMonthly || data.data.hasPreBooking)) {
+        updateFormData({
+          isMonthly: data.data.isMonthly,
+          hasPreBooking: data.data.hasPreBooking,
+          selectedSlot: data.data.assignedSlot
+        });
+        setIsVerifying(false);
+        onNext('fastpass');
+      }
+      else {
+        if (data.success && data.data.isVIP) {
+          updateFormData({ isVIP: true });
+        }
+        setIsVerifying(false);
+        onNext('2');
+      }
+    } catch (e) {
+      console.error("verify-plate backend error", e);
+      setIsVerifying(false);
+      onNext('2');
+    }
+  };
+
   return (
     <div className="flex flex-col items-center justify-center flex-1 w-full max-w-[650px] mx-auto pb-4">
       {/* Hidden Video for silent scanning */}
@@ -241,14 +336,15 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
 
       {/* ─── Yellow Card Container (Flat & Soft) ─── */}
       <div className="bg-[#FFDF00] w-full rounded-[32px] py-6 px-4 sm:px-8 flex flex-col items-center transition-all duration-500">
-        
+
         {/* License Plate Field */}
         <div className="w-full text-center mb-4">
           <label className="block text-xs font-bold text-[#0f172a] tracking-widest mb-2 uppercase">
             License Plate Number
             {isScanning && <span className="ml-2 text-red-500 animate-pulse font-normal lowercase tracking-normal">(camera scanning...)</span>}
+            {isVerifying && <span className="ml-2 text-blue-500 animate-pulse font-normal lowercase tracking-normal">(verifying...)</span>}
           </label>
-          <div 
+          <div
             className={`relative bg-white rounded-2xl h-[60px] flex items-center justify-center w-[90%] mx-auto transition-all border-2 cursor-pointer ${activeField === 'plate' ? 'border-[#0f172a] shadow-[0_4px_15px_rgba(0,0,0,0.05)]' : 'border-transparent'}`}
             onClick={() => setActiveField('plate')}
           >
@@ -262,7 +358,7 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
         </div>
 
         {/* Phone Number Field */}
-        <div className="w-full text-center mb-5">
+        <div className="w-full text-center mb-5 animate-in fade-in slide-in-from-top-4 duration-500">
           <label className="block text-xs font-bold text-[#0f172a] tracking-widest mb-2 uppercase">Enter Phone</label>
           <div
             className={`relative bg-white rounded-2xl h-[60px] flex items-center justify-center px-6 w-[90%] mx-auto transition-all border-2 cursor-pointer ${activeField === 'phone' ? 'border-[#0f172a] shadow-[0_4px_15px_rgba(0,0,0,0.05)]' : 'border-transparent'}`}
@@ -288,13 +384,12 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
 
       {/* Next Step Button */}
       <button
-        onClick={onNext}
-        disabled={(formData.phone || '').length !== 10 || isScanning}
-        className={`mt-6 mb-2 font-bold text-[18px] px-16 py-[16px] rounded-full transition-all border-2 ${
-          ((formData.phone || '').length !== 10 || isScanning || !(formData.licensePlate || ''))
-            ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
-            : 'bg-[#0f172a] border-[#0f172a] text-white hover:bg-black shadow-[0_10px_20px_rgba(0,0,0,0.2)] active:scale-95'
-        }`}
+        onClick={handleManualNext}
+        disabled={((formData.phone || '').length !== 10) || isScanning || isVerifying || !(formData.licensePlate || '')}
+        className={`mt-6 mb-2 font-bold text-[18px] px-16 py-[16px] rounded-full transition-all border-2 ${(((formData.phone || '').length !== 10) || isScanning || isVerifying || !(formData.licensePlate || ''))
+          ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
+          : 'bg-[#0f172a] border-[#0f172a] text-white hover:bg-black shadow-[0_10px_20px_rgba(0,0,0,0.2)] active:scale-95'
+          }`}
       >
         Next step
       </button>
