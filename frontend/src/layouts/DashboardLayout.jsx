@@ -29,6 +29,7 @@ import {
   Menu,
   ChevronDown,
   Clock,
+  History,
 } from "lucide-react";
 
 // ─── Nav configs per role ─────────────────────────────────────────────────────
@@ -118,6 +119,7 @@ const NAV_CONFIG = {
     { label: "Home", icon: <Home size={18} />, to: "/" },
     { label: "Profile", icon: <User size={18} />, to: "/profile" },
     { label: "My Vehicles", icon: <Car size={18} />, to: "/customer/vehicles" },
+    { label: "History", icon: <History size={18} />, to: "/customer/history" },
     { label: "Wallet", icon: <Wallet size={18} />, to: "/customer/wallet" },
     {
       label: "Settings",
