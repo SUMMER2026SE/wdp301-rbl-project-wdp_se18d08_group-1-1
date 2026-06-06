@@ -7,6 +7,8 @@ const dotenv = require('dotenv');
 const connectDB = require('./config/db');
 const errorHandler = require('./middlewares/errorHandler');
 const { setupNotificationSocket } = require('./sockets/notificationSocket');
+const { startScheduler } = require('./services/parkingScheduler');
+const { seedRules } = require('./seeds/notificationRuleSeeder');
 
 // Load env variables
 dotenv.config();
@@ -94,6 +96,14 @@ const startServer = async () => {
       console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
       console.log(`🔗 Health check: http://localhost:${PORT}/api/health`);
       console.log(`🔌 Socket.IO ready`);
+
+      // Start parking session scheduler
+      startScheduler(app);
+
+      // Seed default notification rules (upsert, won't overwrite existing)
+      seedRules().catch(err => {
+        console.error('⚠️ Auto-seed notification rules failed:', err.message);
+      });
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error.message);

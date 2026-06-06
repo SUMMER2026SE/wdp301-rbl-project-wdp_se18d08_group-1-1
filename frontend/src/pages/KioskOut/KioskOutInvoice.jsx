@@ -1,14 +1,15 @@
-import { useState, useEffect } from 'react';
-import { Camera, Clock, CreditCard, ChevronRight, AlertTriangle, Wallet, Image as ImageIcon } from 'lucide-react';
+import { useCallback, useState, useEffect } from 'react';
+import { Camera, Clock, ChevronRight, AlertTriangle, Wallet, Image as ImageIcon } from 'lucide-react';
 import { QRCodeSVG as QRCode } from 'qrcode.react';
+import { API_BASE } from '../../services/api';
 
 export default function KioskOutInvoice({ sessionData, exitImage, onCheckoutSuccess, onBack }) {
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const handleCheckout = async (paymentMethod) => {
+  const handleCheckout = useCallback(async (paymentMethod) => {
     setIsProcessing(true);
     try {
-      const res = await fetch('http://localhost:5001/api/sessions/kiosk-checkout', {
+      const res = await fetch(`${API_BASE}/sessions/kiosk-checkout`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -28,14 +29,15 @@ export default function KioskOutInvoice({ sessionData, exitImage, onCheckoutSucc
       console.error(err);
       setIsProcessing(false);
     }
-  };
+  }, [exitImage, onCheckoutSuccess, sessionData]);
 
   useEffect(() => {
     // If AutoPay is allowed, auto-trigger checkout
     if (sessionData && sessionData.canAutoPay) {
-      handleCheckout('wallet');
+      const timerId = setTimeout(() => handleCheckout('wallet'), 0);
+      return () => clearTimeout(timerId);
     }
-  }, [sessionData]);
+  }, [handleCheckout, sessionData]);
 
   if (!sessionData) {
     return (

@@ -22,7 +22,7 @@ const notificationSchema = new mongoose.Schema(
     },
     priority: {
       type: String,
-      enum: ['INFO', 'SUCCESS', 'WARNING', 'ERROR'],
+      enum: ['INFO', 'SUCCESS', 'WARNING', 'ERROR', 'SYSTEM'],
       default: 'INFO',
     },
     targetType: {
@@ -49,6 +49,32 @@ const notificationSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    adminReadBy: [
+      {
+        userId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
+          required: true,
+        },
+        readAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
+    adminDeletedBy: [
+      {
+        userId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User',
+          required: true,
+        },
+        deletedAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
   },
   {
     timestamps: true,

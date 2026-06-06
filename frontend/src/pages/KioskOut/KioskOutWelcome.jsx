@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState } from 'react';
 import { Camera, ScanLine, Car, AlertCircle } from 'lucide-react';
+import { API_BASE } from '../../services/api';
 
 export default function KioskOutWelcome({ onScanSuccess }) {
   const videoRef = useRef(null);
@@ -40,7 +41,7 @@ export default function KioskOutWelcome({ onScanSuccess }) {
   const handlePlateDetected = async (plate, imageBase64) => {
     try {
       setErrorMessage(''); // clear previous errors
-      const res = await fetch('http://localhost:5001/api/sessions/kiosk-exit-scan', {
+      const res = await fetch(`${API_BASE}/sessions/kiosk-exit-scan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ licensePlate: plate })
@@ -92,7 +93,7 @@ export default function KioskOutWelcome({ onScanSuccess }) {
       ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
       const imageBase64 = canvas.toDataURL('image/jpeg', 0.8);
 
-      const response = await fetch('http://localhost:5001/api/ai/scan-plate', {
+      const response = await fetch(`${API_BASE}/ai/scan-plate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: imageBase64 })
@@ -142,6 +143,8 @@ export default function KioskOutWelcome({ onScanSuccess }) {
     return () => {
       if (interval) clearInterval(interval);
     };
+    // Scanner loop intentionally captures the current handlers for this mounted camera session.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [streamError]);
 
   // Manual fallback for Tester

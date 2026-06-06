@@ -1,20 +1,20 @@
-import { useMemo, useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Bell,
   Send,
   Calendar,
   FileText,
   Zap,
-  Users,
   Globe,
 } from "lucide-react";
-import { useNotificationStore } from "../../lib/notifications/store";
+import { useSocket } from "../../contexts/SocketProvider";
 import LiveFeed from "./notifications/LiveFeed";
 import ComposeForm from "./notifications/ComposeForm";
 import ScheduledList from "./notifications/ScheduledList";
 import TemplateManager from "./notifications/TemplateManager";
 import AutoRulesTable from "./notifications/AutoRulesTable";
-import { PRIORITY_META } from "../../lib/notifications/types";
+import { DEFAULT_TEMPLATES } from "../../lib/notifications/types";
+import * as notifApi from "../../services/notificationService";
 
 const TABS = [
   { key: "live", label: "Phát sóng trực tiếp", icon: Bell },
@@ -25,29 +25,207 @@ const TABS = [
 ];
 
 export default function NotificationManagement() {
+  const socket = useSocket();
   const [activeTab, setActiveTab] = useState("live");
-  const notifications = useNotificationStore((state) => state.notifications);
-  const scheduled = useNotificationStore((state) => state.scheduled);
-  const templates = useNotificationStore((state) => state.templates);
-  const autoRules = useNotificationStore((state) => state.autoRules);
-  const markRead = useNotificationStore((state) => state.markRead);
-  const markAllRead = useNotificationStore((state) => state.markAllRead);
-  const addNotification = useNotificationStore((state) => state.addNotification);
-  const scheduleNotification = useNotificationStore(
-    (state) => state.scheduleNotification,
-  );
-  const removeScheduled = useNotificationStore((state) => state.removeScheduled);
-  const addTemplate = useNotificationStore((state) => state.addTemplate);
-  const updateTemplate = useNotificationStore((state) => state.updateTemplate);
-  const deleteTemplate = useNotificationStore((state) => state.deleteTemplate);
-  const updateAutoRule = useNotificationStore((state) => state.updateAutoRule);
-  const triggerAutoEvent = useNotificationStore((state) => state.triggerAutoEvent);
-  const syncOnReconnect = useNotificationStore((state) => state.syncOnReconnect);
 
-  const unreadCount = useMemo(
-    () => notifications.filter((item) => !item.read).length,
-    [notifications],
-  );
+  const [liveNotifications, setLiveNotifications] = useState([]);
+  const [autoRules, setAutoRules] = useState([]);
+  const [scheduled, setScheduled] = useState([]);
+  const [templates, setTemplates] = useState(DEFAULT_TEMPLATES);
+
+  const fetchLiveFeed = useCallback(async () => {
+    try {
+      const res = await notifApi.getAdminHistory({ page: 1, limit: 50 });
+      if (res.ok && res.data) {
+        const items = (res.data.data || []).map((n) => ({
+          id: n._id,
+          title: n.title,
+          message: n.content,
+          priority: n.priority,
+          type: n.type,
+          target: {
+            type: n.targetType === "ALL_USERS" ? "all" :
+                  n.targetType === "MULTI_USER" ? "multi" : "single",
+          },
+          channels: ["In-app"],
+          eventKey: n.metadata?.eventType || null,
+          createdAt: n.createdAt,
+          read: Boolean(n.isRead),
+          metadata: n.metadata || {},
+          createdBy: n.createdBy,
+          targetUsers: n.targetUsers,
+        }));
+        setLiveNotifications(items);
+      }
+    } catch (err) {
+      console.error("Failed to fetch live feed:", err);
+    }
+  }, []);
+
+  const fetchAutoRules = useCallback(async () => {
+    try {
+      const res = await notifApi.getAutoRules();
+      if (res.ok && res.data) {
+        const rules = (res.data.data || []).map((r) => ({
+          eventKey: r.eventKey,
+          group: r.group,
+          name: r.name,
+          description: r.description,
+          priority: r.priority,
+          enabled: r.enabled,
+          channels: r.channels || [],
+          throttleMinutes: r.throttleMinutes || 10,
+          lastTriggeredAt: r.lastTriggeredAt,
+        }));
+        setAutoRules(rules);
+      }
+    } catch (err) {
+      console.error("Failed to fetch auto rules:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timerId = setTimeout(() => {
+      if (activeTab === "live") fetchLiveFeed();
+      if (activeTab === "rules") fetchAutoRules();
+    }, 0);
+
+    return () => clearTimeout(timerId);
+  }, [activeTab, fetchLiveFeed, fetchAutoRules]);
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleAdminNotification = () => {
+      fetchLiveFeed();
+    };
+
+    socket.on("notification:admin:new", handleAdminNotification);
+
+    return () => {
+      socket.off("notification:admin:new", handleAdminNotification);
+    };
+  }, [socket, fetchLiveFeed]);
+
+  const handleMarkRead = useCallback(async (id) => {
+    setLiveNotifications((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, read: true } : item))
+    );
+
+    try {
+      const res = await notifApi.markAdminHistoryAsRead(id);
+      if (!res.ok) fetchLiveFeed();
+    } catch (err) {
+      console.error("Failed to mark admin notification as read:", err);
+      fetchLiveFeed();
+    }
+  }, [fetchLiveFeed]);
+
+  const handleMarkAllRead = useCallback(async () => {
+    setLiveNotifications((prev) => prev.map((item) => ({ ...item, read: true })));
+
+    try {
+      const res = await notifApi.markAllAdminHistoryAsRead();
+      if (!res.ok) fetchLiveFeed();
+    } catch (err) {
+      console.error("Failed to mark all admin notifications as read:", err);
+      fetchLiveFeed();
+    }
+  }, [fetchLiveFeed]);
+
+  const handleUpdateAutoRule = useCallback(async (eventKey, patch) => {
+    setAutoRules((prev) =>
+      prev.map((r) => (r.eventKey === eventKey ? { ...r, ...patch } : r))
+    );
+    try {
+      const res = await notifApi.updateAutoRule(eventKey, patch);
+      if (!res.ok) fetchAutoRules();
+    } catch (err) {
+      console.error("Failed to update auto rule:", err);
+      fetchAutoRules();
+    }
+  }, [fetchAutoRules]);
+
+  const handleTestAutoRule = useCallback(async (eventKey) => {
+    try {
+      const res = await notifApi.testAutoRule(eventKey);
+      if (res.ok) {
+        fetchLiveFeed();
+        fetchAutoRules();
+      }
+    } catch (err) {
+      console.error("Failed to test auto rule:", err);
+    }
+  }, [fetchAutoRules, fetchLiveFeed]);
+
+  const handleSendNotification = useCallback(async (payload) => {
+    try {
+      const targetMap = {
+        all: "ALL_USERS",
+        single: "SINGLE_USER",
+        multi: "MULTI_USER",
+      };
+
+      const apiPayload = {
+        title: payload.title,
+        content: payload.message,
+        type: "SYSTEM",
+        priority: payload.priority || "INFO",
+        targetType: targetMap[payload.target?.type] || "ALL_USERS",
+        targetUsers: payload.target?.type === "single"
+          ? [payload.target.value]
+          : payload.target?.type === "multi"
+          ? (payload.target.value || "").split(",").map((s) => s.trim()).filter(Boolean)
+          : [],
+      };
+
+      const res = await notifApi.createNotification(apiPayload);
+      if (res.ok) {
+        fetchLiveFeed();
+      } else {
+        console.error("Failed to send notification:", res.data);
+      }
+    } catch (err) {
+      console.error("Failed to send notification:", err);
+    }
+  }, [fetchLiveFeed]);
+
+  const scheduleNotification = useCallback((payload) => {
+    setScheduled((prev) => [
+      {
+        ...payload,
+        id: `scheduled_${Date.now()}`,
+        createdAt: new Date().toISOString(),
+      },
+      ...prev,
+    ]);
+  }, []);
+
+  const removeScheduled = useCallback((id) => {
+    setScheduled((prev) => prev.filter((item) => item.id !== id));
+  }, []);
+
+  const addTemplate = useCallback((template) => {
+    setTemplates((prev) => [
+      ...prev,
+      {
+        ...template,
+        id: `tmpl_${Date.now()}`,
+      },
+    ]);
+  }, []);
+
+  const updateTemplate = useCallback((id, patch) => {
+    setTemplates((prev) =>
+      prev.map((template) => (template.id === id ? { ...template, ...patch } : template))
+    );
+  }, []);
+
+  const deleteTemplate = useCallback((id) => {
+    setTemplates((prev) => prev.filter((template) => template.id !== id));
+  }, []);
+
+  const unreadCount = liveNotifications.filter((item) => !item.read).length;
 
   return (
     <div className="min-h-screen bg-[#1A1A1A] text-gray-100 px-4 py-6 lg:px-8">
@@ -76,7 +254,7 @@ export default function NotificationManagement() {
               </div>
               <button
                 type="button"
-                onClick={syncOnReconnect}
+                onClick={fetchLiveFeed}
                 className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500/15 px-4 py-3 text-sm font-semibold text-emerald-200 ring-1 ring-emerald-500/20 hover:bg-emerald-500/20"
               >
                 <Globe size={16} />
@@ -112,15 +290,15 @@ export default function NotificationManagement() {
         <div className="rounded-3xl border border-white/5 bg-white/5 p-6 shadow-xl shadow-black/20">
           {activeTab === "live" && (
             <LiveFeed
-              notifications={notifications}
-              onMarkRead={markRead}
-              onMarkAllRead={markAllRead}
+              notifications={liveNotifications}
+              onMarkRead={handleMarkRead}
+              onMarkAllRead={handleMarkAllRead}
             />
           )}
           {activeTab === "compose" && (
             <ComposeForm
               templates={templates}
-              onSend={addNotification}
+              onSend={handleSendNotification}
               onSchedule={scheduleNotification}
             />
           )}
@@ -141,8 +319,8 @@ export default function NotificationManagement() {
           {activeTab === "rules" && (
             <AutoRulesTable
               rules={autoRules}
-              onUpdate={updateAutoRule}
-              onTest={triggerAutoEvent}
+              onUpdate={handleUpdateAutoRule}
+              onTest={handleTestAutoRule}
             />
           )}
         </div>

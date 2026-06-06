@@ -34,6 +34,7 @@ import CustomerProfile from "./pages/Customer/CustomerProfile";
 import MyVehicles from "./pages/Customer/MyVehicles";
 import WalletPage from "./pages/Wallet/WalletPage";
 import ParkingHistory from "./pages/Customer/ParkingHistory";
+import CustomerNotifications from "./pages/Customer/CustomerNotifications";
 
 // Misc
 import UnauthorizedPage from "./pages/UnauthorizedPage";
@@ -106,6 +107,7 @@ export default function App() {
           <Route path="/customer/vehicles" element={<MyVehicles />} />
           <Route path="/customer/wallet" element={<WalletPage />} />
           <Route path="/customer/history" element={<ParkingHistory />} />
+          <Route path="/customer/notifications" element={<CustomerNotifications />} />
         </Route>
 
         {/* ── 403 ── */}

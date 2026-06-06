@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { useState } from 'react';
+import { Routes, Route, useNavigate } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import KioskWelcome from './KioskWelcome';
 import KioskStep1 from './KioskStep1';
@@ -7,10 +7,10 @@ import KioskStep2 from './KioskStep2';
 import KioskStep3 from './KioskStep3';
 import KioskFastPass from './KioskFastPass';
 import KioskLayout from './KioskLayout';
+import { API_BASE } from '../../services/api';
 
 export default function KioskFlow() {
   const navigate = useNavigate();
-  const location = useLocation();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successSession, setSuccessSession] = useState(null); // stores the successful session data
 
@@ -41,7 +41,7 @@ export default function KioskFlow() {
   const handleConfirm = async () => {
     setIsSubmitting(true);
     try {
-      const response = await fetch('http://localhost:5001/api/sessions/kiosk-entry', {
+      const response = await fetch(`${API_BASE}/sessions/kiosk-entry`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
