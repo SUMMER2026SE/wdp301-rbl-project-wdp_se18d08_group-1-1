@@ -69,7 +69,7 @@ const DEFAULT_RULES = [
     description: 'Khi nạp tiền vào ví thành công.',
     priority: 'SUCCESS',
     enabled: true,
-    channels: ['In-app'],
+    channels: ['In-app', 'Email'],
     throttleMinutes: 5,
   },
   {
@@ -89,7 +89,7 @@ const DEFAULT_RULES = [
     description: 'Khi thanh toán phí đỗ xe thành công.',
     priority: 'SUCCESS',
     enabled: true,
-    channels: ['In-app'],
+    channels: ['In-app', 'Email'],
     throttleMinutes: 5,
   },
   {
@@ -181,7 +181,7 @@ const DEFAULT_RULES = [
     description: 'Phiên đỗ xe đã hết hạn.',
     priority: 'ERROR',
     enabled: true,
-    channels: ['In-app', 'Push', 'SMS'],
+    channels: ['In-app', 'Email', 'Push', 'SMS'],
     throttleMinutes: 10,
   },
 
@@ -193,7 +193,7 @@ const DEFAULT_RULES = [
     description: 'Khi khách hàng quá giờ check-in đặt chỗ.',
     priority: 'WARNING',
     enabled: true,
-    channels: ['In-app'],
+    channels: ['In-app', 'Email'],
     throttleMinutes: 15,
   },
   {
@@ -235,7 +235,7 @@ const DEFAULT_RULES = [
     description: 'Thông báo phiên bản mới.',
     priority: 'INFO',
     enabled: true,
-    channels: ['In-app'],
+    channels: ['In-app', 'Email'],
     throttleMinutes: 120,
   },
 ];

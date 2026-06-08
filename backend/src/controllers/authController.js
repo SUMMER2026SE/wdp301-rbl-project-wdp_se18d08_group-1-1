@@ -9,6 +9,7 @@ const {
   verifyRefreshToken,
 } = require('../utils/tokenUtils');
 const { generateOTP, sendOTPEmail, sendResetPasswordEmail } = require('../utils/emailUtils');
+const { buildOtpAutofillHint, getOtpAutofillConfig } = require('../utils/otpAutofillUtils');
 const notifTriggers = require('../services/notificationTriggers');
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -477,6 +478,27 @@ const sendOTP = async (req, res, next) => {
     res.status(200).json({
       success: true,
       message: 'OTP sent to your email. It will expire in 10 minutes.',
+      data: {
+        expiresIn: 600,
+        autofillHint: buildOtpAutofillHint(),
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get OTP autofill metadata for web clients
+ * @route   GET /api/auth/otp-config
+ * @access  Public
+ */
+const getOTPConfig = async (req, res, next) => {
+  try {
+    res.status(200).json({
+      success: true,
+      message: 'OTP autofill config retrieved successfully.',
+      data: getOtpAutofillConfig(),
     });
   } catch (error) {
     next(error);
@@ -711,6 +733,7 @@ module.exports = {
   getMe,
   googleLogin,
   sendOTP,
+  getOTPConfig,
   verifyOTP,
   forgotPassword,
   verifyResetPasswordOTP,
