@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Plus, Edit, Copy, Trash2, X } from "lucide-react";
 import ParkingLotsBuilder from "./ParkingLotsBuilder/ParkingLotsBuilder";
 import ParkingMapGrid from "../../components/ParkingMapGrid";
@@ -22,7 +22,7 @@ export default function ParkingLots() {
 
   const currentFloor = floors.find(f => f._id === currentFloorId);
 
-  const seedDefaultFloor = async () => {
+  const seedDefaultFloor = useCallback(async () => {
     const defaultLayout = {
       width: 1000,
       height: 600,
@@ -41,9 +41,9 @@ export default function ParkingLots() {
       ]
     };
     await createFloor({ floorNumber: 1, name: "Floor 1", layoutData: defaultLayout });
-  };
+  }, []);
 
-  const fetchFloors = async () => {
+  const fetchFloors = useCallback(async () => {
     setLoading(true);
     try {
       const res = await getAllFloors();
@@ -62,11 +62,14 @@ export default function ParkingLots() {
       console.error(e);
     }
     setLoading(false);
-  };
+  }, [seedDefaultFloor]);
 
   useEffect(() => {
-    fetchFloors();
-  }, []);
+    const timer = setTimeout(() => {
+      fetchFloors();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [fetchFloors]);
 
   const handleCreateFloor = async () => {
     const floorNumber = floors.length + 1;

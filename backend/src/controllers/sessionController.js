@@ -3,6 +3,8 @@ const UserDetail = require('../models/UserDetail');
 const User = require('../models/User');
 const cloudinary = require('../config/cloudinary');
 const { sendKioskCheckInEmail, sendCheckoutEmail } = require('../utils/emailUtils');
+const notifTriggers = require('../services/notificationTriggers');
+const { LOW_BALANCE_THRESHOLD } = require('../services/parkingScheduler');
 
 /**
  * Verify license plate to auto-fill phone or skip steps
@@ -177,6 +179,13 @@ exports.createKioskSession = async (req, res, next) => {
         vehicleType: newSession.vehicleType
       }).then(() => console.log('Email sent successfully!'))
         .catch(err => console.error('Failed to send Kiosk check-in email:', err));
+    }
+
+    // Fire-and-forget: send vehicle entry notification
+    if (userId) {
+      notifTriggers.notifyVehicleEntry(
+        req.app, userId, licensePlate, parkingSlot || 'N/A'
+      ).catch(err => console.error('Failed to send entry notification:', err));
     }
 
     res.status(201).json({
@@ -368,6 +377,31 @@ exports.kioskCheckout = async (req, res, next) => {
         }
       } catch (err) {
         console.error('Error fetching user for checkout email:', err);
+      }
+
+      // Fire-and-forget: send vehicle exit + payment notifications
+      const uid = session.userId._id || session.userId;
+      notifTriggers.notifyVehicleExit(
+        req.app, uid, session.licensePlate, totalPrice
+      ).catch(err => console.error('Failed to send exit notification:', err));
+
+      if (paymentMethod === 'wallet') {
+        notifTriggers.notifyPaymentSuccess(
+          req.app, uid, totalPrice, session._id.toString()
+        ).catch(err => console.error('Failed to send payment notification:', err));
+
+        // Check low balance after payment
+        try {
+          const { getBalance } = require('../services/walletService');
+          const walletData = await getBalance(uid);
+          if (walletData.balance < LOW_BALANCE_THRESHOLD) {
+            notifTriggers.notifyLowBalance(
+              req.app, uid, walletData.balance
+            ).catch(err => console.error('Failed to send low balance notification:', err));
+          }
+        } catch (balErr) {
+          console.error('Error checking balance after payment:', balErr);
+        }
       }
     }
 

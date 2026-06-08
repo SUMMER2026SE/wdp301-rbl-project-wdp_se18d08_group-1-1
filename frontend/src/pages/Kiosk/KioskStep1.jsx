@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Delete } from 'lucide-react';
+import { API_BASE } from '../../services/api';
 
 export default function KioskStep1({ formData, updateFormData, onNext }) {
   const [activeField, setActiveField] = useState('plate'); // Default to plate
@@ -8,13 +9,6 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
   const [isVerifying, setIsVerifying] = useState(false);
   const videoRef = useRef(null);
   const streamRef = useRef(null);
-
-  useEffect(() => {
-    if (!formData.licensePlate || formData.licensePlate === 'SCANNING...' || formData.licensePlate === 'TAP TO ENTER') {
-      startSilentScan();
-    }
-    return () => stopCamera();
-  }, []);
 
   const stopCamera = () => {
     if (streamRef.current) {
@@ -72,7 +66,7 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
             const formatted = formatVietnamesePlate(rawResult.plate);
             if (formatted) {
               try {
-                const response = await fetch('http://localhost:5001/api/sessions/verify-plate', {
+                const response = await fetch(`${API_BASE}/sessions/verify-plate`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ licensePlate: formatted })
@@ -157,7 +151,7 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
       ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
       const imageBase64 = canvas.toDataURL('image/jpeg', 0.8);
 
-      const response = await fetch('http://localhost:5001/api/ai/scan-plate', {
+      const response = await fetch(`${API_BASE}/ai/scan-plate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: imageBase64 })
@@ -172,6 +166,19 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
     }
     return null;
   };
+
+  useEffect(() => {
+    let timerId = null;
+    if (!formData.licensePlate || formData.licensePlate === 'SCANNING...' || formData.licensePlate === 'TAP TO ENTER') {
+      timerId = setTimeout(startSilentScan, 0);
+    }
+    return () => {
+      if (timerId) clearTimeout(timerId);
+      stopCamera();
+    };
+    // Run once on mount; scanner owns its async lifecycle through refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleKeyClick = (key) => {
     if (activeField === 'phone') {
@@ -196,7 +203,6 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
           updateFormData({ licensePlate: currentRaw.toUpperCase() });
         }
         setIsScanning(false);
-        isScanningRef.current = false;
       }
     }
   };
@@ -294,7 +300,7 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
   const handleManualNext = async () => {
     setIsVerifying(true);
     try {
-      const response = await fetch('http://localhost:5001/api/sessions/verify-plate', {
+      const response = await fetch(`${API_BASE}/sessions/verify-plate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ licensePlate: formData.licensePlate })

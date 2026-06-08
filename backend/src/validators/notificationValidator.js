@@ -57,6 +57,10 @@ const queryNotificationValidator = [
     .optional()
     .isLength({ max: 100 })
     .withMessage('Search query must not exceed 100 characters'),
+  query('priority')
+    .optional()
+    .isIn(['INFO', 'SUCCESS', 'WARNING', 'ERROR', 'SYSTEM'])
+    .withMessage('Invalid priority'),
 ];
 
 module.exports = {
