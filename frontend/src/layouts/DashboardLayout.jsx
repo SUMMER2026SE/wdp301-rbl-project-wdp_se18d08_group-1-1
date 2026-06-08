@@ -83,6 +83,11 @@ const NAV_CONFIG = {
       to: "/staff/dashboard",
     },
     {
+      label: "Customer Management",
+      icon: <Users size={18} />,
+      to: "/staff/accounts",
+    },
+    {
       label: "Session Management",
       icon: <MonitorCheck size={18} />,
       to: "/staff/sessions",

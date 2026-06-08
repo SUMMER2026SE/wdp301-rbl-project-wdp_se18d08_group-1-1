@@ -28,6 +28,7 @@ import AccountManagement from './pages/Admin/AccountManagement';
 import StaffDashboard from "./pages/Staff/Dashboard";
 import StaffProfile from "./pages/Staff/StaffProfile";
 import StaffSessionManagement from "./pages/Staff/SessionManagement";
+import StaffAccountManagement from "./pages/Staff/AccountManagement";
 
 // Pages – Customer
 import CustomerProfile from "./pages/Customer/CustomerProfile";
@@ -87,6 +88,7 @@ export default function App() {
           }
         >
           <Route path="/staff/dashboard" element={<StaffDashboard />} />
+          <Route path="/staff/accounts" element={<StaffAccountManagement />} />
           <Route path="/staff/sessions" element={<StaffSessionManagement />} />
           <Route path="/staff/profile" element={<StaffProfile />} />
         </Route>

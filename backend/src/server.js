@@ -47,6 +47,7 @@ app.use("/api/wallet", require("./routes/walletRoutes"));
 app.use("/api/ai", require("./routes/aiRoutes"));
 app.use("/api/vehicles", require("./routes/vehicleRoutes"));
 app.use("/api/admin", require("./routes/adminRoutes"));
+app.use("/api/staff", require("./routes/staffRoutes"));
 app.use("/api/sessions", require("./routes/sessionRoutes"));
 
 // 404 handler
@@ -80,3 +81,4 @@ const startServer = async () => {
 };
 
 startServer();
+// Forced restart for nodemon
