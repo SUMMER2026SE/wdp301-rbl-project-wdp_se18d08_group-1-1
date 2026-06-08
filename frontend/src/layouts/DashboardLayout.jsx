@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
+import { apiFetch } from "../services/api";
 import logoImg from "../assets/images/logo.png";
 import {
   LayoutDashboard,
@@ -162,8 +163,9 @@ const ROLE_THEME = {
 const getInitials = (name = "") =>
   name
     .split(" ")
+    .filter(Boolean)
     .map((w) => w[0])
-    .slice(-2)
+    .slice(0, 2)
     .join("")
     .toUpperCase();
 
@@ -201,6 +203,38 @@ export default function DashboardLayout() {
     return () =>
       window.removeEventListener("valo_auth_change", handleAuthChange);
   }, []);
+
+  // Fetch profile if avatar is missing
+  useEffect(() => {
+    const fetchProfileAvatar = async () => {
+      if (!user || Object.keys(user).length === 0) return;
+      if (user.avatar || user.profile?.avatar || user.avatarUrl) return; // already has it
+      
+      const token = localStorage.getItem("accessToken");
+      if (!token) return;
+
+      try {
+        const { ok, data } = await apiFetch("/profile", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (ok && data?.success) {
+          const freshAvatar = data.data.profile?.avatar || "";
+          if (freshAvatar) {
+            const updatedUser = {
+              ...user,
+              ...data.data,
+              avatar: freshAvatar
+            };
+            sessionStorage.setItem("valo_user", JSON.stringify(updatedUser));
+            setUser(updatedUser);
+            window.dispatchEvent(new Event("valo_auth_change"));
+          }
+        }
+      } catch (e) {}
+    };
+
+    fetchProfileAvatar();
+  }, [user]);
 
   // Close notif dropdown on outside click
   useEffect(() => {
@@ -392,10 +426,18 @@ export default function DashboardLayout() {
             {/* Avatar */}
             <div
               className={`w-9 h-9 rounded-full bg-gradient-to-br ${theme.accent}
-                flex items-center justify-center text-black font-extrabold text-sm cursor-pointer`}
+                flex items-center justify-center text-black font-extrabold text-sm cursor-pointer overflow-hidden shrink-0 shadow-sm select-none`}
               title={displayName}
             >
-              {getInitials(displayName)}
+              {(user?.avatar || user?.profile?.avatar || user?.avatarUrl) ? (
+                <img
+                  src={user.avatar || user.profile?.avatar || user.avatarUrl}
+                  alt="Avatar"
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <span>{getInitials(displayName)}</span>
+              )}
             </div>
           </div>
         </header>

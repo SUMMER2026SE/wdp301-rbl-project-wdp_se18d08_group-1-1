@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Link, NavLink, useNavigate, useLocation } from "react-router-dom";
+import { apiFetch } from "../services/api";
 import {
   LogOut,
   User,
@@ -115,6 +116,39 @@ export default function Navbar() {
     });
   }, [location.pathname]);
 
+  // ΓöÇΓöÇ Fetch profile if avatar is missing ΓöÇΓöÇ
+  useEffect(() => {
+    const fetchProfileAvatar = async () => {
+      if (!user) return;
+      if (user.avatar || user.profile?.avatar || user.avatarUrl) return; // already has it
+      
+      const token = localStorage.getItem("accessToken");
+      if (!token) return;
+
+      try {
+        const { ok, data } = await apiFetch("/profile", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (ok && data?.success) {
+          const freshAvatar = data.data.profile?.avatar || "";
+          if (freshAvatar) {
+            const updatedUser = {
+              ...user,
+              ...data.data,
+              avatar: freshAvatar
+            };
+            sessionStorage.setItem("valo_user", JSON.stringify(updatedUser));
+            setUser(updatedUser);
+            window.dispatchEvent(new Event("valo_auth_change"));
+          }
+        }
+      } catch (e) {}
+    };
+
+    fetchProfileAvatar();
+  }, [user]);
+
+
   // ΓöÇΓöÇ Logout ΓöÇΓöÇ
   const handleLogout = () => {
     localStorage.removeItem("accessToken");
@@ -126,30 +160,41 @@ export default function Navbar() {
     navigate("/");
   };
 
-  const getInitials = (name = "") =>
-    name
+  const getInitials = (name) => {
+    return (name || "U")
       .split(" ")
       .filter(Boolean)
       .map((w) => w[0])
       .slice(0, 2)
       .join("")
       .toUpperCase();
+  };
 
   const navLinks = user ? customerLinks : guestLinks;
-  const grad = getGradient(user?.name || "");
+  
+  const displayName = user
+    ? [user.profile?.firstName, user.profile?.lastName]
+        .filter(Boolean)
+        .join(" ") ||
+      user.name ||
+      user.fullName ||
+      user.username ||
+      "User"
+    : "User";
+
+  const grad = getGradient(displayName);
   const isScrolled = scrollY > 40;
 
   return (
     <>
       <nav id="main-navbar" className="fixed top-0 left-0 right-0 z-50">
-        {/* ΓöÇΓöÇΓöÇ Outer wrapper: adds margin + pill shape when scrolled ΓöÇΓöÇΓöÇ */}
         <div
           className="transition-all duration-700 ease-[cubic-bezier(0.4,0,0.2,1)]"
           style={{
             margin: isScrolled ? "16px 5% 0" : "0",
             borderRadius: isScrolled ? "100px" : "0",
             background: isScrolled
-              ? "rgba(253, 251, 247, 0.85)" /* Soft premium warm tint */
+              ? "rgba(253, 251, 247, 0.85)"
               : "rgba(255,255,255,0.95)",
             backdropFilter: isScrolled
               ? "blur(24px) saturate(180%)"
@@ -161,7 +206,7 @@ export default function Navbar() {
               ? "0 10px 40px rgba(0,0,0,0.06), 0 2px 10px rgba(212,175,55,0.05), inset 0 1px 0 rgba(255,255,255,0.8)"
               : "0 1px 0 rgba(0,0,0,0.04)",
             border: isScrolled
-              ? "1px solid rgba(212,175,55,0.15)" /* Subtle gold border */
+              ? "1px solid rgba(212,175,55,0.15)"
               : "1px solid transparent",
           }}
         >
@@ -169,7 +214,6 @@ export default function Navbar() {
             className="max-w-7xl mx-auto px-5 sm:px-8 flex items-center justify-between transition-all duration-500"
             style={{ height: isScrolled ? "52px" : "72px" }}
           >
-            {/* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ LOGO ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */}
             <Link
               to="/"
               className="flex items-center gap-2.5 group shrink-0"
@@ -193,7 +237,6 @@ export default function Navbar() {
               </div>
             </Link>
 
-            {/* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ CENTER NAV ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */}
             <div className="hidden lg:flex items-center">
               <div className="flex items-center gap-0.5 relative">
                 {navLinks.map((link) => (
@@ -215,7 +258,6 @@ export default function Navbar() {
                           }
                         `}
                       >
-                        {/* Active bg pill */}
                         {isActive && (
                           <span className="absolute inset-0 rounded-xl bg-gray-900/[0.06] nav-active-bg" />
                         )}
@@ -228,7 +270,6 @@ export default function Navbar() {
                         />
                         <span className="relative z-10">{link.label}</span>
 
-                        {/* Active dot */}
                         {isActive && (
                           <span className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-4 h-[3px] rounded-full bg-gold nav-dot-enter" />
                         )}
@@ -239,11 +280,9 @@ export default function Navbar() {
               </div>
             </div>
 
-            {/* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ RIGHT ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */}
             <div className="flex items-center gap-1.5">
               {user ? (
                 <>
-                  {/* Notification */}
                   <button
                     id="nav-notifications"
                     className="relative w-10 h-10 rounded-xl flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-black/[0.04] transition-all duration-200 nav-btn-hover"
@@ -257,7 +296,6 @@ export default function Navbar() {
                     )}
                   </button>
 
-                  {/* Profile */}
                   <div className="relative" ref={profileRef}>
                     <button
                       id="nav-profile-btn"
@@ -271,21 +309,19 @@ export default function Navbar() {
                         }
                       `}
                     >
-                      <div
-                        className={`w-8 h-8 rounded-[10px] overflow-hidden ${user.avatar ? "" : "bg-[#050505] border border-gold/20"} flex items-center justify-center shadow-sm select-none shrink-0`}
-                      >
-                        {user.avatar ? (
+                      <div className="w-9 h-9 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 flex items-center justify-center text-black font-extrabold text-sm cursor-pointer shadow-sm select-none shrink-0 overflow-hidden">
+                        {(user?.avatar || user?.profile?.avatar || user?.avatarUrl) ? (
                           <img
-                            src={user.avatar}
-                            alt={user.name}
+                            src={user.avatar || user.profile?.avatar || user.avatarUrl}
+                            alt={displayName}
                             className="w-full h-full object-cover"
                           />
                         ) : (
-                          <img src={Logo} alt="VALO" className="w-[65%] h-[65%] object-contain" />
+                          <span>{getInitials(displayName)}</span>
                         )}
                       </div>
                       <span className="hidden sm:block text-[13px] font-semibold text-gray-700 max-w-[90px] truncate">
-                        {user.name?.split(" ").pop()}
+                        {displayName.split(" ").pop()}
                       </span>
                       <ChevronDown
                         size={12}
@@ -293,31 +329,27 @@ export default function Navbar() {
                       />
                     </button>
 
-                    {/* ΓöÇΓöÇΓöÇ DROPDOWN ΓöÇΓöÇΓöÇ */}
                     {profileOpen && (
                       <div className="absolute right-0 top-[calc(100%+8px)] w-[280px] bg-white/80 backdrop-blur-2xl rounded-2xl shadow-[0_16px_64px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.06)] border border-white/60 overflow-hidden nav-dropdown-enter">
-                        {/* User card */}
                         <div className="p-4 border-b border-gray-100/80">
                           <div className="flex items-center gap-3">
-                            <div
-                              className={`w-11 h-11 rounded-xl overflow-hidden ${user.avatar ? "" : "bg-[#050505] border border-gold/20"} flex items-center justify-center shadow-lg select-none`}
-                            >
-                              {user.avatar ? (
+                            <div className="w-11 h-11 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 flex items-center justify-center text-black font-extrabold text-lg cursor-pointer shadow-lg select-none overflow-hidden shrink-0">
+                              {(user?.avatar || user?.profile?.avatar || user?.avatarUrl) ? (
                                 <img
-                                  src={user.avatar}
-                                  alt={user.name}
+                                  src={user.avatar || user.profile?.avatar || user.avatarUrl}
+                                  alt={displayName}
                                   className="w-full h-full object-cover"
                                 />
                               ) : (
-                                <img src={Logo} alt="VALO" className="w-[65%] h-[65%] object-contain" />
+                                <span>{getInitials(displayName)}</span>
                               )}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="font-bold text-gray-900 text-sm truncate">
-                                {user.name}
+                              <p className="text-[15px] font-bold text-gray-900 leading-none">
+                                {displayName}
                               </p>
-                              <p className="text-[11px] text-gray-400 truncate">
-                                {user.email}
+                              <p className="text-[13px] text-gray-500 font-medium truncate mt-1">
+                                {user?.email || "No email"}
                               </p>
                             </div>
                             {roleBadge[user.role] && (
@@ -330,34 +362,12 @@ export default function Navbar() {
                           </div>
                         </div>
 
-
-                        {/* Menu */}
                         <div className="p-2 mt-1">
                           {[
-                            {
-                              id: "profile",
-                              icon: User,
-                              label: "Profile",
-                              to: "/profile",
-                            },
-                            {
-                              id: "transactions",
-                              icon: History,
-                              label: "Transaction History",
-                              to: "/wallet/history",
-                            },
-                            {
-                              id: "notifications",
-                              icon: Bell,
-                              label: "Notifications",
-                              to: "/notifications",
-                            },
-                            {
-                              id: "policy",
-                              icon: FileText,
-                              label: "Policy",
-                              to: "/policy",
-                            },
+                            { id: "profile", icon: User, label: "Profile", to: "/profile" },
+                            { id: "transactions", icon: History, label: "Transaction History", to: "/wallet/history" },
+                            { id: "notifications", icon: Bell, label: "Notifications", to: "/notifications" },
+                            { id: "policy", icon: FileText, label: "Policy", to: "/policy" },
                           ].map((item) => (
                             <Link
                               key={item.id}
@@ -377,8 +387,7 @@ export default function Navbar() {
                             </Link>
                           ))}
 
-                          {(user.role === "admin" ||
-                            user.role === "staff") && (
+                          {(user.role === "admin" || user.role === "staff") && (
                               <>
                                 <div className="h-px bg-gray-100 my-1 mx-3" />
                                 <Link
@@ -394,16 +403,12 @@ export default function Navbar() {
                                     {user.role === "admin" ? "Admin" : "Staff"}{" "}
                                     Panel
                                   </span>
-                                  <ChevronRight
-                                    size={14}
-                                    className="ml-auto text-gray-300 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300"
-                                  />
+                                  <ChevronRight size={14} className="ml-auto text-gray-300 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300" />
                                 </Link>
                               </>
                             )}
                         </div>
 
-                        {/* Logout */}
                         <div className="border-t border-gray-100/80 p-2">
                           <button
                             id="nav-btn-logout"
@@ -421,7 +426,6 @@ export default function Navbar() {
                   </div>
                 </>
               ) : (
-                /* ΓöÇΓöÇ GUEST ΓöÇΓöÇ */
                 <div className="flex items-center gap-2">
                   <Link
                     to="/login"
@@ -447,7 +451,6 @@ export default function Navbar() {
                 </div>
               )}
 
-              {/* Mobile toggle */}
               <button
                 id="nav-mobile-toggle"
                 onClick={() => setMobileOpen((o) => !o)}
@@ -470,12 +473,10 @@ export default function Navbar() {
         </div>
       </nav>
 
-      {/* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ MOBILE OVERLAY ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */}
       <div
         className={`fixed inset-0 z-40 transition-all duration-500 ${mobileOpen ? "pointer-events-auto" : "pointer-events-none"
           }`}
       >
-        {/* Backdrop */}
         <div
           className={`absolute inset-0 bg-black/20 backdrop-blur-sm transition-opacity duration-500 ${mobileOpen ? "opacity-100" : "opacity-0"
             }`}

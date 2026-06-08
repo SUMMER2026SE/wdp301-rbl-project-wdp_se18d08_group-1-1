@@ -253,3 +253,57 @@ exports.updateUserStatus = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc  Update user details (role, status, profile)
+ * @route PUT /api/admin/users/:id
+ * @access Admin only
+ */
+exports.updateUser = async (req, res, next) => {
+  try {
+    const { role, status, firstName, lastName, phone } = req.body;
+    
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    if (role !== undefined) user.role = role;
+    if (status !== undefined) user.status = status;
+    await user.save();
+
+    let userDetail = await UserDetail.findOne({ userId: user._id });
+    if (!userDetail) {
+      userDetail = new UserDetail({ userId: user._id });
+    }
+    
+    if (firstName !== undefined) userDetail.firstName = firstName;
+    if (lastName !== undefined) userDetail.lastName = lastName;
+    if (phone !== undefined) userDetail.phone = phone;
+    await userDetail.save();
+
+    // Fetch the updated user with profile to return
+    const updatedUser = await User.aggregate([
+      { $match: { _id: user._id } },
+      {
+        $lookup: {
+          from: 'userdetails',
+          localField: '_id',
+          foreignField: 'userId',
+          as: 'profile'
+        }
+      },
+      {
+        $unwind: {
+          path: '$profile',
+          preserveNullAndEmptyArrays: true
+        }
+      }
+    ]);
+
+    res.status(200).json({ success: true, data: updatedUser[0] });
+  } catch (err) {
+    next(err);
+  }
+};
+
+

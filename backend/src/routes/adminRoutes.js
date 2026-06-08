@@ -35,5 +35,6 @@ router.post('/vehicles/sync-models', syncAllVehicleModels);
 // Users
 router.get('/users', require('../controllers/adminController').listUsers);
 router.put('/users/:id/status', require('../controllers/adminController').updateUserStatus);
+router.put('/users/:id', require('../controllers/adminController').updateUser);
 
 module.exports = router;
