@@ -6,5 +6,10 @@ export default defineConfig({
   plugins: [react()],
   define: {
     'process.env': {}
-  }
+  },
+  server: {
+    port: 5173,
+    strictPort: true,
+    host: 'localhost',
+  },
 })

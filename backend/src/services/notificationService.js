@@ -493,7 +493,7 @@ async function getAdminNotifications(filters = {}) {
   const query = {};
   if (type) query.type = type;
 
-  const [notifications, total] = await Promise.all([
+  const [notifications, total, successCount, errorCount] = await Promise.all([
     Notification.find(query)
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -501,6 +501,8 @@ async function getAdminNotifications(filters = {}) {
       .populate('createdBy', 'username email')
       .lean(),
     Notification.countDocuments(query),
+    Notification.countDocuments({ ...query, priority: { $in: ['SUCCESS', 'INFO', 'SYSTEM'] } }),
+    Notification.countDocuments({ ...query, priority: { $in: ['ERROR', 'WARNING'] } })
   ]);
 
   return {
@@ -511,6 +513,11 @@ async function getAdminNotifications(filters = {}) {
       total,
       totalPages: Math.ceil(total / parseInt(limit)),
     },
+    stats: {
+      totalSent: total,
+      success: successCount,
+      errors: errorCount,
+    }
   };
 }
 
