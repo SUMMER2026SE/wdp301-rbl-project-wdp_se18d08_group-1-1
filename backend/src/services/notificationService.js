@@ -574,7 +574,7 @@ async function getAdminNotifications(filters = {}) {
     ];
   }
 
-  const [notifications, total] = await Promise.all([
+  const [notifications, total, successCount, errorCount] = await Promise.all([
     Notification.find(query)
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -583,6 +583,8 @@ async function getAdminNotifications(filters = {}) {
       .populate('targetUsers', 'username email')
       .lean(),
     Notification.countDocuments(query),
+    Notification.countDocuments({ ...query, priority: { $in: ['SUCCESS', 'INFO', 'SYSTEM'] } }),
+    Notification.countDocuments({ ...query, priority: { $in: ['ERROR', 'WARNING'] } })
   ]);
 
   const notificationsWithAdminState = notifications.map((notification) => ({
@@ -600,6 +602,11 @@ async function getAdminNotifications(filters = {}) {
       total,
       totalPages: Math.ceil(total / parseInt(limit)),
     },
+    stats: {
+      totalSent: total,
+      success: successCount,
+      errors: errorCount,
+    }
   };
 }
 

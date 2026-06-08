@@ -22,6 +22,9 @@ import {
   ChevronRight,
 } from "lucide-react";
 import Logo from "../assets/images/logo.png";
+import { useNotifications } from "../hooks/useNotifications";
+import { formatDistanceToNow } from "date-fns";
+import { vi } from "date-fns/locale";
 
 /* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
    VALO PARKING ΓÇô Premium Navbar
@@ -72,9 +75,13 @@ export default function Navbar() {
   });
   const [profileOpen, setProfileOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [notifCount] = useState(3);
+  const [notifOpen, setNotifOpen] = useState(false);
   const [scrollY, setScrollY] = useState(0);
   const profileRef = useRef(null);
+  const notifRef = useRef(null);
+
+  // Hook for notifications
+  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
 
   // ΓöÇΓöÇ Sync user ΓöÇΓöÇ
   const syncUser = useCallback(() => {
@@ -105,6 +112,7 @@ export default function Navbar() {
   useEffect(() => {
     const handler = (e) => {
       if (profileRef.current && !profileRef.current.contains(e.target)) setProfileOpen(false);
+      if (notifRef.current && !notifRef.current.contains(e.target)) setNotifOpen(false);
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -115,6 +123,7 @@ export default function Navbar() {
     window.requestAnimationFrame(() => {
       setMobileOpen(false);
       setProfileOpen(false);
+      setNotifOpen(false);
     });
   }, [location.pathname]);
 
@@ -234,18 +243,95 @@ export default function Navbar() {
               {user ? (
                 <>
                   {/* Notification */}
-                  <button
-                    id="nav-notifications"
-                    className="relative w-10 h-10 rounded-xl flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-black/[0.04] transition-all duration-200 nav-btn-hover"
-                    title="Notifications"
-                  >
-                    <Bell size={18} strokeWidth={2} />
-                    {notifCount > 0 && (
-                      <span className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-[5px] flex items-center justify-center text-[9px] font-bold text-white bg-red-500 rounded-full ring-2 ring-white">
-                        {notifCount > 9 ? '9+' : notifCount}
-                      </span>
+                  <div className="relative" ref={notifRef}>
+                    <button
+                      id="nav-notifications"
+                      onClick={() => setNotifOpen(o => !o)}
+                      className={`relative w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 nav-btn-hover ${notifOpen ? 'bg-black/[0.06] text-gray-900' : 'text-gray-400 hover:text-gray-700 hover:bg-black/[0.04]'}`}
+                      title="Notifications"
+                    >
+                      <Bell size={18} strokeWidth={2} />
+                      {unreadCount > 0 && (
+                        <span className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-[5px] flex items-center justify-center text-[9px] font-bold text-white bg-red-500 rounded-full ring-2 ring-white">
+                          {unreadCount > 9 ? '9+' : unreadCount}
+                        </span>
+                      )}
+                    </button>
+
+                    {/* ΓöÇΓöÇΓöÇ NOTIFICATIONS DROPDOWN ΓöÇΓöÇΓöÇ */}
+                    {notifOpen && (
+                      <div className="absolute right-0 top-[calc(100%+8px)] w-96 bg-white/95 backdrop-blur-2xl rounded-2xl shadow-[0_16px_64px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.06)] border border-white/60 overflow-hidden nav-dropdown-enter z-50 flex flex-col max-h-[460px]">
+                        <div className="px-4 py-3 flex justify-between items-center bg-gradient-to-r from-white to-gray-50 border-b border-gray-100">
+                          <div className="flex items-center gap-3">
+                            <p className="text-gray-900 font-bold text-sm">Thông báo</p>
+                            {unreadCount > 0 && (
+                              <span className="text-[11px] font-semibold text-white bg-rose-500 rounded-full px-2 py-0.5">
+                                {unreadCount}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {unreadCount > 0 && (
+                              <button onClick={markAllAsRead} className="text-xs text-emerald-600 hover:text-emerald-500 font-medium transition-colors">
+                                Đánh dấu tất cả
+                              </button>
+                            )}
+                            <button onClick={() => setNotifOpen(false)} className="text-xs text-gray-400 hover:text-gray-600">Đóng</button>
+                          </div>
+                        </div>
+
+                        <div className="overflow-y-auto flex-1 text-left p-2 space-y-2">
+                          {notifications.length === 0 ? (
+                            <div className="p-6 text-center text-gray-500 text-sm">Không có thông báo nào</div>
+                          ) : (
+                            notifications.map((n) => (
+                              <div
+                                key={n._id || n.notificationId}
+                                onClick={() => !n.isRead && markAsRead(n._id || n.notificationId)}
+                                className={`flex items-start gap-3 p-3 rounded-xl hover:shadow-sm transition-all bg-white border ${!n.isRead ? 'ring-1 ring-emerald-100' : 'border-gray-100'}`}
+                              >
+                                <div className="flex flex-col items-center">
+                                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm ${!n.isRead ? 'bg-emerald-500' : 'bg-gray-200 text-gray-600'}`}>
+                                    {n.title ? (n.title[0] || 'N') : 'N'}
+                                  </div>
+                                </div>
+
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-start gap-2">
+                                    <p className={`text-sm font-semibold truncate ${!n.isRead ? 'text-gray-900' : 'text-gray-700'}`}>{n.title}</p>
+                                    <div className="ml-auto text-[11px] text-gray-400">{n.createdAt ? formatDistanceToNow(new Date(n.createdAt), { addSuffix: true, locale: vi }) : 'Vừa xong'}</div>
+                                  </div>
+                                  <p className="text-gray-500 text-[13px] mt-1 line-clamp-2">{n.content}</p>
+                                  <div className="mt-2 flex items-center gap-2">
+                                    {!n.isRead && (
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); markAsRead(n._id || n.notificationId); }}
+                                        className="text-xs text-emerald-600 hover:text-emerald-500 font-medium transition-colors"
+                                      >
+                                        Đánh dấu
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); /* placeholder: maybe delete later */ }}
+                                      className="text-xs text-gray-400 hover:text-gray-600 font-medium transition-colors"
+                                    >
+                                      Thêm
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+
+                        <div className="p-3 border-t border-gray-100 bg-gray-50/50">
+                          <button onClick={() => { navigate('/notifications'); setNotifOpen(false); }} className="w-full text-center text-xs text-gray-600 hover:text-gray-900 py-2 font-medium transition-colors rounded-xl bg-white/60">
+                            Xem tất cả thông báo
+                          </button>
+                        </div>
+                      </div>
                     )}
-                  </button>
+                  </div>
 
                   {/* Profile */}
                   <div className="relative" ref={profileRef}>

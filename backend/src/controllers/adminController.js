@@ -36,6 +36,34 @@ const syncVehiclesForModel = async (brand, model, secureUrl) => {
 };
 
 /**
+ * @desc  Search users by username or email (Admin/Staff)
+ * @route GET /api/admin/users/search
+ * @access Admin only
+ */
+exports.searchUsers = async (req, res, next) => {
+  try {
+    const q = req.query.q || '';
+    const User = require('../models/User'); // Import here to avoid circular dependencies if any
+    
+    const filter = q ? {
+      $or: [
+        { username: { $regex: q, $options: 'i' } },
+        { email: { $regex: q, $options: 'i' } }
+      ]
+    } : {};
+    
+    const users = await User.find(filter)
+      .select('username email role status')
+      .limit(20)
+      .lean();
+      
+    res.status(200).json({ success: true, data: users });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
  * @desc  Upload a .glb 3D model for a vehicle brand/model
  * @route POST /api/admin/vehicles/upload-model
  * @access Admin only

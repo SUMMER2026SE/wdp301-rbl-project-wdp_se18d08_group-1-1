@@ -232,6 +232,7 @@ const getAdminHistory = async (req, res, next) => {
       success: true,
       data: result.notifications,
       pagination: result.pagination,
+      stats: result.stats,
     });
   } catch (error) {
     next(error);

@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { SocketProvider } from "./contexts/SocketProvider";
 
 // Layouts
 import MainLayout from "./layouts/MainLayout";
@@ -22,11 +23,10 @@ import AdminDashboard from './pages/Admin/Dashboard';
 import VehicleManagement from './pages/Admin/VehicleManagement';
 import AdminProfile from './pages/Admin/AdminProfile';
 import ParkingLots from './pages/Admin/ParkingLots';
-import NotificationManagement from './pages/Admin/NotificationManagement';
-
 
 // Pages – Staff
 import StaffDashboard from "./pages/Staff/Dashboard";
+import NotificationManagement from './pages/Staff/NotificationManagement';
 
 
 // Pages – Customer
@@ -41,8 +41,9 @@ import UnauthorizedPage from "./pages/UnauthorizedPage";
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
+    <SocketProvider>
+      <BrowserRouter>
+        <Routes>
         {/* ── Standalone Kiosk app ── */}
         <Route path="/kiosk/*" element={<KioskFlow />} />
         <Route path="/kiosk-out/*" element={<KioskOutFlow />} />
@@ -114,5 +115,6 @@ export default function App() {
         <Route path="/unauthorized" element={<UnauthorizedPage />} />
       </Routes>
     </BrowserRouter>
+    </SocketProvider>
   );
 }

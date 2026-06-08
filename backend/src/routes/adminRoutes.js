@@ -9,6 +9,7 @@ const {
   getPendingVehicles,
   approveVehicle,
   rejectVehicle,
+  searchUsers,
 } = require('../controllers/adminController');
 
 const router = express.Router();
@@ -26,8 +27,14 @@ const upload = multer({
   },
 });
 
-// All admin routes require a valid JWT + admin role
-router.use(protect, authorize('admin'));
+// All admin routes require a valid JWT
+router.use(protect);
+
+// Users (allow both admin and staff)
+router.get('/users/search', authorize('admin', 'staff'), searchUsers);
+
+// The rest require admin role
+router.use(authorize('admin'));
 
 // Vehicle 3D models
 router.get('/vehicles/models', listVehicleModels);
