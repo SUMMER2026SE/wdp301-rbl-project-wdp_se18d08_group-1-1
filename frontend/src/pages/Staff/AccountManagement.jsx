@@ -114,7 +114,7 @@ function SkeletonRow() {
 function StatCard({ icon: Icon, label, value, gradient, glow, loading }) {
   return (
     <div
-      className="relative rounded-2xl p-5 overflow-hidden cursor-default group transition-all duration-300 hover:scale-[1.035]"
+      className="relative rounded-2xl p-4 overflow-hidden cursor-default group transition-all duration-300 hover:scale-[1.035]"
       style={{
         background: 'rgba(255,255,255,0.03)',
         border: '1px solid rgba(255,255,255,0.08)',
@@ -428,7 +428,7 @@ export default function AccountManagement() {
       <div className={`flex flex-col flex-1 min-w-0 overflow-hidden transition-all duration-300`}>
 
         {/* -- Header -- */}
-        <div className="bg-[#080808] px-8 pt-7 pb-6 border-b border-white/[0.06] flex-shrink-0">
+        <div className="bg-[#080808] px-8 pt-3 pb-3 border-b border-white/[0.06] flex-shrink-0">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold text-[#ffd555] tracking-tight">Customer Management</h1>
@@ -440,7 +440,7 @@ export default function AccountManagement() {
           </div>
 
           {/* -- Stat Cards -- */}
-          <div className="grid grid-cols-4 gap-4 mt-6">
+          <div className="grid grid-cols-4 gap-4 mt-4">
             <StatCard icon={Users}   label="Total Customers"  value={totalAccounts} gradient="from-cyan-400 to-blue-500"    glow="rgba(6,182,212,0.3)"    loading={loading} />
             <StatCard icon={UserPlus} label="New This Month"  value={newThisMonth}  gradient="from-violet-400 to-purple-600" glow="rgba(167,139,250,0.3)"  loading={loading} />
             <StatCard icon={UserX}   label="Blocked Customers" value={blockedCount}  gradient="from-rose-500 to-red-600"     glow="rgba(239,68,68,0.3)"    loading={loading} />
@@ -449,7 +449,7 @@ export default function AccountManagement() {
         </div>
 
         {/* -- Controls Bar -- */}
-        <div className="flex flex-wrap items-center gap-4 px-8 py-4 flex-shrink-0 bg-[#080808]">
+        <div className="flex flex-wrap items-center gap-4 px-8 py-2 flex-shrink-0 bg-[#080808]">
           <div className="relative flex-1 min-w-[240px] max-w-sm">
             <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
             <input
@@ -756,7 +756,7 @@ export default function AccountManagement() {
                   <div className="flex gap-3">
                     {isEditing ? (
                       <>
-                        <button onClick={() => { setIsEditing(false); setSaveState('idle'); }}
+                        <button onClick={() => { closePanel(); setSaveState('idle'); }}
                           className="flex-1 py-2.5 rounded-xl border border-white/10 text-white/70 text-sm font-medium hover:bg-white/5 hover:text-white transition-all active:scale-95">
                           Cancel
                         </button>
