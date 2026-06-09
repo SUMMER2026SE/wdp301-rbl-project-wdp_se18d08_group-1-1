@@ -62,7 +62,7 @@ const createTopUp = async (req, res, next) => {
         `${process.env.CLIENT_URL}/customer/wallet?orderCode=${orderCode}&cancel=true`,
       items: [
         {
-          name: 'Nạp tiền ví VALO',
+          name: 'VALO wallet top-up',
           quantity: 1,
           price: parseInt(amount),
         },
@@ -78,7 +78,7 @@ const createTopUp = async (req, res, next) => {
       orderCode,
       paymentLink.paymentLinkId,
       paymentLink.checkoutUrl,
-      `Nạp tiền ví VALO - ${parseInt(amount).toLocaleString('vi-VN')} VNĐ`
+      `VALO wallet top-up - ${parseInt(amount).toLocaleString('vi-VN')} VND`
     );
 
     res.status(201).json({

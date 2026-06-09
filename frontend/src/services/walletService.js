@@ -27,7 +27,7 @@ export const getTopUpStatus = (orderCode, cancel = false) => {
 
 export const getTransactionsHistory = (params = {}) => {
   const query = new URLSearchParams(params).toString();
-  return apiFetch(`/wallet/transactions?${query}`, {
+  return apiFetch(`/wallet/transactions${query ? `?${query}` : ''}`, {
     method: 'GET',
     headers: getAuthHeaders(),
   });
