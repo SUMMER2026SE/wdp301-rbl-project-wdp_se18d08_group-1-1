@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Zap, CheckCircle2, ShieldCheck, Bell, Mail } from "lucide-react";
 
-const AVAILABLE_CHANNELS = ["In-app", "Email", "SMS", "Push"];
+const AVAILABLE_CHANNELS = ["In-app", "Email"];
 
 function eventIcon(group) {
   switch (group) {
@@ -43,8 +43,8 @@ export default function AutoRulesTable({ rules, onUpdate, onTest }) {
 
       <div className="space-y-8">
         {Object.entries(grouped).map(([groupName, groupRules]) => (
-          <div key={groupName} className="rounded-3xl border border-gray-700/60 bg-gray-900/70 p-5">
-            <div className="flex items-center gap-3 border-b border-gray-700/50 pb-4 text-white">
+          <div key={groupName} className="rounded-xl border border-border bg-card p-5">
+            <div className="flex items-center gap-3 border-b border-border pb-4 text-white">
               <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-200">
                 {eventIcon(groupName)}
               </span>
@@ -58,15 +58,41 @@ export default function AutoRulesTable({ rules, onUpdate, onTest }) {
               {groupRules.map((rule) => (
                 <div
                   key={rule.eventKey}
-                  className="rounded-3xl border border-gray-700/80 bg-gray-950/50 p-4"
+                  className="rounded-xl border border-border bg-card p-4"
                 >
-                  <div className="grid gap-4 lg:grid-cols-[1fr_0.9fr_0.7fr] lg:items-center">
-                    <div className="space-y-2">
-                      <p className="font-semibold text-white">{rule.name}</p>
-                      <p className="text-sm text-gray-400">Key: {rule.eventKey}</p>
-                    </div>
-                    <div className="space-y-3">
-                      <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex items-center gap-4">
+                    {/* Toggle on left */}
+                    <button
+                      type="button"
+                      onClick={() => onUpdate(rule.eventKey, { enabled: !rule.enabled })}
+                      aria-pressed={rule.enabled}
+                      className={`relative w-14 h-8 rounded-full transition-colors focus:outline-none flex-shrink-0 ${
+                        rule.enabled ? "bg-success" : "bg-secondary"
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-background shadow-md transform transition-transform ${
+                          rule.enabled ? "translate-x-6" : "translate-x-0"
+                        }`}
+                      />
+                    </button>
+
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 justify-between">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-4">
+                            <div className="min-w-0">
+                              <p className="font-semibold text-white truncate">{rule.name}</p>
+                              <p className="text-sm text-muted-foreground">Key: {rule.eventKey}</p>
+                            </div>
+                            <div className="text-xs px-3 py-2 rounded border border-border text-muted-foreground bg-white/5">
+                              Throttle: <span className="font-medium">{rule.throttleMinutes ?? '—'}p</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
                         {AVAILABLE_CHANNELS.map((channel) => (
                           <button
                             key={channel}
@@ -80,55 +106,25 @@ export default function AutoRulesTable({ rules, onUpdate, onTest }) {
                             }}
                             className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
                               rule.channels.includes(channel)
-                                ? "border-sky-400 bg-sky-500/10 text-sky-100"
-                                : "border-gray-700 bg-gray-900 text-gray-400 hover:border-sky-500/20"
+                                ? "border-success bg-success/15 text-success"
+                                : "border-border bg-card text-muted-foreground hover:border-success/40"
                             }`}
                           >
                             {channel}
                           </button>
                         ))}
                       </div>
-                      <div className="grid gap-2 sm:grid-cols-[1fr_1fr]">
-                        <div className="rounded-2xl border border-gray-700/80 bg-gray-900 px-3 py-2">
-                          <label className="text-xs uppercase tracking-[0.2em] text-gray-500">Throttle (phút)</label>
-                          <input
-                            type="number"
-                            min={1}
-                            value={rule.throttleMinutes}
-                            onChange={(event) =>
-                              onUpdate(rule.eventKey, {
-                                throttleMinutes: Number(event.target.value) || 1,
-                              })
-                            }
-                            className="mt-2 w-full rounded-2xl bg-transparent text-sm text-gray-100 outline-none"
-                          />
-                        </div>
-                        <div className="rounded-2xl border border-gray-700/80 bg-gray-900 px-3 py-2">
-                          <label className="text-xs uppercase tracking-[0.2em] text-gray-500">Trạng thái</label>
-                          <button
-                            type="button"
-                            onClick={() => onUpdate(rule.eventKey, { enabled: !rule.enabled })}
-                            className={`mt-2 inline-flex h-10 items-center justify-center rounded-2xl px-4 text-sm font-semibold transition ${
-                              rule.enabled
-                                ? "bg-emerald-500 text-black"
-                                : "bg-gray-700 text-gray-200"
-                            }`}
-                          >
-                            {rule.enabled ? "Bật" : "Tắt"}
-                          </button>
-                        </div>
-                      </div>
                     </div>
-                    <div className="flex flex-col gap-3 items-start lg:items-end">
+
+                    <div className="flex flex-col items-end gap-2">
                       <button
                         type="button"
                         onClick={() => onTest(rule.eventKey, { message: "Kiểm tra quy tắc tự động." })}
-                        className="inline-flex items-center gap-2 rounded-3xl bg-sky-500 px-4 py-3 text-sm font-semibold text-white hover:bg-sky-400"
+                        className="w-10 h-10 rounded-full bg-sky-500 flex items-center justify-center text-white hover:bg-sky-400"
                       >
                         <Zap size={16} />
-                        Test
                       </button>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-muted-foreground">
                         Lần kích hoạt cuối: {rule.lastTriggeredAt ? new Date(rule.lastTriggeredAt).toLocaleString("vi-VN") : "Chưa có"}
                       </p>
                     </div>

@@ -1,12 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { vi } from "date-fns/locale";
-import { getAdminHistory, createNotification } from "../../services/notificationService";
+import { useSocket } from "../../contexts/SocketProvider";
 import { searchUsers } from "../../services/userService";
+import { createNotification, getAdminHistory, getAutoRules, updateAutoRule, testAutoRule } from "../../services/notificationService";
+import AutoRulesTable from "./notifications/AutoRulesTable";
 
 const TABS = [
   { id: "feed", label: "Live Feed" },
   { id: "compose", label: "Gửi thông báo" },
+  { id: "rules", label: "Quy tắc tự động" },
 ];
 
 const PRIORITIES = ["INFO", "SUCCESS", "WARNING", "ERROR", "SYSTEM"];
@@ -21,11 +24,14 @@ const PRIORITY_META = {
 
 export default function NotificationManagement() {
   const [tab, setTab] = useState("feed");
+  const [ruleToast, setRuleToast] = useState(null);
   const [historyList, setHistoryList] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [apiStats, setApiStats] = useState({ totalSent: 0, success: 0, errors: 0 });
+  const [autoRules, setAutoRules] = useState([]);
+  const [rulesLoading, setRulesLoading] = useState(false);
 
-  const socket = "connected";
+  const socket = useSocket();
 
   const fetchHistory = async () => {
     setHistoryLoading(true);
@@ -44,9 +50,47 @@ export default function NotificationManagement() {
     }
   };
 
+  const fetchRules = async () => {
+    setRulesLoading(true);
+    try {
+      const res = await getAutoRules();
+      if (res.ok && res.data?.data) {
+        setAutoRules(res.data.data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch auto rules:", err);
+    } finally {
+      setRulesLoading(false);
+    }
+  };
+
   useEffect(() => {
-    fetchHistory();
+    const initialize = async () => {
+      await fetchHistory();
+      await fetchRules();
+    };
+    initialize();
   }, []);
+
+  const handleRuleUpdate = async (eventKey, data) => {
+    const res = await updateAutoRule(eventKey, data);
+    if (res.ok) {
+      await fetchRules();
+    } else {
+      console.error("Failed to update rule:", res);
+    }
+  };
+
+  const handleRuleTest = async (eventKey) => {
+    const res = await testAutoRule(eventKey);
+    if (!res.ok) {
+      console.error("Failed to test rule:", res);
+      setRuleToast("Test rule thất bại.");
+    } else {
+      setRuleToast("Test rule thành công.");
+      setTimeout(() => setRuleToast(null), 3000);
+    }
+  };
 
   const stats = apiStats;
 
@@ -86,6 +130,14 @@ export default function NotificationManagement() {
         <section className="mt-6">
           {tab === "feed" && <FeedTab notifications={historyList} loading={historyLoading} onRefresh={fetchHistory} />}
           {tab === "compose" && <ComposeTab onSent={() => { setTab("feed"); fetchHistory(); }} />}
+          {tab === "rules" && (
+            <>
+              {ruleToast && (
+                <div className="mb-4 text-sm text-green-400">{ruleToast}</div>
+              )}
+              <AutoRulesTable rules={autoRules} loading={rulesLoading} onUpdate={handleRuleUpdate} onTest={handleRuleTest} />
+            </>
+          )}
         </section>
       </div>
     </div>
@@ -170,7 +222,7 @@ function FeedTab({ notifications, loading, onRefresh }) {
         </button>
       </div>
 
-      <div className="rounded-xl border border-white/5 bg-[#1A1A1A] overflow-hidden">
+      <div className="rounded-3xl border border-gray-700/80 bg-gray-950/50 p-4 animate-float overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3 border-b border-white/5">
           <div className="font-semibold text-white">Live events (Lịch sử gửi API)</div>
           <div className="text-xs text-gray-400">{filtered.length} items</div>
@@ -290,6 +342,7 @@ function ComposeTab({ onSent }) {
         setToast("Lỗi API: " + (res.data?.message || JSON.stringify(res.data?.errors) || "Không xác định"));
       }
     } catch (err) {
+      console.error(err);
       setToast("Lỗi kết nối API.");
     } finally {
       setIsSubmitting(false);
@@ -425,7 +478,7 @@ function UserPicker({ multi, value, onChange }) {
         placeholder="Tìm User theo username, email…"
         className="w-full bg-[#1A1A1A] border border-white/10 rounded-md px-3 py-2 text-sm mb-2 focus:outline-none placeholder:text-gray-600"
       />
-      <ul className="max-h-48 overflow-y-auto divide-y divide-white/5">
+      <ul className="max-h-48 overflow-y-auto divide-y divide-white/5 hide-scrollbar">
         {loading && <li className="px-2 py-4 text-center text-xs text-gray-500">Đang tìm kiếm...</li>}
         {!loading && results.length === 0 && <li className="px-2 py-4 text-center text-xs text-gray-500">Không tìm thấy người dùng.</li>}
         {results.map((u) => {

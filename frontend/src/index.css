@@ -224,4 +224,15 @@
       background-clip: text;
       -webkit-text-fill-color: transparent;
     }
+    /* Hide scrollbars for elements that use horizontal/vertical overflow when desired */
+    .hide-scrollbar {
+      -ms-overflow-style: none; /* IE and Edge */
+      scrollbar-width: none; /* Firefox */
+    }
+    .hide-scrollbar::-webkit-scrollbar {
+      width: 0;
+      height: 0;
+      display: none;
+      background: transparent;
+    }
   }

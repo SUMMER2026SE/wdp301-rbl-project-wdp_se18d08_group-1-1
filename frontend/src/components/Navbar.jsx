@@ -286,8 +286,8 @@ export default function Navbar() {
                           ) : (
                             notifications.map((n) => (
                               <div
-                                key={n._id || n.notificationId}
-                                onClick={() => !n.isRead && markAsRead(n._id || n.notificationId)}
+                                key={n.notificationId || n._id}
+                                onClick={() => !n.isRead && markAsRead(n.notificationId || n._id)}
                                 className={`flex items-start gap-3 p-3 rounded-xl hover:shadow-sm transition-all bg-white border ${!n.isRead ? 'ring-1 ring-emerald-100' : 'border-gray-100'}`}
                               >
                                 <div className="flex flex-col items-center">
@@ -305,7 +305,7 @@ export default function Navbar() {
                                   <div className="mt-2 flex items-center gap-2">
                                     {!n.isRead && (
                                       <button
-                                        onClick={(e) => { e.stopPropagation(); markAsRead(n._id || n.notificationId); }}
+                                        onClick={(e) => { e.stopPropagation(); markAsRead(n.notificationId || n._id); }}
                                         className="text-xs text-emerald-600 hover:text-emerald-500 font-medium transition-colors"
                                       >
                                         Đánh dấu

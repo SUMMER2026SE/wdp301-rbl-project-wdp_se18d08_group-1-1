@@ -373,8 +373,8 @@ export default function DashboardLayout() {
                     ) : (
                       notifications.map((n) => (
                         <div
-                          key={n._id || n.notificationId}
-                          onClick={() => !n.isRead && markAsRead(n._id || n.notificationId)}
+                          key={n.notificationId || n._id}
+                          onClick={() => !n.isRead && markAsRead(n.notificationId || n._id)}
                           className={`flex items-start gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-white/5 border-b border-gray-100 dark:border-white/5 last:border-0 cursor-pointer transition-colors ${!n.isRead ? 'bg-emerald-50/50 dark:bg-emerald-500/5' : ''}`}
                         >
                           <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${!n.isRead ? 'bg-emerald-500' : 'bg-transparent'}`} />

@@ -263,17 +263,17 @@ export default function NotificationManagement() {
   };
 
   const updateRule = async (rule, patch) => {
-    const updated = await notifApi.updateAutoRule(rule._id || rule.id, patch);
-    const nextRule = updated?.rule || updated;
+    const updated = await notifApi.updateAutoRule(rule.eventKey, patch);
+    const nextRule = updated?.data || updated;
     setAutoRules((current) =>
       current.map((item) =>
-        (item._id || item.id) === (rule._id || rule.id) ? { ...item, ...nextRule } : item
+        item.eventKey === rule.eventKey ? { ...item, ...nextRule } : item
       )
     );
   };
 
   const testRule = async (rule) => {
-    await notifApi.testAutoRule(rule._id || rule.id);
+    await notifApi.testAutoRule(rule.eventKey);
     setNotice(`Đã gửi thử luật "${rule.name}".`);
   };
 

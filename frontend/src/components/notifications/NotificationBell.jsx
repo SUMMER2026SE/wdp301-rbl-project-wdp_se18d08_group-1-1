@@ -85,7 +85,7 @@ export default function NotificationBell({ dark = false }) {
               ) : (
                 recentNotifs.map((n) => (
                   <NotificationItem
-                    key={n._id}
+                    key={n.notificationId || n._id}
                     notification={n}
                     onRead={markAsRead}
                     compact
@@ -161,7 +161,7 @@ export default function NotificationBell({ dark = false }) {
               </div>
             ) : (
               recentNotifs.map((n) => (
-                <div key={n._id}
+                <div key={n.notificationId || n._id}
                   onClick={() => {
                     if (!n.isRead) markAsRead(n.notificationId || n._id);
                     setOpen(false);
