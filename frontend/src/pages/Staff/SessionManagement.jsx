@@ -1,18 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { Camera, Clock, X, Search, ShieldCheck } from 'lucide-react';
+import { useCallback, useState, useEffect } from 'react';
+import { Camera, X, ShieldCheck } from 'lucide-react';
+import { API_BASE } from '../../services/api';
 
 export default function SessionManagement() {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedSession, setSelectedSession] = useState(null);
 
-  useEffect(() => {
-    fetchSessions();
-  }, []);
-
-  const fetchSessions = async () => {
+  const fetchSessions = useCallback(async () => {
     try {
-      const response = await fetch('http://localhost:5001/api/sessions');
+      const response = await fetch(`${API_BASE}/sessions`);
       const data = await response.json();
       if (data.success) {
         setSessions(data.data);
@@ -22,7 +19,12 @@ export default function SessionManagement() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const timerId = setTimeout(fetchSessions, 0);
+    return () => clearTimeout(timerId);
+  }, [fetchSessions]);
 
   const formatDate = (dateString) => {
     if (!dateString) return '-';

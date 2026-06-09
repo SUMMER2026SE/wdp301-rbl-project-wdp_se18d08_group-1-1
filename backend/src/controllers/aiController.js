@@ -80,11 +80,36 @@ exports.scanRegistrationCard = async (req, res) => {
 Extract ONLY the following fields and return ONLY a valid JSON object with no extra text:
 {
   "ownerName": "<Tên chủ xe - Owner's full name>",
-  "brand": "<Nhãn hiệu - Brand/Manufacturer, e.g. HONDA, TOYOTA>",
-  "model": "<Số loại / Model code, e.g. WINNER X, VIOS>",
-  "licensePlate": "<Biển số đăng ký - License plate number, remove spaces and dots, e.g. 43D1-89750>"
+  "brand": "<Nhãn hiệu - Brand/Manufacturer, e.g. HONDA, TOYOTA, MG>",
+  "model": "<Số loại / Model code, e.g. WINNER X, VIOS, ZS>",
+  "licensePlate": "<Biển số đăng ký - License plate number, remove all spaces and dots, e.g. 43D1-89750>",
+  "colorText": "<Màu sơn / Color of the vehicle EXACTLY as written on the card>",
+  "hexColor": "<Convert colorText to the closest CSS hex color using this reference table:
+    Trắng / Trắng tinh / Trắng ngà → #f5f5f5
+    Đen / Đen bóng / Đen nhám → #1a1a1a
+    Bạc / Xám bạc / Bạc ánh kim / Silver → #c0c0c0
+    Xám / Xám tro / Ghi → #808080
+    Xám đậm → #4a4a4a
+    Đỏ / Đỏ tươi → #cc2200
+    Đỏ đô / Đỏ mận → #8b1a1a
+    Cam → #e65c00
+    Vàng → #f5c400
+    Vàng cát / Be → #c8a86b
+    Xanh dương / Xanh nước biển → #1a4fa0
+    Xanh đen / Xanh navy → #0a1a3a
+    Xanh lá / Xanh lục → #2d7a2d
+    Xanh mint → #5fb8a0
+    Nâu / Nâu đồng → #6b3a1f
+    Tím → #6a0dad
+    Hồng → #e75480
+    Vàng đồng / Đồng → #b8860b
+    Nâu vàng / Gold → #c8a84a
+    Nâu đỏ / Đỏ nâu → #7b2d00
+    If colorText does not match any above, pick the nearest color logically.
+    Return null ONLY if colorText is also null or completely unreadable.>"
 }
 If a field is not visible or cannot be read, set it to null.
+Do NOT default hexColor to #ffffff — if you cannot determine the color, return null.
 Do NOT include any explanation, markdown, or code blocks. Return raw JSON only.`;
 
     const result = await model.generateContent([
@@ -104,6 +129,8 @@ Do NOT include any explanation, markdown, or code blocks. Return raw JSON only.`
     try {
       const clean = text.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
       extracted = JSON.parse(clean);
+      console.log('[AI Scan] Raw text from Gemini:', text);
+      console.log('[AI Scan] Parsed:', extracted);
     } catch {
       return res.status(422).json({
         success: false,
@@ -119,6 +146,8 @@ Do NOT include any explanation, markdown, or code blocks. Return raw JSON only.`
         brand: extracted.brand || null,
         model: extracted.model || null,
         licensePlate: extracted.licensePlate || null,
+        colorText: extracted.colorText || null,
+        hexColor: extracted.hexColor || null,
       },
     });
   } catch (error) {

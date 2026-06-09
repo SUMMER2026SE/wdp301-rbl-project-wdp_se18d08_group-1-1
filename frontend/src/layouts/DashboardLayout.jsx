@@ -2,6 +2,9 @@ import { useState, useEffect, useRef } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { apiFetch } from "../services/api";
 import logoImg from "../assets/images/logo.png";
+import { useNotifications } from "../hooks/useNotifications";
+import { formatDistanceToNow } from "date-fns";
+import { vi } from "date-fns/locale";
 import {
   LayoutDashboard,
   Users,
@@ -16,7 +19,8 @@ import {
   User,
   Wallet,
   Settings,
-  // Staff icons
+  History,
+  // Manager icons
   MonitorCheck,
   Car,
   Gauge,
@@ -56,7 +60,7 @@ const NAV_CONFIG = {
     },
     { label: "Services", icon: <Wrench size={18} />, to: "/admin/services" },
     {
-      label: "Vehicle Models",
+      label: "Quản lý xe & 3D",
       icon: <Car size={18} />,
       to: "/admin/vehicle-models",
     },
@@ -69,11 +73,6 @@ const NAV_CONFIG = {
       label: "Financial Export",
       icon: <DollarSign size={18} />,
       to: "/admin/financial",
-    },
-    {
-      label: "Profile",
-      icon: <User size={18} />,
-      to: "/admin/profile",
     },
   ],
   staff: [
@@ -92,6 +91,11 @@ const NAV_CONFIG = {
       icon: <MonitorCheck size={18} />,
       to: "/staff/sessions",
     },
+    {
+      label: "Live Grid Monitor",
+      icon: <MonitorCheck size={18} />,
+      to: "/staff/live-grid",
+    },
     { label: "Gate Control", icon: <Car size={18} />, to: "/staff/gate" },
     {
       label: "Occupancy Reports",
@@ -109,6 +113,11 @@ const NAV_CONFIG = {
       to: "/staff/violations",
     },
     {
+      label: "Quản lý thông báo",
+      icon: <Bell size={18} />,
+      to: "/staff/notifications",
+    },
+    {
       label: "Task Status",
       icon: <ClipboardList size={18} />,
       to: "/staff/tasks",
@@ -118,17 +127,12 @@ const NAV_CONFIG = {
       icon: <SlidersHorizontal size={18} />,
       to: "/staff/rates",
     },
-    {
-      label: "Profile",
-      icon: <User size={18} />,
-      to: "/staff/profile",
-    },
   ],
   customer: [
     { label: "Home", icon: <Home size={18} />, to: "/" },
     { label: "Profile", icon: <User size={18} />, to: "/profile" },
     { label: "My Vehicles", icon: <Car size={18} />, to: "/customer/vehicles" },
-    { label: "Parking History", icon: <ClipboardList size={18} />, to: "/customer/history" },
+    { label: "History", icon: <History size={18} />, to: "/customer/history" },
     { label: "Wallet", icon: <Wallet size={18} />, to: "/customer/wallet" },
     {
       label: "Settings",
@@ -182,6 +186,9 @@ export default function DashboardLayout() {
   const [collapsed, setCollapsed] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef(null);
+
+  // Hook for notifications
+  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
 
   const role = user?.role;
   const navItems = NAV_CONFIG[role] || [];
@@ -260,7 +267,7 @@ export default function DashboardLayout() {
   };
 
   return (
-    <div className="h-[100dvh] overflow-hidden w-full bg-gray-100 dark:bg-[#0D0D0D] flex font-sans transition-colors duration-300">
+    <div className="min-h-screen bg-gray-100 dark:bg-[#0D0D0D] flex font-sans transition-colors duration-300">
       {/* ══════════ SIDEBAR ══════════ */}
       <aside
         className={`
@@ -381,49 +388,55 @@ export default function DashboardLayout() {
                 className="relative w-9 h-9 rounded-xl bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
               >
                 <Bell size={17} />
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
+                {unreadCount > 0 && (
+                  <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
               </button>
               {notifOpen && (
-                <div className="absolute right-0 top-[calc(100%+8px)] w-72 bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden z-50">
-                  <div className="px-4 py-3 border-b border-gray-100 dark:border-white/5">
+                <div className="absolute right-0 top-[calc(100%+8px)] w-80 bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden z-50 flex flex-col max-h-[400px]">
+                  <div className="px-4 py-3 border-b border-gray-100 dark:border-white/5 flex justify-between items-center bg-gray-50 dark:bg-[#111]">
                     <p className="text-gray-900 dark:text-white font-bold text-sm">
-                      Notifications
+                      Thông báo
                     </p>
+                    {unreadCount > 0 && (
+                      <button onClick={markAllAsRead} className="text-xs text-emerald-500 hover:text-emerald-400 font-medium">
+                        Đánh dấu đã đọc
+                      </button>
+                    )}
                   </div>
-                  {[
-                    {
-                      text: "Gate B camera offline",
-                      time: "3m ago",
-                      dot: "bg-yellow-400",
-                    },
-                    {
-                      text: "New booking #B-2041 created",
-                      time: "10m ago",
-                      dot: "bg-green-400",
-                    },
-                    {
-                      text: "Payment timeout – Slot A-07",
-                      time: "1h ago",
-                      dot: "bg-red-400",
-                    },
-                  ].map((n, i) => (
-                    <div
-                      key={i}
-                      className="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-white/5 border-b border-gray-100 dark:border-white/5 last:border-0 cursor-pointer"
-                    >
-                      <div
-                        className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${n.dot}`}
-                      />
-                      <div>
-                        <p className="text-gray-700 dark:text-gray-300 text-xs font-medium">
-                          {n.text}
-                        </p>
-                        <p className="text-gray-400 dark:text-gray-600 text-[10px] mt-0.5">
-                          {n.time}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
+                  <div className="overflow-y-auto flex-1">
+                    {notifications.length === 0 ? (
+                      <div className="p-6 text-center text-gray-500 text-sm">Không có thông báo nào</div>
+                    ) : (
+                      notifications.map((n) => (
+                        <div
+                          key={n._id || n.notificationId}
+                          onClick={() => !n.isRead && markAsRead(n._id || n.notificationId)}
+                          className={`flex items-start gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-white/5 border-b border-gray-100 dark:border-white/5 last:border-0 cursor-pointer transition-colors ${!n.isRead ? 'bg-emerald-50/50 dark:bg-emerald-500/5' : ''}`}
+                        >
+                          <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${!n.isRead ? 'bg-emerald-500' : 'bg-transparent'}`} />
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-xs font-medium ${!n.isRead ? 'text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400'}`}>
+                              {n.title}
+                            </p>
+                            <p className="text-gray-500 dark:text-gray-500 text-[11px] mt-0.5 line-clamp-2">
+                              {n.content}
+                            </p>
+                            <p className="text-gray-400 dark:text-gray-600 text-[10px] mt-1">
+                              {n.createdAt ? formatDistanceToNow(new Date(n.createdAt), { addSuffix: true, locale: vi }) : 'Vừa xong'}
+                            </p>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  <div className="p-2 border-t border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-[#111]">
+                    <button onClick={() => navigate(role === 'staff' || role === 'admin' ? `/${role}/notifications` : '/profile')} className="w-full text-center text-xs text-gray-500 hover:text-gray-900 dark:hover:text-white py-1">
+                      Xem tất cả
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

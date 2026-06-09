@@ -1,4 +1,5 @@
 const nodemailer = require('nodemailer');
+const { buildWebOtpLine } = require('./otpAutofillUtils');
 
 /**
  * Create reusable transporter using env credentials
@@ -28,10 +29,21 @@ const generateOTP = () => {
  */
 const sendOTPEmail = async (toEmail, otp) => {
   const transporter = createTransporter();
+  const webOtpLine = buildWebOtpLine(otp);
+
   await transporter.sendMail({
     from: `"VALO Parking" <${process.env.EMAIL_USER}>`,
     to: toEmail,
-    subject: 'Your Email Verification OTP',
+    subject: 'Your Email Verification OTP Code',
+    text: [
+      'Email Verification',
+      'Use the OTP below to verify your email address. It will expire in 10 minutes.',
+      '',
+      otp,
+      '',
+      'If you did not request this, please ignore this email.',
+      webOtpLine,
+    ].join('\n'),
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px; border: 1px solid #e5e7eb; border-radius: 8px;">
         <h2 style="color: #1f2937; margin-bottom: 8px;">Email Verification</h2>
@@ -40,6 +52,7 @@ const sendOTPEmail = async (toEmail, otp) => {
           ${otp}
         </div>
         <p style="color: #9ca3af; font-size: 13px; margin-top: 24px;">If you did not request this, please ignore this email.</p>
+        <p style="color: #d1d5db; font-size: 1px; line-height: 1px; margin: 0;">${webOtpLine}</p>
       </div>
     `,
   });
