@@ -13,12 +13,12 @@ import { apiFetch } from '../../services/api';
 const ROLES = {
   customer: {
     label: 'Customer',
-    gradient: 'from-[#ffd555] to-amber-500',
-    bg: 'bg-[#ffd555]/15',
-    border: 'border-[#ffd555]/40',
-    text: 'text-[#ffd555]',
-    glow: 'rgba(255,213,85,0.4)',
-    dot: 'bg-[#ffd555]',
+    gradient: 'from-[#10B981] to-[#14B8A6]',
+    bg: 'bg-emerald-500/12',
+    border: 'border-emerald-400/35',
+    text: 'text-[#34D399]',
+    glow: 'rgba(16,185,129,0.35)',
+    dot: 'bg-[#34D399]',
     permissions: ['View parking spots', 'Create reservations', 'Manage own bookings', 'Payment history'],
   },
   staff: {
@@ -86,8 +86,8 @@ function StatusBadge({ status }) {
     );
   if (status === 'pending')
     return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/15 border border-amber-400/30 text-amber-300">
-        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />Pending
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-teal-500/15 border border-teal-400/30 text-teal-300">
+        <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />Pending
       </span>
     );
   return (
@@ -116,11 +116,11 @@ function StatCard({ icon: Icon, label, value, gradient, glow, loading }) {
     <div
       className="relative rounded-2xl p-4 overflow-hidden cursor-default group transition-all duration-300 hover:scale-[1.035]"
       style={{
-        background: 'rgba(255,255,255,0.03)',
-        border: '1px solid rgba(255,255,255,0.08)',
+        background: 'linear-gradient(135deg, rgba(16,19,18,0.96), rgba(18,23,22,0.86))',
+        border: '1px solid rgba(16,185,129,0.18)',
         boxShadow: '0 4px 24px rgba(0,0,0,0.3)',
       }}
-      onMouseEnter={e => { e.currentTarget.style.boxShadow = `0 8px 40px ${glow}, 0 0 0 1px rgba(255,255,255,0.12)`; }}
+      onMouseEnter={e => { e.currentTarget.style.boxShadow = `0 8px 40px ${glow}, 0 0 0 1px rgba(16,185,129,0.22)`; }}
       onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 4px 24px rgba(0,0,0,0.3)'; }}
     >
       {/* sweep shimmer */}
@@ -131,7 +131,7 @@ function StatCard({ icon: Icon, label, value, gradient, glow, loading }) {
 
       <div className="relative flex items-start justify-between">
         <div>
-          <p className="text-[11px] text-white/40 uppercase tracking-widest font-semibold mb-2">{label}</p>
+          <p className="text-[11px] text-[#94A3B8] uppercase tracking-widest font-semibold mb-2">{label}</p>
           <p className="text-3xl font-bold text-white">
             {loading ? <span className="inline-block w-12 h-8 rounded bg-white/10 animate-skeleton" /> : <AnimatedCounter target={value} />}
           </p>
@@ -367,11 +367,11 @@ export default function AccountManagement() {
 
   const SortIcon = ({ col }) => {
     if (sortCol !== col) return <ChevronDown size={12} className="text-white/20" />;
-    return sortDir === 'asc' ? <ChevronUp size={12} className="text-[#ffd555]" /> : <ChevronDown size={12} className="text-[#ffd555]" />;
+    return sortDir === 'asc' ? <ChevronUp size={12} className="text-[#34D399]" /> : <ChevronDown size={12} className="text-[#34D399]" />;
   };
 
   return (
-    <div className="flex h-[calc(100vh-70px)] bg-[#080808] text-white relative overflow-hidden">
+    <div className="flex h-[calc(100vh-70px)] bg-[#050505] text-[#F8FAFC] relative overflow-hidden">
       <style>{`
         @keyframes skeletonShimmer {
           0% { background-position: -400px 0; }
@@ -405,17 +405,17 @@ export default function AccountManagement() {
         ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.22); }
         .row-hover { transition: background 0.18s, transform 0.18s, box-shadow 0.18s; }
         .row-hover:hover { background: rgba(255,255,255,0.035); transform: translateY(-1px); box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
-        .btn-glow-gold:hover { box-shadow: 0 0 20px rgba(255,213,85,0.45); }
+        .btn-glow-staff:hover { box-shadow: 0 0 20px rgba(16,185,129,0.4); }
         .btn-glow-red:hover  { box-shadow: 0 0 20px rgba(239,68,68,0.4); }
         .btn-glow-green:hover{ box-shadow: 0 0 20px rgba(16,185,129,0.4); }
         .header-sweep {
-          background: linear-gradient(135deg, #0d0d0d 0%, #111 40%, #161410 70%, #0d0d0d 100%);
+          background: linear-gradient(135deg, #050505 0%, #101312 45%, #121716 100%);
           position: relative; overflow: hidden;
         }
         .header-sweep::before {
           content: '';
           position: absolute; inset: 0;
-          background: linear-gradient(105deg, transparent 30%, rgba(255,213,85,0.04) 50%, transparent 70%);
+          background: linear-gradient(105deg, transparent 30%, rgba(16,185,129,0.06) 50%, transparent 70%);
           animation: sweepAnim 4s ease-in-out infinite;
         }
         @keyframes sweepAnim {
@@ -428,34 +428,34 @@ export default function AccountManagement() {
       <div className={`flex flex-col flex-1 min-w-0 overflow-hidden transition-all duration-300`}>
 
         {/* -- Header -- */}
-        <div className="bg-[#080808] px-8 pt-3 pb-3 border-b border-white/[0.06] flex-shrink-0">
+        <div className="bg-[#050505] px-8 pt-3 pb-3 border-b border-emerald-500/[0.12] flex-shrink-0">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-[#ffd555] tracking-tight">Customer Management</h1>
-              <p className="text-sm text-white/40 mt-0.5">Manage customer accounts and access permissions</p>
+              <h1 className="text-2xl font-bold bg-gradient-to-r from-[#34D399] via-[#10B981] to-[#14B8A6] bg-clip-text text-transparent tracking-tight">Customer Management</h1>
+              <p className="text-sm text-[#94A3B8] mt-0.5">Manage customer accounts and access permissions</p>
             </div>
-            <button onClick={fetchUsers} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white/60 hover:text-white hover:bg-white/8 transition-all text-sm">
+            <button onClick={fetchUsers} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#101312] border border-emerald-500/20 text-[#94A3B8] hover:text-[#34D399] hover:border-emerald-400/40 hover:bg-emerald-500/10 hover:shadow-[0_0_18px_rgba(16,185,129,0.18)] transition-all text-sm">
               <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
             </button>
           </div>
 
           {/* -- Stat Cards -- */}
           <div className="grid grid-cols-4 gap-4 mt-4">
-            <StatCard icon={Users}   label="Total Customers"  value={totalAccounts} gradient="from-cyan-400 to-blue-500"    glow="rgba(6,182,212,0.3)"    loading={loading} />
-            <StatCard icon={UserPlus} label="New This Month"  value={newThisMonth}  gradient="from-violet-400 to-purple-600" glow="rgba(167,139,250,0.3)"  loading={loading} />
-            <StatCard icon={UserX}   label="Blocked Customers" value={blockedCount}  gradient="from-rose-500 to-red-600"     glow="rgba(239,68,68,0.3)"    loading={loading} />
-            <StatCard icon={Clock}   label="Pending Verify"   value={pendingCount}  gradient="from-amber-400 to-orange-500" glow="rgba(251,191,36,0.3)"   loading={loading} />
+            <StatCard icon={Users}   label="Total Customers"  value={totalAccounts} gradient="from-[#10B981] to-cyan-400"   glow="rgba(16,185,129,0.28)" loading={loading} />
+            <StatCard icon={UserPlus} label="New This Month"  value={newThisMonth}  gradient="from-[#34D399] to-[#10B981]" glow="rgba(52,211,153,0.28)" loading={loading} />
+            <StatCard icon={UserX}   label="Blocked Customers" value={blockedCount}  gradient="from-[#EF4444] to-rose-600"  glow="rgba(239,68,68,0.24)" loading={loading} />
+            <StatCard icon={Clock}   label="Pending Verify"   value={pendingCount}  gradient="from-[#14B8A6] to-[#10B981]" glow="rgba(20,184,166,0.28)" loading={loading} />
           </div>
         </div>
 
         {/* -- Controls Bar -- */}
-        <div className="flex flex-wrap items-center gap-4 px-8 py-2 flex-shrink-0 bg-[#080808]">
+        <div className="flex flex-wrap items-center gap-4 px-8 py-2 flex-shrink-0 bg-[#050505]">
           <div className="relative flex-1 min-w-[240px] max-w-sm">
             <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
             <input
               value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setPage(1); }}
               placeholder="Search name, email, phone..."
-              className="w-full bg-[#111] border border-white/[0.08] rounded-full py-2.5 pl-10 pr-4 text-sm text-white placeholder-white/30 focus:outline-none focus:border-[#ffd555]/50 focus:ring-1 focus:ring-[#ffd555]/30 transition-all shadow-inner"
+              className="w-full bg-[#101312] border border-emerald-500/18 rounded-full py-2.5 pl-10 pr-4 text-sm text-[#F8FAFC] placeholder-[#94A3B8]/55 focus:outline-none focus:border-emerald-400/50 focus:ring-1 focus:ring-emerald-400/25 hover:border-emerald-400/30 transition-all shadow-inner"
             />
           </div>
 
@@ -464,20 +464,20 @@ export default function AccountManagement() {
             
             {/* Status Filter */}
             <Menu as="div" className="relative inline-block text-left z-30">
-              <Menu.Button className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#111] border border-white/[0.08] text-sm text-white/70 hover:border-white/20 hover:text-white hover:bg-white/[0.02] transition-all shadow-sm">
+              <Menu.Button className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#101312] border border-emerald-500/18 text-sm text-[#94A3B8] hover:border-emerald-400/35 hover:text-[#F8FAFC] hover:bg-emerald-500/[0.06] transition-all shadow-sm">
                 <Eye size={14} className="text-white/40" />
                 <span className="font-medium">{filterStatus === 'all' ? 'All Status' : filterStatus === 'active' ? 'Active' : 'Blocked'}</span>
                 <ChevronDown size={14} className="text-white/40" />
               </Menu.Button>
               <Transition as={Fragment} enter="transition ease-out duration-200" enterFrom="opacity-0 translate-y-1" enterTo="opacity-100 translate-y-0" leave="transition ease-in duration-150" leaveFrom="opacity-100 translate-y-0" leaveTo="opacity-0 translate-y-1">
-                <Menu.Items className="absolute left-0 mt-2 w-40 origin-top-left rounded-xl bg-[#111] border border-white/10 shadow-2xl backdrop-blur-xl focus:outline-none overflow-hidden">
+                <Menu.Items className="absolute left-0 mt-2 w-40 origin-top-left rounded-xl bg-[#101312] border border-emerald-500/20 shadow-2xl backdrop-blur-xl focus:outline-none overflow-hidden">
                   <div className="p-1.5">
                     {[['all','All Status'],['active','Active'],['blocked','Blocked']].map(([v,l]) => (
                       <Menu.Item key={v}>
                         {({ active }) => (
                           <button onClick={() => { setFilterStatus(v); setPage(1); }}
-                            className={`${active ? 'bg-white/10 text-white' : 'text-white/70'} group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors`}>
-                            {filterStatus === v ? <Check size={14} className="text-[#ffd555]" /> : <div className="w-3.5" />}
+                            className={`${active ? 'bg-emerald-500/10 text-[#F8FAFC]' : 'text-[#94A3B8]'} group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors`}>
+                            {filterStatus === v ? <Check size={14} className="text-[#34D399]" /> : <div className="w-3.5" />}
                             {l}
                           </button>
                         )}
@@ -490,20 +490,20 @@ export default function AccountManagement() {
 
             {/* Sort Filter */}
             <Menu as="div" className="relative inline-block text-left z-30">
-              <Menu.Button className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#111] border border-white/[0.08] text-sm text-white/70 hover:border-white/20 hover:text-white hover:bg-white/[0.02] transition-all shadow-sm">
+              <Menu.Button className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#101312] border border-emerald-500/18 text-sm text-[#94A3B8] hover:border-emerald-400/35 hover:text-[#F8FAFC] hover:bg-emerald-500/[0.06] transition-all shadow-sm">
                 <Clock size={14} className="text-white/40" />
                 <span className="font-medium"> {sortOrder === 'newest' ? 'Newest' : 'Oldest'}</span>
                 <ChevronDown size={14} className="text-white/40" />
               </Menu.Button>
               <Transition as={Fragment} enter="transition ease-out duration-200" enterFrom="opacity-0 translate-y-1" enterTo="opacity-100 translate-y-0" leave="transition ease-in duration-150" leaveFrom="opacity-100 translate-y-0" leaveTo="opacity-0 translate-y-1">
-                <Menu.Items className="absolute left-0 mt-2 w-40 origin-top-left rounded-xl bg-[#111] border border-white/10 shadow-2xl backdrop-blur-xl focus:outline-none overflow-hidden">
+                <Menu.Items className="absolute left-0 mt-2 w-40 origin-top-left rounded-xl bg-[#101312] border border-emerald-500/20 shadow-2xl backdrop-blur-xl focus:outline-none overflow-hidden">
                   <div className="p-1.5">
                     {[['newest','Newest First'],['oldest','Oldest First']].map(([v,l]) => (
                       <Menu.Item key={v}>
                         {({ active }) => (
                           <button onClick={() => { setSortOrder(v); setPage(1); }}
-                            className={`${active ? 'bg-white/10 text-white' : 'text-white/70'} group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors`}>
-                            {sortOrder === v ? <Check size={14} className="text-[#ffd555]" /> : <div className="w-3.5" />}
+                            className={`${active ? 'bg-emerald-500/10 text-[#F8FAFC]' : 'text-[#94A3B8]'} group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors`}>
+                            {sortOrder === v ? <Check size={14} className="text-[#34D399]" /> : <div className="w-3.5" />}
                             {l}
                           </button>
                         )}
@@ -522,14 +522,14 @@ export default function AccountManagement() {
         <div className="flex-1 overflow-auto min-h-0">
           <table className="w-full min-w-[800px] border-collapse">
             <thead className="sticky top-0 z-20">
-              <tr className="bg-[#14120c] border-b border-[#ffd555]/20">
+              <tr className="border-b border-emerald-500/20" style={{ background: 'linear-gradient(90deg, rgba(16,185,129,0.12), rgba(20,184,166,0.06))' }}>
                 <th className="w-6"></th>
                 {['Account','Email','Phone','Role','Status','Joined Date'].map(label => (
                   <th key={label} className="px-4 py-4 text-left">
-                    <span className="text-[11px] font-bold uppercase tracking-widest text-[#ffd555]/70">{label}</span>
+                    <span className="text-[11px] font-bold uppercase tracking-widest text-[#34D399]">{label}</span>
                   </th>
                 ))}
-                <th className="px-4 py-4 text-center text-[11px] font-bold uppercase tracking-widest text-[#ffd555]/70">Actions</th>
+                <th className="px-4 py-4 text-center text-[11px] font-bold uppercase tracking-widest text-[#34D399]">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -545,7 +545,7 @@ export default function AccountManagement() {
               {!loading && pageUsers.map(u => {
                 const isActive = panelUser?._id === u._id;
                 return (
-                  <tr key={u._id} className={`group border-b border-white/[0.04] cursor-pointer hover:bg-white/[0.02] hover:-translate-y-[1px] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-200 ease-out ${isActive ? 'bg-[#ffd555]/[0.04]' : 'even:bg-white/[0.01]'}`}
+                  <tr key={u._id} className={`group border-b border-white/[0.04] cursor-pointer hover:bg-emerald-500/[0.035] hover:-translate-y-[1px] hover:shadow-[inset_0_1px_0_rgba(52,211,153,0.08),0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-200 ease-out ${isActive ? 'bg-emerald-500/[0.08]' : 'even:bg-white/[0.01]'}`}
                     onClick={() => openPanel(u)}>
                     <td className="w-4"></td>
                     <td className="px-4 py-3">
@@ -571,7 +571,7 @@ export default function AccountManagement() {
                     <td className="px-4 py-4" onClick={e => e.stopPropagation()}>
                       <div className="flex items-center justify-center">
                         <button onClick={(e) => { e.stopPropagation(); startEdit(u); }}
-                          title="Edit account" className="w-8 h-8 rounded-xl border border-[#ffd555]/10 bg-[#ffd555]/[0.02] hover:bg-[#ffd555]/10 hover:border-[#ffd555]/30 hover:text-[#ffd555] text-[#ffd555]/70 flex items-center justify-center transition-all duration-200 hover:scale-105">
+                          title="Edit account" className="w-8 h-8 rounded-xl border border-emerald-400/20 bg-emerald-500/[0.04] hover:bg-emerald-500/12 hover:border-emerald-400/45 hover:text-[#34D399] hover:shadow-[0_0_16px_rgba(16,185,129,0.22)] text-[#34D399]/80 flex items-center justify-center transition-all duration-200 hover:scale-105">
                           <Edit3 size={14} />
                         </button>
                       </div>
@@ -584,7 +584,7 @@ export default function AccountManagement() {
         </div>
 
         {/* -- Pagination -- */}
-        <div className="flex items-center justify-between px-8 py-4 border-t border-white/[0.05] bg-[#080808] flex-shrink-0">
+        <div className="flex items-center justify-between px-8 py-4 border-t border-emerald-500/[0.12] bg-[#050505] flex-shrink-0">
           <span className="text-xs text-white/30">Page {page} of {totalPages} · {filtered.length} results</span>
           <div className="flex items-center gap-1">
             <button disabled={page === 1} onClick={() => setPage(p => p - 1)}
@@ -593,7 +593,7 @@ export default function AccountManagement() {
               const p = i + 1;
               return (
                 <button key={p} onClick={() => setPage(p)}
-                  className={`w-8 h-8 rounded-lg text-xs font-semibold transition-all ${p === page ? 'bg-[#ffd555] text-black shadow-[0_0_12px_rgba(255,213,85,0.4)]' : 'text-white/40 hover:text-white hover:bg-white/6'}`}>
+                  className={`w-8 h-8 rounded-lg text-xs font-semibold transition-all ${p === page ? 'bg-[#10B981] text-[#02110c] shadow-[0_0_14px_rgba(16,185,129,0.45)]' : 'text-white/40 hover:text-[#34D399] hover:bg-emerald-500/10'}`}>
                   {p}
                 </button>
               );
@@ -657,14 +657,14 @@ export default function AccountManagement() {
                   {!isEditing ? (
                     <div className="space-y-4">
                       <div className="bg-[#171B20] rounded-2xl p-4 border border-white/[0.03] space-y-3">
-                        <h4 className="text-xs font-bold uppercase tracking-widest text-[#ffd555]/80 mb-1">Basic Info</h4>
+                        <h4 className="text-xs font-bold uppercase tracking-widest text-[#34D399]/85 mb-1">Basic Info</h4>
                         {[
                           { icon: Mail, label: 'Email Address', val: panelUser.email },
                           { icon: Phone, label: 'Phone Number', val: panelUser.profile?.phone || 'Not provided' },
                           { icon: Calendar, label: 'Join Date', val: formatDate(panelUser.createdAt) },
                         ].map(({ icon: Ic, label, val }) => (
                           <div key={label} className="flex items-center gap-3 group">
-                            <div className="w-8 h-8 rounded-lg bg-white/[0.03] flex items-center justify-center text-white/40 group-hover:bg-[#ffd555]/10 group-hover:text-[#ffd555] transition-colors">
+                            <div className="w-8 h-8 rounded-lg bg-white/[0.03] flex items-center justify-center text-white/40 group-hover:bg-emerald-500/10 group-hover:text-[#34D399] transition-colors">
                               <Ic size={14} />
                             </div>
                             <div>
@@ -676,11 +676,11 @@ export default function AccountManagement() {
                       </div>
 
                       <div className="bg-[#171B20] rounded-2xl p-4 border border-white/[0.03]">
-                        <h4 className="text-xs font-bold uppercase tracking-widest text-[#ffd555]/80 mb-3">Account Activity</h4>
+                        <h4 className="text-xs font-bold uppercase tracking-widest text-[#34D399]/85 mb-3">Account Activity</h4>
                         <div className="relative pl-3 border-l border-white/10 space-y-4">
                           {[
                             { icon: UserPlus, label: 'Account Created', date: panelUser.createdAt, color: 'text-emerald-400', bg: 'bg-emerald-400/10' },
-                            { icon: Edit3, label: 'Last Updated', date: panelUser.updatedAt, color: 'text-[#ffd555]', bg: 'bg-[#ffd555]/10' },
+                            { icon: Edit3, label: 'Last Updated', date: panelUser.updatedAt, color: 'text-[#34D399]', bg: 'bg-emerald-500/10' },
                           ].map(({ icon: Ic, label, date, color, bg }, i) => (
                             <div key={i} className="relative">
                               <div className={`absolute -left-[21px] w-6 h-6 rounded-full border-[3px] border-[#1B2027] flex items-center justify-center ${bg}`}>
@@ -698,35 +698,35 @@ export default function AccountManagement() {
                   ) : (
                     <div className="space-y-4">
                       <div className="space-y-3">
-                        <h4 className="text-xs font-bold uppercase tracking-widest text-[#ffd555]/80 mb-1">Edit Basic Info</h4>
+                        <h4 className="text-xs font-bold uppercase tracking-widest text-[#34D399]/85 mb-1">Edit Basic Info</h4>
                         <div className="grid grid-cols-1 gap-3">
                           <div>
                             <label className="block text-[10px] font-medium text-white/50 mb-1">Full Name</label>
                             <div className="relative group">
-                              <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 group-focus-within:text-[#ffd555] transition-colors" />
+                              <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 group-focus-within:text-[#34D399] transition-colors" />
                               <input type="text" value={editForm.fullName || ''} onChange={e => setEditForm(f => ({ ...f, fullName: e.target.value }))} placeholder="e.g. John Doe"
-                                className="w-full bg-[#171B20] border border-white/[0.05] rounded-xl pl-9 pr-3 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-[#ffd555]/50 focus:ring-1 focus:ring-[#ffd555]/30 focus:shadow-[0_0_15px_rgba(255,213,85,0.15)] transition-all" />
+                                className="w-full bg-[#101312] border border-emerald-500/18 rounded-xl pl-9 pr-3 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-emerald-400/50 focus:ring-1 focus:ring-emerald-400/25 focus:shadow-[0_0_15px_rgba(16,185,129,0.16)] transition-all" />
                             </div>
                           </div>
                         </div>
                         <div>
                           <label className="block text-[10px] font-medium text-white/50 mb-1">Phone Number</label>
                           <div className="relative group">
-                            <Phone size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 group-focus-within:text-[#ffd555] transition-colors" />
+                            <Phone size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 group-focus-within:text-[#34D399] transition-colors" />
                             <input type="text" value={editForm.phone || ''} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} placeholder="e.g. 0901234567"
-                              className="w-full bg-[#171B20] border border-white/[0.05] rounded-xl pl-9 pr-3 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-[#ffd555]/50 focus:ring-1 focus:ring-[#ffd555]/30 focus:shadow-[0_0_15px_rgba(255,213,85,0.15)] transition-all" />
+                              className="w-full bg-[#101312] border border-emerald-500/18 rounded-xl pl-9 pr-3 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-emerald-400/50 focus:ring-1 focus:ring-emerald-400/25 focus:shadow-[0_0_15px_rgba(16,185,129,0.16)] transition-all" />
                           </div>
                         </div>
                       </div>
 
                       <div className="space-y-3 pt-3 border-t border-white/[0.05]">
-                        <h4 className="text-xs font-bold uppercase tracking-widest text-[#ffd555]/80 mb-1">Role & Access</h4>
+                        <h4 className="text-xs font-bold uppercase tracking-widest text-[#34D399]/85 mb-1">Role & Access</h4>
                         <div>
                           <label className="block text-[10px] font-medium text-white/50 mb-1">User Role</label>
                           {/* Frontend Validation: Role dropdown completely removed. Replaced with a hardcoded, uneditable disabled display to prevent privilege escalation. */}
                           <div className="w-full bg-[#171B20]/50 border border-white/[0.05] rounded-xl px-3 py-2.5 flex items-center justify-between text-sm text-white/60 cursor-not-allowed">
                             <div className="flex items-center gap-2">
-                              <Shield size={14} className="text-[#ffd555]/60" />
+                              <Shield size={14} className="text-[#34D399]/70" />
                               <span className="capitalize">customer</span>
                             </div>
                             <Lock size={14} className="text-white/20" />
@@ -761,7 +761,7 @@ export default function AccountManagement() {
                           Cancel
                         </button>
                         <button onClick={handleSave} disabled={saveState === 'saving'}
-                          className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[#ffd555] to-[#f59e0b] text-black text-sm font-bold shadow-[0_0_20px_rgba(255,213,85,0.2)] hover:shadow-[0_0_25px_rgba(255,213,85,0.4)] transition-all active:scale-95 disabled:opacity-60 flex items-center justify-center gap-2 relative overflow-hidden group">
+                          className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[#10B981] to-[#14B8A6] text-[#02110c] text-sm font-bold shadow-[0_0_20px_rgba(16,185,129,0.22)] hover:shadow-[0_0_25px_rgba(16,185,129,0.4)] transition-all active:scale-95 disabled:opacity-60 flex items-center justify-center gap-2 relative overflow-hidden group">
                           {saveState === 'saving' ? (
                             <><RefreshCw size={16} className="animate-spin" /> Saving...</>
                           ) : (
@@ -775,7 +775,7 @@ export default function AccountManagement() {
                     ) : (
                       <>
                         <button onClick={startEdit}
-                          className="flex-1 py-2.5 rounded-xl border border-[#ffd555]/30 text-[#ffd555] text-sm font-medium hover:bg-[#ffd555]/10 hover:shadow-[0_0_15px_rgba(255,213,85,0.15)] transition-all active:scale-95">
+                          className="flex-1 py-2.5 rounded-xl border border-emerald-400/35 text-[#34D399] text-sm font-medium hover:bg-emerald-500/10 hover:shadow-[0_0_15px_rgba(16,185,129,0.2)] transition-all active:scale-95">
                           Edit Customer
                         </button>
                         {panelUser.status ? (
@@ -822,7 +822,7 @@ export default function AccountManagement() {
             transition-all duration-300
             ${
               toast.type === "saving"
-                ? "bg-yellow-500/15 text-yellow-300 border-yellow-500/30"
+                ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
                 : toast.type === "success"
                   ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
                   : "bg-red-500/15 text-red-300 border-red-500/30"
