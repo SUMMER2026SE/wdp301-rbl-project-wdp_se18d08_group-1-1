@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
-import { vi } from "date-fns/locale";
+import { enUS } from "date-fns/locale";
 import {
   Bell,
   CheckCircle2,
@@ -32,20 +32,20 @@ import {
 import AutoRulesTable from "./notifications/AutoRulesTable";
 
 const TABS = [
-  { id: "feed", label: "Lịch sử", icon: Bell },
-  { id: "compose", label: "Soạn gửi", icon: Send },
-  { id: "rules", label: "Luật tự động", icon: Zap },
+  { id: "feed", label: "Live Feed", icon: Bell },
+  { id: "compose", label: "Send Notification", icon: Send },
+  { id: "rules", label: "Automation Rules", icon: Zap },
 ];
 
 const PRIORITIES = ["INFO", "SUCCESS", "WARNING", "ERROR", "SYSTEM"];
 const TYPES = ["SYSTEM", "PARKING", "BOOKING", "WALLET", "PAYMENT", "ACCOUNT", "PROMOTION", "CAMERA"];
 
 const PRIORITY_META = {
-  INFO: { label: "Thông tin", dot: "bg-sky-400", chip: "border-sky-500/30 bg-sky-500/10 text-sky-300" },
-  SUCCESS: { label: "Thành công", dot: "bg-emerald-400", chip: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" },
-  WARNING: { label: "Cảnh báo", dot: "bg-amber-400", chip: "border-amber-500/30 bg-amber-500/10 text-amber-300" },
-  ERROR: { label: "Lỗi", dot: "bg-red-400", chip: "border-red-500/30 bg-red-500/10 text-red-300" },
-  SYSTEM: { label: "Hệ thống", dot: "bg-violet-400", chip: "border-violet-500/30 bg-violet-500/10 text-violet-300" },
+  INFO: { label: "Info", dot: "bg-sky-400", chip: "border-sky-500/30 bg-sky-500/10 text-sky-300" },
+  SUCCESS: { label: "Success", dot: "bg-emerald-400", chip: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" },
+  WARNING: { label: "Warning", dot: "bg-amber-400", chip: "border-amber-500/30 bg-amber-500/10 text-amber-300" },
+  ERROR: { label: "Error", dot: "bg-red-400", chip: "border-red-500/30 bg-red-500/10 text-red-300" },
+  SYSTEM: { label: "System", dot: "bg-violet-400", chip: "border-violet-500/30 bg-violet-500/10 text-violet-300" },
 };
 
 const emptyForm = {
@@ -66,18 +66,18 @@ function getUser() {
 }
 
 function formatTime(value) {
-  if (!value) return "Chưa có dữ liệu";
-  return formatDistanceToNow(new Date(value), { addSuffix: true, locale: vi });
+  if (!value) return "No data";
+  return formatDistanceToNow(new Date(value), { addSuffix: true, locale: enUS });
 }
 
 function getTargetLabel(item) {
-  if (item.targetType === "ALL_USERS") return "Tất cả khách hàng";
-  if (item.targetType === "MULTI_USER") return `${item.targetUsers?.length || 0} người nhận`;
+  if (item.targetType === "ALL_USERS") return "All customers";
+  if (item.targetType === "MULTI_USER") return `${item.targetUsers?.length || 0} recipients`;
   if (item.targetType === "SINGLE_USER") {
     const user = Array.isArray(item.targetUsers) ? item.targetUsers[0] : null;
-    return user?.email || user?.username || "Một người nhận";
+    return user?.email || user?.username || "One recipient";
   }
-  return "Hệ thống";
+  return "System";
 }
 
 export default function NotificationManagement() {
@@ -131,7 +131,7 @@ export default function NotificationManagement() {
       setHistoryList(res.data?.data || []);
       setStats(res.data?.stats || { totalSent: 0, success: 0, errors: 0 });
     } else {
-      setError(res.data?.message || "Không tải được lịch sử thông báo.");
+      setError(res.data?.message || "Unable to load notification history.");
     }
     setLoading(false);
   }, [filters.priority, filters.search]);
@@ -143,7 +143,7 @@ export default function NotificationManagement() {
     if (res.ok) {
       setAutoRules(res.data?.data || []);
     } else {
-      setError(res.data?.message || "Không tải được luật thông báo.");
+      setError(res.data?.message || "Unable to load notification rules.");
     }
     setRulesLoading(false);
   }, []);
@@ -172,46 +172,45 @@ export default function NotificationManagement() {
     setError(isError ? message : "");
     window.setTimeout(() => {
       setNotice("");
-      if (!isError) return;
-      setError("");
+      if (isError) setError("");
     }, 3000);
   };
 
   const markOneRead = async (id) => {
     const res = await markAdminHistoryAsRead(id);
-    if (!res.ok) return flash(res.data?.message || "Không đánh dấu được thông báo.", true);
+    if (!res.ok) return flash(res.data?.message || "Unable to mark notification as read.", true);
     setHistoryList((current) => current.map((item) => (item._id === id ? { ...item, isRead: true } : item)));
   };
 
   const markAllRead = async () => {
     const res = await markAllAdminHistoryAsRead();
-    if (!res.ok) return flash(res.data?.message || "Không đánh dấu được thông báo.", true);
+    if (!res.ok) return flash(res.data?.message || "Unable to mark notifications as read.", true);
     setHistoryList((current) => current.map((item) => ({ ...item, isRead: true })));
   };
 
   const removeNotification = async (id) => {
     const res = await deleteAdminHistoryNotification(id);
-    if (!res.ok) return flash(res.data?.message || "Không xóa được thông báo.", true);
+    if (!res.ok) return flash(res.data?.message || "Unable to hide notification.", true);
     setHistoryList((current) => current.filter((item) => item._id !== id));
   };
 
   const updateRule = async (eventKey, patch) => {
     const res = await updateAutoRule(eventKey, patch);
-    if (!res.ok) return flash(res.data?.message || "Cập nhật luật thất bại.", true);
+    if (!res.ok) return flash(res.data?.message || "Rule update failed.", true);
     await fetchRules();
-    flash("Đã cập nhật luật thông báo.");
+    flash("Notification rule updated.");
   };
 
   const testRule = async (eventKey) => {
     const res = await testAutoRule(eventKey);
-    if (!res.ok) return flash(res.data?.message || "Gửi thử luật thất bại.", true);
+    if (!res.ok) return flash(res.data?.message || "Rule test failed.", true);
     const email = res.data?.data?.email;
     if (email?.sent) {
-      flash(`Đã gửi thông báo thử nghiệm và email tới ${email.to}.`);
+      flash(`Test notification and email sent to ${email.to}.`);
     } else if (email?.reason) {
-      flash(`Đã gửi in-app test. Email chưa gửi: ${email.reason}.`);
+      flash(`In-app test sent. Email skipped: ${email.reason}.`);
     } else {
-      flash("Đã gửi thông báo thử nghiệm.");
+      flash("Test notification sent.");
     }
     fetchHistory();
   };
@@ -231,11 +230,11 @@ export default function NotificationManagement() {
 
     setSaving(false);
     if (!res.ok) {
-      flash(res.data?.message || res.data?.errors?.[0]?.msg || "Gửi thông báo thất bại.", true);
+      flash(res.data?.message || res.data?.errors?.[0]?.msg || "Failed to send notification.", true);
       return false;
     }
 
-    flash("Đã gửi thông báo.");
+    flash("Notification sent.");
     setTab("feed");
     fetchHistory();
     return true;
@@ -250,9 +249,9 @@ export default function NotificationManagement() {
               <ShieldCheck size={14} />
               {isAdmin ? "Admin" : "Staff"} Notification Center
             </div>
-            <h1 className="mt-3 text-2xl font-bold tracking-tight text-white lg:text-3xl">Quản lý thông báo</h1>
+            <h1 className="mt-3 text-2xl font-bold tracking-tight text-white lg:text-3xl">Notification Management</h1>
             <p className="mt-1 max-w-2xl text-sm text-gray-400">
-              Theo dõi lịch sử gửi, tạo thông báo cho khách hàng và cấu hình các trigger tự động.
+              Track send history, create customer notifications, and manage automated triggers.
             </p>
           </div>
           <div className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${socket?.connected ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" : "border-amber-500/30 bg-amber-500/10 text-amber-300"}`}>
@@ -262,10 +261,10 @@ export default function NotificationManagement() {
         </header>
 
         <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <StatCard label="Tổng đã gửi" value={stats.totalSent || historyList.length} icon={Bell} />
-          <StatCard label="Chưa đọc nội bộ" value={unreadAdmin} icon={Mail} />
-          <StatCard label="Thành công/Info" value={stats.success || 0} icon={CheckCircle2} />
-          <StatCard label="Cảnh báo/Lỗi" value={stats.errors || 0} icon={CircleAlert} />
+          <StatCard label="Total Sent" value={stats.totalSent || historyList.length} icon={Bell} />
+          <StatCard label="Unread Internal" value={unreadAdmin} icon={Mail} />
+          <StatCard label="Success/Info" value={stats.success || 0} icon={CheckCircle2} />
+          <StatCard label="Warnings/Errors" value={stats.errors || 0} icon={CircleAlert} />
         </section>
 
         {(notice || error) && (
@@ -345,7 +344,7 @@ function FeedTab({ filters, items, loading, theme, onChangeFilters, onRefresh, o
           <input
             value={filters.search}
             onChange={(event) => onChangeFilters((current) => ({ ...current, search: event.target.value }))}
-            placeholder="Tìm tiêu đề, nội dung, người nhận"
+            placeholder="Search title, content, or recipient"
             className={`h-10 w-full rounded-lg border border-white/10 bg-[#0D0D0D] pl-9 pr-3 text-sm text-gray-100 outline-none ${theme.ring}`}
           />
         </div>
@@ -354,7 +353,7 @@ function FeedTab({ filters, items, loading, theme, onChangeFilters, onRefresh, o
           onChange={(event) => onChangeFilters((current) => ({ ...current, priority: event.target.value }))}
           className={`h-10 rounded-lg border border-white/10 bg-[#0D0D0D] px-3 text-sm text-gray-100 outline-none ${theme.ring}`}
         >
-          <option value="ALL">Tất cả mức ưu tiên</option>
+          <option value="ALL">All priorities</option>
           {PRIORITIES.map((priority) => (
             <option key={priority} value={priority}>
               {priority}
@@ -363,11 +362,11 @@ function FeedTab({ filters, items, loading, theme, onChangeFilters, onRefresh, o
         </select>
         <button type="button" onClick={onReadAll} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-white/10 px-3 text-sm font-semibold text-gray-300 hover:bg-white/5">
           <CheckCircle2 size={16} />
-          Đã đọc tất cả
+          Mark all read
         </button>
         <button type="button" onClick={onRefresh} className={`inline-flex h-10 items-center justify-center gap-2 rounded-lg px-3 text-sm font-semibold ${theme.button}`}>
           {loading ? <Loader2 className="animate-spin" size={16} /> : <RefreshCw size={16} />}
-          Làm mới
+          Refresh
         </button>
       </div>
 
@@ -375,10 +374,10 @@ function FeedTab({ filters, items, loading, theme, onChangeFilters, onRefresh, o
         {loading ? (
           <div className="flex items-center gap-2 p-6 text-sm text-gray-400">
             <Loader2 className="animate-spin" size={16} />
-            Đang tải lịch sử thông báo...
+            Loading notification history...
           </div>
         ) : items.length === 0 ? (
-          <div className="p-10 text-center text-sm text-gray-500">Chưa có thông báo phù hợp.</div>
+          <div className="p-10 text-center text-sm text-gray-500">No matching notifications.</div>
         ) : (
           <div className="divide-y divide-white/5">
             {items.map((item) => (
@@ -417,11 +416,11 @@ function NotificationRow({ item, onRead, onDelete }) {
       </div>
       <div className="flex shrink-0 gap-2 lg:justify-end">
         {!item.isRead && (
-          <button type="button" onClick={() => onRead(item._id)} className="grid h-9 w-9 place-items-center rounded-lg border border-white/10 text-gray-400 hover:bg-white/5 hover:text-white" aria-label="Đánh dấu đã đọc">
+          <button type="button" onClick={() => onRead(item._id)} className="grid h-9 w-9 place-items-center rounded-lg border border-white/10 text-gray-400 hover:bg-white/5 hover:text-white" aria-label="Mark as read">
             <CheckCircle2 size={16} />
           </button>
         )}
-        <button type="button" onClick={() => onDelete(item._id)} className="grid h-9 w-9 place-items-center rounded-lg border border-red-500/20 text-red-300 hover:bg-red-500/10" aria-label="Ẩn thông báo">
+        <button type="button" onClick={() => onDelete(item._id)} className="grid h-9 w-9 place-items-center rounded-lg border border-red-500/20 text-red-300 hover:bg-red-500/10" aria-label="Hide notification">
           <Trash2 size={16} />
         </button>
       </div>
@@ -446,37 +445,37 @@ function ComposeTab({ theme, saving, onSubmit }) {
   return (
     <form onSubmit={submit} className="grid gap-5 rounded-xl border border-white/5 bg-[#151515] p-5 lg:grid-cols-[1.1fr_0.9fr]">
       <div className="space-y-4">
-        <Field label="Tiêu đề">
+        <Field label="Title">
           <input
             value={form.title}
             onChange={(event) => update("title", event.target.value)}
             maxLength={200}
-            placeholder="Ví dụ: Bảo trì hệ thống tối nay"
+            placeholder="Example: System maintenance tonight"
             className={`h-11 w-full rounded-lg border border-white/10 bg-[#0D0D0D] px-3 text-sm text-white outline-none ${theme.ring}`}
           />
         </Field>
-        <Field label="Nội dung">
+        <Field label="Content">
           <textarea
             value={form.content}
             onChange={(event) => update("content", event.target.value)}
             maxLength={2000}
-            rows={7}
-            placeholder="Nhập nội dung thông báo"
-            className={`w-full resize-none rounded-lg border border-white/10 bg-[#0D0D0D] px-3 py-3 text-sm leading-6 text-white outline-none ${theme.ring}`}
+            rows={8}
+            placeholder="Write the notification content..."
+            className={`w-full resize-none rounded-lg border border-white/10 bg-[#0D0D0D] px-3 py-3 text-sm text-white outline-none ${theme.ring}`}
           />
         </Field>
       </div>
 
       <div className="space-y-4">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Loại">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Type">
             <select value={form.type} onChange={(event) => update("type", event.target.value)} className={`h-11 w-full rounded-lg border border-white/10 bg-[#0D0D0D] px-3 text-sm text-white outline-none ${theme.ring}`}>
               {TYPES.map((type) => (
                 <option key={type} value={type}>{type}</option>
               ))}
             </select>
           </Field>
-          <Field label="Mức ưu tiên">
+          <Field label="Priority">
             <select value={form.priority} onChange={(event) => update("priority", event.target.value)} className={`h-11 w-full rounded-lg border border-white/10 bg-[#0D0D0D] px-3 text-sm text-white outline-none ${theme.ring}`}>
               {PRIORITIES.map((priority) => (
                 <option key={priority} value={priority}>{priority}</option>
@@ -485,12 +484,12 @@ function ComposeTab({ theme, saving, onSubmit }) {
           </Field>
         </div>
 
-        <Field label="Người nhận">
+        <Field label="Recipients">
           <div className="grid gap-2 sm:grid-cols-3">
             {[
-              { value: "ALL_USERS", label: "Tất cả" },
-              { value: "SINGLE_USER", label: "Một user" },
-              { value: "MULTI_USER", label: "Nhiều user" },
+              { value: "ALL_USERS", label: "All" },
+              { value: "SINGLE_USER", label: "One user" },
+              { value: "MULTI_USER", label: "Multiple users" },
             ].map((option) => (
               <button
                 key={option.value}
@@ -516,17 +515,17 @@ function ComposeTab({ theme, saving, onSubmit }) {
         )}
 
         <div className="rounded-xl border border-white/5 bg-[#0D0D0D] p-4">
-          <p className="text-sm font-semibold text-white">Tóm tắt</p>
+          <p className="text-sm font-semibold text-white">Summary</p>
           <div className="mt-3 space-y-2 text-sm text-gray-400">
-            <p>Loại: <span className="text-gray-200">{form.type}</span></p>
-            <p>Ưu tiên: <span className="text-gray-200">{form.priority}</span></p>
-            <p>Người nhận: <span className="text-gray-200">{form.audience === "ALL_USERS" ? "Tất cả khách hàng" : `${form.users.length} user`}</span></p>
+            <p>Type: <span className="text-gray-200">{form.type}</span></p>
+            <p>Priority: <span className="text-gray-200">{form.priority}</span></p>
+            <p>Recipients: <span className="text-gray-200">{form.audience === "ALL_USERS" ? "All customers" : `${form.users.length} users`}</span></p>
           </div>
         </div>
 
         <button type="submit" disabled={!valid || saving} className={`inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50 ${theme.button}`}>
           {saving ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}
-          Gửi thông báo
+          Send Notification
         </button>
       </div>
     </form>
@@ -573,7 +572,7 @@ function UserPicker({ multi, value, onChange, theme }) {
         <input
           value={q}
           onChange={(event) => setQ(event.target.value)}
-          placeholder="Tìm username hoặc email"
+          placeholder="Search username or email"
           className={`h-10 w-full rounded-lg border border-white/10 bg-[#151515] pl-9 pr-3 text-sm text-white outline-none ${theme.ring}`}
         />
       </div>
@@ -595,10 +594,10 @@ function UserPicker({ multi, value, onChange, theme }) {
         {loading ? (
           <div className="flex items-center gap-2 p-4 text-sm text-gray-500">
             <Loader2 className="animate-spin" size={14} />
-            Đang tìm...
+            Searching...
           </div>
         ) : results.length === 0 ? (
-          <p className="p-4 text-sm text-gray-500">Không có người dùng phù hợp.</p>
+          <p className="p-4 text-sm text-gray-500">No matching users.</p>
         ) : (
           results.map((user) => {
             const active = value.some((item) => item._id === user._id);

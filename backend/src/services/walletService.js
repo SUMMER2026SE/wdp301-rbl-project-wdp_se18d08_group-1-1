@@ -25,16 +25,73 @@ const getOrCreateWallet = async (userId) => {
 /**
  * Get wallet balance
  * @param {string} userId - User's ObjectId
- * @returns {Object} { balance, totalTopUp, totalSpent, totalRefunded }
+ * @returns {Object} { balance, totalTopUp, totalSpent, totalRefunded, totalTransactions, totalParkingPayments }
  */
 const getBalance = async (userId) => {
   const wallet = await getOrCreateWallet(userId);
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+
+  const [lifetimeAgg, monthlyAgg] = await Promise.all([
+    WalletTransaction.aggregate([
+      { $match: { userId: new mongoose.Types.ObjectId(userId), status: 'COMPLETED' } },
+      {
+        $group: {
+          _id: '$type',
+          amount: { $sum: '$amount' },
+          count: { $sum: 1 },
+        },
+      },
+    ]),
+    WalletTransaction.aggregate([
+      {
+        $match: {
+          userId: new mongoose.Types.ObjectId(userId),
+          status: 'COMPLETED',
+          createdAt: { $gte: monthStart },
+        },
+      },
+      {
+        $group: {
+          _id: '$type',
+          amount: { $sum: '$amount' },
+          count: { $sum: 1 },
+        },
+      },
+    ]),
+  ]);
+
+  const toSummary = (rows) =>
+    rows.reduce(
+      (acc, row) => {
+        acc[row._id] = { amount: row.amount || 0, count: row.count || 0 };
+        return acc;
+      },
+      {}
+    );
+
+  const lifetime = toSummary(lifetimeAgg);
+  const monthly = toSummary(monthlyAgg);
+
+  const [totalTransactions, totalParkingPayments] = await Promise.all([
+    WalletTransaction.countDocuments({ userId }),
+    WalletTransaction.countDocuments({ userId, type: 'PAYMENT', status: 'COMPLETED' }),
+  ]);
+
   return {
     balance: wallet.balance,
-    totalTopUp: wallet.totalTopUp,
-    totalSpent: wallet.totalSpent,
-    totalRefunded: wallet.totalRefunded,
+    totalTopUp: lifetime.TOP_UP?.amount || wallet.totalTopUp,
+    totalSpent: lifetime.PAYMENT?.amount || wallet.totalSpent,
+    totalRefunded: lifetime.REFUND?.amount || wallet.totalRefunded,
+    monthlyTopUp: monthly.TOP_UP?.amount || 0,
+    monthlySpent: monthly.PAYMENT?.amount || 0,
+    monthlyRefunded: monthly.REFUND?.amount || 0,
+    monthlyParkingPayments: monthly.PAYMENT?.count || 0,
+    totalTransactions,
+    totalParkingPayments,
     status: wallet.status,
+    overdraftLimit: -100000,
   };
 };
 

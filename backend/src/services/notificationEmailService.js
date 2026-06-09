@@ -52,7 +52,7 @@ const createTransporter = () =>
 
 const getActionUrl = (eventKey) => {
   const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
-  if (eventKey.startsWith('wallet.')) return `${clientUrl}/wallet`;
+  if (eventKey.startsWith('wallet.')) return `${clientUrl}/customer/wallet`;
   if (eventKey.startsWith('booking.')) return `${clientUrl}/customer/bookings`;
   if (eventKey.startsWith('parking.')) return `${clientUrl}/customer/history`;
   return clientUrl;

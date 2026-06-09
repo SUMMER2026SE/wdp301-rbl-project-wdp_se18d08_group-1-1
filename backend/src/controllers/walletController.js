@@ -54,11 +54,15 @@ const createTopUp = async (req, res, next) => {
       orderCode,
       amount: parseInt(amount),
       description: `VALO NapVi`,
-      returnUrl: process.env.PAYOS_RETURN_URL || `${process.env.CLIENT_URL}/customer/wallet`,
-      cancelUrl: process.env.PAYOS_CANCEL_URL || `${process.env.CLIENT_URL}/customer/wallet?cancel=true`,
+      returnUrl:
+        process.env.PAYOS_RETURN_URL ||
+        `${process.env.CLIENT_URL}/customer/wallet?orderCode=${orderCode}`,
+      cancelUrl:
+        process.env.PAYOS_CANCEL_URL ||
+        `${process.env.CLIENT_URL}/customer/wallet?orderCode=${orderCode}&cancel=true`,
       items: [
         {
-          name: 'Nạp tiền ví VALO',
+          name: 'VALO wallet top-up',
           quantity: 1,
           price: parseInt(amount),
         },
@@ -74,7 +78,7 @@ const createTopUp = async (req, res, next) => {
       orderCode,
       paymentLink.paymentLinkId,
       paymentLink.checkoutUrl,
-      `Nạp tiền ví VALO - ${parseInt(amount).toLocaleString('vi-VN')} VNĐ`
+      `VALO wallet top-up - ${parseInt(amount).toLocaleString('vi-VN')} VND`
     );
 
     res.status(201).json({

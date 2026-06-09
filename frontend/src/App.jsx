@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { SocketProvider } from "./contexts/SocketProvider";
 
 // Layouts
@@ -42,6 +42,11 @@ import CustomerNotifications from "./pages/Customer/CustomerNotifications";
 
 // Misc
 import UnauthorizedPage from "./pages/UnauthorizedPage";
+
+function RedirectOldWalletRoutes() {
+  const location = useLocation();
+  return <Navigate to={`/customer/wallet${location.search}`} replace />;
+}
 
 export default function App() {
   return (
@@ -130,6 +135,7 @@ export default function App() {
             <Route path="/customer/vehicles" element={<MyVehicles />} />
             <Route path="/customer/wallet" element={<WalletPage />} />
             <Route path="/customer/history" element={<ParkingHistory />} />
+            <Route path="/wallet/*" element={<RedirectOldWalletRoutes />} />
             <Route
               path="/customer/notifications"
               element={<CustomerNotifications />}

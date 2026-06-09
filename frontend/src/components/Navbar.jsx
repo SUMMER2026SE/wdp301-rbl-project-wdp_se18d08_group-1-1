@@ -25,7 +25,7 @@ import {
 import Logo from "../assets/images/logo.png";
 import { useNotifications } from "../hooks/useNotifications";
 import { formatDistanceToNow } from "date-fns";
-import { vi } from "date-fns/locale";
+import { enUS } from "date-fns/locale";
 
 /* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
    VALO PARKING ΓÇô Premium Navbar
@@ -42,9 +42,9 @@ const guestLinks = [
 
 const customerLinks = [
   { to: "/", label: "Home", icon: Sparkles },
-  { to: "/booking", label: "Booking", icon: CalendarCheck },
+  { to: "/services", label: "Services", icon: Settings },
   { to: "/parking-map", label: "Parking Map", icon: Map },
-  { to: "/wallet", label: "Wallet", icon: Wallet },
+  { to: "/customer/wallet", label: "Wallet", icon: Wallet },
 ];
 
 const roleBadge = {
@@ -323,7 +323,7 @@ export default function Navbar() {
                         <div className="px-4 py-3 flex justify-between items-center bg-gradient-to-r from-white to-gray-50 border-b border-gray-100">
                           <div className="flex items-center gap-3">
                             <p className="text-gray-900 font-bold text-sm">
-                              Thông báo
+                              Notifications
                             </p>
                             {unreadCount > 0 && (
                               <span className="text-[11px] font-semibold text-white bg-rose-500 rounded-full px-2 py-0.5">
@@ -337,14 +337,14 @@ export default function Navbar() {
                                 onClick={markAllAsRead}
                                 className="text-xs text-emerald-600 hover:text-emerald-500 font-medium transition-colors"
                               >
-                                Đánh dấu tất cả
+                                Mark all as read
                               </button>
                             )}
                             <button
                               onClick={() => setNotifOpen(false)}
                               className="text-xs text-gray-400 hover:text-gray-600"
                             >
-                              Đóng
+                              Close
                             </button>
                           </div>
                         </div>
@@ -352,7 +352,7 @@ export default function Navbar() {
                         <div className="overflow-y-auto flex-1 text-left p-2 space-y-2">
                           {notifications.length === 0 ? (
                             <div className="p-6 text-center text-gray-500 text-sm">
-                              Không có thông báo nào
+                              No notifications
                             </div>
                           ) : (
                             notifications.map((n) => (
@@ -380,9 +380,9 @@ export default function Navbar() {
                                       {n.createdAt
                                         ? formatDistanceToNow(
                                             new Date(n.createdAt),
-                                            { addSuffix: true, locale: vi },
+                                            { addSuffix: true, locale: enUS },
                                           )
-                                        : "Vừa xong"}
+                                        : "Just now"}
                                     </div>
                                   </div>
                                   <p className="text-gray-500 text-[13px] mt-1 line-clamp-2">
@@ -394,7 +394,7 @@ export default function Navbar() {
                                         onClick={(e) => { e.stopPropagation(); markAsRead(n.notificationId || n._id); }}
                                         className="text-xs text-emerald-600 hover:text-emerald-500 font-medium transition-colors"
                                       >
-                                        Đánh dấu
+                                        Mark as read
                                       </button>
                                     )}
                                     <button
@@ -403,7 +403,7 @@ export default function Navbar() {
                                       }}
                                       className="text-xs text-gray-400 hover:text-gray-600 font-medium transition-colors"
                                     >
-                                      Thêm
+                                      More
                                     </button>
                                   </div>
                                 </div>
@@ -420,7 +420,7 @@ export default function Navbar() {
                             }}
                             className="w-full text-center text-xs text-gray-600 hover:text-gray-900 py-2 font-medium transition-colors rounded-xl bg-white/60"
                           >
-                            Xem tất cả thông báo
+                            View all notifications
                           </button>
                         </div>
                       </div>
@@ -519,7 +519,7 @@ export default function Navbar() {
                               id: "transactions",
                               icon: History,
                               label: "Transaction History",
-                              to: "/wallet/history",
+                              to: "/customer/wallet",
                             },
                             {
                               id: "notifications",
