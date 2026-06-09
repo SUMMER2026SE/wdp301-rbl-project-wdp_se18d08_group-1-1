@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
+import { apiFetch } from "../services/api";
 import logoImg from "../assets/images/logo.png";
 import { useNotifications } from "../hooks/useNotifications";
 import { formatDistanceToNow } from "date-fns";
@@ -43,14 +44,9 @@ const NAV_CONFIG = {
       to: "/admin/dashboard",
     },
     {
-      label: "Manager Accounts",
+      label: "Account Management",
       icon: <Users size={18} />,
-      to: "/admin/managers",
-    },
-    {
-      label: "User Management",
-      icon: <ShieldCheck size={18} />,
-      to: "/admin/users",
+      to: "/admin/accounts",
     },
     {
       label: "Parking Lots",
@@ -89,6 +85,16 @@ const NAV_CONFIG = {
       label: "Overview",
       icon: <LayoutDashboard size={18} />,
       to: "/staff/dashboard",
+    },
+    {
+      label: "Customer Management",
+      icon: <Users size={18} />,
+      to: "/staff/accounts",
+    },
+    {
+      label: "Session Management",
+      icon: <MonitorCheck size={18} />,
+      to: "/staff/sessions",
     },
     {
       label: "Live Grid Monitor",
@@ -171,8 +177,9 @@ const ROLE_THEME = {
 const getInitials = (name = "") =>
   name
     .split(" ")
+    .filter(Boolean)
     .map((w) => w[0])
-    .slice(-2)
+    .slice(0, 2)
     .join("")
     .toUpperCase();
 
@@ -186,7 +193,8 @@ export default function DashboardLayout() {
   const notifRef = useRef(null);
 
   // Hook for notifications
-  const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
+  const { notifications, unreadCount, markAsRead, markAllAsRead } =
+    useNotifications();
 
   const role = user?.role;
   const navItems = NAV_CONFIG[role] || [];
@@ -213,6 +221,38 @@ export default function DashboardLayout() {
     return () =>
       window.removeEventListener("valo_auth_change", handleAuthChange);
   }, []);
+
+  // Fetch profile if avatar is missing
+  useEffect(() => {
+    const fetchProfileAvatar = async () => {
+      if (!user || Object.keys(user).length === 0) return;
+      if (user.avatar || user.profile?.avatar || user.avatarUrl) return; // already has it
+
+      const token = localStorage.getItem("accessToken");
+      if (!token) return;
+
+      try {
+        const { ok, data } = await apiFetch("/profile", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (ok && data?.success) {
+          const freshAvatar = data.data.profile?.avatar || "";
+          if (freshAvatar) {
+            const updatedUser = {
+              ...user,
+              ...data.data,
+              avatar: freshAvatar,
+            };
+            sessionStorage.setItem("valo_user", JSON.stringify(updatedUser));
+            setUser(updatedUser);
+            window.dispatchEvent(new Event("valo_auth_change"));
+          }
+        }
+      } catch (e) {}
+    };
+
+    fetchProfileAvatar();
+  }, [user]);
 
   // Close notif dropdown on outside click
   useEffect(() => {
@@ -356,7 +396,7 @@ export default function DashboardLayout() {
                 <Bell size={17} />
                 {unreadCount > 0 && (
                   <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
-                    {unreadCount > 9 ? '9+' : unreadCount}
+                    {unreadCount > 9 ? "9+" : unreadCount}
                   </span>
                 )}
               </button>
@@ -367,14 +407,19 @@ export default function DashboardLayout() {
                       Thông báo
                     </p>
                     {unreadCount > 0 && (
-                      <button onClick={markAllAsRead} className="text-xs text-emerald-500 hover:text-emerald-400 font-medium">
+                      <button
+                        onClick={markAllAsRead}
+                        className="text-xs text-emerald-500 hover:text-emerald-400 font-medium"
+                      >
                         Đánh dấu đã đọc
                       </button>
                     )}
                   </div>
                   <div className="overflow-y-auto flex-1">
                     {notifications.length === 0 ? (
-                      <div className="p-6 text-center text-gray-500 text-sm">Không có thông báo nào</div>
+                      <div className="p-6 text-center text-gray-500 text-sm">
+                        Không có thông báo nào
+                      </div>
                     ) : (
                       notifications.map((n) => (
                         <div
@@ -382,16 +427,25 @@ export default function DashboardLayout() {
                           onClick={() => !n.isRead && markAsRead(n.notificationId || n._id)}
                           className={`flex items-start gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-white/5 border-b border-gray-100 dark:border-white/5 last:border-0 cursor-pointer transition-colors ${!n.isRead ? 'bg-emerald-50/50 dark:bg-emerald-500/5' : ''}`}
                         >
-                          <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${!n.isRead ? 'bg-emerald-500' : 'bg-transparent'}`} />
+                          <div
+                            className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${!n.isRead ? "bg-emerald-500" : "bg-transparent"}`}
+                          />
                           <div className="flex-1 min-w-0">
-                            <p className={`text-xs font-medium ${!n.isRead ? 'text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400'}`}>
+                            <p
+                              className={`text-xs font-medium ${!n.isRead ? "text-gray-900 dark:text-white" : "text-gray-600 dark:text-gray-400"}`}
+                            >
                               {n.title}
                             </p>
                             <p className="text-gray-500 dark:text-gray-500 text-[11px] mt-0.5 line-clamp-2">
                               {n.content}
                             </p>
                             <p className="text-gray-400 dark:text-gray-600 text-[10px] mt-1">
-                              {n.createdAt ? formatDistanceToNow(new Date(n.createdAt), { addSuffix: true, locale: vi }) : 'Vừa xong'}
+                              {n.createdAt
+                                ? formatDistanceToNow(new Date(n.createdAt), {
+                                    addSuffix: true,
+                                    locale: vi,
+                                  })
+                                : "Vừa xong"}
                             </p>
                           </div>
                         </div>
@@ -399,7 +453,16 @@ export default function DashboardLayout() {
                     )}
                   </div>
                   <div className="p-2 border-t border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-[#111]">
-                    <button onClick={() => navigate(role === 'staff' || role === 'admin' ? `/${role}/notifications` : '/customer/notifications')} className="w-full text-center text-xs text-gray-500 hover:text-gray-900 dark:hover:text-white py-1">
+                    <button
+                      onClick={() =>
+                        navigate(
+                          role === "staff" || role === "admin"
+                            ? `/${role}/notifications`
+                            : "/customer/notifications",
+                        )
+                      }
+                      className="w-full text-center text-xs text-gray-500 hover:text-gray-900 dark:hover:text-white py-1"
+                    >
                       Xem tất cả
                     </button>
                   </div>
@@ -410,10 +473,18 @@ export default function DashboardLayout() {
             {/* Avatar */}
             <div
               className={`w-9 h-9 rounded-full bg-gradient-to-br ${theme.accent}
-                flex items-center justify-center text-black font-extrabold text-sm cursor-pointer`}
+                flex items-center justify-center text-black font-extrabold text-sm cursor-pointer overflow-hidden shrink-0 shadow-sm select-none`}
               title={displayName}
             >
-              {getInitials(displayName)}
+              {user?.avatar || user?.profile?.avatar || user?.avatarUrl ? (
+                <img
+                  src={user.avatar || user.profile?.avatar || user.avatarUrl}
+                  alt="Avatar"
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <span>{getInitials(displayName)}</span>
+              )}
             </div>
           </div>
         </header>
