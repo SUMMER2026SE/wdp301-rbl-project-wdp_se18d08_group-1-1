@@ -1,32 +1,41 @@
-const cloudinary = require('../config/cloudinary');
-const streamifier = require('streamifier');
-const Vehicle = require('../models/Vehicle');
+const cloudinary = require("../config/cloudinary");
+const streamifier = require("streamifier");
+const Vehicle = require("../models/Vehicle");
 // ─── Draco compression ────────────────────────────────────────────────────────
 // npm install gltf-pipeline
-const { processGlb } = require('gltf-pipeline');
+const { processGlb } = require("gltf-pipeline");
 
-const User = require('../models/User');
-const UserDetail = require('../models/UserDetail');
+const User = require("../models/User");
+const UserDetail = require("../models/UserDetail");
 
 // Same normalizer as vehicleController – must stay in sync
-const normalizeSlug = (str = '') =>
-  str.toLowerCase().trim().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+const normalizeSlug = (str = "") =>
+  str
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]/g, "");
 
 // Update modelUrl for all vehicles whose normalised brand+model matches the publicId
 const syncVehiclesForModel = async (brand, model, secureUrl) => {
   const nb = normalizeSlug(brand);
-  const nm = normalizeSlug(model || 'default');
+  const nm = normalizeSlug(model || "default");
 
   // Build a regex that matches the original brand/model case-insensitively
   // e.g. brand='Peugeot', model='3008 P4'  → find vehicles where
   //   normalizeSlug(brand)==nb AND normalizeSlug(model)==nm
   // We do this by fetching candidates and filtering in JS (collections are small)
   const candidates = await Vehicle.find({
-    brand: { $regex: new RegExp(`^${brand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+    brand: {
+      $regex: new RegExp(
+        `^${brand.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`,
+        "i",
+      ),
+    },
   });
 
   const toUpdate = candidates.filter(
-    (v) => normalizeSlug(v.model || 'default') === nm,
+    (v) => normalizeSlug(v.model || "default") === nm,
   );
 
   if (toUpdate.length > 0) {
@@ -45,21 +54,23 @@ const syncVehiclesForModel = async (brand, model, secureUrl) => {
  */
 exports.searchUsers = async (req, res, next) => {
   try {
-    const q = req.query.q || '';
-    const User = require('../models/User'); // Import here to avoid circular dependencies if any
-    
-    const filter = q ? {
-      $or: [
-        { username: { $regex: q, $options: 'i' } },
-        { email: { $regex: q, $options: 'i' } }
-      ]
-    } : {};
-    
+    const q = req.query.q || "";
+    const User = require("../models/User"); // Import here to avoid circular dependencies if any
+
+    const filter = q
+      ? {
+          $or: [
+            { username: { $regex: q, $options: "i" } },
+            { email: { $regex: q, $options: "i" } },
+          ],
+        }
+      : {};
+
     const users = await User.find(filter)
-      .select('username email role status')
+      .select("username email role status")
       .limit(20)
       .lean();
-      
+
     res.status(200).json({ success: true, data: users });
   } catch (err) {
     next(err);
@@ -80,19 +91,25 @@ exports.uploadVehicleModel = async (req, res, next) => {
     const { brand, model } = req.body;
 
     if (!brand) {
-      return res.status(400).json({ success: false, message: 'brand is required' });
+      return res
+        .status(400)
+        .json({ success: false, message: "brand is required" });
     }
     if (!req.file) {
-      return res.status(400).json({ success: false, message: 'No file uploaded' });
+      return res
+        .status(400)
+        .json({ success: false, message: "No file uploaded" });
     }
 
-    const ext = req.file.originalname.split('.').pop().toLowerCase();
-    if (ext !== 'glb') {
-      return res.status(400).json({ success: false, message: 'Only .glb files are accepted' });
+    const ext = req.file.originalname.split(".").pop().toLowerCase();
+    if (ext !== "glb") {
+      return res
+        .status(400)
+        .json({ success: false, message: "Only .glb files are accepted" });
     }
 
     const nb = normalizeSlug(brand);
-    const nm = normalizeSlug(model || 'default');
+    const nm = normalizeSlug(model || "default");
     const publicId = `vehicles/${nb}/${nm}`;
 
     // ── Step 1: Compress GLB in-memory with Draco ─────────────────────────────
@@ -109,7 +126,10 @@ exports.uploadVehicleModel = async (req, res, next) => {
       );
     } catch (compressErr) {
       // Non-fatal: upload uncompressed if Draco step fails
-      console.warn('[uploadVehicleModel] Draco compression skipped:', compressErr.message);
+      console.warn(
+        "[uploadVehicleModel] Draco compression skipped:",
+        compressErr.message,
+      );
       // uploadBuffer stays as req.file.buffer (original)
     }
     // NOTE: We use multer memoryStorage so there are NO temp files on disk.
@@ -120,7 +140,7 @@ exports.uploadVehicleModel = async (req, res, next) => {
     const uploadResult = await new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
-          resource_type: 'raw',
+          resource_type: "raw",
           public_id: publicId,
           overwrite: true,
           invalidate: true,
@@ -133,7 +153,11 @@ exports.uploadVehicleModel = async (req, res, next) => {
       streamifier.createReadStream(uploadBuffer).pipe(uploadStream);
     });
 
-    const synced = await syncVehiclesForModel(brand, model || 'default', uploadResult.secure_url);
+    const synced = await syncVehiclesForModel(
+      brand,
+      model || "default",
+      uploadResult.secure_url,
+    );
 
     res.status(200).json({
       success: true,
@@ -143,7 +167,7 @@ exports.uploadVehicleModel = async (req, res, next) => {
         url: uploadResult.secure_url,
         bytes: uploadResult.bytes,
         brand,
-        model: model || 'default',
+        model: model || "default",
         vehiclesSynced: synced,
       },
     });
@@ -162,18 +186,26 @@ exports.deleteVehicleModel = async (req, res, next) => {
   try {
     const { brand, model } = req.body;
     if (!brand) {
-      return res.status(400).json({ success: false, message: 'brand is required' });
+      return res
+        .status(400)
+        .json({ success: false, message: "brand is required" });
     }
     const nb = normalizeSlug(brand);
-    const nm = normalizeSlug(model || 'default');
+    const nm = normalizeSlug(model || "default");
 
     // Step 1: Remove the file from Cloudinary
-    await cloudinary.uploader.destroy(`vehicles/${nb}/${nm}`, { resource_type: 'raw' });
+    await cloudinary.uploader.destroy(`vehicles/${nb}/${nm}`, {
+      resource_type: "raw",
+    });
 
     // Step 2: Clear modelUrl on all Vehicle documents that pointed to this model.
     // Without this, existing vehicles still hold the old URL and keep rendering
     // the 3D model even after deletion.
-    const vehiclesSynced = await syncVehiclesForModel(brand, model || 'default', '');
+    const vehiclesSynced = await syncVehiclesForModel(
+      brand,
+      model || "default",
+      "",
+    );
 
     res.status(200).json({
       success: true,
@@ -193,9 +225,9 @@ exports.deleteVehicleModel = async (req, res, next) => {
 exports.listVehicleModels = async (req, res, next) => {
   try {
     const result = await cloudinary.api.resources({
-      resource_type: 'raw',
-      type: 'upload',
-      prefix: 'vehicles/',
+      resource_type: "raw",
+      type: "upload",
+      prefix: "vehicles/",
       max_results: 200,
     });
 
@@ -221,9 +253,9 @@ exports.syncAllVehicleModels = async (req, res, next) => {
   try {
     // 1. Get all Cloudinary raw files under vehicles/
     const result = await cloudinary.api.resources({
-      resource_type: 'raw',
-      type: 'upload',
-      prefix: 'vehicles/',
+      resource_type: "raw",
+      type: "upload",
+      prefix: "vehicles/",
       max_results: 200,
     });
 
@@ -231,7 +263,7 @@ exports.syncAllVehicleModels = async (req, res, next) => {
     const cloudMap = {};
     for (const r of result.resources || []) {
       // public_id format: vehicles/{brand}/{model}
-      const key = r.public_id.replace(/^vehicles\//, '');
+      const key = r.public_id.replace(/^vehicles\//, "");
       cloudMap[key] = r.secure_url;
     }
 
@@ -241,9 +273,9 @@ exports.syncAllVehicleModels = async (req, res, next) => {
 
     for (const v of vehicles) {
       const nb = normalizeSlug(v.brand);
-      const nm = normalizeSlug(v.model || 'default');
+      const nm = normalizeSlug(v.model || "default");
       const key = `${nb}/${nm}`;
-      const url = cloudMap[key] || '';
+      const url = cloudMap[key] || "";
 
       if (v.modelUrl !== url) {
         v.modelUrl = url;
@@ -272,21 +304,21 @@ exports.listUsers = async (req, res, next) => {
     const users = await User.aggregate([
       {
         $lookup: {
-          from: 'userdetails',
-          localField: '_id',
-          foreignField: 'userId',
-          as: 'profile'
-        }
+          from: "userdetails",
+          localField: "_id",
+          foreignField: "userId",
+          as: "profile",
+        },
       },
       {
         $unwind: {
-          path: '$profile',
-          preserveNullAndEmptyArrays: true
-        }
+          path: "$profile",
+          preserveNullAndEmptyArrays: true,
+        },
       },
       {
-        $sort: { createdAt: -1 }
-      }
+        $sort: { createdAt: -1 },
+      },
     ]);
     res.status(200).json({ success: true, data: users });
   } catch (err) {
@@ -303,10 +335,12 @@ exports.listUsers = async (req, res, next) => {
  */
 exports.getPendingVehicles = async (req, res, next) => {
   try {
-    const vehicles = await Vehicle.find({ status: 'pending' })
-      .populate('owner', 'name email')
+    const vehicles = await Vehicle.find({ status: "pending" })
+      .populate("owner", "name email")
       .sort({ createdAt: 1 });
-    res.status(200).json({ success: true, count: vehicles.length, data: vehicles });
+    res
+      .status(200)
+      .json({ success: true, count: vehicles.length, data: vehicles });
   } catch (err) {
     next(err);
   }
@@ -320,9 +354,15 @@ exports.getPendingVehicles = async (req, res, next) => {
 exports.updateUserStatus = async (req, res, next) => {
   try {
     const { status } = req.body;
-    const user = await User.findByIdAndUpdate(req.params.id, { status }, { new: true });
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { status },
+      { new: true },
+    );
     if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
     }
     res.status(200).json({ success: true, data: user });
   } catch (err) {
@@ -338,13 +378,18 @@ exports.updateUserStatus = async (req, res, next) => {
 exports.approveVehicle = async (req, res, next) => {
   try {
     const vehicle = await Vehicle.findById(req.params.id);
-    if (!vehicle) return res.status(404).json({ success: false, message: 'Vehicle not found' });
+    if (!vehicle)
+      return res
+        .status(404)
+        .json({ success: false, message: "Vehicle not found" });
 
-    vehicle.status = 'approved';
+    vehicle.status = "approved";
     if (req.body.modelUrl !== undefined) vehicle.modelUrl = req.body.modelUrl;
     await vehicle.save();
 
-    res.status(200).json({ success: true, message: 'Vehicle approved', data: vehicle });
+    res
+      .status(200)
+      .json({ success: true, message: "Vehicle approved", data: vehicle });
   } catch (err) {
     next(err);
   }
@@ -358,10 +403,12 @@ exports.approveVehicle = async (req, res, next) => {
 exports.updateUser = async (req, res, next) => {
   try {
     const { role, status, firstName, lastName, phone } = req.body;
-    
+
     const user = await User.findById(req.params.id);
     if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
     }
 
     if (role !== undefined) user.role = role;
@@ -372,7 +419,7 @@ exports.updateUser = async (req, res, next) => {
     if (!userDetail) {
       userDetail = new UserDetail({ userId: user._id });
     }
-    
+
     if (firstName !== undefined) userDetail.firstName = firstName;
     if (lastName !== undefined) userDetail.lastName = lastName;
     if (phone !== undefined) userDetail.phone = phone;
@@ -383,18 +430,18 @@ exports.updateUser = async (req, res, next) => {
       { $match: { _id: user._id } },
       {
         $lookup: {
-          from: 'userdetails',
-          localField: '_id',
-          foreignField: 'userId',
-          as: 'profile'
-        }
+          from: "userdetails",
+          localField: "_id",
+          foreignField: "userId",
+          as: "profile",
+        },
       },
       {
         $unwind: {
-          path: '$profile',
-          preserveNullAndEmptyArrays: true
-        }
-      }
+          path: "$profile",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
     ]);
 
     res.status(200).json({ success: true, data: updatedUser[0] });
@@ -411,8 +458,13 @@ exports.updateUser = async (req, res, next) => {
 exports.rejectVehicle = async (req, res, next) => {
   try {
     const vehicle = await Vehicle.findByIdAndDelete(req.params.id);
-    if (!vehicle) return res.status(404).json({ success: false, message: 'Vehicle not found' });
-    res.status(200).json({ success: true, message: 'Vehicle rejected and removed' });
+    if (!vehicle)
+      return res
+        .status(404)
+        .json({ success: false, message: "Vehicle not found" });
+    res
+      .status(200)
+      .json({ success: true, message: "Vehicle rejected and removed" });
   } catch (err) {
     next(err);
   }
