@@ -32,6 +32,11 @@ const sessionSchema = new mongoose.Schema(
       trim: true,
       default: null,
     },
+    floorId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'ParkingFloor',
+      default: null,
+    },
     checkInTime: {
       type: Date,
       default: Date.now,

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Link, NavLink, useNavigate, useLocation } from "react-router-dom";
+import { apiFetch } from "../services/api";
 import {
   LogOut,
   User,
@@ -10,15 +11,21 @@ import {
   Map,
   FileText,
   X,
+  Car,
+  Menu,
   Shield,
   History,
   Sparkles,
   Settings,
+  CircleParking,
   ArrowUpRight,
   CreditCard,
   ChevronRight,
 } from "lucide-react";
 import Logo from "../assets/images/logo.png";
+import { useNotifications } from "../hooks/useNotifications";
+import { formatDistanceToNow } from "date-fns";
+import { vi } from "date-fns/locale";
 
 /* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
    VALO PARKING ΓÇô Premium Navbar
@@ -34,15 +41,15 @@ const guestLinks = [
 ];
 
 const customerLinks = [
-  { to: '/', label: 'Home', icon: Sparkles },
-  { to: '/services', label: 'Services', icon: Settings },
-  { to: '/parking-map', label: 'Parking Map', icon: Map },
-  { to: '/customer/wallet', label: 'Wallet', icon: Wallet },
+  { to: "/", label: "Home", icon: Sparkles },
+  { to: "/services", label: "Services", icon: Settings },
+  { to: "/parking-map", label: "Parking Map", icon: Map },
+  { to: "/customer/wallet", label: "Wallet", icon: Wallet },
 ];
 
 const roleBadge = {
   admin: { label: "Admin", bg: "bg-red-500", text: "text-white" },
-  staff: { label: "Staff", bg: "bg-blue-500", text: "text-white" },
+  manager: { label: "Manager", bg: "bg-blue-500", text: "text-white" },
   customer: { label: "Customer", bg: "bg-emerald-500", text: "text-white" },
 };
 
@@ -69,9 +76,14 @@ export default function Navbar() {
   });
   const [profileOpen, setProfileOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [notifCount] = useState(3);
+  const [notifOpen, setNotifOpen] = useState(false);
   const [scrollY, setScrollY] = useState(0);
   const profileRef = useRef(null);
+  const notifRef = useRef(null);
+
+  // Hook for notifications
+  const { notifications, unreadCount, markAsRead, markAllAsRead } =
+    useNotifications();
 
   // ΓöÇΓöÇ Sync user ΓöÇΓöÇ
   const syncUser = useCallback(() => {
@@ -80,6 +92,7 @@ export default function Navbar() {
   }, []);
 
   useEffect(() => {
+    syncUser();
     window.addEventListener("focus", syncUser);
     window.addEventListener("valo_auth_change", syncUser);
     return () => {
@@ -102,6 +115,8 @@ export default function Navbar() {
     const handler = (e) => {
       if (profileRef.current && !profileRef.current.contains(e.target))
         setProfileOpen(false);
+      if (notifRef.current && !notifRef.current.contains(e.target))
+        setNotifOpen(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
@@ -112,8 +127,41 @@ export default function Navbar() {
     window.requestAnimationFrame(() => {
       setMobileOpen(false);
       setProfileOpen(false);
+      setNotifOpen(false);
     });
   }, [location.pathname]);
+
+  // ΓöÇΓöÇ Fetch profile if avatar is missing ΓöÇΓöÇ
+  useEffect(() => {
+    const fetchProfileAvatar = async () => {
+      if (!user) return;
+      if (user.avatar || user.profile?.avatar || user.avatarUrl) return; // already has it
+
+      const token = localStorage.getItem("accessToken");
+      if (!token) return;
+
+      try {
+        const { ok, data } = await apiFetch("/profile", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (ok && data?.success) {
+          const freshAvatar = data.data.profile?.avatar || "";
+          if (freshAvatar) {
+            const updatedUser = {
+              ...user,
+              ...data.data,
+              avatar: freshAvatar,
+            };
+            sessionStorage.setItem("valo_user", JSON.stringify(updatedUser));
+            setUser(updatedUser);
+            window.dispatchEvent(new Event("valo_auth_change"));
+          }
+        }
+      } catch (e) {}
+    };
+
+    fetchProfileAvatar();
+  }, [user]);
 
   // ΓöÇΓöÇ Logout ΓöÇΓöÇ
   const handleLogout = () => {
@@ -126,23 +174,35 @@ export default function Navbar() {
     navigate("/");
   };
 
-  const getInitials = (name = "") =>
-    name
+  const getInitials = (name = "") => {
+    return (name || "U")
       .split(" ")
       .filter(Boolean)
       .map((w) => w[0])
       .slice(0, 2)
       .join("")
       .toUpperCase();
+  };
 
   const navLinks = user ? customerLinks : guestLinks;
-  const grad = getGradient(user?.name || "");
+
+  const displayName = user
+    ? [user.profile?.firstName, user.profile?.lastName]
+        .filter(Boolean)
+        .join(" ") ||
+      user.name ||
+      user.fullName ||
+      user.username ||
+      "User"
+    : "User";
+
+  const grad = getGradient(displayName);
   const isScrolled = scrollY > 40;
 
   return (
     <>
       <nav id="main-navbar" className="fixed top-0 left-0 right-0 z-50">
-        {/* ΓöÇΓöÇΓöÇ Outer wrapper: adds margin + pill shape when scrolled ΓöÇΓöÇΓöÇ */}
+        {/* ─── Outer wrapper: adds margin + pill shape when scrolled ─── */}
         <div
           className="transition-all duration-700 ease-[cubic-bezier(0.4,0,0.2,1)]"
           style={{
@@ -169,7 +229,7 @@ export default function Navbar() {
             className="max-w-7xl mx-auto px-5 sm:px-8 flex items-center justify-between transition-all duration-500"
             style={{ height: isScrolled ? "52px" : "72px" }}
           >
-            {/* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ LOGO ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */}
+            {/* ─── LOGO ─── */}
             <Link
               to="/"
               className="flex items-center gap-2.5 group shrink-0"
@@ -193,7 +253,6 @@ export default function Navbar() {
               </div>
             </Link>
 
-            {/* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ CENTER NAV ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */}
             <div className="hidden lg:flex items-center">
               <div className="flex items-center gap-0.5 relative">
                 {navLinks.map((link) => (
@@ -209,13 +268,13 @@ export default function Navbar() {
                         className={`
                           relative flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold
                           transition-all duration-300 ease-out cursor-pointer select-none
-                          ${isActive
-                            ? "text-gray-900"
-                            : "text-gray-500 hover:text-gray-800"
+                          ${
+                            isActive
+                              ? "text-gray-900"
+                              : "text-gray-500 hover:text-gray-800"
                           }
                         `}
                       >
-                        {/* Active bg pill */}
                         {isActive && (
                           <span className="absolute inset-0 rounded-xl bg-gray-900/[0.06] nav-active-bg" />
                         )}
@@ -223,12 +282,12 @@ export default function Navbar() {
                         <link.icon
                           size={14}
                           strokeWidth={2.2}
-                          className={`relative z-10 transition-colors duration-300 ${isActive ? "text-gold" : "text-gray-400"
-                            }`}
+                          className={`relative z-10 transition-colors duration-300 ${
+                            isActive ? "text-gold" : "text-gray-400"
+                          }`}
                         />
                         <span className="relative z-10">{link.label}</span>
 
-                        {/* Active dot */}
                         {isActive && (
                           <span className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 w-4 h-[3px] rounded-full bg-gold nav-dot-enter" />
                         )}
@@ -239,25 +298,141 @@ export default function Navbar() {
               </div>
             </div>
 
-            {/* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ RIGHT ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */}
             <div className="flex items-center gap-1.5">
               {user ? (
                 <>
                   {/* Notification */}
-                  <button
-                    id="nav-notifications"
-                    className="relative w-10 h-10 rounded-xl flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-black/[0.04] transition-all duration-200 nav-btn-hover"
-                    title="Notifications"
-                  >
-                    <Bell size={18} strokeWidth={2} />
-                    {notifCount > 0 && (
-                      <span className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-[5px] flex items-center justify-center text-[9px] font-bold text-white bg-red-500 rounded-full ring-2 ring-white">
-                        {notifCount > 9 ? "9+" : notifCount}
-                      </span>
-                    )}
-                  </button>
+                  <div className="relative" ref={notifRef}>
+                    <button
+                      id="nav-notifications"
+                      onClick={() => setNotifOpen((o) => !o)}
+                      className={`relative w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 nav-btn-hover ${notifOpen ? "bg-black/[0.06] text-gray-900" : "text-gray-400 hover:text-gray-700 hover:bg-black/[0.04]"}`}
+                      title="Notifications"
+                    >
+                      <Bell size={18} strokeWidth={2} />
+                      {unreadCount > 0 && (
+                        <span className="absolute top-1.5 right-1.5 min-w-[16px] h-4 px-[5px] flex items-center justify-center text-[9px] font-bold text-white bg-red-500 rounded-full ring-2 ring-white">
+                          {unreadCount > 9 ? "9+" : unreadCount}
+                        </span>
+                      )}
+                    </button>
 
-                  {/* Profile */}
+                    {/* ─── NOTIFICATIONS DROPDOWN ─── */}
+                    {notifOpen && (
+                      <div className="absolute right-0 top-[calc(100%+8px)] w-96 bg-white/95 backdrop-blur-2xl rounded-2xl shadow-[0_16px_64px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.06)] border border-white/60 overflow-hidden nav-dropdown-enter z-50 flex flex-col max-h-[460px]">
+                        <div className="px-4 py-3 flex justify-between items-center bg-gradient-to-r from-white to-gray-50 border-b border-gray-100">
+                          <div className="flex items-center gap-3">
+                            <p className="text-gray-900 font-bold text-sm">
+                              Thông báo
+                            </p>
+                            {unreadCount > 0 && (
+                              <span className="text-[11px] font-semibold text-white bg-rose-500 rounded-full px-2 py-0.5">
+                                {unreadCount}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {unreadCount > 0 && (
+                              <button
+                                onClick={markAllAsRead}
+                                className="text-xs text-emerald-600 hover:text-emerald-500 font-medium transition-colors"
+                              >
+                                Đánh dấu tất cả
+                              </button>
+                            )}
+                            <button
+                              onClick={() => setNotifOpen(false)}
+                              className="text-xs text-gray-400 hover:text-gray-600"
+                            >
+                              Đóng
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="overflow-y-auto flex-1 text-left p-2 space-y-2">
+                          {notifications.length === 0 ? (
+                            <div className="p-6 text-center text-gray-500 text-sm">
+                              Không có thông báo nào
+                            </div>
+                          ) : (
+                            notifications.map((n) => (
+                              <div
+                                key={n._id || n.notificationId}
+                                onClick={() =>
+                                  !n.isRead &&
+                                  markAsRead(n._id || n.notificationId)
+                                }
+                                className={`flex items-start gap-3 p-3 rounded-xl hover:shadow-sm transition-all bg-white border ${!n.isRead ? "ring-1 ring-emerald-100" : "border-gray-100"}`}
+                              >
+                                <div className="flex flex-col items-center">
+                                  <div
+                                    className={`w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-sm ${!n.isRead ? "bg-emerald-500" : "bg-gray-200 text-gray-600"}`}
+                                  >
+                                    {n.title ? n.title[0] || "N" : "N"}
+                                  </div>
+                                </div>
+
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-start gap-2">
+                                    <p
+                                      className={`text-sm font-semibold truncate ${!n.isRead ? "text-gray-900" : "text-gray-700"}`}
+                                    >
+                                      {n.title}
+                                    </p>
+                                    <div className="ml-auto text-[11px] text-gray-400">
+                                      {n.createdAt
+                                        ? formatDistanceToNow(
+                                            new Date(n.createdAt),
+                                            { addSuffix: true, locale: vi },
+                                          )
+                                        : "Vừa xong"}
+                                    </div>
+                                  </div>
+                                  <p className="text-gray-500 text-[13px] mt-1 line-clamp-2">
+                                    {n.content}
+                                  </p>
+                                  <div className="mt-2 flex items-center gap-2">
+                                    {!n.isRead && (
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          markAsRead(n._id || n.notificationId);
+                                        }}
+                                        className="text-xs text-emerald-600 hover:text-emerald-500 font-medium transition-colors"
+                                      >
+                                        Đánh dấu
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation(); /* placeholder: maybe delete later */
+                                      }}
+                                      className="text-xs text-gray-400 hover:text-gray-600 font-medium transition-colors"
+                                    >
+                                      Thêm
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </div>
+
+                        <div className="p-3 border-t border-gray-100 bg-gray-50/50">
+                          <button
+                            onClick={() => {
+                              navigate("/customer/notifications");
+                              setNotifOpen(false);
+                            }}
+                            className="w-full text-center text-xs text-gray-600 hover:text-gray-900 py-2 font-medium transition-colors rounded-xl bg-white/60"
+                          >
+                            Xem tất cả thông báo
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   <div className="relative" ref={profileRef}>
                     <button
                       id="nav-profile-btn"
@@ -265,27 +440,32 @@ export default function Navbar() {
                       className={`
                         flex items-center gap-2 pl-[3px] pr-2.5 py-[3px] rounded-2xl
                         transition-all duration-300 nav-btn-hover
-                        ${profileOpen
-                          ? "bg-black/[0.06] ring-1 ring-black/[0.08]"
-                          : "hover:bg-black/[0.04]"
+                        ${
+                          profileOpen
+                            ? "bg-black/[0.06] ring-1 ring-black/[0.08]"
+                            : "hover:bg-black/[0.04]"
                         }
                       `}
                     >
-                      <div
-                        className={`w-8 h-8 rounded-[10px] overflow-hidden ${user.avatar ? "" : "bg-[#050505] border border-gold/20"} flex items-center justify-center shadow-sm select-none shrink-0`}
-                      >
-                        {user.avatar ? (
+                      <div className="w-9 h-9 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 flex items-center justify-center text-black font-extrabold text-sm cursor-pointer shadow-sm select-none shrink-0 overflow-hidden">
+                        {user?.avatar ||
+                        user?.profile?.avatar ||
+                        user?.avatarUrl ? (
                           <img
-                            src={user.avatar}
-                            alt={user.name}
+                            src={
+                              user.avatar ||
+                              user.profile?.avatar ||
+                              user.avatarUrl
+                            }
+                            alt={displayName}
                             className="w-full h-full object-cover"
                           />
                         ) : (
-                          <img src={Logo} alt="VALO" className="w-[65%] h-[65%] object-contain" />
+                          <span>{getInitials(displayName)}</span>
                         )}
                       </div>
                       <span className="hidden sm:block text-[13px] font-semibold text-gray-700 max-w-[90px] truncate">
-                        {user.name?.split(" ").pop()}
+                        {displayName.split(" ").pop()}
                       </span>
                       <ChevronDown
                         size={12}
@@ -293,31 +473,34 @@ export default function Navbar() {
                       />
                     </button>
 
-                    {/* ΓöÇΓöÇΓöÇ DROPDOWN ΓöÇΓöÇΓöÇ */}
                     {profileOpen && (
                       <div className="absolute right-0 top-[calc(100%+8px)] w-[280px] bg-white/80 backdrop-blur-2xl rounded-2xl shadow-[0_16px_64px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.06)] border border-white/60 overflow-hidden nav-dropdown-enter">
                         {/* User card */}
                         <div className="p-4 border-b border-gray-100/80">
                           <div className="flex items-center gap-3">
-                            <div
-                              className={`w-11 h-11 rounded-xl overflow-hidden ${user.avatar ? "" : "bg-[#050505] border border-gold/20"} flex items-center justify-center shadow-lg select-none`}
-                            >
-                              {user.avatar ? (
+                            <div className="w-11 h-11 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 flex items-center justify-center text-black font-extrabold text-lg cursor-pointer shadow-lg select-none overflow-hidden shrink-0">
+                              {user?.avatar ||
+                              user?.profile?.avatar ||
+                              user?.avatarUrl ? (
                                 <img
-                                  src={user.avatar}
-                                  alt={user.name}
+                                  src={
+                                    user.avatar ||
+                                    user.profile?.avatar ||
+                                    user.avatarUrl
+                                  }
+                                  alt={displayName}
                                   className="w-full h-full object-cover"
                                 />
                               ) : (
-                                <img src={Logo} alt="VALO" className="w-[65%] h-[65%] object-contain" />
+                                <span>{getInitials(displayName)}</span>
                               )}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="font-bold text-gray-900 text-sm truncate">
-                                {user.name}
+                              <p className="text-[15px] font-bold text-gray-900 leading-none truncate">
+                                {displayName}
                               </p>
-                              <p className="text-[11px] text-gray-400 truncate">
-                                {user.email}
+                              <p className="text-[13px] text-gray-500 font-medium truncate mt-1">
+                                {user?.email || "No email"}
                               </p>
                             </div>
                             {roleBadge[user.role] && (
@@ -330,8 +513,6 @@ export default function Navbar() {
                           </div>
                         </div>
 
-
-                        {/* Menu */}
                         <div className="p-2 mt-1">
                           {[
                             {
@@ -350,7 +531,7 @@ export default function Navbar() {
                               id: "notifications",
                               icon: Bell,
                               label: "Notifications",
-                              to: "/notifications",
+                              to: "/customer/notifications",
                             },
                             {
                               id: "policy",
@@ -372,38 +553,41 @@ export default function Navbar() {
                                   className="text-gray-400 group-hover:text-gold transition-colors duration-300"
                                 />
                               </div>
-                              <span className="font-semibold tracking-wide">{item.label}</span>
-                              <ChevronRight size={14} className="ml-auto text-gray-300 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300" />
+                              <span className="font-semibold tracking-wide">
+                                {item.label}
+                              </span>
+                              <ChevronRight
+                                size={14}
+                                className="ml-auto text-gray-300 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300"
+                              />
                             </Link>
                           ))}
 
-                          {(user.role === "admin" ||
-                            user.role === "staff") && (
-                              <>
-                                <div className="h-px bg-gray-100 my-1 mx-3" />
-                                <Link
-                                  id="nav-dd-dashboard"
-                                  to={`/${user.role}/dashboard`}
-                                  onClick={() => setProfileOpen(false)}
-                                  className="flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-[13px] text-gray-600 hover:text-gray-900 hover:bg-gradient-to-r hover:from-blue-50/50 hover:to-transparent transition-all duration-300 group"
-                                >
-                                  <div className="w-8 h-8 rounded-[10px] bg-blue-50 border border-blue-100/50 group-hover:bg-white group-hover:border-blue-300/40 group-hover:shadow-[0_2px_8px_rgba(59,130,246,0.15)] flex items-center justify-center transition-all duration-300">
-                                    <Shield size={15} className="text-blue-500" />
-                                  </div>
-                                  <span className="font-semibold tracking-wide">
-                                    {user.role === "admin" ? "Admin" : "Staff"}{" "}
-                                    Panel
-                                  </span>
-                                  <ChevronRight
-                                    size={14}
-                                    className="ml-auto text-gray-300 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300"
-                                  />
-                                </Link>
-                              </>
-                            )}
+                          {(user.role === "admin" || user.role === "staff") && (
+                            <>
+                              <div className="h-px bg-gray-100 my-1 mx-3" />
+                              <Link
+                                id="nav-dd-dashboard"
+                                to={`/${user.role}/dashboard`}
+                                onClick={() => setProfileOpen(false)}
+                                className="flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-[13px] text-gray-600 hover:text-gray-900 hover:bg-gradient-to-r hover:from-blue-50/50 hover:to-transparent transition-all duration-300 group"
+                              >
+                                <div className="w-8 h-8 rounded-[10px] bg-blue-50 border border-blue-100/50 group-hover:bg-white group-hover:border-blue-300/40 group-hover:shadow-[0_2px_8px_rgba(59,130,246,0.15)] flex items-center justify-center transition-all duration-300">
+                                  <Shield size={15} className="text-blue-500" />
+                                </div>
+                                <span className="font-semibold tracking-wide">
+                                  {user.role === "admin" ? "Admin" : "Staff"}{" "}
+                                  Panel
+                                </span>
+                                <ChevronRight
+                                  size={14}
+                                  className="ml-auto text-gray-300 opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition-all duration-300"
+                                />
+                              </Link>
+                            </>
+                          )}
                         </div>
 
-                        {/* Logout */}
                         <div className="border-t border-gray-100/80 p-2">
                           <button
                             id="nav-btn-logout"
@@ -411,7 +595,10 @@ export default function Navbar() {
                             className="w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-[13px] text-red-500 hover:text-red-600 hover:bg-red-50/80 transition-all duration-300 font-semibold group"
                           >
                             <div className="w-8 h-8 rounded-[10px] bg-red-50 border border-red-100/50 group-hover:bg-white group-hover:border-red-300/40 group-hover:shadow-[0_2px_8px_rgba(239,68,68,0.15)] flex items-center justify-center transition-all duration-300">
-                              <LogOut size={15} className="text-red-400 group-hover:text-red-500 transition-colors" />
+                              <LogOut
+                                size={15}
+                                className="text-red-400 group-hover:text-red-500 transition-colors"
+                              />
                             </div>
                             <span className="tracking-wide">Sign Out</span>
                           </button>
@@ -421,7 +608,6 @@ export default function Navbar() {
                   </div>
                 </>
               ) : (
-                /* ΓöÇΓöÇ GUEST ΓöÇΓöÇ */
                 <div className="flex items-center gap-2">
                   <Link
                     to="/login"
@@ -447,7 +633,6 @@ export default function Navbar() {
                 </div>
               )}
 
-              {/* Mobile toggle */}
               <button
                 id="nav-mobile-toggle"
                 onClick={() => setMobileOpen((o) => !o)}
@@ -470,22 +655,23 @@ export default function Navbar() {
         </div>
       </nav>
 
-      {/* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ MOBILE OVERLAY ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */}
       <div
-        className={`fixed inset-0 z-40 transition-all duration-500 ${mobileOpen ? "pointer-events-auto" : "pointer-events-none"
-          }`}
+        className={`fixed inset-0 z-40 transition-all duration-500 ${
+          mobileOpen ? "pointer-events-auto" : "pointer-events-none"
+        }`}
       >
-        {/* Backdrop */}
         <div
-          className={`absolute inset-0 bg-black/20 backdrop-blur-sm transition-opacity duration-500 ${mobileOpen ? "opacity-100" : "opacity-0"
-            }`}
+          className={`absolute inset-0 bg-black/20 backdrop-blur-sm transition-opacity duration-500 ${
+            mobileOpen ? "opacity-100" : "opacity-0"
+          }`}
           onClick={() => setMobileOpen(false)}
         />
 
         {/* Panel */}
         <div
-          className={`absolute top-0 right-0 w-[300px] h-full bg-white/95 backdrop-blur-2xl shadow-2xl transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${mobileOpen ? "translate-x-0" : "translate-x-full"
-            }`}
+          className={`absolute top-0 right-0 w-[300px] h-full bg-white/95 backdrop-blur-2xl shadow-2xl transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${
+            mobileOpen ? "translate-x-0" : "translate-x-full"
+          }`}
         >
           {/* Close */}
           <div className="flex items-center justify-between p-5 border-b border-gray-100">
@@ -513,9 +699,10 @@ export default function Navbar() {
                 id={`nav-m-${link.label.replace(/\s+/g, "-").toLowerCase()}`}
                 onClick={() => setMobileOpen(false)}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-300 ${isActive
-                    ? "bg-gold/10 text-gray-900"
-                    : "text-gray-500 hover:bg-gray-50 hover:text-gray-800"
+                  `flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-300 ${
+                    isActive
+                      ? "bg-gold/10 text-gray-900"
+                      : "text-gray-500 hover:bg-gray-50 hover:text-gray-800"
                   }`
                 }
                 style={{ animationDelay: `${i * 50}ms` }}
@@ -567,7 +754,11 @@ export default function Navbar() {
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <img src={Logo} alt="VALO" className="w-[65%] h-[65%] object-contain" />
+                    <img
+                      src={Logo}
+                      alt="VALO"
+                      className="w-[65%] h-[65%] object-contain"
+                    />
                   )}
                 </div>
                 <div className="flex-1 min-w-0">

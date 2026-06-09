@@ -3,6 +3,76 @@ const UserDetail = require('../models/UserDetail');
 const User = require('../models/User');
 const cloudinary = require('../config/cloudinary');
 const { sendKioskCheckInEmail, sendCheckoutEmail } = require('../utils/emailUtils');
+const notifTriggers = require('../services/notificationTriggers');
+const { LOW_BALANCE_THRESHOLD } = require('../services/parkingScheduler');
+
+/**
+ * Verify license plate to auto-fill phone or skip steps
+ * POST /api/sessions/verify-plate
+ */
+exports.verifyPlate = async (req, res, next) => {
+  try {
+    const { licensePlate } = req.body;
+    if (!licensePlate) {
+      return res.status(400).json({ success: false, message: 'License plate is required' });
+    }
+
+    // Check if there is already an active session for this plate
+    const activeSession = await Session.findOne({ licensePlate, status: 'active' });
+    if (activeSession) {
+      return res.status(200).json({
+        success: true,
+        data: { isActive: true, phone: activeSession.phone }
+      });
+    }
+
+    // Check for registered vehicle
+    const Vehicle = require('../models/Vehicle');
+    const UserDetail = require('../models/UserDetail');
+
+    const registeredVehicle = await Vehicle.findOne({ 
+      licensePlate: { $regex: new RegExp(`^${licensePlate}$`, 'i') }, 
+      status: 'approved' 
+    });
+
+    let isVIP = false;
+    let phone = null;
+
+    if (registeredVehicle) {
+       isVIP = true;
+       const userDetail = await UserDetail.findOne({ userId: registeredVehicle.owner });
+       if (userDetail) {
+          phone = userDetail.phone;
+       }
+    }
+
+    // Look for past sessions to auto-fill phone number
+    const pastSession = await Session.findOne({ licensePlate, phone: { $ne: null } }).sort({ checkInTime: -1 });
+    if (!phone && pastSession) {
+      phone = pastSession.phone;
+    }
+
+    // Placeholder: Check for monthly pass or pre-booking (Fastpass)
+    const isMonthly = false;
+    const hasPreBooking = false;
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        isActive: false,
+        isMonthly,
+        hasPreBooking,
+        isVIP,
+        phone: phone,
+        isKnownGuest: !!phone || isVIP
+      }
+    });
+
+  } catch (error) {
+    console.error('verifyPlate error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
 
 /**
  * Create a new parking session from Kiosk
@@ -10,7 +80,7 @@ const { sendKioskCheckInEmail, sendCheckoutEmail } = require('../utils/emailUtil
  */
 exports.createKioskSession = async (req, res, next) => {
   try {
-    const { licensePlate, phone, vehicleType, parkingSlot, durationHours, entryImageBase64 } = req.body;
+    const { licensePlate, phone, vehicleType, parkingSlot, floorId, durationHours, entryImageBase64 } = req.body;
 
     if (!licensePlate) {
       return res.status(400).json({ success: false, message: 'License plate is required' });
@@ -19,9 +89,9 @@ exports.createKioskSession = async (req, res, next) => {
     // TÌM XEM XE CÓ ĐANG Ở TRONG BÃI KHÔNG (Phòng trường hợp xe bám đuôi đi ra, giờ quay lại)
     const existingSession = await Session.findOne({ licensePlate, status: 'active' });
     if (existingSession) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'This vehicle is currently recorded as being in the parking lot. Please contact security to resolve system error.' 
+      return res.status(400).json({
+        success: false,
+        message: 'This vehicle is currently recorded as being in the parking lot. Please contact security to resolve system error.'
       });
     }
 
@@ -46,12 +116,12 @@ exports.createKioskSession = async (req, res, next) => {
     let userEmail = null;
     console.log('--- KIOSK CHECK-IN DEBUG ---');
     console.log('Received phone:', phone);
-    
+
     if (phone) {
       // Fetch ALL UserDetails with this phone, sorted by newest first
       const userDetails = await UserDetail.find({ phone }).sort({ createdAt: -1 });
       console.log(`Found ${userDetails.length} UserDetail(s) for this phone.`);
-      
+
       for (const detail of userDetails) {
         const user = await User.findById(detail.userId);
         if (user) {
@@ -72,6 +142,7 @@ exports.createKioskSession = async (req, res, next) => {
       phone: phone || null,
       vehicleType: vehicleType || 'car',
       parkingSlot: parkingSlot || null,
+      floorId: floorId || null,
       expectedDurationHours: durationHours ? Number(durationHours) : 1,
       entryImage_url,
       checkInTime: new Date(),
@@ -82,7 +153,7 @@ exports.createKioskSession = async (req, res, next) => {
     console.log('Will send check-in email?', userEmail ? 'YES (' + userEmail + ')' : 'NO');
     if (userEmail) {
       // Format time for email
-      const formattedTime = new Date(newSession.checkInTime).toLocaleString('en-US', { 
+      const formattedTime = new Date(newSession.checkInTime).toLocaleString('en-US', {
         timeZone: 'Asia/Ho_Chi_Minh',
         dateStyle: 'medium',
         timeStyle: 'short'
@@ -108,6 +179,13 @@ exports.createKioskSession = async (req, res, next) => {
         vehicleType: newSession.vehicleType
       }).then(() => console.log('Email sent successfully!'))
         .catch(err => console.error('Failed to send Kiosk check-in email:', err));
+    }
+
+    // Fire-and-forget: send vehicle entry notification
+    if (userId) {
+      notifTriggers.notifyVehicleEntry(
+        req.app, userId, licensePlate, parkingSlot || 'N/A'
+      ).catch(err => console.error('Failed to send entry notification:', err));
     }
 
     res.status(201).json({
@@ -279,13 +357,13 @@ exports.kioskCheckout = async (req, res, next) => {
       try {
         const user = await User.findById(session.userId);
         if (user && user.email) {
-          const formattedCheckIn = new Date(session.checkInTime).toLocaleString('en-US', { 
+          const formattedCheckIn = new Date(session.checkInTime).toLocaleString('en-US', {
             timeZone: 'Asia/Ho_Chi_Minh', dateStyle: 'medium', timeStyle: 'short'
           });
-          const formattedCheckOut = new Date(session.checkOutTime).toLocaleString('en-US', { 
+          const formattedCheckOut = new Date(session.checkOutTime).toLocaleString('en-US', {
             timeZone: 'Asia/Ho_Chi_Minh', dateStyle: 'medium', timeStyle: 'short'
           });
-          
+
           sendCheckoutEmail(user.email, {
             sessionId: session._id.toString().slice(-6).toUpperCase(),
             checkInTime: formattedCheckIn,
@@ -300,6 +378,31 @@ exports.kioskCheckout = async (req, res, next) => {
       } catch (err) {
         console.error('Error fetching user for checkout email:', err);
       }
+
+      // Fire-and-forget: send vehicle exit + payment notifications
+      const uid = session.userId._id || session.userId;
+      notifTriggers.notifyVehicleExit(
+        req.app, uid, session.licensePlate, totalPrice
+      ).catch(err => console.error('Failed to send exit notification:', err));
+
+      if (paymentMethod === 'wallet') {
+        notifTriggers.notifyPaymentSuccess(
+          req.app, uid, totalPrice, session._id.toString()
+        ).catch(err => console.error('Failed to send payment notification:', err));
+
+        // Check low balance after payment
+        try {
+          const { getBalance } = require('../services/walletService');
+          const walletData = await getBalance(uid);
+          if (walletData.balance < LOW_BALANCE_THRESHOLD) {
+            notifTriggers.notifyLowBalance(
+              req.app, uid, walletData.balance
+            ).catch(err => console.error('Failed to send low balance notification:', err));
+          }
+        } catch (balErr) {
+          console.error('Error checking balance after payment:', balErr);
+        }
+      }
     }
 
     res.status(200).json({
@@ -310,6 +413,27 @@ exports.kioskCheckout = async (req, res, next) => {
 
   } catch (error) {
     console.error('Error in kioskCheckout:', error);
+    next(error);
+  }
+};
+
+/**
+ * Get active parking status
+ * GET /api/sessions/active-status
+ * Returns list of active sessions with floorId and parkingSlot
+ */
+exports.getActiveParkingStatus = async (req, res, next) => {
+  try {
+    const activeSessions = await Session.find({ status: 'active', parkingSlot: { $ne: null } })
+      .select('licensePlate parkingSlot floorId vehicleType checkInTime expectedDurationHours phone userId')
+      .populate('userId', 'email username');
+
+    res.status(200).json({
+      success: true,
+      data: activeSessions,
+    });
+  } catch (error) {
+    console.error('Error getting active parking status:', error);
     next(error);
   }
 };

@@ -22,7 +22,6 @@ const EMPTY_FORM = {
   vehicleType: 'car',
   brand: '',
   model: '',
-  color: '',
   hexColor: '#ffffff',
   nickname: '',
 };
@@ -162,7 +161,6 @@ function VehicleModal({ editVehicle, onClose, onSaved }) {
         vehicleType: editVehicle.vehicleType,
         brand: editVehicle.brand || '',
         model: editVehicle.model || '',
-        color: editVehicle.color || '',
         hexColor: editVehicle.hexColor || '#ffffff',
         nickname: editVehicle.nickname || '',
       }
@@ -211,13 +209,17 @@ function VehicleModal({ editVehicle, onClose, onSaved }) {
       setScanPreview(base64);
       const res = await scanRegistrationCard(base64);
       if (res.ok && res.data?.data) {
-        const { nickname, brand, model, licensePlate } = res.data.data;
+        const { nickname, brand, model, licensePlate, hexColor: aiHex } = res.data.data;
+        console.log('[AI Scan] response data:', res.data.data);
+        console.log('[AI Scan] hexColor from AI:', aiHex);
+        const cleanPlate = licensePlate ? licensePlate.replace(/\./g, '') : '';
         setForm((f) => ({
           ...f,
           nickname: nickname || f.nickname,
           brand: brand || f.brand,
           model: model || f.model,
-          licensePlate: licensePlate || f.licensePlate,
+          licensePlate: cleanPlate || f.licensePlate,
+          hexColor: aiHex || f.hexColor,
         }));
       } else {
         setError(res.data?.message || 'Không đọc được thông tin. Vui lòng nhập tay.');
@@ -231,11 +233,18 @@ function VehicleModal({ editVehicle, onClose, onSaved }) {
   // ── Submit ──
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!isEdit && !scanPreview) {
+      setError('Đảnh cà vẹt xe là bắt buộc khi thêm xe mới.');
+      return;
+    }
     setSaving(true);
     setError('');
+    const payload = isEdit
+      ? form
+      : { ...form, registrationCardImage: scanPreview };
     const res = isEdit
-      ? await updateVehicle(editVehicle._id, form)
-      : await addVehicle(form);
+      ? await updateVehicle(editVehicle._id, payload)
+      : await addVehicle(payload);
     setSaving(false);
     if (res.ok) {
       onSaved(res.data.data, isEdit ? 'updated' : 'added');
@@ -273,38 +282,60 @@ function VehicleModal({ editVehicle, onClose, onSaved }) {
         <div className="px-6 py-5 overflow-y-auto max-h-[calc(100vh-160px)]">
           {/* AI Scan Section */}
           {!isEdit && (
-            <div className="mb-5 rounded-xl border border-dashed
-              border-yellow-500/30 dark:border-yellow-500/20
-              bg-yellow-500/5 p-4">
-              <div className="flex items-center gap-2 mb-2">
+            <div className={`mb-5 rounded-xl border border-dashed p-4
+              ${scanPreview
+                ? 'border-green-500/40 bg-green-500/5'
+                : 'border-yellow-500/30 bg-yellow-500/5'}`}>
+              <div className="flex items-center gap-2 mb-1">
                 <ScanLine size={15} className="text-yellow-500 dark:text-yellow-400" />
                 <span className="text-xs font-bold text-yellow-600 dark:text-yellow-400 uppercase tracking-wider">
                   Quét cà vẹt xe bằng AI
                 </span>
+                <span className="text-[10px] text-red-400 font-semibold ml-auto">* Bắt buộc</span>
               </div>
               <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                Tải ảnh đăng ký xe để tự động điền thông tin
+                Tải ảnh đăng ký xe để tự động điền thông tin và màu xe
               </p>
 
               {scanPreview && (
-                <img src={scanPreview} alt="preview"
-                  className="w-full h-32 object-cover rounded-lg border
-                    border-gray-200 dark:border-white/10 mb-3" />
+                <div className="relative mb-3">
+                  <img src={scanPreview} alt="preview"
+                    className="w-full h-32 object-cover rounded-lg border border-gray-200 dark:border-white/10" />
+                  <div className="absolute top-2 right-2 flex items-center gap-1
+                    bg-green-500/20 border border-green-500/40 text-green-400
+                    text-[10px] font-bold px-2 py-0.5 rounded-full backdrop-blur-sm">
+                    <Check size={10} />
+                    Đã quét
+                  </div>
+                </div>
               )}
 
-              <button
-                type="button"
-                onClick={() => fileRef.current?.click()}
-                disabled={scanning}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold
-                  bg-yellow-500 hover:bg-yellow-400 text-black
-                  transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {scanning
-                  ? <Loader2 size={13} className="animate-spin" />
-                  : <Upload size={13} />}
-                {scanning ? 'Đang quét...' : 'Tải ảnh cà vẹt xe'}
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  disabled={scanning}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold
+                    bg-yellow-500 hover:bg-yellow-400 text-black
+                    transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {scanning
+                    ? <Loader2 size={13} className="animate-spin" />
+                    : <Upload size={13} />}
+                  {scanning ? 'Đang quét...' : scanPreview ? 'Quét lại' : 'Tải ảnh cà vẹt xe'}
+                </button>
+
+                {/* Auto-detected color preview */}
+                {form.hexColor && form.hexColor !== '#ffffff' && (
+                  <div className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                    <span
+                      className="inline-block w-5 h-5 rounded-full border-2 border-white/30 shadow"
+                      style={{ backgroundColor: form.hexColor }}
+                    />
+                    Màu tự động: <span className="font-mono">{form.hexColor}</span>
+                  </div>
+                )}
+              </div>
               <input ref={fileRef} type="file" accept="image/*" className="hidden"
                 onChange={handleScanFile} />
             </div>
@@ -373,30 +404,20 @@ function VehicleModal({ editVehicle, onClose, onSaved }) {
               </div>
             </div>
 
-            {/* Color + Nickname */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-1 block">
-                  Màu sắc
-                </label>
-                <input name="color" value={form.color} onChange={handleChange}
-                  placeholder="Trắng, Đen..."
-                  className={inputCls} />
-              </div>
-              <div>
-                <label className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-1 block">
-                  Tên gợi nhớ
-                </label>
-                <input name="nickname" value={form.nickname} onChange={handleChange}
-                  placeholder="Xe gia đình..."
-                  className={inputCls} />
-              </div>
-            </div>
-
-            {/* Màu sơn 3D */}
+            {/* Nickname */}
             <div>
               <label className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-1 block">
-                Màu sơn 3D (HEX)
+                Tên gợi nhớ
+              </label>
+              <input name="nickname" value={form.nickname} onChange={handleChange}
+                placeholder="Xe gia đình..."
+                className={inputCls} />
+            </div>
+
+            {/* Màu sơn 3D — auto từ AI, có thể điều chỉnh */}
+            <div>
+              <label className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-1 block">
+                Màu sơn 3D (HEX) — tự động từ AI
               </label>
               <div className="flex items-center gap-2">
                 <input
@@ -405,7 +426,7 @@ function VehicleModal({ editVehicle, onClose, onSaved }) {
                   value={form.hexColor}
                   onChange={handleChange}
                   className="h-9 w-9 cursor-pointer rounded-lg border border-gray-300 dark:border-white/15 bg-transparent p-0.5 shrink-0"
-                  title="Chọn màu sơn xe"
+                  title="Điều chỉnh màu sơn xe"
                 />
                 <input
                   name="hexColor"
@@ -479,6 +500,7 @@ export default function MyVehicles() {
   const [toast, setToast]             = useState(null);
   const [quickColor, setQuickColor]   = useState(null); // local hex while picking
   const colorInputRef = useRef(null);
+  const colorDebounceRef = useRef(null); // debounce timer để tránh setState quá nhanh
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -545,9 +567,12 @@ export default function MyVehicles() {
   const openEdit = () => { if (selected) { setEditVehicle(selected); setModalOpen(true); } };
 
   // ── Inline quick-color ──
-  const handleQuickColorChange = async (hex) => {
+  // Debounce 40ms: bỏ qua các lần gọi liên tục khi user kéo nhanh color picker,
+  // chỉ gọi setQuickColor khi user dừng lại → tránh Maximum update depth error.
+  const handleQuickColorChange = (hex) => {
     if (!selected) return;
-    setQuickColor(hex);
+    clearTimeout(colorDebounceRef.current);
+    colorDebounceRef.current = setTimeout(() => setQuickColor(hex), 40);
   };
   const handleQuickColorCommit = async (hex) => {
     if (!selected) return;
@@ -671,6 +696,12 @@ export default function MyVehicles() {
                   ★ Mặc định
                 </span>
               )}
+              {selected?.status === 'pending' && (
+                <span className="text-[10px] font-bold bg-orange-500/20 text-orange-400
+                  border border-orange-500/40 rounded-full px-2 py-0.5">
+                  ⏳ Chờ duyệt
+                </span>
+              )}
               <span className="inline-flex items-center gap-1 text-[11px] font-semibold
                 bg-white/10 text-gray-300 border border-white/15 rounded-full px-2.5 py-0.5">
                 {typeObj?.icon}
@@ -779,6 +810,7 @@ export default function MyVehicles() {
                   modelUrl={selected.modelUrl}
                   carColor={activeColor}
                   height="100%"
+                  boundsMargin={0.85}
                 />
               ) : (
                 <NoModelPlaceholder hexColor={selected?.hexColor} />

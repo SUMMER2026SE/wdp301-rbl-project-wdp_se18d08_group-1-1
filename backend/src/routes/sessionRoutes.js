@@ -4,6 +4,12 @@ const sessionController = require('../controllers/sessionController');
 
 const { protect, authorize } = require('../middlewares/authMiddleware');
 
+// GET /api/sessions/active-status
+router.get('/active-status', sessionController.getActiveParkingStatus);
+
+// POST /api/sessions/verify-plate
+router.post('/verify-plate', sessionController.verifyPlate);
+
 // POST /api/sessions/kiosk-entry
 router.post('/kiosk-entry', sessionController.createKioskSession);
 

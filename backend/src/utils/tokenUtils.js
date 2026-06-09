@@ -13,7 +13,7 @@ const generateAccessToken = (user) => {
     },
     process.env.JWT_SECRET,
     {
-      expiresIn: process.env.JWT_EXPIRE || '15m',
+      expiresIn: user.role === 'admin' ? '1h' : (process.env.JWT_EXPIRE || '15m'),
     }
   );
 };
