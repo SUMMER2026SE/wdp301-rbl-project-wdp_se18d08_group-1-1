@@ -9,11 +9,23 @@ const LOGO_URL =
 
 const EVENT_TEMPLATE_MAP = {
   'account.registered': 'REGISTRATION_SUCCESS',
+  'account.email_verified': 'EMAIL_VERIFIED',
+  'account.password_changed': 'PASSWORD_CHANGED',
+  'account.locked': 'ACCOUNT_LOCKED',
+  'account.unlocked': 'ACCOUNT_UNLOCKED',
   'wallet.topup_success': 'TOPUP_SUCCESS',
   'wallet.topup_failed': 'TOPUP_FAILED',
+  'wallet.refund_success': 'REFUND_SUCCESS',
+  'wallet.low_balance': 'LOW_BALANCE',
   'wallet.payment_success': 'PAYMENT_SUCCESS',
+  'wallet.payment_failed': 'PAYMENT_FAILED',
   'booking.created': 'BOOKING_SUCCESS',
   'booking.cancelled': 'BOOKING_CANCELLED',
+  'parking.entry': 'VEHICLE_ENTRY',
+  'parking.exit': 'VEHICLE_EXIT',
+  'parking.remaining_30': 'PARKING_30MIN_WARNING',
+  'parking.remaining_15': 'PARKING_15MIN_WARNING',
+  'parking.remaining_5': 'PARKING_5MIN_WARNING',
   'parking.expired': 'PARKING_EXPIRED',
   'system.maintenance': 'SYSTEM_MAINTENANCE',
   'system.update': 'SYSTEM_UPDATE',
@@ -159,6 +171,53 @@ const sendNotificationEmail = async (userId, eventKey, templateData = {}) => {
   }
 };
 
+const sendRuleTestEmail = async (userId, rule, templateData = {}) => {
+  try {
+    if (!userId || !rule?.eventKey || !mongoose.Types.ObjectId.isValid(userId)) {
+      return { sent: false, reason: 'Invalid user or rule' };
+    }
+
+    if (!Array.isArray(rule.channels) || !rule.channels.includes('Email')) {
+      return { sent: false, reason: 'Email channel is disabled' };
+    }
+
+    const user = await User.findById(userId)
+      .select('email status username role')
+      .lean();
+
+    if (!user?.email || user.status === false) {
+      return { sent: false, reason: 'Current user has no active email' };
+    }
+
+    const templatePayload = getTemplatePayload(rule.eventKey, templateData);
+    const payload = templatePayload || {
+      title: rule.name,
+      content: rule.description || `Test trigger for ${rule.eventKey}.`,
+      type: 'SYSTEM',
+      priority: rule.priority || 'INFO',
+    };
+
+    await sendRenderedEmail(
+      user,
+      rule.eventKey,
+      {
+        ...payload,
+        title: `[TEST] ${payload.title}`,
+        content: `${payload.content}\n\nThis is a test email sent from the notification rules screen.`,
+      },
+      {
+        ...templateData,
+        isTest: true,
+      }
+    );
+
+    return { sent: true, to: user.email };
+  } catch (err) {
+    console.error(`[EmailNotif] ${rule?.eventKey || 'test'} test error: ${err.message}`);
+    return { sent: false, reason: err.message };
+  }
+};
+
 const sendBroadcastNotificationEmail = async (userIds, eventKey, templateData = {}) => {
   try {
     if (!Array.isArray(userIds) || userIds.length === 0 || !eventKey) return;
@@ -197,4 +256,5 @@ const sendBroadcastNotificationEmail = async (userIds, eventKey, templateData = 
 module.exports = {
   sendNotificationEmail,
   sendBroadcastNotificationEmail,
+  sendRuleTestEmail,
 };

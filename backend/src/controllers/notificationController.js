@@ -1,5 +1,6 @@
 const { validationResult } = require('express-validator');
 const notificationService = require('../services/notificationService');
+const notificationEmailService = require('../services/notificationEmailService');
 const { emitNotification, broadcastNotification } = require('../sockets/notificationSocket');
 const NotificationRule = require('../models/NotificationRule');
 
@@ -32,7 +33,7 @@ const createNotification = async (req, res, next) => {
       );
       // Broadcast to all online users
       if (io) {
-        broadcastNotification(io, result.notification);
+        await broadcastNotification(io, result.notification);
       }
 
       return res.status(201).json({
@@ -433,6 +434,18 @@ const testAutoRule = async (req, res, next) => {
       await emitNotification(io, userId, notification);
     }
 
+    const emailResult = await notificationEmailService.sendRuleTestEmail(userId, rule, {
+      templateKey: req.body?.templateKey,
+      amount: '100.000',
+      balance: '500.000',
+      slot: 'A1-01',
+      slotInfo: 'A1-01',
+      plate: 'TEST-001',
+      totalCost: '25.000',
+      reason: 'Test from notification rule screen',
+      bookingId: 'TEST-BOOKING',
+    });
+
     // Update lastTriggeredAt
     await NotificationRule.findOneAndUpdate(
       { eventKey },
@@ -441,8 +454,13 @@ const testAutoRule = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      message: `Test notification sent for rule '${rule.name}'`,
-      data: notification,
+      message: emailResult.sent
+        ? `Test notification and email sent for rule '${rule.name}'`
+        : `Test notification sent for rule '${rule.name}'`,
+      data: {
+        notification,
+        email: emailResult,
+      },
     });
   } catch (error) {
     next(error);

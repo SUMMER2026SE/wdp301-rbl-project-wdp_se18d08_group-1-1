@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Bell, Calendar, FileText, Send, Users, User } from "lucide-react";
+import { Bell, Calendar, FileText, Send, Users, User, Mail } from "lucide-react";
 import { PRIORITY, PRIORITY_META, TARGET_OPTIONS } from "../../../lib/notifications/types";
 
 const sampleCustomers = [
@@ -9,12 +9,15 @@ const sampleCustomers = [
   { id: "cust_004", name: "Phạm Thị D" },
 ];
 
+const AVAILABLE_CHANNELS = ["In-app", "Email"];
+
 export default function ComposeForm({ templates, onSend, onSchedule }) {
   const [target, setTarget] = useState("all");
   const [selectedCustomers, setSelectedCustomers] = useState([]);
   const [title, setTitle] = useState("");
   const [message, setMessage] = useState("");
   const [priority, setPriority] = useState(PRIORITY.INFO);
+  const [channels, setChannels] = useState(["In-app"]);
   const [sendAt, setSendAt] = useState("");
 
   const recipientLabel = useMemo(() => {
@@ -45,7 +48,7 @@ export default function ComposeForm({ templates, onSend, onSchedule }) {
       message: message || "Nội dung thông báo chưa được nhập.",
       priority,
       target: buildTarget(),
-      channels: ["In-app"],
+      channels: channels.length > 0 ? channels : ["In-app"],
     };
 
     if (mode === "schedule" && sendAt) {
@@ -54,6 +57,18 @@ export default function ComposeForm({ templates, onSend, onSchedule }) {
     }
 
     onSend(payload);
+  };
+
+  const toggleChannel = (channel) => {
+    const isActive = channels.includes(channel);
+    const nextChannels = isActive
+      ? channels.filter((c) => c !== channel)
+      : [...channels, channel];
+    
+    // Ensure at least one channel is selected
+    if (nextChannels.length > 0) {
+      setChannels(nextChannels);
+    }
   };
 
   return (
@@ -134,6 +149,27 @@ export default function ComposeForm({ templates, onSend, onSchedule }) {
               </div>
             </div>
 
+            <div>
+              <label className="mb-2 block text-sm font-semibold text-gray-300">Kênh gửi</label>
+              <div className="flex flex-wrap gap-3">
+                {AVAILABLE_CHANNELS.map((channel) => (
+                  <button
+                    key={channel}
+                    type="button"
+                    onClick={() => toggleChannel(channel)}
+                    className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-2 text-sm font-semibold transition-colors ${
+                      channels.includes(channel)
+                        ? "border-yellow-500/40 bg-yellow-500/15 text-yellow-200"
+                        : "border-white/10 bg-white/5 text-gray-300 hover:border-yellow-500/20"
+                    }`}
+                  >
+                    {channel === "Email" ? <Mail size={16} /> : <Bell size={16} />}
+                    {channel}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="flex flex-wrap items-center gap-3">
               <button
                 type="button"
@@ -194,19 +230,29 @@ export default function ComposeForm({ templates, onSend, onSchedule }) {
           </div>
 
           <div className="space-y-3 rounded-3xl border border-white/10 bg-white/5 p-4">
-            <div className="flex items-center gap-3 text-gray-300">
-              <Users size={16} />
-              <p className="text-sm">Đối tượng hiện tại: {recipientLabel}</p>
+            <div className="flex items-center justify-between gap-3 text-gray-300">
+              <div className="flex items-center gap-3">
+                <Users size={16} />
+                <p className="text-sm">Đối tượng hiện tại: {recipientLabel}</p>
+              </div>
             </div>
-            <div className="flex items-center gap-3 text-gray-300">
-              <User size={16} />
-              <p className="text-sm">
-                Khách hàng đã chọn: {selectedCustomers.length || "0"}
-              </p>
+            <div className="flex items-center justify-between gap-3 text-gray-300">
+              <div className="flex items-center gap-3">
+                <User size={16} />
+                <p className="text-sm">Khách hàng đã chọn: {selectedCustomers.length || "0"}</p>
+              </div>
             </div>
-            <div className="flex items-center gap-3 text-gray-300">
-              <Bell size={16} />
-              <p className="text-sm">Mức ưu tiên: {PRIORITY_META[priority].label}</p>
+            <div className="flex items-center justify-between gap-3 text-gray-300">
+              <div className="flex items-center gap-3">
+                <Bell size={16} />
+                <p className="text-sm">Mức ưu tiên: {PRIORITY_META[priority].label}</p>
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-3 text-gray-300">
+              <div className="flex items-center gap-3">
+                <Mail size={16} />
+                <p className="text-sm">Kênh gửi: {channels.join(", ")}</p>
+              </div>
             </div>
           </div>
 

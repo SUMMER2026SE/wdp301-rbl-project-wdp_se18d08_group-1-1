@@ -130,6 +130,7 @@ async function notifyEmailVerified(app, userId) {
     if (notification) {
       const io = getIO(app);
       if (io) await emitNotification(io, userId, notification);
+      queueNotificationEmail(userId, 'account.email_verified');
       await updateRuleLastTriggered('account.email_verified');
     }
   } catch (err) {
@@ -151,6 +152,7 @@ async function notifyPasswordChanged(app, userId) {
     if (notification) {
       const io = getIO(app);
       if (io) await emitNotification(io, userId, notification);
+      queueNotificationEmail(userId, 'account.password_changed');
       await updateRuleLastTriggered('account.password_changed');
     }
   } catch (err) {
@@ -171,6 +173,7 @@ async function notifyAccountLocked(app, userId) {
     if (notification) {
       const io = getIO(app);
       if (io) await emitNotification(io, userId, notification);
+      queueNotificationEmail(userId, 'account.locked');
       await updateRuleLastTriggered('account.locked');
     }
   } catch (err) {
@@ -191,6 +194,7 @@ async function notifyAccountUnlocked(app, userId) {
     if (notification) {
       const io = getIO(app);
       if (io) await emitNotification(io, userId, notification);
+      queueNotificationEmail(userId, 'account.unlocked');
       await updateRuleLastTriggered('account.unlocked');
     }
   } catch (err) {
@@ -266,6 +270,10 @@ async function notifyRefundSuccess(app, userId, amount, balance) {
     if (notification) {
       const io = getIO(app);
       if (io) await emitNotification(io, userId, notification);
+      queueNotificationEmail(userId, 'wallet.refund_success', {
+        amount: fmtAmount,
+        balance: fmtBalance,
+      });
       await updateRuleLastTriggered('wallet.refund_success');
     }
   } catch (err) {
@@ -288,6 +296,7 @@ async function notifyLowBalance(app, userId, balance) {
     if (notification) {
       const io = getIO(app);
       if (io) await emitNotification(io, userId, notification);
+      queueNotificationEmail(userId, 'wallet.low_balance', { balance: fmtBalance });
       await updateRuleLastTriggered('wallet.low_balance');
     }
   } catch (err) {
@@ -335,6 +344,7 @@ async function notifyPaymentFailed(app, userId, amount) {
     if (notification) {
       const io = getIO(app);
       if (io) await emitNotification(io, userId, notification);
+      queueNotificationEmail(userId, 'wallet.payment_failed', { amount: fmtAmount });
       await updateRuleLastTriggered('wallet.payment_failed');
     }
   } catch (err) {
@@ -414,6 +424,7 @@ async function notifyVehicleEntry(app, userId, plate, slot) {
     if (notification) {
       const io = getIO(app);
       if (io) await emitNotification(io, userId, notification);
+      queueNotificationEmail(userId, 'parking.entry', { plate, slot: slot || 'N/A' });
       await updateRuleLastTriggered('parking.entry');
     }
   } catch (err) {
@@ -436,6 +447,7 @@ async function notifyVehicleExit(app, userId, plate, totalCost) {
     if (notification) {
       const io = getIO(app);
       if (io) await emitNotification(io, userId, notification);
+      queueNotificationEmail(userId, 'parking.exit', { plate, totalCost: fmtCost });
       await updateRuleLastTriggered('parking.exit');
     }
   } catch (err) {
@@ -472,6 +484,7 @@ async function notifyParkingTimeWarning(app, userId, sessionId, minutesLeft) {
     if (notification) {
       const io = getIO(app);
       if (io) await emitNotification(io, userId, notification);
+      queueNotificationEmail(userId, ruleKey);
       await updateRuleLastTriggered(ruleKey);
     }
   } catch (err) {
@@ -570,7 +583,7 @@ async function notifySystemMaintenance(app) {
     );
     if (result) {
       const io = getIO(app);
-      if (io) broadcastNotification(io, result.notification);
+      if (io) await broadcastNotification(io, result.notification);
       queueBroadcastEmail(result.userIds, 'system.maintenance');
       await updateRuleLastTriggered('system.maintenance');
     }
@@ -590,7 +603,7 @@ async function notifyVersionUpdate(app) {
     );
     if (result) {
       const io = getIO(app);
-      if (io) broadcastNotification(io, result.notification);
+      if (io) await broadcastNotification(io, result.notification);
       queueBroadcastEmail(result.userIds, 'system.update');
       await updateRuleLastTriggered('system.update');
     }

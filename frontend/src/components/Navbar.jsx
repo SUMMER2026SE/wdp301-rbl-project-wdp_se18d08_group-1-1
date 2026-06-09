@@ -325,7 +325,7 @@ export default function Navbar() {
                         </div>
 
                         <div className="p-3 border-t border-gray-100 bg-gray-50/50">
-                          <button onClick={() => { navigate('/notifications'); setNotifOpen(false); }} className="w-full text-center text-xs text-gray-600 hover:text-gray-900 py-2 font-medium transition-colors rounded-xl bg-white/60">
+                          <button onClick={() => { navigate('/customer/notifications'); setNotifOpen(false); }} className="w-full text-center text-xs text-gray-600 hover:text-gray-900 py-2 font-medium transition-colors rounded-xl bg-white/60">
                             Xem tất cả thông báo
                           </button>
                         </div>

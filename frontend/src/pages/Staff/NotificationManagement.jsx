@@ -1,142 +1,318 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { vi } from "date-fns/locale";
+import {
+  Bell,
+  CheckCircle2,
+  CircleAlert,
+  Clock3,
+  Loader2,
+  Mail,
+  RefreshCw,
+  Search,
+  Send,
+  ShieldCheck,
+  Trash2,
+  Users,
+  X,
+  Zap,
+} from "lucide-react";
 import { useSocket } from "../../contexts/SocketProvider";
 import { searchUsers } from "../../services/userService";
-import { createNotification, getAdminHistory, getAutoRules, updateAutoRule, testAutoRule } from "../../services/notificationService";
+import {
+  createNotification,
+  deleteAdminHistoryNotification,
+  getAdminHistory,
+  getAutoRules,
+  markAdminHistoryAsRead,
+  markAllAdminHistoryAsRead,
+  testAutoRule,
+  updateAutoRule,
+} from "../../services/notificationService";
 import AutoRulesTable from "./notifications/AutoRulesTable";
 
 const TABS = [
-  { id: "feed", label: "Live Feed" },
-  { id: "compose", label: "Gửi thông báo" },
-  { id: "rules", label: "Quy tắc tự động" },
+  { id: "feed", label: "Lịch sử", icon: Bell },
+  { id: "compose", label: "Soạn gửi", icon: Send },
+  { id: "rules", label: "Luật tự động", icon: Zap },
 ];
 
 const PRIORITIES = ["INFO", "SUCCESS", "WARNING", "ERROR", "SYSTEM"];
+const TYPES = ["SYSTEM", "PARKING", "BOOKING", "WALLET", "PAYMENT", "ACCOUNT", "PROMOTION", "CAMERA"];
 
 const PRIORITY_META = {
-  INFO: { label: "INFO", bg: "bg-sky-500/10", color: "text-sky-400", border: "border-sky-500/30" },
-  SUCCESS: { label: "SUCCESS", bg: "bg-emerald-500/10", color: "text-emerald-400", border: "border-emerald-500/30" },
-  WARNING: { label: "WARNING", bg: "bg-amber-500/10", color: "text-amber-400", border: "border-amber-500/30" },
-  ERROR: { label: "ERROR", bg: "bg-red-500/10", color: "text-red-400", border: "border-red-500/30" },
-  SYSTEM: { label: "SYSTEM", bg: "bg-violet-500/10", color: "text-violet-400", border: "border-violet-500/30" },
+  INFO: { label: "Thông tin", dot: "bg-sky-400", chip: "border-sky-500/30 bg-sky-500/10 text-sky-300" },
+  SUCCESS: { label: "Thành công", dot: "bg-emerald-400", chip: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" },
+  WARNING: { label: "Cảnh báo", dot: "bg-amber-400", chip: "border-amber-500/30 bg-amber-500/10 text-amber-300" },
+  ERROR: { label: "Lỗi", dot: "bg-red-400", chip: "border-red-500/30 bg-red-500/10 text-red-300" },
+  SYSTEM: { label: "Hệ thống", dot: "bg-violet-400", chip: "border-violet-500/30 bg-violet-500/10 text-violet-300" },
 };
 
+const emptyForm = {
+  title: "",
+  content: "",
+  type: "SYSTEM",
+  priority: "INFO",
+  audience: "ALL_USERS",
+  users: [],
+};
+
+function getUser() {
+  try {
+    return JSON.parse(sessionStorage.getItem("valo_user") || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function formatTime(value) {
+  if (!value) return "Chưa có dữ liệu";
+  return formatDistanceToNow(new Date(value), { addSuffix: true, locale: vi });
+}
+
+function getTargetLabel(item) {
+  if (item.targetType === "ALL_USERS") return "Tất cả khách hàng";
+  if (item.targetType === "MULTI_USER") return `${item.targetUsers?.length || 0} người nhận`;
+  if (item.targetType === "SINGLE_USER") {
+    const user = Array.isArray(item.targetUsers) ? item.targetUsers[0] : null;
+    return user?.email || user?.username || "Một người nhận";
+  }
+  return "Hệ thống";
+}
+
 export default function NotificationManagement() {
-  const [tab, setTab] = useState("feed");
-  const [ruleToast, setRuleToast] = useState(null);
-  const [historyList, setHistoryList] = useState([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [apiStats, setApiStats] = useState({ totalSent: 0, success: 0, errors: 0 });
-  const [autoRules, setAutoRules] = useState([]);
-  const [rulesLoading, setRulesLoading] = useState(false);
-
   const socket = useSocket();
+  const currentUser = getUser();
+  const isAdmin = currentUser?.role === "admin";
+  const accent = isAdmin ? "yellow" : "emerald";
+  const [tab, setTab] = useState("feed");
+  const [historyList, setHistoryList] = useState([]);
+  const [autoRules, setAutoRules] = useState([]);
+  const [stats, setStats] = useState({ totalSent: 0, success: 0, errors: 0 });
+  const [filters, setFilters] = useState({ search: "", priority: "ALL" });
+  const [loading, setLoading] = useState(false);
+  const [rulesLoading, setRulesLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
 
-  const fetchHistory = async () => {
-    setHistoryLoading(true);
-    try {
-      const res = await getAdminHistory({ limit: 50 });
-      if (res.ok && res.data?.data) {
-        setHistoryList(res.data.data);
-        if (res.data.stats) {
-          setApiStats(res.data.stats);
-        }
-      }
-    } catch (err) {
-      console.error("Failed to fetch history:", err);
-    } finally {
-      setHistoryLoading(false);
+  const theme = useMemo(
+    () =>
+      accent === "yellow"
+        ? {
+            text: "text-yellow-300",
+            border: "border-yellow-500/30",
+            bg: "bg-yellow-500/10",
+            button: "bg-yellow-500 text-black hover:bg-yellow-400",
+            ring: "focus:border-yellow-400",
+          }
+        : {
+            text: "text-emerald-300",
+            border: "border-emerald-500/30",
+            bg: "bg-emerald-500/10",
+            button: "bg-emerald-500 text-white hover:bg-emerald-400",
+            ring: "focus:border-emerald-400",
+          },
+    [accent]
+  );
+
+  const unreadAdmin = useMemo(() => historyList.filter((item) => !item.isRead).length, [historyList]);
+
+  const fetchHistory = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    const res = await getAdminHistory({
+      limit: 50,
+      search: filters.search.trim() || undefined,
+      priority: filters.priority === "ALL" ? undefined : filters.priority,
+    });
+
+    if (res.ok) {
+      setHistoryList(res.data?.data || []);
+      setStats(res.data?.stats || { totalSent: 0, success: 0, errors: 0 });
+    } else {
+      setError(res.data?.message || "Không tải được lịch sử thông báo.");
     }
-  };
+    setLoading(false);
+  }, [filters.priority, filters.search]);
 
-  const fetchRules = async () => {
+  const fetchRules = useCallback(async () => {
     setRulesLoading(true);
-    try {
-      const res = await getAutoRules();
-      if (res.ok && res.data?.data) {
-        setAutoRules(res.data.data);
-      }
-    } catch (err) {
-      console.error("Failed to fetch auto rules:", err);
-    } finally {
-      setRulesLoading(false);
+    setError("");
+    const res = await getAutoRules();
+    if (res.ok) {
+      setAutoRules(res.data?.data || []);
+    } else {
+      setError(res.data?.message || "Không tải được luật thông báo.");
     }
-  };
-
-  useEffect(() => {
-    const initialize = async () => {
-      await fetchHistory();
-      await fetchRules();
-    };
-    initialize();
+    setRulesLoading(false);
   }, []);
 
-  const handleRuleUpdate = async (eventKey, data) => {
-    const res = await updateAutoRule(eventKey, data);
-    if (res.ok) {
-      await fetchRules();
-    } else {
-      console.error("Failed to update rule:", res);
-    }
+  useEffect(() => {
+    fetchHistory();
+  }, [fetchHistory]);
+
+  useEffect(() => {
+    fetchRules();
+  }, [fetchRules]);
+
+  useEffect(() => {
+    if (!socket) return undefined;
+    const handleAdminNotification = (payload) => {
+      setHistoryList((current) => [{ ...payload, isRead: false }, ...current]);
+      setStats((current) => ({ ...current, totalSent: current.totalSent + 1 }));
+    };
+
+    socket.on("notification:admin:new", handleAdminNotification);
+    return () => socket.off("notification:admin:new", handleAdminNotification);
+  }, [socket]);
+
+  const flash = (message, isError = false) => {
+    setNotice(isError ? "" : message);
+    setError(isError ? message : "");
+    window.setTimeout(() => {
+      setNotice("");
+      if (!isError) return;
+      setError("");
+    }, 3000);
   };
 
-  const handleRuleTest = async (eventKey) => {
+  const markOneRead = async (id) => {
+    const res = await markAdminHistoryAsRead(id);
+    if (!res.ok) return flash(res.data?.message || "Không đánh dấu được thông báo.", true);
+    setHistoryList((current) => current.map((item) => (item._id === id ? { ...item, isRead: true } : item)));
+  };
+
+  const markAllRead = async () => {
+    const res = await markAllAdminHistoryAsRead();
+    if (!res.ok) return flash(res.data?.message || "Không đánh dấu được thông báo.", true);
+    setHistoryList((current) => current.map((item) => ({ ...item, isRead: true })));
+  };
+
+  const removeNotification = async (id) => {
+    const res = await deleteAdminHistoryNotification(id);
+    if (!res.ok) return flash(res.data?.message || "Không xóa được thông báo.", true);
+    setHistoryList((current) => current.filter((item) => item._id !== id));
+  };
+
+  const updateRule = async (eventKey, patch) => {
+    const res = await updateAutoRule(eventKey, patch);
+    if (!res.ok) return flash(res.data?.message || "Cập nhật luật thất bại.", true);
+    await fetchRules();
+    flash("Đã cập nhật luật thông báo.");
+  };
+
+  const testRule = async (eventKey) => {
     const res = await testAutoRule(eventKey);
-    if (!res.ok) {
-      console.error("Failed to test rule:", res);
-      setRuleToast("Test rule thất bại.");
+    if (!res.ok) return flash(res.data?.message || "Gửi thử luật thất bại.", true);
+    const email = res.data?.data?.email;
+    if (email?.sent) {
+      flash(`Đã gửi thông báo thử nghiệm và email tới ${email.to}.`);
+    } else if (email?.reason) {
+      flash(`Đã gửi in-app test. Email chưa gửi: ${email.reason}.`);
     } else {
-      setRuleToast("Test rule thành công.");
-      setTimeout(() => setRuleToast(null), 3000);
+      flash("Đã gửi thông báo thử nghiệm.");
     }
+    fetchHistory();
   };
 
-  const stats = apiStats;
+  const submitNotification = async (form) => {
+    setSaving(true);
+    setError("");
+    const targetUsers = form.audience === "ALL_USERS" ? [] : form.users.map((user) => user._id);
+    const res = await createNotification({
+      title: form.title.trim(),
+      content: form.content.trim(),
+      type: form.type,
+      priority: form.priority,
+      targetType: form.audience,
+      targetUsers,
+    });
+
+    setSaving(false);
+    if (!res.ok) {
+      flash(res.data?.message || res.data?.errors?.[0]?.msg || "Gửi thông báo thất bại.", true);
+      return false;
+    }
+
+    flash("Đã gửi thông báo.");
+    setTab("feed");
+    fetchHistory();
+    return true;
+  };
 
   return (
-    <div className="bg-[#0D0D0D] text-gray-100 min-h-full">
-      <div className="px-6 py-6 max-w-[1400px] mx-auto">
-        <header className="flex items-start justify-between gap-4 mb-6">
+    <div className="min-h-full bg-[#0D0D0D] text-gray-100">
+      <div className="mx-auto max-w-[1440px] px-5 py-6 lg:px-8">
+        <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-3xl font-bold tracking-tight text-white">Notification Management</h1>
-              <LiveBadge socket={socket} />
+            <div className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold ${theme.border} ${theme.bg} ${theme.text}`}>
+              <ShieldCheck size={14} />
+              {isAdmin ? "Admin" : "Staff"} Notification Center
             </div>
-            <p className="text-gray-400 mt-1">
-              Gửi thông báo tới toàn hệ thống hoặc người dùng cụ thể.
+            <h1 className="mt-3 text-2xl font-bold tracking-tight text-white lg:text-3xl">Quản lý thông báo</h1>
+            <p className="mt-1 max-w-2xl text-sm text-gray-400">
+              Theo dõi lịch sử gửi, tạo thông báo cho khách hàng và cấu hình các trigger tự động.
             </p>
+          </div>
+          <div className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${socket?.connected ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" : "border-amber-500/30 bg-amber-500/10 text-amber-300"}`}>
+            <span className={`h-2 w-2 rounded-full ${socket?.connected ? "bg-emerald-400" : "bg-amber-400"}`} />
+            {socket?.connected ? "Socket live" : "Socket offline"}
           </div>
         </header>
 
-        <StatsRow stats={stats} />
+        <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <StatCard label="Tổng đã gửi" value={stats.totalSent || historyList.length} icon={Bell} />
+          <StatCard label="Chưa đọc nội bộ" value={unreadAdmin} icon={Mail} />
+          <StatCard label="Thành công/Info" value={stats.success || 0} icon={CheckCircle2} />
+          <StatCard label="Cảnh báo/Lỗi" value={stats.errors || 0} icon={CircleAlert} />
+        </section>
+
+        {(notice || error) && (
+          <div className={`mt-4 rounded-xl border px-4 py-3 text-sm ${error ? "border-red-500/30 bg-red-500/10 text-red-300" : `${theme.border} ${theme.bg} ${theme.text}`}`}>
+            {error || notice}
+          </div>
+        )}
 
         <nav className="mt-6 flex flex-wrap gap-2 border-b border-white/10">
-          {TABS.map((t) => (
+          {TABS.map(({ id, label, icon: Icon }) => (
             <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
-                tab === t.id
-                  ? "border-emerald-500 text-emerald-400"
-                  : "border-transparent text-gray-400 hover:text-white"
+              key={id}
+              type="button"
+              onClick={() => setTab(id)}
+              className={`inline-flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-semibold transition ${
+                tab === id ? `${theme.text} ${theme.border}` : "border-transparent text-gray-500 hover:text-gray-200"
               }`}
             >
-              {t.label}
+              <Icon size={16} />
+              {label}
             </button>
           ))}
         </nav>
 
         <section className="mt-6">
-          {tab === "feed" && <FeedTab notifications={historyList} loading={historyLoading} onRefresh={fetchHistory} />}
-          {tab === "compose" && <ComposeTab onSent={() => { setTab("feed"); fetchHistory(); }} />}
+          {tab === "feed" && (
+            <FeedTab
+              filters={filters}
+              items={historyList}
+              loading={loading}
+              theme={theme}
+              onChangeFilters={setFilters}
+              onRefresh={fetchHistory}
+              onRead={markOneRead}
+              onReadAll={markAllRead}
+              onDelete={removeNotification}
+            />
+          )}
+          {tab === "compose" && <ComposeTab theme={theme} saving={saving} onSubmit={submitNotification} />}
           {tab === "rules" && (
-            <>
-              {ruleToast && (
-                <div className="mb-4 text-sm text-green-400">{ruleToast}</div>
-              )}
-              <AutoRulesTable rules={autoRules} loading={rulesLoading} onUpdate={handleRuleUpdate} onTest={handleRuleTest} />
-            </>
+            <AutoRulesTable
+              rules={autoRules}
+              loading={rulesLoading}
+              accent={accent}
+              onUpdate={updateRule}
+              onTest={testRule}
+            />
           )}
         </section>
       </div>
@@ -144,371 +320,305 @@ export default function NotificationManagement() {
   );
 }
 
-function LiveBadge({ socket }) {
-  const ok = socket === "connected";
+function StatCard({ label, value, icon: Icon }) {
   return (
-    <span className={`inline-flex items-center gap-2 text-xs px-2.5 py-1 rounded-full border ${
-      ok ? "border-emerald-500/40 text-emerald-400 bg-emerald-500/10" : "border-amber-500/40 text-amber-400 bg-amber-500/10"
-    }`}>
-      <span className={`w-2 h-2 rounded-full ${ok ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
-      {ok ? "LIVE · API" : "Offline"}
-    </span>
+    <div className="rounded-xl border border-white/5 bg-[#151515] p-4 shadow-lg">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</p>
+          <p className="mt-2 text-3xl font-bold text-white">{value}</p>
+        </div>
+        <span className="grid h-11 w-11 place-items-center rounded-xl border border-white/10 bg-white/5 text-gray-300">
+          <Icon size={20} />
+        </span>
+      </div>
+    </div>
   );
 }
 
-function StatsRow({ stats }) {
-  const cards = [
-    { label: "Tổng đã gửi (Lịch sử)", value: stats.totalSent, tone: "info", icon: "✅" },
-    { label: "Gửi thành công", value: stats.success, tone: "success", icon: "🚀" },
-    { label: "Cảnh báo & Lỗi", value: stats.errors, tone: "error", icon: "⚠" },
-  ];
-  
-  const toneMap = {
-    info: "border-sky-500/30 text-sky-400 bg-sky-500/10",
-    system: "border-violet-500/30 text-violet-400 bg-violet-500/10",
-    success: "border-emerald-500/30 text-emerald-400 bg-emerald-500/10",
-    error: "border-red-500/30 text-red-400 bg-red-500/10",
+function FeedTab({ filters, items, loading, theme, onChangeFilters, onRefresh, onRead, onReadAll, onDelete }) {
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 rounded-xl border border-white/5 bg-[#151515] p-4 lg:flex-row lg:items-center">
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+          <input
+            value={filters.search}
+            onChange={(event) => onChangeFilters((current) => ({ ...current, search: event.target.value }))}
+            placeholder="Tìm tiêu đề, nội dung, người nhận"
+            className={`h-10 w-full rounded-lg border border-white/10 bg-[#0D0D0D] pl-9 pr-3 text-sm text-gray-100 outline-none ${theme.ring}`}
+          />
+        </div>
+        <select
+          value={filters.priority}
+          onChange={(event) => onChangeFilters((current) => ({ ...current, priority: event.target.value }))}
+          className={`h-10 rounded-lg border border-white/10 bg-[#0D0D0D] px-3 text-sm text-gray-100 outline-none ${theme.ring}`}
+        >
+          <option value="ALL">Tất cả mức ưu tiên</option>
+          {PRIORITIES.map((priority) => (
+            <option key={priority} value={priority}>
+              {priority}
+            </option>
+          ))}
+        </select>
+        <button type="button" onClick={onReadAll} className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-white/10 px-3 text-sm font-semibold text-gray-300 hover:bg-white/5">
+          <CheckCircle2 size={16} />
+          Đã đọc tất cả
+        </button>
+        <button type="button" onClick={onRefresh} className={`inline-flex h-10 items-center justify-center gap-2 rounded-lg px-3 text-sm font-semibold ${theme.button}`}>
+          {loading ? <Loader2 className="animate-spin" size={16} /> : <RefreshCw size={16} />}
+          Làm mới
+        </button>
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-white/5 bg-[#151515]">
+        {loading ? (
+          <div className="flex items-center gap-2 p-6 text-sm text-gray-400">
+            <Loader2 className="animate-spin" size={16} />
+            Đang tải lịch sử thông báo...
+          </div>
+        ) : items.length === 0 ? (
+          <div className="p-10 text-center text-sm text-gray-500">Chưa có thông báo phù hợp.</div>
+        ) : (
+          <div className="divide-y divide-white/5">
+            {items.map((item) => (
+              <NotificationRow key={item._id} item={item} onRead={onRead} onDelete={onDelete} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function NotificationRow({ item, onRead, onDelete }) {
+  const meta = PRIORITY_META[item.priority] || PRIORITY_META.INFO;
+
+  return (
+    <article className={`flex flex-col gap-4 p-4 lg:flex-row lg:items-start lg:justify-between ${item.isRead ? "" : "bg-white/[0.03]"}`}>
+      <div className="flex min-w-0 gap-3">
+        <span className={`mt-2 h-2.5 w-2.5 shrink-0 rounded-full ${item.isRead ? "bg-gray-700" : meta.dot}`} />
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${meta.chip}`}>{meta.label}</span>
+            <span className="rounded-full border border-white/10 px-2.5 py-1 text-xs font-semibold text-gray-400">{item.type || "SYSTEM"}</span>
+            <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+              <Clock3 size={12} />
+              {formatTime(item.createdAt)}
+            </span>
+          </div>
+          <h2 className="mt-2 truncate text-base font-semibold text-white">{item.title}</h2>
+          <p className="mt-1 line-clamp-2 text-sm leading-6 text-gray-400">{item.content}</p>
+          <p className="mt-2 inline-flex items-center gap-1 text-xs text-gray-500">
+            <Users size={13} />
+            {getTargetLabel(item)}
+          </p>
+        </div>
+      </div>
+      <div className="flex shrink-0 gap-2 lg:justify-end">
+        {!item.isRead && (
+          <button type="button" onClick={() => onRead(item._id)} className="grid h-9 w-9 place-items-center rounded-lg border border-white/10 text-gray-400 hover:bg-white/5 hover:text-white" aria-label="Đánh dấu đã đọc">
+            <CheckCircle2 size={16} />
+          </button>
+        )}
+        <button type="button" onClick={() => onDelete(item._id)} className="grid h-9 w-9 place-items-center rounded-lg border border-red-500/20 text-red-300 hover:bg-red-500/10" aria-label="Ẩn thông báo">
+          <Trash2 size={16} />
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function ComposeTab({ theme, saving, onSubmit }) {
+  const [form, setForm] = useState(emptyForm);
+
+  const valid = form.title.trim() && form.content.trim() && (form.audience === "ALL_USERS" || form.users.length > 0);
+
+  const update = (field, value) => setForm((current) => ({ ...current, [field]: value }));
+
+  const submit = async (event) => {
+    event.preventDefault();
+    if (!valid) return;
+    const ok = await onSubmit(form);
+    if (ok) setForm(emptyForm);
   };
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      {cards.map((c) => (
-        <div key={c.label} className="rounded-xl border border-white/5 bg-[#1A1A1A] p-5 shadow-lg">
-          <div className={`w-11 h-11 rounded-lg border ${toneMap[c.tone]} grid place-items-center text-lg`}>{c.icon}</div>
-          <div className="mt-4 text-4xl font-bold tracking-tight text-white">{c.value}</div>
-          <div className="text-sm text-gray-400 mt-1">{c.label}</div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/* ---------------- Feed Tab ---------------- */
-function FeedTab({ notifications, loading, onRefresh }) {
-  const [filter, setFilter] = useState("ALL");
-  const [query, setQuery] = useState("");
-
-  const filtered = notifications
-    .filter((m) => filter === "ALL" || m.priority === filter)
-    .filter((m) => {
-      if (!query.trim()) return true;
-      const q = query.toLowerCase();
-      return (
-        m.title?.toLowerCase().includes(q) ||
-        m.content?.toLowerCase().includes(q) ||
-        m.targetType?.toLowerCase().includes(q)
-      );
-    });
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <FilterChip label="Tất cả" active={filter === "ALL"} onClick={() => setFilter("ALL")} />
-        {PRIORITIES.map((p) => (
-          <FilterChip key={p} label={p} active={filter === p} onClick={() => setFilter(p)} tone={p} />
-        ))}
-        <div className="flex-1" />
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Tìm tiêu đề, nội dung…"
-          className="w-72 max-w-full bg-[#111] border border-white/10 rounded-md px-3 py-2 text-sm placeholder:text-gray-500 focus:outline-none focus:ring-1 focus:ring-emerald-500/50"
-        />
-        <button
-          onClick={onRefresh}
-          className="text-xs px-3 py-2 rounded-md border border-white/10 hover:bg-white/5"
-        >
-          {loading ? "Đang tải..." : "Làm mới"}
-        </button>
-      </div>
-
-      <div className="rounded-3xl border border-gray-700/80 bg-gray-950/50 p-4 animate-float overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-3 border-b border-white/5">
-          <div className="font-semibold text-white">Live events (Lịch sử gửi API)</div>
-          <div className="text-xs text-gray-400">{filtered.length} items</div>
-        </div>
-        <ul className="divide-y divide-white/5">
-          {filtered.length === 0 && !loading && (
-            <li className="px-5 py-10 text-center text-gray-500 text-sm">Chưa có thông báo phù hợp.</li>
-          )}
-          {loading && filtered.length === 0 && (
-            <li className="px-5 py-10 text-center text-gray-500 text-sm">Đang tải lịch sử từ API...</li>
-          )}
-          {filtered.map((m) => (
-            <MessageRow key={m._id || m.id} m={m} />
-          ))}
-        </ul>
-      </div>
-    </div>
-  );
-}
-
-function FilterChip({ label, active, onClick, tone }) {
-  const toneCls = tone ? PRIORITY_META[tone] : null;
-  return (
-    <button
-      onClick={onClick}
-      className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-        active
-          ? toneCls
-            ? `${toneCls.bg} ${toneCls.color} ${toneCls.border}`
-            : "bg-emerald-500/15 text-emerald-400 border-emerald-500/40"
-          : "border-white/10 text-gray-400 hover:text-white"
-      }`}
-    >
-      {label}
-    </button>
-  );
-}
-
-function MessageRow({ m }) {
-  const meta = PRIORITY_META[m.priority] || PRIORITY_META.INFO;
-  const targetLabel = m.targetType === "ALL_USERS" ? "Toàn hệ thống" : 
-                      m.targetType === "MULTI_USER" ? `${m.targetUsers?.length || 0} người` : 
-                      m.targetType === "SINGLE_USER" ? `Một User` : "Hệ thống";
-  
-  return (
-    <li className={`px-5 py-4 flex items-start gap-4 bg-white/[0.02]`}>
-      <div className={`w-10 h-10 rounded-lg border ${meta.bg} ${meta.color} ${meta.border} grid place-items-center text-xs font-bold shrink-0`}>
-        {m.priority ? m.priority[0] : "I"}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-semibold text-gray-100">{m.title}</span>
-          <span className={`text-[10px] px-1.5 py-0.5 rounded ${meta.bg} ${meta.color} border ${meta.border}`}>
-            {meta.label}
-          </span>
-          <span className="text-[10px] px-1.5 py-0.5 rounded border border-white/10 text-gray-400">
-            {m.type || "SYSTEM"}
-          </span>
-        </div>
-        <div className="text-sm text-gray-400 mt-1">{m.content}</div>
-        <div className="text-xs text-gray-500 mt-2 flex flex-wrap gap-x-3 gap-y-1">
-          <span>👤 {targetLabel}</span>
-          <span>•</span>
-          <span>Trạng thái: {m.status || "SENT"}</span>
-          <span>•</span>
-          <span>{m.createdAt ? formatDistanceToNow(new Date(m.createdAt), { addSuffix: true, locale: vi }) : "Vừa xong"}</span>
-        </div>
-      </div>
-    </li>
-  );
-}
-
-/* ---------------- Compose Tab ---------------- */
-function ComposeTab({ onSent }) {
-  const [audienceKind, setAudienceKind] = useState("single");
-  const [selectedUsers, setSelectedUsers] = useState([]);
-  const [title, setTitle] = useState("");
-  const [message, setMessage] = useState("");
-  const [priority, setPriority] = useState("INFO");
-  const [toast, setToast] = useState(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  async function submit() {
-    setIsSubmitting(true);
-    setToast(null);
-
-    let targetType = 'ALL_USERS';
-    let targetUsers = [];
-    
-    if (audienceKind === "multi") {
-      targetType = 'MULTI_USER';
-      targetUsers = selectedUsers.map(u => u._id);
-    } else if (audienceKind === "single") {
-      targetType = 'SINGLE_USER';
-      if (selectedUsers.length === 0) {
-        setIsSubmitting(false);
-        return setToast("Vui lòng chọn user.");
-      }
-      targetUsers = [selectedUsers[0]._id];
-    }
-
-    const payload = {
-      title,
-      content: message,
-      type: 'SYSTEM',
-      priority,
-      targetType,
-      targetUsers,
-    };
-
-    try {
-      const res = await createNotification(payload);
-      if (res.ok) {
-        setToast("Đã gửi thông báo thành công qua API.");
-        setTimeout(onSent, 1000);
-      } else {
-        setToast("Lỗi API: " + (res.data?.message || JSON.stringify(res.data?.errors) || "Không xác định"));
-      }
-    } catch (err) {
-      console.error(err);
-      setToast("Lỗi kết nối API.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  return (
-    <div className="space-y-5 rounded-xl border border-white/5 bg-[#1A1A1A] p-6 shadow-lg max-w-4xl">
-      <Field label="Gửi đến">
-        <div className="flex flex-wrap gap-2">
-          {[
-            { id: "single", label: "Một Customer" },
-            { id: "multi", label: "Nhiều Customer" },
-            { id: "all", label: "Toàn bộ hệ thống" },
-          ].map((opt) => (
-            <button
-              key={opt.id}
-              onClick={() => setAudienceKind(opt.id)}
-              className={`px-3 py-2 rounded-md text-sm border transition-colors ${
-                audienceKind === opt.id ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400" : "border-white/10 hover:bg-white/5 text-gray-300"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-        {audienceKind !== "all" && (
-          <UserPicker
-            multi={audienceKind === "multi"}
-            value={selectedUsers}
-            onChange={setSelectedUsers}
+    <form onSubmit={submit} className="grid gap-5 rounded-xl border border-white/5 bg-[#151515] p-5 lg:grid-cols-[1.1fr_0.9fr]">
+      <div className="space-y-4">
+        <Field label="Tiêu đề">
+          <input
+            value={form.title}
+            onChange={(event) => update("title", event.target.value)}
+            maxLength={200}
+            placeholder="Ví dụ: Bảo trì hệ thống tối nay"
+            className={`h-11 w-full rounded-lg border border-white/10 bg-[#0D0D0D] px-3 text-sm text-white outline-none ${theme.ring}`}
           />
-        )}
-      </Field>
-      <Field label="Tiêu đề">
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Ví dụ: Bảo trì hệ thống tối nay"
-          className="w-full bg-[#111] border border-white/10 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500/50 placeholder:text-gray-600"
-        />
-      </Field>
-      <Field label="Nội dung (Content)">
-        <textarea
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          rows={4}
-          placeholder="Nội dung thông báo..."
-          className="w-full bg-[#111] border border-white/10 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-emerald-500/50 placeholder:text-gray-600"
-        />
-      </Field>
-      
-      <div className="grid sm:grid-cols-2 gap-4">
-        <Field label="Mức ưu tiên">
-          <div className="flex flex-wrap gap-2">
-            {PRIORITIES.map((p) => {
-              const meta = PRIORITY_META[p];
-              return (
-                <button
-                  key={p}
-                  onClick={() => setPriority(p)}
-                  className={`text-xs px-3 py-1.5 rounded-full border ${
-                    priority === p ? `${meta.bg} ${meta.color} ${meta.border}` : "border-white/10 text-gray-400 hover:bg-white/5"
-                  }`}
-                >
-                  {p}
-                </button>
-              );
-            })}
-          </div>
+        </Field>
+        <Field label="Nội dung">
+          <textarea
+            value={form.content}
+            onChange={(event) => update("content", event.target.value)}
+            maxLength={2000}
+            rows={7}
+            placeholder="Nhập nội dung thông báo"
+            className={`w-full resize-none rounded-lg border border-white/10 bg-[#0D0D0D] px-3 py-3 text-sm leading-6 text-white outline-none ${theme.ring}`}
+          />
         </Field>
       </div>
-      
-      <div className="flex items-center justify-end gap-2 pt-4 border-t border-white/10">
-        {toast && <span className={`text-xs mr-auto ${toast.includes("Lỗi") ? "text-red-400" : "text-emerald-400"}`}>{toast}</span>}
-        <button
-          onClick={submit}
-          disabled={isSubmitting}
-          className="px-6 py-2.5 rounded-md bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isSubmitting ? "Đang xử lý..." : "Gửi thông báo (API)"}
+
+      <div className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Loại">
+            <select value={form.type} onChange={(event) => update("type", event.target.value)} className={`h-11 w-full rounded-lg border border-white/10 bg-[#0D0D0D] px-3 text-sm text-white outline-none ${theme.ring}`}>
+              {TYPES.map((type) => (
+                <option key={type} value={type}>{type}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Mức ưu tiên">
+            <select value={form.priority} onChange={(event) => update("priority", event.target.value)} className={`h-11 w-full rounded-lg border border-white/10 bg-[#0D0D0D] px-3 text-sm text-white outline-none ${theme.ring}`}>
+              {PRIORITIES.map((priority) => (
+                <option key={priority} value={priority}>{priority}</option>
+              ))}
+            </select>
+          </Field>
+        </div>
+
+        <Field label="Người nhận">
+          <div className="grid gap-2 sm:grid-cols-3">
+            {[
+              { value: "ALL_USERS", label: "Tất cả" },
+              { value: "SINGLE_USER", label: "Một user" },
+              { value: "MULTI_USER", label: "Nhiều user" },
+            ].map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => update("audience", option.value)}
+                className={`rounded-lg border px-3 py-2 text-sm font-semibold transition ${
+                  form.audience === option.value ? `${theme.border} ${theme.bg} ${theme.text}` : "border-white/10 text-gray-400 hover:bg-white/5"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </Field>
+
+        {form.audience !== "ALL_USERS" && (
+          <UserPicker
+            multi={form.audience === "MULTI_USER"}
+            value={form.users}
+            onChange={(users) => update("users", users)}
+            theme={theme}
+          />
+        )}
+
+        <div className="rounded-xl border border-white/5 bg-[#0D0D0D] p-4">
+          <p className="text-sm font-semibold text-white">Tóm tắt</p>
+          <div className="mt-3 space-y-2 text-sm text-gray-400">
+            <p>Loại: <span className="text-gray-200">{form.type}</span></p>
+            <p>Ưu tiên: <span className="text-gray-200">{form.priority}</span></p>
+            <p>Người nhận: <span className="text-gray-200">{form.audience === "ALL_USERS" ? "Tất cả khách hàng" : `${form.users.length} user`}</span></p>
+          </div>
+        </div>
+
+        <button type="submit" disabled={!valid || saving} className={`inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50 ${theme.button}`}>
+          {saving ? <Loader2 className="animate-spin" size={16} /> : <Send size={16} />}
+          Gửi thông báo
         </button>
       </div>
-    </div>
+    </form>
   );
 }
 
 function Field({ label, children }) {
   return (
-    <div>
-      <label className="text-xs uppercase tracking-wider text-gray-500">{label}</label>
-      <div className="mt-2">{children}</div>
-    </div>
+    <label className="block">
+      <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</span>
+      <span className="mt-2 block">{children}</span>
+    </label>
   );
 }
 
-function UserPicker({ multi, value, onChange }) {
+function UserPicker({ multi, value, onChange, theme }) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const fetchUsers = async () => {
+    const timer = window.setTimeout(async () => {
       setLoading(true);
-      try {
-        const res = await searchUsers(q);
-        if (res.ok && res.data?.data) {
-          setResults(res.data.data);
-        }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    // Add debounce
-    const timeoutId = setTimeout(fetchUsers, 300);
-    return () => clearTimeout(timeoutId);
+      const res = await searchUsers(q.trim());
+      setResults(res.ok ? res.data?.data || [] : []);
+      setLoading(false);
+    }, 250);
+
+    return () => window.clearTimeout(timer);
   }, [q]);
-  
-  function toggle(user) {
+
+  const toggle = (user) => {
     if (!multi) return onChange([user]);
-    const exists = value.find((x) => x._id === user._id);
-    onChange(exists ? value.filter((x) => x._id !== user._id) : [...value, user]);
-  }
-  
+    const exists = value.some((item) => item._id === user._id);
+    onChange(exists ? value.filter((item) => item._id !== user._id) : [...value, user]);
+  };
+
+  const remove = (id) => onChange(value.filter((item) => item._id !== id));
+
   return (
-    <div className="mt-3 rounded-lg border border-white/5 bg-[#111] p-3">
-      <input
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="Tìm User theo username, email…"
-        className="w-full bg-[#1A1A1A] border border-white/10 rounded-md px-3 py-2 text-sm mb-2 focus:outline-none placeholder:text-gray-600"
-      />
-      <ul className="max-h-48 overflow-y-auto divide-y divide-white/5 hide-scrollbar">
-        {loading && <li className="px-2 py-4 text-center text-xs text-gray-500">Đang tìm kiếm...</li>}
-        {!loading && results.length === 0 && <li className="px-2 py-4 text-center text-xs text-gray-500">Không tìm thấy người dùng.</li>}
-        {results.map((u) => {
-          const on = value.some((x) => x._id === u._id);
-          return (
-            <li key={u._id}>
-              <button
-                onClick={() => toggle(u)}
-                className={`w-full px-2 py-2 flex items-center justify-between rounded text-sm ${on ? "bg-emerald-500/10 text-emerald-400" : "hover:bg-white/5 text-gray-300"}`}
-              >
-                <div className="flex flex-col items-start">
-                  <span className="font-medium">{u.username}</span>
-                  <span className="text-gray-500 text-xs">{u.email}</span>
-                </div>
-                <span className="text-[10px] text-gray-500 uppercase border border-white/10 px-1 rounded">{u.role}</span>
+    <div className="rounded-xl border border-white/5 bg-[#0D0D0D] p-3">
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={16} />
+        <input
+          value={q}
+          onChange={(event) => setQ(event.target.value)}
+          placeholder="Tìm username hoặc email"
+          className={`h-10 w-full rounded-lg border border-white/10 bg-[#151515] pl-9 pr-3 text-sm text-white outline-none ${theme.ring}`}
+        />
+      </div>
+
+      {value.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {value.map((user) => (
+            <span key={user._id} className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs ${theme.border} ${theme.bg} ${theme.text}`}>
+              {user.email || user.username}
+              <button type="button" onClick={() => remove(user._id)} className="hover:text-white">
+                <X size={12} />
               </button>
-            </li>
-          );
-        })}
-      </ul>
-      {multi && (
-        <div className="text-xs text-emerald-400 mt-2 bg-emerald-500/10 p-2 rounded flex flex-wrap gap-1">
-          Đã chọn {value.length} người: {value.map(v => v.username).join(', ')}
+            </span>
+          ))}
         </div>
       )}
-      {!multi && value.length > 0 && (
-        <div className="text-xs text-emerald-400 mt-2 bg-emerald-500/10 p-2 rounded">
-          Đã chọn: {value[0].username} ({value[0].email})
-        </div>
-      )}
+
+      <div className="mt-3 max-h-56 overflow-y-auto rounded-lg border border-white/5">
+        {loading ? (
+          <div className="flex items-center gap-2 p-4 text-sm text-gray-500">
+            <Loader2 className="animate-spin" size={14} />
+            Đang tìm...
+          </div>
+        ) : results.length === 0 ? (
+          <p className="p-4 text-sm text-gray-500">Không có người dùng phù hợp.</p>
+        ) : (
+          results.map((user) => {
+            const active = value.some((item) => item._id === user._id);
+            return (
+              <button
+                key={user._id}
+                type="button"
+                onClick={() => toggle(user)}
+                className={`flex w-full items-center justify-between gap-3 border-b border-white/5 px-3 py-2 text-left last:border-0 hover:bg-white/5 ${active ? "bg-white/[0.04]" : ""}`}
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold text-gray-200">{user.username || "User"}</span>
+                  <span className="block truncate text-xs text-gray-500">{user.email}</span>
+                </span>
+                <span className="rounded border border-white/10 px-2 py-0.5 text-[10px] uppercase text-gray-500">{user.role}</span>
+              </button>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 }

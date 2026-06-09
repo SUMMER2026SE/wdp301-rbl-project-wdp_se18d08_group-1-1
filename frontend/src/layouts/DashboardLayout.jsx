@@ -78,6 +78,11 @@ const NAV_CONFIG = {
       icon: <DollarSign size={18} />,
       to: "/admin/financial",
     },
+    {
+      label: "Quản lý thông báo",
+      icon: <Bell size={18} />,
+      to: "/admin/notifications",
+    },
   ],
   staff: [
     {
@@ -394,7 +399,7 @@ export default function DashboardLayout() {
                     )}
                   </div>
                   <div className="p-2 border-t border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-[#111]">
-                    <button onClick={() => navigate(role === 'staff' || role === 'admin' ? `/${role}/notifications` : '/profile')} className="w-full text-center text-xs text-gray-500 hover:text-gray-900 dark:hover:text-white py-1">
+                    <button onClick={() => navigate(role === 'staff' || role === 'admin' ? `/${role}/notifications` : '/customer/notifications')} className="w-full text-center text-xs text-gray-500 hover:text-gray-900 dark:hover:text-white py-1">
                       Xem tất cả
                     </button>
                   </div>

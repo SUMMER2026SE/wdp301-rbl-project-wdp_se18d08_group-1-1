@@ -23,6 +23,7 @@ import AdminDashboard from './pages/Admin/Dashboard';
 import VehicleManagement from './pages/Admin/VehicleManagement';
 import AdminProfile from './pages/Admin/AdminProfile';
 import ParkingLots from './pages/Admin/ParkingLots';
+import AdminNotificationManagement from './pages/Admin/NotificationManagement';
 
 // Pages – Staff
 import StaffDashboard from "./pages/Staff/Dashboard";
@@ -76,6 +77,7 @@ export default function App() {
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
           <Route path="/admin/vehicle-models" element={<VehicleManagement />} />
           <Route path="/admin/parking-lots" element={<ParkingLots />} />
+          <Route path="/admin/notifications" element={<AdminNotificationManagement />} />
           <Route path="/admin/profile" element={<AdminProfile />} />
         </Route>
 

@@ -106,6 +106,7 @@ export function useNotifications({ autoFetch = true, limit = 20 } = {}) {
         },
         ...prev,
       ]);
+      setUnreadCount((count) => count + 1);
     };
 
     const handleUnreadCount = (data) => {

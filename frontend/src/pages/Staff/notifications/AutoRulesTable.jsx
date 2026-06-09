@@ -1,140 +1,136 @@
 import { useMemo } from "react";
-import { Zap, CheckCircle2, ShieldCheck, Bell, Mail } from "lucide-react";
+import { Bell, CheckCircle2, Loader2, Mail, ShieldCheck, Timer, Zap } from "lucide-react";
 
-const AVAILABLE_CHANNELS = ["In-app", "Email"];
+const AVAILABLE_CHANNELS = ["Email"];
 
-function eventIcon(group) {
-  switch (group) {
-    case "Tài khoản":
-      return <ShieldCheck size={16} />;
-    case "Ví":
-      return <CheckCircle2 size={16} />;
-    case "Đặt chỗ":
-      return <Bell size={16} />;
-    case "Đỗ xe":
-      return <Zap size={16} />;
-    default:
-      return <Mail size={16} />;
-  }
+function eventIcon(group = "") {
+  const normalized = group.toLowerCase();
+  if (normalized.includes("account") || normalized.includes("tài khoản")) return <ShieldCheck size={16} />;
+  if (normalized.includes("wallet") || normalized.includes("ví")) return <CheckCircle2 size={16} />;
+  if (normalized.includes("parking") || normalized.includes("đỗ xe")) return <Zap size={16} />;
+  if (normalized.includes("system") || normalized.includes("hệ thống")) return <Mail size={16} />;
+  return <Bell size={16} />;
 }
 
-export default function AutoRulesTable({ rules, onUpdate, onTest }) {
+export default function AutoRulesTable({ rules = [], loading = false, accent = "emerald", onUpdate, onTest }) {
+  const theme =
+    accent === "yellow"
+      ? {
+          text: "text-yellow-300",
+          border: "border-yellow-500/30",
+          bg: "bg-yellow-500/10",
+          button: "bg-yellow-500 text-black hover:bg-yellow-400",
+        }
+      : {
+          text: "text-emerald-300",
+          border: "border-emerald-500/30",
+          bg: "bg-emerald-500/10",
+          button: "bg-emerald-500 text-white hover:bg-emerald-400",
+        };
+
   const grouped = useMemo(() => {
     return rules.reduce((acc, rule) => {
-      acc[rule.group] = acc[rule.group] || [];
-      acc[rule.group].push(rule);
+      const group = rule.group || "Khác";
+      acc[group] = acc[group] || [];
+      acc[group].push(rule);
       return acc;
     }, {});
   }, [rules]);
 
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <p className="text-sm text-sky-400 uppercase tracking-[0.2em] font-semibold">
-            Quy tắc tự động
-          </p>
-          <h2 className="mt-2 text-2xl font-semibold text-white">Cấu hình hành vi tự động</h2>
-          <p className="mt-2 text-sm text-gray-400 max-w-2xl">
-            Bật/tắt quy tắc, chọn kênh gửi, điều chỉnh throttle để chống spam và kiểm tra trigger ngay.
-          </p>
-        </div>
+  const toggleChannel = (rule, channel) => {
+    const channels = Array.isArray(rule.channels) && rule.channels.length ? rule.channels : ["In-app"];
+    const nextChannels = channels.includes(channel)
+      ? channels.filter((item) => item !== channel)
+      : [...channels, channel];
+
+    onUpdate(rule.eventKey, { channels: nextChannels.includes("In-app") ? nextChannels : ["In-app", ...nextChannels] });
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 rounded-xl border border-white/5 bg-[#151515] p-6 text-sm text-gray-400">
+        <Loader2 className="animate-spin" size={16} />
+        Đang tải luật tự động...
       </div>
+    );
+  }
 
-      <div className="space-y-8">
-        {Object.entries(grouped).map(([groupName, groupRules]) => (
-          <div key={groupName} className="rounded-xl border border-border bg-card p-5">
-            <div className="flex items-center gap-3 border-b border-border pb-4 text-white">
-              <span className="inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-sky-500/10 text-sky-200">
-                {eventIcon(groupName)}
-              </span>
-              <div>
-                <p className="text-lg font-semibold">{groupName}</p>
-                <p className="text-sm text-gray-400">Các sự kiện tự động thuộc nhóm {groupName}</p>
-              </div>
-            </div>
+  if (!rules.length) {
+    return <div className="rounded-xl border border-white/5 bg-[#151515] p-10 text-center text-sm text-gray-500">Chưa có luật tự động.</div>;
+  }
 
-            <div className="mt-5 space-y-3">
-              {groupRules.map((rule) => (
-                <div
-                  key={rule.eventKey}
-                  className="rounded-xl border border-border bg-card p-4"
-                >
-                  <div className="flex items-center gap-4">
-                    {/* Toggle on left */}
-                    <button
-                      type="button"
-                      onClick={() => onUpdate(rule.eventKey, { enabled: !rule.enabled })}
-                      aria-pressed={rule.enabled}
-                      className={`relative w-14 h-8 rounded-full transition-colors focus:outline-none flex-shrink-0 ${
-                        rule.enabled ? "bg-success" : "bg-secondary"
-                      }`}
-                    >
-                      <span
-                        className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-background shadow-md transform transition-transform ${
-                          rule.enabled ? "translate-x-6" : "translate-x-0"
-                        }`}
-                      />
-                    </button>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 justify-between">
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-4">
-                            <div className="min-w-0">
-                              <p className="font-semibold text-white truncate">{rule.name}</p>
-                              <p className="text-sm text-muted-foreground">Key: {rule.eventKey}</p>
-                            </div>
-                            <div className="text-xs px-3 py-2 rounded border border-border text-muted-foreground bg-white/5">
-                              Throttle: <span className="font-medium">{rule.throttleMinutes ?? '—'}p</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                        {AVAILABLE_CHANNELS.map((channel) => (
-                          <button
-                            key={channel}
-                            type="button"
-                            onClick={() => {
-                              const active = rule.channels.includes(channel);
-                              const nextChannels = active
-                                ? rule.channels.filter((item) => item !== channel)
-                                : [...rule.channels, channel];
-                              onUpdate(rule.eventKey, { channels: nextChannels });
-                            }}
-                            className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
-                              rule.channels.includes(channel)
-                                ? "border-success bg-success/15 text-success"
-                                : "border-border bg-card text-muted-foreground hover:border-success/40"
-                            }`}
-                          >
-                            {channel}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col items-end gap-2">
-                      <button
-                        type="button"
-                        onClick={() => onTest(rule.eventKey, { message: "Kiểm tra quy tắc tự động." })}
-                        className="w-10 h-10 rounded-full bg-sky-500 flex items-center justify-center text-white hover:bg-sky-400"
-                      >
-                        <Zap size={16} />
-                      </button>
-                      <p className="text-xs text-muted-foreground">
-                        Lần kích hoạt cuối: {rule.lastTriggeredAt ? new Date(rule.lastTriggeredAt).toLocaleString("vi-VN") : "Chưa có"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ))}
+  return (
+    <div className="space-y-5">
+      {Object.entries(grouped).map(([groupName, groupRules]) => (
+        <section key={groupName} className="overflow-hidden rounded-xl border border-white/5 bg-[#151515]">
+          <div className="flex items-center gap-3 border-b border-white/5 px-5 py-4">
+            <span className={`grid h-10 w-10 place-items-center rounded-xl border ${theme.border} ${theme.bg} ${theme.text}`}>
+              {eventIcon(groupName)}
+            </span>
+            <div>
+              <h2 className="text-base font-semibold text-white">{groupName}</h2>
+              <p className="text-xs text-gray-500">{groupRules.length} luật đang được cấu hình</p>
             </div>
           </div>
-        ))}
-      </div>
+
+          <div className="divide-y divide-white/5">
+            {groupRules.map((rule) => {
+              const channels = Array.isArray(rule.channels) && rule.channels.length ? rule.channels : ["In-app"];
+
+              return (
+                <article key={rule.eventKey} className="grid gap-4 px-5 py-4 xl:grid-cols-[1fr_auto] xl:items-center">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => onUpdate(rule.eventKey, { enabled: !rule.enabled })}
+                        className={`relative h-7 w-12 rounded-full transition ${rule.enabled ? "bg-emerald-500" : "bg-gray-700"}`}
+                        aria-pressed={Boolean(rule.enabled)}
+                      >
+                        <span className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition ${rule.enabled ? "left-6" : "left-1"}`} />
+                      </button>
+                      <h3 className="truncate text-sm font-semibold text-white">{rule.name}</h3>
+                      <span className="rounded-full border border-white/10 px-2 py-0.5 text-[10px] uppercase text-gray-500">{rule.priority || "INFO"}</span>
+                      <span className="rounded-full border border-white/10 px-2 py-0.5 text-[10px] text-gray-500">{rule.eventKey}</span>
+                    </div>
+                    <p className="mt-2 line-clamp-2 text-sm text-gray-400">{rule.description || "Không có mô tả."}</p>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <span className={`${rule.enabled ? `${theme.border} ${theme.bg} ${theme.text}` : "border-white/10 text-gray-500"} rounded-full border px-3 py-1 text-xs font-semibold`}>
+                        In-app
+                      </span>
+                      {AVAILABLE_CHANNELS.map((channel) => (
+                        <button
+                          key={channel}
+                          type="button"
+                          onClick={() => toggleChannel(rule, channel)}
+                          className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                            channels.includes(channel)
+                              ? `${theme.border} ${theme.bg} ${theme.text}`
+                              : "border-white/10 text-gray-500 hover:bg-white/5"
+                          }`}
+                        >
+                          {channel}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 xl:justify-end">
+                    <span className="inline-flex h-10 items-center gap-2 rounded-lg border border-white/10 px-3 text-xs text-gray-400">
+                      <Timer size={14} />
+                      {rule.throttleMinutes || 0} phút
+                    </span>
+                    <button type="button" onClick={() => onTest(rule.eventKey)} className={`inline-flex h-10 items-center gap-2 rounded-lg px-3 text-sm font-semibold ${theme.button}`}>
+                      <Zap size={15} />
+                      Test
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      ))}
     </div>
   );
 }

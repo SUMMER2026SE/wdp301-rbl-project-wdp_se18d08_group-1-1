@@ -173,7 +173,7 @@ async function emitNotification(io, userId, notification) {
 /**
  * Broadcast a notification event to all online users
  */
-function broadcastNotification(io, notification) {
+async function broadcastNotification(io, notification) {
   const payload = {
     _id: notification._id,
     title: notification.title,
@@ -188,6 +188,13 @@ function broadcastNotification(io, notification) {
 
   io.emit('notification:new', payload);
   emitToAdmins(io, 'notification:admin:new', payload);
+
+  await Promise.allSettled(
+    Array.from(onlineUsers.keys()).map(async (userId) => {
+      const unreadCount = await notificationService.getUnreadCount(userId);
+      emitToUser(io, userId, 'notification:unreadCount', { count: unreadCount });
+    })
+  );
 }
 
 module.exports = {
