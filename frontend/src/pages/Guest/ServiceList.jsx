@@ -1,7 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Sparkles, CheckCircle2, ArrowRight, Star } from 'lucide-react';
+import { Sparkles, CheckCircle2, ArrowRight, Star, Clock } from 'lucide-react';
 import { getServices } from '../../services/extraServiceApi';
+
+const formatServiceTime = (timeCost) => {
+  const minutes = Number(timeCost);
+
+  if (!Number.isFinite(minutes) || minutes < 1) {
+    return '30 min';
+  }
+
+  if (minutes < 60) {
+    return `${minutes} min`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+
+  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+};
 
 const ServiceList = () => {
   const [services, setServices] = useState([]);
@@ -152,8 +169,8 @@ const ServiceList = () => {
                       Professional staff
                     </li>
                     <li className="flex items-center gap-2 text-xs text-gray-400">
-                      <CheckCircle2 size={14} style={{ color: '#D4AF37' }} />
-                      Done during your parking time
+                      <Clock size={14} style={{ color: '#D4AF37' }} />
+                      Estimated time: {formatServiceTime(service.timeCost)}
                     </li>
                   </ul>
 

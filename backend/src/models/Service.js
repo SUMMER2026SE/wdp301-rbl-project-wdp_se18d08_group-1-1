@@ -17,6 +17,15 @@ const serviceSchema = new mongoose.Schema(
       required: [true, 'Service price is required'],
       min: [0, 'Price cannot be negative'],
     },
+    timeCost: {
+      type: Number,
+      default: 30,
+      min: [1, 'Service time cost must be at least 1 minute'],
+      validate: {
+        validator: Number.isInteger,
+        message: 'Service time cost must be a whole number of minutes',
+      },
+    },
     imageUrl: {
       type: String,
       required: [true, 'Image URL is required'],

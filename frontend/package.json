@@ -16,9 +16,12 @@
     "qrcode.react": "^4.2.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
+    "react-rnd": "^10.5.3",
     "react-router-dom": "^7.15.1",
+    "socket.io-client": "^4.8.3",
     "tesseract.js": "^7.0.0",
-    "three": "^0.184.0"
+    "three": "^0.184.0",
+    "uuid": "^14.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

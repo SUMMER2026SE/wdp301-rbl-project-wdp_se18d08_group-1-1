@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Pencil, Trash2, Plus, Image as ImageIcon, X, CheckCircle, XCircle, Package } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Pencil, Trash2, Plus, Image as ImageIcon, X, CheckCircle, XCircle, Package, Clock } from 'lucide-react';
 import { getServices, createService, updateService, deleteService } from '../../services/extraServiceApi';
 
 const AdminServiceManager = () => {
@@ -18,6 +18,7 @@ const AdminServiceManager = () => {
     name: '',
     description: '',
     price: '',
+    timeCost: '30',
     isActive: true,
   });
   const [imageFile, setImageFile] = useState(null);
@@ -64,12 +65,18 @@ const AdminServiceManager = () => {
   const openModal = (service = null) => {
     if (service) {
       setEditingService(service);
-      setFormData({ name: service.name, description: service.description, price: service.price, isActive: service.isActive });
+      setFormData({
+        name: service.name,
+        description: service.description,
+        price: service.price,
+        timeCost: service.timeCost ?? 30,
+        isActive: service.isActive,
+      });
       setImagePreview(service.imageUrl);
       setImageFile(null);
     } else {
       setEditingService(null);
-      setFormData({ name: '', description: '', price: '', isActive: true });
+      setFormData({ name: '', description: '', price: '', timeCost: '30', isActive: true });
       setImagePreview('');
       setImageFile(null);
     }
@@ -93,6 +100,7 @@ const AdminServiceManager = () => {
       submitData.append('name', formData.name);
       submitData.append('description', formData.description);
       submitData.append('price', formData.price);
+      submitData.append('timeCost', formData.timeCost);
       submitData.append('isActive', formData.isActive);
 
       if (imageFile) {
@@ -237,7 +245,7 @@ const AdminServiceManager = () => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr style={{ borderBottom: '1px solid rgba(212,175,55,0.15)' }}>
-                {['Image', 'Name & Description', 'Price', 'Status', 'Actions'].map(h => (
+                {['Image', 'Name & Description', 'Price', 'Time Cost', 'Status', 'Actions'].map(h => (
                   <th
                     key={h}
                     className="p-4 text-xs font-bold tracking-widest uppercase"
@@ -251,7 +259,7 @@ const AdminServiceManager = () => {
             <tbody>
               {services.length === 0 && !loading && (
                 <tr>
-                  <td colSpan="5" className="p-12 text-center" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                  <td colSpan="6" className="p-12 text-center" style={{ color: 'rgba(255,255,255,0.3)' }}>
                     <Package size={32} className="mx-auto mb-3 opacity-40" />
                     No services found. Click "Add New Service" to create one.
                   </td>
@@ -259,7 +267,7 @@ const AdminServiceManager = () => {
               )}
               {loading && services.length === 0 && (
                 <tr>
-                  <td colSpan="5" className="p-12 text-center">
+                  <td colSpan="6" className="p-12 text-center">
                     <div className="flex justify-center">
                       <div className="h-8 w-8 rounded-full border-3 border-t-transparent animate-spin" style={{ borderColor: gold, borderTopColor: 'transparent', borderWidth: '3px' }} />
                     </div>
@@ -301,6 +309,14 @@ const AdminServiceManager = () => {
                   <td className="p-4">
                     <span className="font-bold text-sm" style={{ color: gold }}>
                       ${service.price.toFixed(2)}
+                    </span>
+                  </td>
+
+                  {/* Time Cost */}
+                  <td className="p-4">
+                    <span className="inline-flex items-center gap-2 text-xs font-bold" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                      <Clock size={14} style={{ color: gold }} />
+                      {service.timeCost ?? 30} min
                     </span>
                   </td>
 
@@ -438,6 +454,24 @@ const AdminServiceManager = () => {
                   style={inputStyle}
                   required
                   placeholder="0.00"
+                  onFocus={e => e.target.style.borderColor = 'rgba(212,175,55,0.5)'}
+                  onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.12)'}
+                />
+              </div>
+
+              {/* Time Cost */}
+              <div>
+                <label style={labelStyle}>Time Cost (minutes)</label>
+                <input
+                  type="number"
+                  name="timeCost"
+                  value={formData.timeCost}
+                  onChange={handleInputChange}
+                  min="1"
+                  step="1"
+                  style={inputStyle}
+                  required
+                  placeholder="30"
                   onFocus={e => e.target.style.borderColor = 'rgba(212,175,55,0.5)'}
                   onBlur={e => e.target.style.borderColor = 'rgba(255,255,255,0.12)'}
                 />

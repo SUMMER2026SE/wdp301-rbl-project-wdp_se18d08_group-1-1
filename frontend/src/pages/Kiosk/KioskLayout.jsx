@@ -36,12 +36,12 @@ export default function KioskLayout() {
         `}
       </style>
       <div className="relative flex w-full h-full bg-[#fcfcfc] overflow-hidden kiosk-font">
-        
+
         {/* ─── GLOBAL BACKGROUND SLANT & POLYGONS ─── */}
         {/* The slanted yellow background that divides the screen */}
         <div className="absolute top-0 left-0 w-[50%] h-full bg-[#FFDF00] slanted-yellow z-0">
           {/* Dot pattern */}
-          <div 
+          <div
             className="absolute inset-0 opacity-10"
             style={{
               backgroundImage: 'radial-gradient(#000 1.5px, transparent 1.5px)',
@@ -55,16 +55,16 @@ export default function KioskLayout() {
           {/* Row 1 */}
           <div className="absolute top-[45%] left-[40%] w-10 h-8 bg-[#cca300] transform -skew-x-[25deg]"></div>
           <div className="absolute top-[48%] left-[50%] w-14 h-10 bg-[#cca300] transform -skew-x-[25deg]"></div>
-          
+
           {/* Row 2 */}
           <div className="absolute top-[55%] left-[30%] w-14 h-10 bg-[#cca300] transform -skew-x-[25deg]"></div>
           <div className="absolute top-[58%] left-[55%] w-12 h-8 bg-[#cca300] transform -skew-x-[25deg]"></div>
-          
+
           {/* Row 3 */}
           <div className="absolute top-[65%] left-[20%] w-12 h-10 bg-[#cca300] transform -skew-x-[25deg]"></div>
           <div className="absolute top-[68%] left-[40%] w-14 h-12 bg-[#cca300] transform -skew-x-[25deg]"></div>
           <div className="absolute top-[71%] left-[60%] w-14 h-12 bg-[#cca300] transform -skew-x-[25deg]"></div>
-          
+
           {/* Row 4 (Bottom) */}
           <div className="absolute top-[85%] left-[10%] w-12 h-12 bg-[#cca300] transform -skew-x-[25deg]"></div>
           <div className="absolute top-[90%] left-[30%] w-14 h-14 bg-[#cca300] transform -skew-x-[25deg]"></div>
@@ -81,9 +81,9 @@ export default function KioskLayout() {
             </div>
 
             {/* Digital Clock */}
-            <div 
+            <div
               className="text-[130px] font-bold text-[#0f172a] leading-none digital-font"
-              style={{ 
+              style={{
                 textShadow: '3px 3px 0 rgba(255,255,255,0.3)',
                 WebkitTextStroke: '2px #0f172a'
               }}
@@ -101,16 +101,16 @@ export default function KioskLayout() {
 
         {/* ─── RIGHT PANEL (Form Content) ─── */}
         <div className="flex-1 flex flex-col h-full px-12 py-6 overflow-hidden z-30">
-          
+
           {/* Stepper Header */}
           <div className="flex items-center justify-center max-w-[500px] mx-auto w-full mb-10">
-            
+
             <StepIndicator num={1} label="Information" isActive={currentStep >= 1} isCurrent={currentStep === 1} />
             <div className={`flex-1 h-0.5 mx-4 ${currentStep >= 2 ? 'bg-[#FFDF00]' : 'bg-gray-200'}`}></div>
-            
+
             <StepIndicator num={2} label="Choose a place" isActive={currentStep >= 2} isCurrent={currentStep === 2} />
             <div className={`flex-1 h-0.5 mx-4 ${currentStep >= 3 ? 'bg-[#FFDF00]' : 'bg-gray-200'}`}></div>
-            
+
             <StepIndicator num={3} label="Confirm" isActive={currentStep >= 3} isCurrent={currentStep === 3} />
 
           </div>
@@ -132,7 +132,7 @@ function StepIndicator({ num, label, isActive, isCurrent }) {
     <div className="flex flex-col items-center gap-3 relative">
       <div className={`
         w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold transition-all z-10
-        ${isCurrent ? 'bg-[#FFDF00] text-[#0f172a] shadow-[0_4px_15px_rgba(255,223,0,0.4)]' : 
+        ${isCurrent ? 'bg-[#FFDF00] text-[#0f172a] shadow-[0_4px_15px_rgba(255,223,0,0.4)]' :
           isActive ? 'bg-[#0f172a] text-white' : 'bg-white border-2 border-gray-200 text-gray-300'}
       `}>
         {num}

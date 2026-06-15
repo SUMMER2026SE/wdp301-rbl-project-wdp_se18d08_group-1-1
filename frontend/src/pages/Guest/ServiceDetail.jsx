@@ -1,7 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, CheckCircle, ShieldCheck, Clock, CreditCard, Sparkles } from 'lucide-react';
 import { getServiceById } from '../../services/extraServiceApi';
+
+const formatServiceTime = (timeCost) => {
+  const minutes = Number(timeCost);
+
+  if (!Number.isFinite(minutes) || minutes < 1) {
+    return '30 min';
+  }
+
+  if (minutes < 60) {
+    return `${minutes} min`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+
+  return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
+};
 
 const ServiceDetail = () => {
   const { id } = useParams();
@@ -71,7 +88,7 @@ const ServiceDetail = () => {
 
   const features = [
     { icon: <ShieldCheck size={20} />, label: 'Quality Guaranteed', bg: 'rgba(212,175,55,0.12)', color: '#D4AF37' },
-    { icon: <Clock size={20} />,       label: 'Time Efficient',     bg: 'rgba(212,175,55,0.08)', color: '#C59A3F' },
+    { icon: <Clock size={20} />,       label: `Estimated ${formatServiceTime(service.timeCost)}`, bg: 'rgba(212,175,55,0.08)', color: '#C59A3F' },
     { icon: <CheckCircle size={20} />, label: 'Trusted Pros',       bg: 'rgba(212,175,55,0.12)', color: '#D4AF37' },
     { icon: <CreditCard size={20} />,  label: 'Secure Payment',     bg: 'rgba(212,175,55,0.08)', color: '#C59A3F' },
   ];

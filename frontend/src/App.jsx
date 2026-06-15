@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 // Layouts
 import MainLayout from "./layouts/MainLayout";
@@ -17,6 +17,7 @@ import OAuthCallback from "./pages/OAuthCallback";
 
 // Pages - Kiosk
 import KioskFlow from "./pages/Kiosk/KioskFlow";
+import KioskOutFlow from "./pages/KioskOut/KioskOutFlow";
 
 // Pages – Admin
 import AdminDashboard from './pages/Admin/Dashboard';
@@ -27,6 +28,7 @@ import AdminServiceManager from "./pages/Admin/AdminServiceManager";
 
 // Pages – Staff (Manager)
 import ManagerDashboard from "./pages/Staff/Dashboard";
+import LiveGridMonitor from "./pages/Staff/LiveGridMonitor";
 
 // Pages – Customer
 import CustomerProfile from "./pages/Customer/CustomerProfile";
@@ -43,6 +45,10 @@ export default function App() {
       <Routes>
         {/* ── Standalone Kiosk app ── */}
         <Route path="/kiosk/*" element={<KioskFlow />} />
+        <Route path="/kiosk-out/*" element={<KioskOutFlow />} />
+        {/* Typo Catchers */}
+        <Route path="/kiost-out/*" element={<Navigate to="/kiosk-out" replace />} />
+        <Route path="/kiost/*" element={<Navigate to="/kiosk" replace />} />
 
         {/* ── Public: Navbar + Footer ── */}
         <Route element={<MainLayout />}>
@@ -76,17 +82,18 @@ export default function App() {
         </Route>
 
         {/* ══════════════════════════════════════════
-            MANAGER section — DashboardLayout chung
-            Chỉ role "manager" được vào
+            STAFF section — DashboardLayout chung
+            Chỉ role "staff" được vào
         ══════════════════════════════════════════ */}
         <Route
           element={
-            <ProtectedRoute allowedRoles={["manager"]}>
+            <ProtectedRoute allowedRoles={["staff"]}>
               <DashboardLayout />
             </ProtectedRoute>
           }
         >
-          <Route path="/manager/dashboard" element={<ManagerDashboard />} />
+          <Route path="/staff/dashboard" element={<ManagerDashboard />} />
+          <Route path="/staff/live-grid" element={<LiveGridMonitor />} />
         </Route>
 
         {/* ── Customer section ── */}
