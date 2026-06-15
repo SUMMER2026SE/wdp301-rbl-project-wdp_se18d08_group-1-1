@@ -20,8 +20,8 @@ const createNotificationValidator = [
     .withMessage('Invalid notification type'),
   body('priority')
     .optional()
-    .isIn(['INFO', 'SUCCESS', 'WARNING', 'ERROR'])
-    .withMessage('Priority must be INFO, SUCCESS, WARNING, or ERROR'),
+    .isIn(['INFO', 'SUCCESS', 'WARNING', 'ERROR', 'SYSTEM'])
+    .withMessage('Priority must be INFO, SUCCESS, WARNING, ERROR, or SYSTEM'),
   body('targetType')
     .notEmpty()
     .withMessage('targetType is required')
@@ -57,6 +57,10 @@ const queryNotificationValidator = [
     .optional()
     .isLength({ max: 100 })
     .withMessage('Search query must not exceed 100 characters'),
+  query('priority')
+    .optional()
+    .isIn(['INFO', 'SUCCESS', 'WARNING', 'ERROR', 'SYSTEM'])
+    .withMessage('Invalid priority'),
 ];
 
 module.exports = {

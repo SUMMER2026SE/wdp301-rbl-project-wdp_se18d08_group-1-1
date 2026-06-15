@@ -8,6 +8,7 @@ const {
   getMe,
   googleLogin,
   sendOTP,
+  getOTPConfig,
   verifyOTP,
   forgotPassword,
   verifyResetPasswordOTP,
@@ -29,6 +30,7 @@ router.post('/register', registerValidator, register);
 router.post('/login', loginValidator, login);
 router.post('/refresh-token', refreshAccessToken);
 router.post('/google', googleLogin);
+router.get('/otp-config', getOTPConfig);
 router.post('/send-otp', sendOTPValidator, sendOTP);
 router.post('/verify-otp', verifyOTPValidator, verifyOTP);
 router.post('/forgot-password', forgotPasswordValidator, forgotPassword);

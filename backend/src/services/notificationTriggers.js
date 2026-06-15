@@ -1,13 +1,18 @@
 const notificationService = require('./notificationService');
+const notificationEmailService = require('./notificationEmailService');
 const { emitNotification, broadcastNotification } = require('../sockets/notificationSocket');
+const NotificationRule = require('../models/NotificationRule');
+const Notification = require('../models/Notification');
 
 /**
  * Notification Trigger Helpers
  *
  * Each function:
- * 1. Creates an auto-notification with deduplication
- * 2. Emits via Socket.IO if user is online
- * 3. If user is offline, notification is still saved in DB
+ * 1. Checks if the corresponding auto-rule is enabled in DB
+ * 2. Creates an auto-notification with deduplication
+ * 3. Emits via Socket.IO if user is online
+ * 4. If user is offline, notification is still saved in DB
+ * 5. Updates lastTriggeredAt on the rule
  *
  * Usage: const triggers = require('../services/notificationTriggers');
  *        await triggers.notifyRegistrationSuccess(req.app, userId);
@@ -21,10 +26,80 @@ function getIO(app) {
   return app ? app.get('io') : null;
 }
 
+function queueNotificationEmail(userId, eventKey, templateData = {}) {
+  notificationEmailService.sendNotificationEmail(userId, eventKey, templateData);
+}
+
+function queueBroadcastEmail(userIds, eventKey, templateData = {}) {
+  notificationEmailService.sendBroadcastNotificationEmail(userIds, eventKey, templateData);
+}
+
+// ─── Helper: check if a rule is enabled ─────────────────────────────────────────
+async function isRuleEnabled(eventKey) {
+  try {
+    const rule = await NotificationRule.findOne({ eventKey });
+    // If no rule exists in DB, default to enabled (backwards compatible)
+    if (!rule) return true;
+    return rule.enabled;
+  } catch (err) {
+    // On DB error, default to enabled so we don't silently drop notifications
+    console.error(`[NotifTrigger] isRuleEnabled error for ${eventKey}:`, err.message);
+    return true;
+  }
+}
+
+// â”€â”€â”€ Helper: check enabled + throttle for a rule â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+async function shouldTriggerRule(eventKey, userId = null, eventType = null) {
+  try {
+    const rule = await NotificationRule.findOne({ eventKey });
+    if (!rule) return true;
+    if (!rule.enabled) return false;
+
+    const throttleMinutes = Number(rule.throttleMinutes) || 0;
+    if (throttleMinutes <= 0) return true;
+
+    const since = new Date(Date.now() - throttleMinutes * 60 * 1000);
+
+    if (userId && eventType) {
+      const recentNotification = await Notification.exists({
+        targetUsers: userId,
+        'metadata.eventType': eventType,
+        createdAt: { $gte: since },
+        isRevoked: false,
+      });
+      return !recentNotification;
+    }
+
+    if (rule.lastTriggeredAt && rule.lastTriggeredAt >= since) {
+      return false;
+    }
+
+    return true;
+  } catch (err) {
+    console.error(`[NotifTrigger] shouldTriggerRule error for ${eventKey}:`, err.message);
+    return true;
+  }
+}
+
+// ─── Helper: update lastTriggeredAt on rule ─────────────────────────────────────
+async function updateRuleLastTriggered(eventKey) {
+  try {
+    await NotificationRule.findOneAndUpdate(
+      { eventKey },
+      { lastTriggeredAt: new Date() }
+    );
+  } catch (err) {
+    // Non-critical, just log
+    console.error(`[NotifTrigger] updateRuleLastTriggered error:`, err.message);
+  }
+}
+
 // ─── ACCOUNT ────────────────────────────────────────────────────────────────────
 
 async function notifyRegistrationSuccess(app, userId) {
   try {
+    if (!(await shouldTriggerRule('account.registered', userId, 'REGISTRATION_SUCCESS'))) return;
+
     const notification = await notificationService.createAutoNotification(
       'REGISTRATION_SUCCESS',
       `user_${userId}_register`,
@@ -34,6 +109,8 @@ async function notifyRegistrationSuccess(app, userId) {
     if (notification) {
       const io = getIO(app);
       if (io) await emitNotification(io, userId, notification);
+      queueNotificationEmail(userId, 'account.registered');
+      await updateRuleLastTriggered('account.registered');
     }
   } catch (err) {
     console.error('[NotifTrigger] notifyRegistrationSuccess error:', err.message);
@@ -42,6 +119,8 @@ async function notifyRegistrationSuccess(app, userId) {
 
 async function notifyEmailVerified(app, userId) {
   try {
+    if (!(await shouldTriggerRule('account.email_verified', userId, 'EMAIL_VERIFIED'))) return;
+
     const notification = await notificationService.createAutoNotification(
       'EMAIL_VERIFIED',
       `user_${userId}_email_verified`,
@@ -51,6 +130,7 @@ async function notifyEmailVerified(app, userId) {
     if (notification) {
       const io = getIO(app);
       if (io) await emitNotification(io, userId, notification);
+      await updateRuleLastTriggered('account.email_verified');
     }
   } catch (err) {
     console.error('[NotifTrigger] notifyEmailVerified error:', err.message);
@@ -59,6 +139,8 @@ async function notifyEmailVerified(app, userId) {
 
 async function notifyPasswordChanged(app, userId) {
   try {
+    if (!(await shouldTriggerRule('account.password_changed', userId, 'PASSWORD_CHANGED'))) return;
+
     const refId = `user_${userId}_pwd_${Date.now()}`;
     const notification = await notificationService.createAutoNotification(
       'PASSWORD_CHANGED',
@@ -69,6 +151,7 @@ async function notifyPasswordChanged(app, userId) {
     if (notification) {
       const io = getIO(app);
       if (io) await emitNotification(io, userId, notification);
+      await updateRuleLastTriggered('account.password_changed');
     }
   } catch (err) {
     console.error('[NotifTrigger] notifyPasswordChanged error:', err.message);
@@ -77,6 +160,8 @@ async function notifyPasswordChanged(app, userId) {
 
 async function notifyAccountLocked(app, userId) {
   try {
+    if (!(await shouldTriggerRule('account.locked', userId, 'ACCOUNT_LOCKED'))) return;
+
     const notification = await notificationService.createAutoNotification(
       'ACCOUNT_LOCKED',
       `user_${userId}_locked_${Date.now()}`,
@@ -86,6 +171,7 @@ async function notifyAccountLocked(app, userId) {
     if (notification) {
       const io = getIO(app);
       if (io) await emitNotification(io, userId, notification);
+      await updateRuleLastTriggered('account.locked');
     }
   } catch (err) {
     console.error('[NotifTrigger] notifyAccountLocked error:', err.message);
@@ -94,6 +180,8 @@ async function notifyAccountLocked(app, userId) {
 
 async function notifyAccountUnlocked(app, userId) {
   try {
+    if (!(await shouldTriggerRule('account.unlocked', userId, 'ACCOUNT_UNLOCKED'))) return;
+
     const notification = await notificationService.createAutoNotification(
       'ACCOUNT_UNLOCKED',
       `user_${userId}_unlocked_${Date.now()}`,
@@ -103,6 +191,7 @@ async function notifyAccountUnlocked(app, userId) {
     if (notification) {
       const io = getIO(app);
       if (io) await emitNotification(io, userId, notification);
+      await updateRuleLastTriggered('account.unlocked');
     }
   } catch (err) {
     console.error('[NotifTrigger] notifyAccountUnlocked error:', err.message);
@@ -113,6 +202,8 @@ async function notifyAccountUnlocked(app, userId) {
 
 async function notifyTopUpSuccess(app, userId, amount, balance) {
   try {
+    if (!(await shouldTriggerRule('wallet.topup_success', userId, 'TOPUP_SUCCESS'))) return;
+
     const fmtAmount = Number(amount).toLocaleString('vi-VN');
     const fmtBalance = Number(balance).toLocaleString('vi-VN');
     const notification = await notificationService.createAutoNotification(
@@ -125,6 +216,11 @@ async function notifyTopUpSuccess(app, userId, amount, balance) {
     if (notification) {
       const io = getIO(app);
       if (io) await emitNotification(io, userId, notification);
+      queueNotificationEmail(userId, 'wallet.topup_success', {
+        amount: fmtAmount,
+        balance: fmtBalance,
+      });
+      await updateRuleLastTriggered('wallet.topup_success');
     }
   } catch (err) {
     console.error('[NotifTrigger] notifyTopUpSuccess error:', err.message);
@@ -133,6 +229,8 @@ async function notifyTopUpSuccess(app, userId, amount, balance) {
 
 async function notifyTopUpFailed(app, userId, amount) {
   try {
+    if (!(await shouldTriggerRule('wallet.topup_failed', userId, 'TOPUP_FAILED'))) return;
+
     const fmtAmount = Number(amount).toLocaleString('vi-VN');
     const notification = await notificationService.createAutoNotification(
       'TOPUP_FAILED',
@@ -144,6 +242,8 @@ async function notifyTopUpFailed(app, userId, amount) {
     if (notification) {
       const io = getIO(app);
       if (io) await emitNotification(io, userId, notification);
+      queueNotificationEmail(userId, 'wallet.topup_failed', { amount: fmtAmount });
+      await updateRuleLastTriggered('wallet.topup_failed');
     }
   } catch (err) {
     console.error('[NotifTrigger] notifyTopUpFailed error:', err.message);
@@ -152,6 +252,8 @@ async function notifyTopUpFailed(app, userId, amount) {
 
 async function notifyRefundSuccess(app, userId, amount, balance) {
   try {
+    if (!(await shouldTriggerRule('wallet.refund_success', userId, 'REFUND_SUCCESS'))) return;
+
     const fmtAmount = Number(amount).toLocaleString('vi-VN');
     const fmtBalance = Number(balance).toLocaleString('vi-VN');
     const notification = await notificationService.createAutoNotification(
@@ -164,6 +266,7 @@ async function notifyRefundSuccess(app, userId, amount, balance) {
     if (notification) {
       const io = getIO(app);
       if (io) await emitNotification(io, userId, notification);
+      await updateRuleLastTriggered('wallet.refund_success');
     }
   } catch (err) {
     console.error('[NotifTrigger] notifyRefundSuccess error:', err.message);
@@ -172,6 +275,8 @@ async function notifyRefundSuccess(app, userId, amount, balance) {
 
 async function notifyLowBalance(app, userId, balance) {
   try {
+    if (!(await shouldTriggerRule('wallet.low_balance', userId, 'LOW_BALANCE'))) return;
+
     const fmtBalance = Number(balance).toLocaleString('vi-VN');
     const notification = await notificationService.createAutoNotification(
       'LOW_BALANCE',
@@ -183,6 +288,7 @@ async function notifyLowBalance(app, userId, balance) {
     if (notification) {
       const io = getIO(app);
       if (io) await emitNotification(io, userId, notification);
+      await updateRuleLastTriggered('wallet.low_balance');
     }
   } catch (err) {
     console.error('[NotifTrigger] notifyLowBalance error:', err.message);
@@ -193,6 +299,8 @@ async function notifyLowBalance(app, userId, balance) {
 
 async function notifyPaymentSuccess(app, userId, amount, sessionId) {
   try {
+    if (!(await shouldTriggerRule('wallet.payment_success', userId, 'PAYMENT_SUCCESS'))) return;
+
     const fmtAmount = Number(amount).toLocaleString('vi-VN');
     const notification = await notificationService.createAutoNotification(
       'PAYMENT_SUCCESS',
@@ -204,6 +312,8 @@ async function notifyPaymentSuccess(app, userId, amount, sessionId) {
     if (notification) {
       const io = getIO(app);
       if (io) await emitNotification(io, userId, notification);
+      queueNotificationEmail(userId, 'wallet.payment_success', { amount: fmtAmount });
+      await updateRuleLastTriggered('wallet.payment_success');
     }
   } catch (err) {
     console.error('[NotifTrigger] notifyPaymentSuccess error:', err.message);
@@ -212,6 +322,8 @@ async function notifyPaymentSuccess(app, userId, amount, sessionId) {
 
 async function notifyPaymentFailed(app, userId, amount) {
   try {
+    if (!(await shouldTriggerRule('wallet.payment_failed', userId, 'PAYMENT_FAILED'))) return;
+
     const fmtAmount = Number(amount).toLocaleString('vi-VN');
     const notification = await notificationService.createAutoNotification(
       'PAYMENT_FAILED',
@@ -223,6 +335,7 @@ async function notifyPaymentFailed(app, userId, amount) {
     if (notification) {
       const io = getIO(app);
       if (io) await emitNotification(io, userId, notification);
+      await updateRuleLastTriggered('wallet.payment_failed');
     }
   } catch (err) {
     console.error('[NotifTrigger] notifyPaymentFailed error:', err.message);
@@ -233,6 +346,8 @@ async function notifyPaymentFailed(app, userId, amount) {
 
 async function notifyBookingSuccess(app, userId, bookingDetails = {}) {
   try {
+    if (!(await shouldTriggerRule('booking.created', userId, 'BOOKING_SUCCESS'))) return;
+
     const notification = await notificationService.createAutoNotification(
       'BOOKING_SUCCESS',
       `booking_${bookingDetails.bookingId || Date.now()}_created`,
@@ -243,6 +358,11 @@ async function notifyBookingSuccess(app, userId, bookingDetails = {}) {
     if (notification) {
       const io = getIO(app);
       if (io) await emitNotification(io, userId, notification);
+      queueNotificationEmail(userId, 'booking.created', {
+        slotInfo: bookingDetails.slotInfo || 'N/A',
+        bookingId: bookingDetails.bookingId,
+      });
+      await updateRuleLastTriggered('booking.created');
     }
   } catch (err) {
     console.error('[NotifTrigger] notifyBookingSuccess error:', err.message);
@@ -251,6 +371,8 @@ async function notifyBookingSuccess(app, userId, bookingDetails = {}) {
 
 async function notifyBookingCancelled(app, userId, bookingDetails = {}) {
   try {
+    if (!(await shouldTriggerRule('booking.cancelled', userId, 'BOOKING_CANCELLED'))) return;
+
     const notification = await notificationService.createAutoNotification(
       'BOOKING_CANCELLED',
       `booking_${bookingDetails.bookingId || Date.now()}_cancelled`,
@@ -264,6 +386,12 @@ async function notifyBookingCancelled(app, userId, bookingDetails = {}) {
     if (notification) {
       const io = getIO(app);
       if (io) await emitNotification(io, userId, notification);
+      queueNotificationEmail(userId, 'booking.cancelled', {
+        slotInfo: bookingDetails.slotInfo || 'N/A',
+        reason: bookingDetails.reason || '',
+        bookingId: bookingDetails.bookingId,
+      });
+      await updateRuleLastTriggered('booking.cancelled');
     }
   } catch (err) {
     console.error('[NotifTrigger] notifyBookingCancelled error:', err.message);
@@ -274,6 +402,8 @@ async function notifyBookingCancelled(app, userId, bookingDetails = {}) {
 
 async function notifyVehicleEntry(app, userId, plate, slot) {
   try {
+    if (!(await shouldTriggerRule('parking.entry', userId, 'VEHICLE_ENTRY'))) return;
+
     const notification = await notificationService.createAutoNotification(
       'VEHICLE_ENTRY',
       `user_${userId}_entry_${Date.now()}`,
@@ -284,6 +414,7 @@ async function notifyVehicleEntry(app, userId, plate, slot) {
     if (notification) {
       const io = getIO(app);
       if (io) await emitNotification(io, userId, notification);
+      await updateRuleLastTriggered('parking.entry');
     }
   } catch (err) {
     console.error('[NotifTrigger] notifyVehicleEntry error:', err.message);
@@ -292,6 +423,8 @@ async function notifyVehicleEntry(app, userId, plate, slot) {
 
 async function notifyVehicleExit(app, userId, plate, totalCost) {
   try {
+    if (!(await shouldTriggerRule('parking.exit', userId, 'VEHICLE_EXIT'))) return;
+
     const fmtCost = Number(totalCost).toLocaleString('vi-VN');
     const notification = await notificationService.createAutoNotification(
       'VEHICLE_EXIT',
@@ -303,6 +436,7 @@ async function notifyVehicleExit(app, userId, plate, totalCost) {
     if (notification) {
       const io = getIO(app);
       if (io) await emitNotification(io, userId, notification);
+      await updateRuleLastTriggered('parking.exit');
     }
   } catch (err) {
     console.error('[NotifTrigger] notifyVehicleExit error:', err.message);
@@ -312,10 +446,21 @@ async function notifyVehicleExit(app, userId, plate, totalCost) {
 async function notifyParkingTimeWarning(app, userId, sessionId, minutesLeft) {
   try {
     let templateKey;
-    if (minutesLeft === 30) templateKey = 'PARKING_30MIN_WARNING';
-    else if (minutesLeft === 15) templateKey = 'PARKING_15MIN_WARNING';
-    else if (minutesLeft === 5) templateKey = 'PARKING_5MIN_WARNING';
-    else return;
+    let ruleKey;
+    if (minutesLeft === 30) {
+      templateKey = 'PARKING_30MIN_WARNING';
+      ruleKey = 'parking.remaining_30';
+    } else if (minutesLeft === 15) {
+      templateKey = 'PARKING_15MIN_WARNING';
+      ruleKey = 'parking.remaining_15';
+    } else if (minutesLeft === 5) {
+      templateKey = 'PARKING_5MIN_WARNING';
+      ruleKey = 'parking.remaining_5';
+    } else {
+      return;
+    }
+
+    if (!(await shouldTriggerRule(ruleKey, userId, templateKey))) return;
 
     // Anti-spam: use session+minutes as referenceId so each warning only sent once
     const notification = await notificationService.createAutoNotification(
@@ -327,6 +472,7 @@ async function notifyParkingTimeWarning(app, userId, sessionId, minutesLeft) {
     if (notification) {
       const io = getIO(app);
       if (io) await emitNotification(io, userId, notification);
+      await updateRuleLastTriggered(ruleKey);
     }
   } catch (err) {
     console.error('[NotifTrigger] notifyParkingTimeWarning error:', err.message);
@@ -335,6 +481,8 @@ async function notifyParkingTimeWarning(app, userId, sessionId, minutesLeft) {
 
 async function notifyParkingExpired(app, userId, sessionId) {
   try {
+    if (!(await shouldTriggerRule('parking.expired', userId, 'PARKING_EXPIRED'))) return;
+
     const notification = await notificationService.createAutoNotification(
       'PARKING_EXPIRED',
       `session_${sessionId}_expired`,
@@ -344,6 +492,8 @@ async function notifyParkingExpired(app, userId, sessionId) {
     if (notification) {
       const io = getIO(app);
       if (io) await emitNotification(io, userId, notification);
+      queueNotificationEmail(userId, 'parking.expired');
+      await updateRuleLastTriggered('parking.expired');
     }
   } catch (err) {
     console.error('[NotifTrigger] notifyParkingExpired error:', err.message);
@@ -352,6 +502,8 @@ async function notifyParkingExpired(app, userId, sessionId) {
 
 async function notifyParkingOvertime(app, userId, sessionId) {
   try {
+    if (!(await shouldTriggerRule('parking.expired', userId, 'PARKING_OVERTIME'))) return;
+
     const notification = await notificationService.createAutoNotification(
       'PARKING_OVERTIME',
       `session_${sessionId}_overtime`,
@@ -409,6 +561,8 @@ async function notifyPlateMismatch(app, userId, expected, detected) {
 
 async function notifySystemMaintenance(app) {
   try {
+    if (!(await shouldTriggerRule('system.maintenance'))) return;
+
     const result = await notificationService.createBroadcastAutoNotification(
       'SYSTEM_MAINTENANCE',
       `system_maintenance_${Date.now()}`,
@@ -417,6 +571,8 @@ async function notifySystemMaintenance(app) {
     if (result) {
       const io = getIO(app);
       if (io) broadcastNotification(io, result.notification);
+      queueBroadcastEmail(result.userIds, 'system.maintenance');
+      await updateRuleLastTriggered('system.maintenance');
     }
   } catch (err) {
     console.error('[NotifTrigger] notifySystemMaintenance error:', err.message);
@@ -425,6 +581,8 @@ async function notifySystemMaintenance(app) {
 
 async function notifyVersionUpdate(app) {
   try {
+    if (!(await shouldTriggerRule('system.update'))) return;
+
     const result = await notificationService.createBroadcastAutoNotification(
       'SYSTEM_UPDATE',
       `system_update_${Date.now()}`,
@@ -433,6 +591,8 @@ async function notifyVersionUpdate(app) {
     if (result) {
       const io = getIO(app);
       if (io) broadcastNotification(io, result.notification);
+      queueBroadcastEmail(result.userIds, 'system.update');
+      await updateRuleLastTriggered('system.update');
     }
   } catch (err) {
     console.error('[NotifTrigger] notifyVersionUpdate error:', err.message);
@@ -440,6 +600,9 @@ async function notifyVersionUpdate(app) {
 }
 
 module.exports = {
+  // Helpers
+  isRuleEnabled,
+  shouldTriggerRule,
   // Account
   notifyRegistrationSuccess,
   notifyEmailVerified,

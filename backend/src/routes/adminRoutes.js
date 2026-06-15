@@ -1,6 +1,6 @@
-const express = require('express');
-const multer = require('multer');
-const { protect, authorize } = require('../middlewares/authMiddleware');
+const express = require("express");
+const multer = require("multer");
+const { protect, authorize } = require("../middlewares/authMiddleware");
 const {
   uploadVehicleModel,
   deleteVehicleModel,
@@ -9,7 +9,8 @@ const {
   getPendingVehicles,
   approveVehicle,
   rejectVehicle,
-} = require('../controllers/adminController');
+  searchUsers,
+} = require("../controllers/adminController");
 
 const router = express.Router();
 
@@ -18,26 +19,44 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    if (file.originalname.toLowerCase().endsWith('.glb')) {
+    if (file.originalname.toLowerCase().endsWith(".glb")) {
       cb(null, true);
     } else {
-      cb(new Error('Only .glb files are allowed'));
+      cb(new Error("Only .glb files are allowed"));
     }
   },
 });
 
-// All admin routes require a valid JWT + admin role
-router.use(protect, authorize('admin'));
+// All admin routes require a valid JWT
+router.use(protect);
+
+// Users (allow both admin and staff)
+router.get("/users/search", authorize("admin", "staff"), searchUsers);
+
+// The rest require admin role
+router.use(authorize("admin"));
 
 // Vehicle 3D models
-router.get('/vehicles/models', listVehicleModels);
-router.post('/vehicles/upload-model', upload.single('file'), uploadVehicleModel);
-router.delete('/vehicles/upload-model', deleteVehicleModel);
-router.post('/vehicles/sync-models', syncAllVehicleModels);
+router.get("/vehicles/models", listVehicleModels);
+router.post(
+  "/vehicles/upload-model",
+  upload.single("file"),
+  uploadVehicleModel,
+);
+router.delete("/vehicles/upload-model", deleteVehicleModel);
+router.post("/vehicles/sync-models", syncAllVehicleModels);
+
+// Users
+router.get("/users", require("../controllers/adminController").listUsers);
+router.put(
+  "/users/:id/status",
+  require("../controllers/adminController").updateUserStatus,
+);
+router.put("/users/:id", require("../controllers/adminController").updateUser);
 
 // Vehicle approval
-router.get('/vehicles/pending', getPendingVehicles);
-router.patch('/vehicles/:id/approve', approveVehicle);
-router.delete('/vehicles/:id/reject', rejectVehicle);
+router.get("/vehicles/pending", getPendingVehicles);
+router.patch("/vehicles/:id/approve", approveVehicle);
+router.delete("/vehicles/:id/reject", rejectVehicle);
 
 module.exports = router;

@@ -485,32 +485,128 @@ async function revokeNotification(notificationId) {
   return notification;
 }
 
+async function markAdminNotificationAsRead(adminId, notificationId) {
+  const notification = await Notification.findOneAndUpdate(
+    {
+      _id: notificationId,
+      'adminReadBy.userId': { $ne: adminId },
+    },
+    {
+      $push: {
+        adminReadBy: {
+          userId: adminId,
+          readAt: new Date(),
+        },
+      },
+    },
+    { new: true }
+  );
+
+  return notification || Notification.findById(notificationId);
+}
+
+async function markAllAdminNotificationsAsRead(adminId) {
+  return Notification.updateMany(
+    {
+      isRevoked: false,
+      'adminDeletedBy.userId': { $ne: adminId },
+      'adminReadBy.userId': { $ne: adminId },
+    },
+    {
+      $push: {
+        adminReadBy: {
+          userId: adminId,
+          readAt: new Date(),
+        },
+      },
+    }
+  );
+}
+
+async function deleteAdminNotification(adminId, notificationId) {
+  const notification = await Notification.findOneAndUpdate(
+    {
+      _id: notificationId,
+      'adminDeletedBy.userId': { $ne: adminId },
+    },
+    {
+      $push: {
+        adminDeletedBy: {
+          userId: adminId,
+          deletedAt: new Date(),
+        },
+      },
+    },
+    { new: true }
+  );
+
+  return notification || Notification.findById(notificationId);
+}
+
 // ─── Get admin notification history ─────────────────────────────────────────────
 async function getAdminNotifications(filters = {}) {
-  const { page = 1, limit = 20, type } = filters;
+  const { page = 1, limit = 20, type, priority, search, adminId } = filters;
   const skip = (page - 1) * limit;
 
-  const query = {};
+  const query = { isRevoked: false };
+  if (adminId) {
+    query['adminDeletedBy.userId'] = { $ne: adminId };
+  }
   if (type) query.type = type;
+  if (priority) query.priority = priority;
+  if (search) {
+    const searchRegex = new RegExp(search, 'i');
+    const matchedUsers = await User.find({
+      $or: [
+        { email: searchRegex },
+        { username: searchRegex },
+      ],
+    })
+      .select('_id')
+      .lean();
+    const matchedUserIds = matchedUsers.map((user) => user._id);
 
-  const [notifications, total] = await Promise.all([
+    query.$or = [
+      { title: searchRegex },
+      { content: searchRegex },
+      { createdBy: { $in: matchedUserIds } },
+      { targetUsers: { $in: matchedUserIds } },
+    ];
+  }
+
+  const [notifications, total, successCount, errorCount] = await Promise.all([
     Notification.find(query)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit))
       .populate('createdBy', 'username email')
+      .populate('targetUsers', 'username email')
       .lean(),
     Notification.countDocuments(query),
+    Notification.countDocuments({ ...query, priority: { $in: ['SUCCESS', 'INFO', 'SYSTEM'] } }),
+    Notification.countDocuments({ ...query, priority: { $in: ['ERROR', 'WARNING'] } })
   ]);
 
+  const notificationsWithAdminState = notifications.map((notification) => ({
+    ...notification,
+    isRead: adminId
+      ? (notification.adminReadBy || []).some((item) => String(item.userId) === String(adminId))
+      : false,
+  }));
+
   return {
-    notifications,
+    notifications: notificationsWithAdminState,
     pagination: {
       page: parseInt(page),
       limit: parseInt(limit),
       total,
       totalPages: Math.ceil(total / parseInt(limit)),
     },
+    stats: {
+      totalSent: total,
+      success: successCount,
+      errors: errorCount,
+    }
   };
 }
 
@@ -528,5 +624,8 @@ module.exports = {
   markAllAsRead,
   deleteNotification,
   revokeNotification,
+  markAdminNotificationAsRead,
+  markAllAdminNotificationsAsRead,
+  deleteAdminNotification,
   getAdminNotifications,
 };

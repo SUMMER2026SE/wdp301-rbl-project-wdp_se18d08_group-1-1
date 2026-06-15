@@ -148,6 +148,13 @@ const getTopUpStatus = async (req, res, next) => {
           );
           transaction.status = 'COMPLETED';
           transaction.balanceAfter = result.newBalance;
+
+          // Fire-and-forget: notify top-up success (in case webhook didn't fire)
+          if (!result.alreadyProcessed && transaction.userId) {
+            notifTriggers.notifyTopUpSuccess(
+              req.app, transaction.userId, transaction.amount, result.newBalance
+            ).catch(err => console.error('Failed to send top-up notification:', err));
+          }
         } else if (payosInfo.status === 'CANCELLED') {
           await walletService.cancelPendingTopUp(parseInt(orderCode));
           transaction.status = 'CANCELLED';

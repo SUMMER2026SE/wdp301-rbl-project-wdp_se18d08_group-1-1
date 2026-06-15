@@ -132,10 +132,21 @@ function emitToUser(io, userId, event, data) {
 }
 
 /**
+ * Emit an event to all connected admin/staff sockets.
+ */
+function emitToAdmins(io, event, data) {
+  for (const socket of io.sockets.sockets.values()) {
+    if (['admin', 'staff'].includes(socket.userRole)) {
+      socket.emit(event, data);
+    }
+  }
+}
+
+/**
  * Emit a new notification to a user (with unread count update)
  */
 async function emitNotification(io, userId, notification) {
-  emitToUser(io, userId, 'notification:new', {
+  const payload = {
     _id: notification._id,
     title: notification.title,
     content: notification.content,
@@ -143,7 +154,12 @@ async function emitNotification(io, userId, notification) {
     priority: notification.priority,
     metadata: notification.metadata,
     createdAt: notification.createdAt,
-  });
+    targetType: notification.targetType,
+    targetUsers: notification.targetUsers,
+  };
+
+  emitToUser(io, userId, 'notification:new', payload);
+  emitToAdmins(io, 'notification:admin:new', payload);
 
   // Also update unread count
   try {
@@ -158,7 +174,7 @@ async function emitNotification(io, userId, notification) {
  * Broadcast a notification event to all online users
  */
 function broadcastNotification(io, notification) {
-  io.emit('notification:new', {
+  const payload = {
     _id: notification._id,
     title: notification.title,
     content: notification.content,
@@ -166,12 +182,18 @@ function broadcastNotification(io, notification) {
     priority: notification.priority,
     metadata: notification.metadata,
     createdAt: notification.createdAt,
-  });
+    targetType: notification.targetType,
+    targetUsers: notification.targetUsers,
+  };
+
+  io.emit('notification:new', payload);
+  emitToAdmins(io, 'notification:admin:new', payload);
 }
 
 module.exports = {
   setupNotificationSocket,
   emitToUser,
+  emitToAdmins,
   emitNotification,
   broadcastNotification,
   onlineUsers,

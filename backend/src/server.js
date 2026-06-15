@@ -7,6 +7,8 @@ const dotenv = require('dotenv');
 const connectDB = require('./config/db');
 const errorHandler = require('./middlewares/errorHandler');
 const { setupNotificationSocket } = require('./sockets/notificationSocket');
+const { startScheduler } = require('./services/parkingScheduler');
+const { seedRules } = require('./seeds/notificationRuleSeeder');
 
 // Load env variables
 dotenv.config();
@@ -52,6 +54,7 @@ app.use("/api/ai", require("./routes/aiRoutes"));
 app.use("/api/vehicles", require("./routes/vehicleRoutes"));
 app.use("/api/admin", require("./routes/adminRoutes"));
 app.use("/api", serviceRoutes);
+app.use("/api/staff", require("./routes/staffRoutes"));
 app.use("/api/sessions", require("./routes/sessionRoutes"));
 app.use("/api/parking-floors", require("./routes/parkingFloorRoutes"));
 app.use("/api/notifications", require("./routes/notificationRoutes"));
@@ -96,6 +99,14 @@ const startServer = async () => {
       console.log(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
       console.log(`🔗 Health check: http://localhost:${PORT}/api/health`);
       console.log(`🔌 Socket.IO ready`);
+
+      // Start parking session scheduler
+      startScheduler(app);
+
+      // Seed default notification rules (upsert, won't overwrite existing)
+      seedRules().catch(err => {
+        console.error('⚠️ Auto-seed notification rules failed:', err.message);
+      });
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error.message);
@@ -104,3 +115,4 @@ const startServer = async () => {
 };
 
 startServer();
+// Forced restart for nodemon

@@ -4,7 +4,7 @@
  */
 
 export const API_BASE =
-  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5001/api";
+  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000/api";
 
 let isRefreshing = false;
 let refreshPromise = null;
@@ -38,6 +38,7 @@ async function refreshToken() {
       const data = await response.json();
       if (data.data && data.data.accessToken) {
         localStorage.setItem("accessToken", data.data.accessToken);
+        window.dispatchEvent(new Event("valo_auth_change"));
         return data.data.accessToken;
       }
       throw new Error("No access token in response");
