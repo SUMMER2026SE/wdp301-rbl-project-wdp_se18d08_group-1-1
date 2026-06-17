@@ -27,6 +27,7 @@ import AdminProfile from "./pages/Admin/AdminProfile";
 import ParkingLots from "./pages/Admin/ParkingLots";
 import AdminServiceManager from "./pages/Admin/AdminServiceManager";
 import AccountManagement from "./pages/Admin/AccountManagement";
+import TicketPackages from "./pages/Admin/TicketPackages";
 
 // Pages – Staff
 import StaffDashboard from "./pages/Staff/Dashboard";
@@ -92,6 +93,7 @@ export default function App() {
             />
             <Route path="/admin/services" element={<AdminServiceManager />} />
             <Route path="/admin/parking-lots" element={<ParkingLots />} />
+            <Route path="/admin/tickets" element={<TicketPackages />} />
             <Route path="/admin/profile" element={<AdminProfile />} />
           </Route>
 

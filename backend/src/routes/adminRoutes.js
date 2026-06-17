@@ -11,6 +11,18 @@ const {
   rejectVehicle,
   searchUsers,
 } = require("../controllers/adminController");
+const {
+  getPackageTypes,
+  createPackageType,
+  updatePackageType,
+  deletePackageType,
+  getTicketPackages,
+  getTicketPackageById,
+  createTicketPackage,
+  updateTicketPackage,
+  deleteTicketPackage,
+  getTicketPackageStats,
+} = require("../controllers/ticketPackageController");
 
 const router = express.Router();
 
@@ -58,5 +70,18 @@ router.put("/users/:id", require("../controllers/adminController").updateUser);
 router.get("/vehicles/pending", getPendingVehicles);
 router.patch("/vehicles/:id/approve", approveVehicle);
 router.delete("/vehicles/:id/reject", rejectVehicle);
+
+// Ticket Packages
+router.get("/package-types", getPackageTypes);
+router.post("/package-types", createPackageType);
+router.put("/package-types/:id", updatePackageType);
+router.delete("/package-types/:id", deletePackageType);
+
+router.get("/ticket-packages/stats", getTicketPackageStats);
+router.get("/ticket-packages", getTicketPackages);
+router.post("/ticket-packages", createTicketPackage);
+router.get("/ticket-packages/:id", getTicketPackageById);
+router.put("/ticket-packages/:id", updateTicketPackage);
+router.delete("/ticket-packages/:id", deleteTicketPackage);
 
 module.exports = router;
