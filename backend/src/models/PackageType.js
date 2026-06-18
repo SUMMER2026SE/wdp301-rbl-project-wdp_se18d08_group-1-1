@@ -7,8 +7,8 @@ const packageTypeSchema = new mongoose.Schema(
       required: [true, "Package type name is required"],
       unique: true,
       trim: true,
-      minlength: [2, "Package type name is too short"],
-      maxlength: [80, "Package type name is too long"],
+      minlength: [3, "Package type name must be at least 3 characters"],
+      maxlength: [50, "Package type name must be 50 characters or less"],
     },
     description: {
       type: String,

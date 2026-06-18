@@ -13,6 +13,7 @@ const {
 } = require("../controllers/adminController");
 const {
   getPackageTypes,
+  getPackageTypeById,
   createPackageType,
   updatePackageType,
   deletePackageType,
@@ -73,6 +74,7 @@ router.delete("/vehicles/:id/reject", rejectVehicle);
 
 // Ticket Packages
 router.get("/package-types", getPackageTypes);
+router.get("/package-types/:id", getPackageTypeById);
 router.post("/package-types", createPackageType);
 router.put("/package-types/:id", updatePackageType);
 router.delete("/package-types/:id", deletePackageType);

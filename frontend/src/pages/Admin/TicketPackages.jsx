@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertTriangle,
@@ -33,113 +33,6 @@ function cx(...inputs) {
   return twMerge(clsx(inputs));
 }
 
-const seedPackages = [
-  {
-    id: "pkg-001",
-    code: "PKG-001",
-    name: "Guest Hourly Ticket",
-    type: "Guest",
-    appliesTo: "Guest",
-    basePrice: 20000,
-    firstBlockDuration: 120,
-    nextBlockPrice: 10000,
-    nextBlockDuration: 60,
-    monthlyPrice: 0,
-    durationDays: 0,
-    overtimeFee: 0,
-    noShowFee: 0,
-    tailgatingFee: 150000,
-    qrFraudFee: 250000,
-    gracePeriod: 10,
-    vehicleLimit: 1,
-    penaltyAmount: 0,
-    feeType: "",
-    description: "Walk-in parking ticket issued at the kiosk.",
-    status: "Active",
-    updatedAt: "2026-06-02",
-    fixedSlot: false,
-    unlimitedEntry: false,
-  },
-  {
-    id: "pkg-002",
-    code: "PKG-002",
-    name: "Customer Hourly Booking",
-    type: "Hourly",
-    appliesTo: "Customer",
-    basePrice: 15000,
-    firstBlockDuration: 60,
-    nextBlockPrice: 15000,
-    nextBlockDuration: 60,
-    monthlyPrice: 0,
-    durationDays: 0,
-    overtimeFee: 25000,
-    noShowFee: 30000,
-    tailgatingFee: 150000,
-    qrFraudFee: 250000,
-    gracePeriod: 15,
-    vehicleLimit: 1,
-    penaltyAmount: 0,
-    feeType: "",
-    description: "Booking-based hourly package for registered customers.",
-    status: "Active",
-    updatedAt: "2026-05-30",
-    fixedSlot: false,
-    unlimitedEntry: false,
-  },
-  {
-    id: "pkg-003",
-    code: "PKG-003",
-    name: "VIP Monthly Pass",
-    type: "Monthly",
-    appliesTo: "Customer",
-    basePrice: 0,
-    firstBlockDuration: 0,
-    nextBlockPrice: 0,
-    nextBlockDuration: 0,
-    monthlyPrice: 1500000,
-    durationDays: 30,
-    overtimeFee: 0,
-    noShowFee: 0,
-    tailgatingFee: 250000,
-    qrFraudFee: 300000,
-    gracePeriod: 0,
-    vehicleLimit: 1,
-    penaltyAmount: 0,
-    feeType: "",
-    description: "Monthly parking access with fixed slot support.",
-    status: "Active",
-    updatedAt: "2026-05-28",
-    fixedSlot: true,
-    unlimitedEntry: true,
-  },
-  {
-    id: "pkg-004",
-    code: "PKG-004",
-    name: "Penalty Fee Package",
-    type: "Penalty",
-    appliesTo: "Customer",
-    basePrice: 0,
-    firstBlockDuration: 0,
-    nextBlockPrice: 0,
-    nextBlockDuration: 0,
-    monthlyPrice: 0,
-    durationDays: 0,
-    overtimeFee: 35000,
-    penaltyAmount: 35000,
-    feeType: "Tailgating",
-    noShowFee: 50000,
-    tailgatingFee: 300000,
-    qrFraudFee: 500000,
-    gracePeriod: 0,
-    vehicleLimit: 1,
-    description: "Fee rule for parking violations and exception handling.",
-    status: "Active",
-    updatedAt: "2026-05-20",
-    fixedSlot: false,
-    unlimitedEntry: false,
-  },
-];
-
 const emptyPackage = {
   code: "",
   name: "",
@@ -152,18 +45,126 @@ const emptyPackage = {
   monthlyPrice: "",
   durationDays: "30",
   overtimeFee: "",
-  noShowFee: "",
-  tailgatingFee: "",
-  qrFraudFee: "",
-  gracePeriod: "",
   vehicleLimit: "",
-  penaltyAmount: "",
-  feeType: "",
   description: "",
   status: "Active",
   fixedSlot: false,
   unlimitedEntry: false,
 };
+
+const defaultTypeNameByValue = {
+  Guest: "Guest Hourly",
+  Hourly: "Customer Hourly",
+  Monthly: "Monthly Pass",
+};
+
+const defaultTypeValueByName = Object.fromEntries(
+  Object.entries(defaultTypeNameByValue).map(([value, name]) => [name, value]),
+);
+
+function authHeader() {
+  const token = localStorage.getItem("accessToken");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function packageTypeToOption(type) {
+  const value = defaultTypeValueByName[type.name] || type.name;
+  return {
+    id: type._id || type.id,
+    value,
+    name: type.name,
+    description: type.description || "",
+    icon: type.icon || "Ticket",
+    pricingMode: type.pricingMode,
+    isDefault: Boolean(type.isDefault),
+  };
+}
+
+function packageTypeNameForValue(value, packageTypes = []) {
+  return (
+    packageTypes.find((type) => type.value === value || type.name === value)?.name ||
+    defaultTypeNameByValue[value] ||
+    value
+  );
+}
+
+function mapApiPackage(pkg) {
+  const packageTypeName =
+    pkg.packageTypeId?.name || pkg.packageTypeName || "Customer Hourly";
+  return {
+    id: pkg._id || pkg.id,
+    code: pkg.code || "",
+    name: pkg.name || "",
+    type: defaultTypeValueByName[packageTypeName] || packageTypeName,
+    packageTypeId: pkg.packageTypeId?._id || pkg.packageTypeId || "",
+    packageTypeName,
+    appliesTo: pkg.appliesTo || "Customer",
+    basePrice: pkg.basePrice ?? pkg.firstBlockPrice ?? "",
+    firstBlockDuration: pkg.firstBlockDuration ?? pkg.duration ?? "",
+    nextBlockPrice: pkg.nextBlockPrice ?? "",
+    nextBlockDuration: pkg.nextBlockDuration ?? "",
+    monthlyPrice: pkg.monthlyPrice ?? "",
+    durationDays: pkg.durationDays ?? "",
+    overtimeFee: pkg.overtimeFee ?? "",
+    vehicleLimit: pkg.vehicleLimit ?? "",
+    description: pkg.feeDescription || pkg.description || "",
+    status: pkg.status || "Active",
+    updatedAt: pkg.updatedAt || pkg.createdAt || new Date().toISOString(),
+    fixedSlot: Boolean(pkg.fixedSlotEnabled ?? pkg.fixedSlot),
+    unlimitedEntry: Boolean(pkg.unlimitedEntryEnabled ?? pkg.unlimitedEntry),
+  };
+}
+
+function nextPackageCode(packages = []) {
+  const max = packages.reduce((highest, pkg) => {
+    const match = String(pkg.code || "").match(/^PKG-(\d{3})$/);
+    return match ? Math.max(highest, Number(match[1])) : highest;
+  }, 0);
+  return `PKG-${String(max + 1).padStart(3, "0")}`;
+}
+
+function packageToApiPayload(pkg, packageTypes = []) {
+  const typeName = packageTypeNameForValue(pkg.type, packageTypes);
+  const typeMeta = packageTypes.find(
+    (type) => type.value === pkg.type || type.name === typeName,
+  );
+
+  return {
+    code: pkg.code,
+    name: pkg.name,
+    packageTypeId: typeMeta?.id,
+    packageTypeName: typeName,
+    appliesTo: pkg.appliesTo,
+    status: pkg.status,
+    firstBlockPrice: pkg.basePrice,
+    firstBlockDuration: pkg.firstBlockDuration,
+    nextBlockPrice: pkg.nextBlockPrice,
+    nextBlockDuration: pkg.nextBlockDuration,
+    basePrice: pkg.basePrice,
+    duration: pkg.firstBlockDuration,
+    monthlyPrice: pkg.monthlyPrice,
+    durationDays: pkg.durationDays,
+    vehicleLimit: pkg.vehicleLimit,
+    overtimeFee: pkg.overtimeFee,
+    feeDescription: pkg.description,
+    fixedSlotEnabled: pkg.fixedSlot,
+    unlimitedEntryEnabled: pkg.unlimitedEntry,
+    icon: typeMeta?.icon,
+  };
+}
+
+function backendErrorsToFields(data) {
+  return (data?.errors || []).reduce((acc, error) => {
+    const fieldMap = {
+      packageTypeId: "type",
+      packageTypeName: "type",
+      feeDescription: "description",
+      duration: "firstBlockDuration",
+    };
+    acc[fieldMap[error.field] || error.field] = error.message;
+    return acc;
+  }, {});
+}
 
 function formatMoney(value) {
   const number = Number(value) || 0;
@@ -205,7 +206,6 @@ function typePricingMode(type, customTypes = []) {
   if (type === "Guest") return "Hourly";
   if (type === "Hourly") return "Hourly";
   if (type === "Monthly") return "Monthly";
-  if (type === "Penalty") return "Fixed Fee";
   const custom = customTypeFor(type, customTypes);
   if (custom) return custom.pricingMode;
   return "Hourly";
@@ -225,8 +225,7 @@ function hasValidPricing(pkg, customTypes = []) {
     return (
       isPositive(pkg.basePrice) &&
       isPositiveInteger(pkg.firstBlockDuration) &&
-      isNonNegative(pkg.overtimeFee) &&
-      isNonNegative(pkg.noShowFee)
+      isNonNegative(pkg.overtimeFee)
     );
   }
   if (mode === "Monthly") {
@@ -234,13 +233,6 @@ function hasValidPricing(pkg, customTypes = []) {
       isPositive(pkg.monthlyPrice) &&
       isPositiveInteger(pkg.durationDays) &&
       (!pkg.vehicleLimit || Number(pkg.vehicleLimit) >= 1)
-    );
-  }
-  if (mode === "Fixed Fee") {
-    return (
-      isPositive(pkg.penaltyAmount) &&
-      Boolean(String(pkg.feeType || "").trim()) &&
-      String(pkg.description || "").trim().length >= 5
     );
   }
   return false;
@@ -254,7 +246,7 @@ function validateTicketPackage(pkg, customTypes = []) {
   const status = pkg.status;
   const customType = customTypeFor(type, customTypes);
   const mode = typePricingMode(type, customTypes);
-  const validTypes = ["Guest", "Hourly", "Monthly", "Penalty"];
+  const validTypes = ["Guest", "Hourly", "Monthly"];
 
   if (!name.trim()) errors.name = "Package name is required.";
   else if (name.trim().length < 3) errors.name = "Package name must be at least 3 characters.";
@@ -270,10 +262,6 @@ function validateTicketPackage(pkg, customTypes = []) {
   if ((type === "Hourly" || type === "Monthly") && appliesTo !== "Customer") {
     errors.appliesTo = `${displayPackageType(type)} must apply to Customer.`;
   }
-  if (type === "Penalty" && !["Customer", "All"].includes(appliesTo)) {
-    errors.appliesTo = "Fee Rule can apply to Customer or All.";
-  }
-
   if (type === "Guest") {
     if (!isPositive(pkg.basePrice)) errors.basePrice = "First block price must be greater than 0.";
     if (!isPositiveInteger(pkg.firstBlockDuration)) errors.firstBlockDuration = "First block duration must be greater than 0 minutes.";
@@ -284,19 +272,12 @@ function validateTicketPackage(pkg, customTypes = []) {
     if (!isPositive(pkg.basePrice)) errors.basePrice = "Base price must be greater than 0.";
     if (!isPositiveInteger(pkg.firstBlockDuration)) errors.firstBlockDuration = "Duration must be greater than 0 minutes.";
     if (!isNonNegative(pkg.overtimeFee)) errors.overtimeFee = "Overtime fee must be 0 or greater.";
-    if (!isNonNegative(pkg.noShowFee)) errors.noShowFee = "No-show fee must be 0 or greater.";
   }
   if (mode === "Monthly") {
     if (!isPositive(pkg.monthlyPrice)) errors.monthlyPrice = "Monthly price must be greater than 0.";
     if (!isPositiveInteger(pkg.durationDays)) errors.durationDays = "Duration in days must be greater than 0.";
     if (pkg.vehicleLimit && Number(pkg.vehicleLimit) < 1) errors.vehicleLimit = "Vehicle limit must be at least 1.";
   }
-  if (mode === "Fixed Fee") {
-    if (!String(pkg.feeType || "").trim()) errors.feeType = "Fee type is required.";
-    if (!isPositive(pkg.penaltyAmount)) errors.penaltyAmount = "Fee amount must be greater than 0.";
-    if (String(pkg.description || "").trim().length < 5) errors.description = "Description must be at least 5 characters.";
-  }
-
   return errors;
 }
 
@@ -304,10 +285,6 @@ function primaryPrice(pkg, customTypes = []) {
   const mode = typePricingMode(pkg.type, customTypes);
   if (!hasValidPricing(pkg, customTypes)) return "Pricing pending";
   if (mode === "Monthly") return `${formatMoney(pkg.monthlyPrice)} / mo`;
-  if (mode === "Fixed Fee")
-    return pkg.penaltyAmount
-      ? `${formatMoney(pkg.penaltyAmount)} fee`
-      : "Fixed fee";
   return `${formatMoney(pkg.basePrice)} / ${pkg.firstBlockDuration || 60}m`;
 }
 
@@ -315,7 +292,6 @@ function displayPackageType(type, customTypes = []) {
   if (type === "Guest") return "Guest Hourly";
   if (type === "Hourly") return "Customer Hourly";
   if (type === "Monthly") return "Monthly Pass";
-  if (type === "Penalty") return "Fee Rule";
   const custom = customTypeFor(type, customTypes);
   if (custom) return custom.name;
   return type;
@@ -324,7 +300,6 @@ function displayPackageType(type, customTypes = []) {
 function sortablePrice(pkg, customTypes = []) {
   const mode = typePricingMode(pkg.type, customTypes);
   if (mode === "Monthly") return Number(pkg.monthlyPrice) || 0;
-  if (mode === "Fixed Fee") return Number(pkg.penaltyAmount) || 0;
   return Number(pkg.basePrice) || 0;
 }
 
@@ -538,32 +513,6 @@ function CustomDropdown({ value, options, onChange, className, compact = false, 
   );
 }
 
-function FlowPills({ type }) {
-  const steps =
-    type === "Monthly"
-      ? ["Register Pass", "Fixed Slot", "AI Plate Check", "Unlimited Entry"]
-      : type === "Guest"
-        ? ["Kiosk Entry", "QR Ticket", "Parking", "Checkout Payment"]
-      : type === "Penalty"
-        ? ["Fee Rule", "Detection", "Charge", "Review"]
-        : ["Booking", "AI Plate Check", "Parking", "Overtime Check", "Wallet Payment"];
-
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      {steps.map((step, index) => (
-        <div key={step} className="flex items-center gap-2">
-          <span className="rounded-full border border-white/5 bg-white/[0.03] px-3 py-1.5 text-xs font-semibold text-[#F8FAFC]/80 shadow-inner">
-            {step}
-          </span>
-          {index < steps.length - 1 && (
-            <ArrowRight size={14} className="text-[#F5C542]/50" />
-          )}
-        </div>
-      ))}
-    </div>
-  );
-}
-
 const customTypeIcons = {
   Ticket,
   Clock: Clock3,
@@ -591,13 +540,6 @@ function typeVisual(type, customTypes = []) {
       gradient: "from-emerald-400/25 to-[#F5C542]/20",
     };
   }
-  if (type === "Penalty") {
-    return {
-      icon: AlertTriangle,
-      label: "Fee Rule",
-      gradient: "from-red-400/25 to-[#F5C542]/20",
-    };
-  }
   if (type === "Hourly") {
     return {
       icon: Clock3,
@@ -613,9 +555,7 @@ function typeVisual(type, customTypes = []) {
       gradient:
         custom.pricingMode === "Monthly"
           ? "from-emerald-400/25 to-[#F5C542]/20"
-          : custom.pricingMode === "Fixed Fee"
-            ? "from-red-400/25 to-[#F5C542]/20"
-            : "from-violet-400/25 to-[#F5C542]/20",
+          : "from-violet-400/25 to-[#F5C542]/20",
     };
   }
   return {
@@ -629,17 +569,21 @@ function calculateSimulation(pkg, hours = 4, customTypes = []) {
   const mode = typePricingMode(pkg.type, customTypes);
   if (!hasValidPricing(pkg, customTypes)) return null;
   if (mode === "Monthly") return Number(pkg.monthlyPrice) || 0;
-  if (mode === "Fixed Fee") return Number(pkg.penaltyAmount) || 0;
 
-  const firstMinutes = Number(pkg.firstBlockDuration) || 60;
-  const nextMinutes = Number(pkg.nextBlockDuration) || 60;
   const totalMinutes = hours * 60;
-  const base = Number(pkg.basePrice) || 0;
-  const nextPrice = Number(pkg.nextBlockPrice) || 0;
-  const extraMinutes = Math.max(0, totalMinutes - firstMinutes);
-  const extraBlocks = Math.ceil(extraMinutes / nextMinutes);
+  const firstMinutes = Number(pkg.firstBlockDuration);
+  const base = Number(pkg.basePrice);
 
-  return base + extraBlocks * nextPrice;
+  if (pkg.type === "Guest") {
+    const nextMinutes = Number(pkg.nextBlockDuration);
+    const nextPrice = Number(pkg.nextBlockPrice);
+    const extraMinutes = Math.max(0, totalMinutes - firstMinutes);
+    const extraBlocks = Math.ceil(extraMinutes / nextMinutes);
+    return base + extraBlocks * nextPrice;
+  }
+
+  const extraMinutes = Math.max(0, totalMinutes - firstMinutes);
+  return base + (extraMinutes > 0 ? Number(pkg.overtimeFee) || 0 : 0);
 }
 
 function ParkingPackageVisual({ pkg, compact = false }) {
@@ -678,11 +622,16 @@ function ParkingPackageVisual({ pkg, compact = false }) {
   );
 }
 
-function compactFlowChips(type) {
-  if (type === "Guest") return ["Kiosk", "QR", "Checkout"];
-  if (type === "Monthly") return ["Fixed Slot", "AI Access", "Unlimited"];
-  if (type === "Penalty") return ["Detect", "Charge", "Block"];
-  return ["Booking", "AI Plate", "Wallet"];
+function packageFeatureChips(pkg) {
+  if (pkg.type === "Guest") return ["Walk-in", "Block pricing", "Guest"];
+  if (pkg.type === "Monthly") {
+    return [
+      "Subscription",
+      pkg.fixedSlot ? "Fixed slot" : "Flexible slot",
+      pkg.unlimitedEntry ? "Unlimited entry" : "Limited entry",
+    ];
+  }
+  return ["Booking", "Overtime fee", "Customer"];
 }
 
 function PackageListItem({ pkg, onView, onEdit, index = 0 }) {
@@ -742,7 +691,7 @@ function PackageListItem({ pkg, onView, onEdit, index = 0 }) {
 
       <div className="relative z-10 mt-auto pt-4">
         <div className="mb-4 flex flex-wrap gap-2">
-          {compactFlowChips(pkg.type).map((chip) => (
+          {packageFeatureChips(pkg).map((chip) => (
             <span
               key={chip}
               className="rounded-full border border-white/[0.08] bg-white/[0.04] px-2.5 py-1 text-[11px] font-bold text-[#CBD5E1]"
@@ -901,7 +850,22 @@ function NumberInput({ value, onValueChange, onTouched, unit, error, placeholder
   );
 }
 
-function CustomPackageTypeCreator({ open, existingNames, onCreate, onCancel, showToast }) {
+function PackageTypeManagerModal({
+  open,
+  packageTypes,
+  loading,
+  onCreate,
+  onUpdate,
+  onDelete,
+  onCancel,
+  showToast,
+}) {
+  const emptyDraft = {
+    name: "",
+    description: "",
+    icon: "Ticket",
+    pricingMode: "Hourly",
+  };
   const [draft, setDraft] = useState({
     name: "",
     description: "",
@@ -909,6 +873,22 @@ function CustomPackageTypeCreator({ open, existingNames, onCreate, onCancel, sho
     pricingMode: "Hourly",
   });
   const [touched, setTouched] = useState({});
+  const [editingId, setEditingId] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [serverErrors, setServerErrors] = useState({});
+  const editingType = packageTypes.find((type) => type.id === editingId);
+  const isEditingDefault = Boolean(editingType?.isDefault);
+
+  useEffect(() => {
+    if (!open) {
+      setDraft(emptyDraft);
+      setTouched({});
+      setEditingId(null);
+      setSubmitting(false);
+      setServerErrors({});
+    }
+  }, [open]);
+
   const iconOptions = [
     { value: "Ticket", label: "Ticket", icon: Ticket },
     { value: "Clock", label: "Clock", icon: Clock3 },
@@ -916,43 +896,78 @@ function CustomPackageTypeCreator({ open, existingNames, onCreate, onCancel, sho
     { value: "Car", label: "Car", icon: Car },
     { value: "Shield", label: "Shield", icon: ShieldCheck },
     { value: "AlertTriangle", label: "Alert", icon: AlertTriangle },
+    { value: "QrCode", label: "QR", icon: QrCode },
+    { value: "ParkingCircle", label: "Parking", icon: ParkingCircle },
   ];
   const pricingModeOptions = [
     { value: "Hourly", label: "Hourly", icon: Clock3 },
     { value: "Monthly", label: "Monthly", icon: CalendarDays },
-    { value: "Fixed Fee", label: "Fixed Fee", icon: Ticket },
   ];
   const normalized = draft.name.trim().toLowerCase();
-  
+
   const validate = () => {
     const errs = {};
     if (!draft.name.trim()) errs.name = "Type name is required.";
     else if (draft.name.trim().length < 3) errs.name = "Minimum 3 characters.";
     else if (draft.name.trim().length > 50) errs.name = "Maximum 50 characters.";
-    else if (existingNames.some((name) => name.toLowerCase() === normalized)) errs.name = "Type name must be unique.";
-    
+    else if (
+      packageTypes.some(
+        (type) => type.id !== editingId && type.name.toLowerCase() === normalized,
+      )
+    ) errs.name = "Type name must be unique.";
+
     if (!draft.pricingMode) errs.pricingMode = "Pricing mode is required.";
     if (!draft.icon) errs.icon = "Icon is required.";
-    return errs;
+    return { ...errs, ...serverErrors };
   };
-  
-  const errors = validate();
-  const canSave = Object.keys(errors).length === 0;
 
-  const save = () => {
+  const errors = Object.fromEntries(
+    Object.entries(validate()).filter(([, message]) => Boolean(message)),
+  );
+  const canSave = Object.keys(errors).length === 0;
+  const disabledReason =
+    errors.name || errors.pricingMode || errors.icon || "";
+
+  const resetDraft = () => {
+    setDraft(emptyDraft);
+    setTouched({});
+    setEditingId(null);
+    setServerErrors({});
+  };
+
+  const startEdit = (type) => {
+    setEditingId(type.id);
+    setDraft({
+      name: type.name,
+      description: type.description || "",
+      icon: type.icon || "Ticket",
+      pricingMode: type.pricingMode || "Hourly",
+    });
+    setTouched({});
+    setServerErrors({});
+  };
+
+  const save = async () => {
     if (!canSave) {
       setTouched({ name: true, pricingMode: true, icon: true });
       if (showToast) showToast("Please complete required fields.");
       return;
     }
-    onCreate({
+    setSubmitting(true);
+    const payload = {
       name: draft.name.trim(),
       description: draft.description.trim(),
       icon: draft.icon,
       pricingMode: draft.pricingMode,
-    });
-    setDraft({ name: "", description: "", icon: "Ticket", pricingMode: "Hourly" });
-    setTouched({});
+    };
+    const result = editingId ? await onUpdate(editingId, payload) : await onCreate(payload);
+    setSubmitting(false);
+    if (result?.errors) {
+      setServerErrors(result.errors);
+      setTouched({ name: true, pricingMode: true, icon: true });
+      return;
+    }
+    if (result) resetDraft();
   };
 
   const inputClass = (hasErr) => cx(
@@ -978,24 +993,147 @@ function CustomPackageTypeCreator({ open, existingNames, onCreate, onCancel, sho
             exit={{ opacity: 0, y: 18, scale: 0.96 }}
             transition={{ duration: 0.2, ease: "easeOut" }}
             onMouseDown={(event) => event.stopPropagation()}
-            className="relative w-full max-w-[640px] overflow-visible rounded-[24px] border border-[#F5C542]/30 bg-[#0A0A0A]/90 p-6 shadow-[0_24px_80px_-12px_rgba(0,0,0,0.8)] backdrop-blur-2xl"
+            className="relative max-h-[88vh] w-full max-w-5xl overflow-hidden rounded-[24px] border border-[#F5C542]/30 bg-[#0A0A0A]/90 shadow-[0_24px_80px_-12px_rgba(0,0,0,0.8)] backdrop-blur-2xl"
           >
             <div className="pointer-events-none absolute -top-24 -right-24 h-64 w-64 rounded-full bg-[#F5C542]/10 blur-[80px]" />
-            <div className="relative z-20 mb-6 flex items-center justify-between gap-3">
+            <div className="relative z-20 flex items-center justify-between gap-3 border-b border-white/10 px-6 py-5">
               <div>
-                <h2 className="text-xl font-black text-white">New Package Type</h2>
+                <h2 className="text-xl font-black text-white">Package Type Management</h2>
                 <p className="mt-1 text-sm font-medium text-[#94A3B8]">
-                  Create a reusable package type for ticket packages.
+                  Create, edit, and remove MongoDB-backed package types.
                 </p>
               </div>
+              <button
+                type="button"
+                onClick={onCancel}
+                className="rounded-xl border border-white/10 bg-[#1A1A1A] px-4 py-2.5 text-sm font-bold text-white transition hover:border-[#F5C542]/30 hover:text-[#F5C542]"
+              >
+                Close
+              </button>
             </div>
-            
-            <div className="relative z-20 grid gap-x-5 gap-y-4 md:grid-cols-2">
+
+            <div className="relative z-20 grid max-h-[calc(88vh-88px)] overflow-auto lg:grid-cols-[1fr_380px]">
+              <section className="border-r border-white/10 p-6">
+                <div className="mb-4 flex items-center justify-between">
+                  <p className="text-xs font-black uppercase tracking-[0.16em] text-white/45">
+                    Existing Types
+                  </p>
+                  <span className="rounded-full bg-white/[0.06] px-2.5 py-1 text-xs font-bold text-[#94A3B8]">
+                    {packageTypes.length}
+                  </span>
+                </div>
+
+                {loading ? (
+                  <div className="space-y-3">
+                    {Array.from({ length: 4 }).map((_, index) => (
+                      <div
+                        key={index}
+                        className="h-20 animate-pulse rounded-2xl border border-white/5 bg-white/[0.03]"
+                      />
+                    ))}
+                  </div>
+                ) : packageTypes.length ? (
+                  <div className="space-y-3">
+                    {packageTypes.map((type) => {
+                      const Icon = customTypeIcons[type.icon] || Ticket;
+                      return (
+                        <div
+                          key={type.id}
+                          className="rounded-2xl border border-white/10 bg-black/25 p-4 transition-all hover:border-[#F5C542]/25 hover:bg-[#F5C542]/[0.04]"
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[#F5C542]/20 bg-[#F5C542]/10 text-[#F5C542]">
+                              <Icon size={19} strokeWidth={2.5} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="truncate text-sm font-black text-white">{type.name}</p>
+                                {type.isDefault && (
+                                  <span className="rounded-full border border-[#F5C542]/25 bg-[#F5C542]/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-[#F5C542]">
+                                    Default
+                                  </span>
+                                )}
+                                <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-bold text-[#CBD5E1]">
+                                  {type.pricingMode}
+                                </span>
+                              </div>
+                              <p className="mt-1 line-clamp-2 text-xs font-medium text-[#94A3B8]">
+                                {type.description || "No description"}
+                              </p>
+                            </div>
+                            <div className="flex shrink-0 gap-2">
+                              <button
+                                type="button"
+                                onClick={() => startEdit(type)}
+                                className="rounded-xl border border-white/10 bg-white/[0.04] p-2 text-[#94A3B8] transition hover:border-[#F5C542]/35 hover:text-[#F5C542]"
+                                title="Edit package type"
+                              >
+                                <Edit3 size={15} />
+                              </button>
+                              {!type.isDefault && (
+                                <button
+                                  type="button"
+                                  onClick={() => onDelete(type.id)}
+                                  className="rounded-xl border border-[#EF4444]/20 bg-[#EF4444]/10 p-2 text-[#F87171] transition hover:bg-[#EF4444]/20"
+                                  title="Delete package type"
+                                >
+                                  <Trash2 size={15} />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-8 text-center">
+                    <Layers className="mx-auto text-[#F5C542]" size={34} />
+                    <p className="mt-3 text-sm font-black text-white">No package types yet</p>
+                    <p className="mt-1 text-xs text-[#94A3B8]">
+                      Default package types will be seeded by the backend.
+                    </p>
+                  </div>
+                )}
+              </section>
+
+              <section className="p-6">
+                <div className="mb-4 flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-black text-white">
+                      {editingId ? "Edit Package Type" : "Add Package Type"}
+                    </p>
+                    <p className="mt-1 text-xs font-medium text-[#94A3B8]">
+                      {isEditingDefault
+                        ? "Default types only allow description and icon edits."
+                        : "Create a custom type for ticket packages."}
+                    </p>
+                  </div>
+                  {editingId && (
+                    <button
+                      type="button"
+                      onClick={resetDraft}
+                      className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-bold text-[#94A3B8] transition hover:text-white"
+                    >
+                      New
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid gap-4">
               <Field label="Type Name" required error={touched.name ? errors.name : ""}>
                 <input
                   className={inputClass(Boolean(touched.name && errors.name))}
                   value={draft.name}
-                  onChange={(event) => setDraft((prev) => ({ ...prev, name: event.target.value }))}
+                  disabled={isEditingDefault}
+                  onChange={(event) => {
+                    setDraft((prev) => ({ ...prev, name: event.target.value }));
+                    setServerErrors((prev) => {
+                      const next = { ...prev };
+                      delete next.name;
+                      return next;
+                    });
+                  }}
                   onBlur={() => setTouched((prev) => ({ ...prev, name: true }))}
                   placeholder="Weekend Pass"
                 />
@@ -1005,8 +1143,14 @@ function CustomPackageTypeCreator({ open, existingNames, onCreate, onCancel, sho
                   value={draft.pricingMode}
                   options={pricingModeOptions}
                   onChange={(value) => {
-                    setDraft((prev) => ({ ...prev, pricingMode: value }));
-                    setTouched((prev) => ({ ...prev, pricingMode: true }));
+                    if (isEditingDefault) return;
+                        setDraft((prev) => ({ ...prev, pricingMode: value }));
+                        setTouched((prev) => ({ ...prev, pricingMode: true }));
+                    setServerErrors((prev) => {
+                      const next = { ...prev };
+                      delete next.pricingMode;
+                      return next;
+                    });
                   }}
                   error={Boolean(touched.pricingMode && errors.pricingMode)}
                   large
@@ -1019,33 +1163,38 @@ function CustomPackageTypeCreator({ open, existingNames, onCreate, onCancel, sho
                   onChange={(value) => {
                     setDraft((prev) => ({ ...prev, icon: value }));
                     setTouched((prev) => ({ ...prev, icon: true }));
+                    setServerErrors((prev) => {
+                      const next = { ...prev };
+                      delete next.icon;
+                      return next;
+                    });
                   }}
                   error={Boolean(touched.icon && errors.icon)}
                   large
                 />
               </Field>
               <Field label="Description">
-                <input
-                  className={inputClass(false)}
+                <textarea
+                  className={cx(inputClass(false), "min-h-[88px] resize-none py-3")}
                   value={draft.description}
                   onChange={(event) => setDraft((prev) => ({ ...prev, description: event.target.value }))}
                   placeholder="Special rate for night parking"
                 />
               </Field>
-            </div>
+                </div>
 
-            <div className="relative z-10 mt-8 flex justify-end gap-3 pt-4 border-t border-white/5">
+            <div className="relative z-10 mt-6 flex justify-end gap-3 border-t border-white/5 pt-4">
               <button
                 type="button"
-                onClick={onCancel}
+                onClick={resetDraft}
                 className="rounded-xl border border-white/10 bg-[#1A1A1A] px-5 py-3 text-sm font-bold text-white transition hover:bg-[#2A2A2A] hover:border-white/20"
               >
-                Cancel
+                Clear
               </button>
               <button
                 type="button"
                 onClick={save}
-                disabled={!canSave}
+                disabled={!canSave || submitting}
                 className={cx(
                   "rounded-xl px-5 py-3 text-sm font-black transition-all",
                   canSave
@@ -1053,8 +1202,15 @@ function CustomPackageTypeCreator({ open, existingNames, onCreate, onCancel, sho
                     : "bg-[#F5C542]/50 text-black/50 cursor-not-allowed opacity-50 shadow-none",
                 )}
               >
-                Create Type
+                {submitting ? "Saving..." : editingId ? "Save Type" : "Create Type"}
               </button>
+            </div>
+            {!canSave && disabledReason && (
+              <p className="mt-3 text-right text-xs font-semibold text-[#FCA5A5]">
+                {disabledReason}
+              </p>
+            )}
+              </section>
             </div>
           </motion.div>
         </motion.div>
@@ -1093,8 +1249,8 @@ function Toggle({ label, checked, onChange }) {
   );
 }
 
-function PackageLivePreview({ pkg }) {
-  const simulationTotal = calculateSimulation(pkg, 4);
+function PackageLivePreview({ pkg, customTypes = [] }) {
+  const simulationTotal = calculateSimulation(pkg, 4, customTypes);
   const validPricing = simulationTotal !== null;
 
   return (
@@ -1109,7 +1265,7 @@ function PackageLivePreview({ pkg }) {
             {String(pkg.name || "").trim() || "New Ticket Package"}
           </h3>
           <p className="mt-1 text-sm font-medium text-[#94A3B8]">
-            {displayPackageType(pkg.type)} for {pkg.appliesTo}
+            {displayPackageType(pkg.type, customTypes)} for {pkg.appliesTo}
           </p>
         </div>
         <StatusBadge status={pkg.status} />
@@ -1118,16 +1274,18 @@ function PackageLivePreview({ pkg }) {
         <ParkingPackageVisual pkg={pkg} compact />
       </div>
       <div className="rounded-xl border border-white/5 bg-black/40 p-1 relative z-10 backdrop-blur-md">
-        <DetailRow label="Primary Price" value={primaryPrice(pkg)} highlight />
+        <DetailRow label="Primary Price" value={primaryPrice(pkg, customTypes)} highlight />
         <DetailRow
-          label={pkg.type === "Penalty" ? "Penalty Amount" : "Overtime"}
+          label={pkg.type === "Guest" ? "Next block charge" : pkg.type === "Monthly" ? "Duration" : "Overtime"}
           value={
-            pkg.type === "Penalty"
-              ? pkg.penaltyAmount
-                ? formatMoney(pkg.penaltyAmount)
-                : "Not set"
+            pkg.type === "Guest"
+              ? pkg.nextBlockPrice && pkg.nextBlockDuration
+                ? `${formatMoney(pkg.nextBlockPrice)} / ${pkg.nextBlockDuration} mins`
+                : "Waiting for valid pricing input"
+              : pkg.type === "Monthly"
+              ? `${pkg.durationDays || 30} days`
               : pkg.overtimeFee
-              ? `${formatMoney(pkg.overtimeFee)} / hr`
+              ? formatMoney(pkg.overtimeFee)
               : "Not applied"
           }
         />
@@ -1152,9 +1310,6 @@ function PackageLivePreview({ pkg }) {
             {validPricing ? formatMoney(simulationTotal) : "Waiting for valid pricing input"}
           </p>
         </div>
-      </div>
-      <div className="mt-6 relative z-10">
-        <FlowPills type={pkg.type} />
       </div>
     </div>
   );
@@ -1181,17 +1336,6 @@ function FormSection({ title, icon: Icon, children }) {
   );
 }
 
-function PackageFlowPreview({ type }) {
-  return (
-    <div className="rounded-[1.25rem] border border-[#F5C542]/15 bg-black/35 p-5">
-      <p className="mb-4 text-xs font-black uppercase tracking-[0.2em] text-[#F5C542]">
-        Package Flow Preview
-      </p>
-      <FlowPills type={type} />
-    </div>
-  );
-}
-
 function formSectionTitle(title, Icon, subtitle) {
   return (
     <div className="mb-3 flex items-start gap-3">
@@ -1212,76 +1356,32 @@ function formSectionTitle(title, Icon, subtitle) {
   );
 }
 
-function parkingJourneySteps(type) {
-  if (type === "Guest") {
-    return [
-      { label: "Kiosk", icon: QrCode },
-      { label: "QR Ticket", icon: Tag },
-      { label: "Parking", icon: ParkingCircle },
-      { label: "Payment", icon: PaymentIcon },
-    ];
-  }
-  if (type === "Monthly") {
-    return [
-      { label: "Register", icon: CreditCard },
-      { label: "Fixed Slot", icon: ParkingCircle },
-      { label: "AI Access", icon: ShieldCheck },
-      { label: "Unlimited", icon: Gauge },
-    ];
-  }
-  if (type === "Penalty") {
-    return [
-      { label: "Detect", icon: AlertTriangle },
-      { label: "Charge", icon: WalletCards },
-      { label: "Review", icon: ShieldCheck },
-      { label: "Block", icon: AlertTriangle },
-    ];
-  }
-  return [
-    { label: "Booking", icon: CalendarDays },
-    { label: "AI Plate", icon: ShieldCheck },
-    { label: "Parking", icon: ParkingCircle },
-    { label: "Wallet", icon: WalletCards },
-  ];
-}
-
-function ParkingJourney({ type }) {
-  return (
-    <div className="relative">
-      <div className="grid gap-3 sm:grid-cols-4">
-        {parkingJourneySteps(type).map(({ label, icon: Icon }, index, steps) => (
-          <div key={label} className="relative">
-            {index < steps.length - 1 && (
-              <div className="absolute left-[calc(50%+18px)] right-[-50%] top-[18px] hidden h-px bg-gradient-to-r from-[#F5C542]/45 to-transparent sm:block" />
-            )}
-            <div className="relative flex items-center gap-2 rounded-xl px-2 py-1.5 transition-all hover:bg-[#F5C542]/[0.06]">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#F5C542]/20 bg-[#F5C542]/10 text-[#F5C542] shadow-[0_0_18px_-12px_rgba(245,197,66,0.9)]">
-                <Icon size={16} strokeWidth={2.5} />
-              </div>
-              <span className="min-w-0 truncate text-[11px] font-black uppercase tracking-[0.08em] text-[#E2E8F0]">
-                {label}
-              </span>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 function PackageFormPage({
   mode,
   form,
   setForm,
   customTypes = [],
+  serverErrors = {},
+  onFieldChange,
   onBack,
   onSave,
   onInvalid,
 }) {
   const formRef = useRef(null);
   const [touched, setTouched] = useState({});
-  const update = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
-  const errors = useMemo(() => validateTicketPackage(form, customTypes), [customTypes, form]);
+  const update = (key, value) => {
+    onFieldChange?.(key);
+    setForm((prev) => ({ ...prev, [key]: value }));
+  };
+  const errors = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries({ ...validateTicketPackage(form, customTypes), ...serverErrors }).filter(
+          ([, message]) => Boolean(message),
+        ),
+      ),
+    [customTypes, form, serverErrors],
+  );
   const errorKeys = Object.keys(errors);
   const isValid = errorKeys.length === 0;
   const preview = {
@@ -1295,32 +1395,18 @@ function PackageFormPage({
     label: type.name,
     icon: customTypeIcons[type.icon] || Ticket,
   }));
-  const selectedCustomType = customTypeFor(form.type, customTypes);
   const pricingMode = typePricingMode(form.type, customTypes);
   const appliesToOptions =
     form.type === "Guest"
       ? [{ value: "Guest", label: "Guest", icon: QrCode }]
-      : form.type === "Penalty" || selectedCustomType
-        ? [
-            { value: "Guest", label: "Guest", icon: QrCode },
-            { value: "Customer", label: "Customer", icon: ShieldCheck },
-            { value: "All", label: "All", icon: Layers },
-          ]
-        : [{ value: "Customer", label: "Customer", icon: ShieldCheck }];
+      : [{ value: "Customer", label: "Customer", icon: ShieldCheck }];
   const formStatusOptions = [
     { value: "Active", label: "Active", dot: "bg-[#00D084]" },
     { value: "Inactive", label: "Inactive", dot: "bg-[#94A3B8]" },
   ];
-  const feeTypeOptions = [
-    { value: "Tailgating", label: "Tailgating", icon: AlertTriangle },
-    { value: "QR Fraud", label: "QR Fraud", icon: QrCode },
-    { value: "Overtime", label: "Overtime", icon: Clock3 },
-    { value: "Other", label: "Other", icon: Tag },
-  ];
   const isMonthly = pricingMode === "Monthly";
   const isGuest = form.type === "Guest";
   const isHourly = pricingMode === "Hourly" && !isGuest;
-  const isFixedFee = pricingMode === "Fixed Fee";
   const showError = (field) => (touched[field] ? errors[field] : "");
   const touch = (field) => setTouched((prev) => ({ ...prev, [field]: true }));
   const updateNumber = (field, value) => update(field, value.replace(/[^\d]/g, ""));
@@ -1373,7 +1459,7 @@ function PackageFormPage({
               {mode === "edit" ? "Edit Ticket Package" : "Add Ticket Package"}
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[#94A3B8]">
-              Configure ticket package information, pricing, and parking journey behavior.
+              Configure ticket package information and pricing rules.
             </p>
           </div>
           <div className="flex gap-3">
@@ -1486,10 +1572,8 @@ function PackageFormPage({
                   isMonthly
                     ? "Set the subscription price for recurring parking access."
                     : isHourly
-                      ? "Set booking rate, parking duration, overtime, and no-show charge."
-                      : form.type === "Penalty"
-                        ? "Set the penalty charge and a clear admin-facing description."
-                        : "Set first block, next block, and overtime charges.",
+                      ? "Set booking rate, parking duration, and overtime charge."
+                      : "Set first block pricing and additional block fees for walk-in guests.",
                 )}
                 {isMonthly ? (
                   <div className="grid gap-4 md:grid-cols-2">
@@ -1517,7 +1601,7 @@ function PackageFormPage({
                     </p>
                   </div>
                 ) : isHourly ? (
-                  <div className="grid gap-4 md:grid-cols-4">
+                  <div className="grid gap-4 md:grid-cols-3">
                     <Field label="Base price" name="basePrice" required error={showError("basePrice")}>
                       <NumberInput value={form.basePrice} onValueChange={(value) => updateNumber("basePrice", value)} onTouched={() => touch("basePrice")} unit="VND" error={showError("basePrice")} />
                     </Field>
@@ -1527,39 +1611,9 @@ function PackageFormPage({
                     <Field label="Overtime fee" name="overtimeFee" required error={showError("overtimeFee")}>
                       <NumberInput value={form.overtimeFee} onValueChange={(value) => updateNumber("overtimeFee", value)} onTouched={() => touch("overtimeFee")} unit="VND" error={showError("overtimeFee")} />
                     </Field>
-                    <Field label="No-show fee" name="noShowFee" required error={showError("noShowFee")}>
-                      <NumberInput value={form.noShowFee} onValueChange={(value) => updateNumber("noShowFee", value)} onTouched={() => touch("noShowFee")} unit="VND" error={showError("noShowFee")} />
-                    </Field>
-                    <p className="md:col-span-4 text-xs font-medium text-[#94A3B8]">
-                      Example: 15,000 VND / 60 mins, overtime 25,000 VND/hour
+                    <p className="md:col-span-3 text-xs font-medium text-[#94A3B8]">
+                      Example: 15,000 VND / 60 mins, overtime 25,000 VND when duration is exceeded
                     </p>
-                  </div>
-                ) : isFixedFee ? (
-                  <div className="grid gap-4 md:grid-cols-[220px_220px_1fr]">
-                    <Field label="Fee type" name="feeType" required error={showError("feeType")}>
-                      <CustomDropdown
-                        value={form.feeType}
-                        options={feeTypeOptions}
-                        onChange={(value) => {
-                          update("feeType", value);
-                          touch("feeType");
-                        }}
-                        error={Boolean(showError("feeType"))}
-                        placeholder="Select fee type"
-                      />
-                    </Field>
-                    <Field label="Fee amount" name="penaltyAmount" required error={showError("penaltyAmount")}>
-                      <NumberInput value={form.penaltyAmount} onValueChange={(value) => updateNumber("penaltyAmount", value)} onTouched={() => touch("penaltyAmount")} unit="VND" error={showError("penaltyAmount")} />
-                    </Field>
-                    <Field label="Description" name="description" required error={showError("description")}>
-                      <textarea
-                        className={cx(inputClass(Boolean(showError("description"))), "min-h-[46px] resize-none py-3")}
-                        value={form.description}
-                        onChange={(e) => update("description", e.target.value)}
-                        onBlur={() => touch("description")}
-                        placeholder="Describe when this fee rule is applied"
-                      />
-                    </Field>
                   </div>
                 ) : (
                   <div className="grid gap-4 md:grid-cols-5">
@@ -1582,16 +1636,6 @@ function PackageFormPage({
                 )}
               </section>
 
-              <div className="h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
-
-              <section>
-                {formSectionTitle(
-                  "Parking journey",
-                  ParkingCircle,
-                  "A quick visual check of how this package behaves at the gate.",
-                )}
-                <ParkingJourney type={form.type} />
-              </section>
             </div>
           </motion.div>
 
@@ -1638,7 +1682,7 @@ function PackageDetailsPage({ pkg, customTypes = [], onBack, onEdit, onDelete })
               Ticket Package Details
             </h1>
             <p className="mt-2 text-sm text-[#94A3B8]">
-              Review pricing, package-specific rules, and parking journey behavior.
+              Review pricing, package information, and audit details.
             </p>
           </div>
           <div className="flex gap-3">
@@ -1691,7 +1735,7 @@ function PackageDetailsPage({ pkg, customTypes = [], onBack, onEdit, onDelete })
             <div className="relative z-10 md:text-right shrink-0">
               <p className="text-xs font-bold text-[#94A3B8] uppercase tracking-wider mb-1">Primary Price</p>
               <p className="text-4xl font-black text-[#F5C542] drop-shadow-[0_2px_10px_rgba(245,197,66,0.5)]">
-                {primaryPrice(pkg)}
+                {primaryPrice(pkg, customTypes)}
               </p>
             </div>
           </section>
@@ -1699,73 +1743,52 @@ function PackageDetailsPage({ pkg, customTypes = [], onBack, onEdit, onDelete })
           <div className="grid gap-6 lg:grid-cols-2 items-start">
             {/* Left Column: Pricing Details */}
             <div className="grid gap-6">
-              <FormSection title="Pricing Structure" icon={PaymentIcon}>
+              <FormSection title="Pricing Information" icon={PaymentIcon}>
                 <div className="rounded-2xl border border-white/5 bg-[#0A0A0A]/50 p-2 shadow-inner">
                   {pkg.type === "Guest" && (
                     <>
                       <DetailRow label="First block price" value={pkg.basePrice ? formatMoney(pkg.basePrice) : "Not configured"} highlight />
-                      <DetailRow label="First block duration" value={pkg.duration ? `${pkg.duration} mins` : "Not configured"} />
-                      <DetailRow label="Next block price" value={pkg.nextBlockPrice ? formatMoney(pkg.nextBlockPrice) : "Not configured"} />
+                      <DetailRow label="First block duration" value={pkg.firstBlockDuration ? `${pkg.firstBlockDuration} mins` : "Not configured"} />
+                      <DetailRow label="Next block charge" value={pkg.nextBlockPrice ? formatMoney(pkg.nextBlockPrice) : "Not configured"} />
                       <DetailRow label="Next block duration" value={pkg.nextBlockDuration ? `${pkg.nextBlockDuration} mins` : "Not configured"} />
                     </>
                   )}
                   {pkg.type === "Hourly" && (
                     <>
                       <DetailRow label="Base price" value={pkg.basePrice ? formatMoney(pkg.basePrice) : "Not configured"} highlight />
-                      <DetailRow label="Duration" value={pkg.duration ? `${pkg.duration} mins` : "Not configured"} />
+                      <DetailRow label="Duration" value={pkg.firstBlockDuration ? `${pkg.firstBlockDuration} mins` : "Not configured"} />
                       <DetailRow label="Overtime fee" value={pkg.overtimeFee ? formatMoney(pkg.overtimeFee) : "Not configured"} />
-                      <DetailRow label="No-show fee" value={pkg.noShowFee ? formatMoney(pkg.noShowFee) : "Not configured"} />
                     </>
                   )}
                   {pkg.type === "Monthly" && (
                     <>
                       <DetailRow label="Monthly price" value={pkg.monthlyPrice ? formatMoney(pkg.monthlyPrice) : "Not configured"} highlight />
+                      <DetailRow label="Duration days" value={pkg.durationDays ? `${pkg.durationDays} days` : "30 days"} />
                       <DetailRow label="Vehicle limit" value={pkg.vehicleLimit ? `${pkg.vehicleLimit} vehicle(s)` : "Not configured"} />
-                      <DetailRow label="Fixed slot" value={pkg.fixedSlotEnabled ? "Enabled" : "Disabled"} />
-                      <DetailRow label="Unlimited entry" value={pkg.unlimitedEntryEnabled ? "Enabled" : "Disabled"} />
-                    </>
-                  )}
-                  {pkg.type === "Penalty" && (
-                    <>
-                      <DetailRow label="Fee amount" value={pkg.feeAmount ? formatMoney(pkg.feeAmount) : "Not configured"} highlight />
-                      <DetailRow label="Description" value={pkg.feeDescription || "Not configured"} />
-                    </>
-                  )}
-                  {!["Guest", "Hourly", "Monthly", "Penalty"].includes(pkg.type) && (
-                    <>
-                      <DetailRow label="Base price" value={pkg.basePrice ? formatMoney(pkg.basePrice) : "Not configured"} highlight />
-                      <DetailRow label="Duration" value={pkg.duration ? `${pkg.duration} mins` : "Not configured"} />
+                      <DetailRow label="Fixed slot" value={pkg.fixedSlot ? "Enabled" : "Disabled"} />
+                      <DetailRow label="Unlimited entry" value={pkg.unlimitedEntry ? "Enabled" : "Disabled"} />
                     </>
                   )}
                 </div>
               </FormSection>
-
-              {["Guest", "Hourly"].includes(pkg.type) && (
-                <FormSection title="Pricing Simulation" icon={Gauge}>
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    {[1, 2, 3, 4].map((hours) => (
-                      <div key={hours} className="flex flex-col items-center justify-center rounded-xl border border-white/5 bg-[#111] p-3 text-center">
-                        <span className="text-[10px] font-bold text-[#94A3B8] uppercase tracking-wider">{hours} Hour{hours > 1 && "s"}</span>
-                        <span className="mt-1 text-sm font-black text-[#F5C542]">
-                          {formatMoney(calculateSimulation(pkg, hours, customTypes))}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </FormSection>
-              )}
             </div>
 
             {/* Right Column: Package Metadata */}
             <div className="grid gap-6">
-              <FormSection title="Package Metadata" icon={Layers}>
+              <FormSection title="Package Information" icon={Layers}>
                 <div className="rounded-2xl border border-white/5 bg-[#0A0A0A]/50 p-2 shadow-inner">
                   <DetailRow label="Status" value={pkg.status || "Not configured"} />
-                  <DetailRow label="Type" value={pkg.type || "Not configured"} />
+                  <DetailRow label="Type" value={displayPackageType(pkg.type, customTypes)} />
                   <DetailRow label="Applies to" value={pkg.appliesTo || "Not configured"} />
-                  <DetailRow label="Pricing mode" value={pkg.packageTypeId?.pricingMode || "Not configured"} />
-                  <DetailRow label="Created date" value={pkg.createdAt ? formatDate(pkg.createdAt) : "Not configured"} />
-                  <DetailRow label="Updated date" value={pkg.updatedAt ? formatDate(pkg.updatedAt) : "Not configured"} />
+                  <DetailRow label="Pricing mode" value={typePricingMode(pkg.type, customTypes)} />
+                </div>
+              </FormSection>
+
+              <FormSection title="Audit Information" icon={CalendarDays}>
+                <div className="rounded-2xl border border-white/5 bg-[#0A0A0A]/50 p-2 shadow-inner">
+                  <DetailRow label="Created date" value={pkg.createdAt ? formatDate(pkg.createdAt) : "Not available"} />
+                  <DetailRow label="Updated date" value={pkg.updatedAt ? formatDate(pkg.updatedAt) : "Not available"} />
+                  <DetailRow label="Package ID" value={pkg.id || "Not available"} />
                 </div>
               </FormSection>
             </div>
@@ -1778,15 +1801,18 @@ function PackageDetailsPage({ pkg, customTypes = [], onBack, onEdit, onDelete })
 
 export default function TicketPackages() {
   const [packages, setPackages] = useState([]);
+  const [packageTypes, setPackageTypes] = useState([]);
   const [customPackageTypes, setCustomPackageTypes] = useState([]);
   const [packageTypeFilter, setPackageTypeFilter] = useState("All");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [sortOrder, setSortOrder] = useState("Newest");
   const [loading, setLoading] = useState(true);
+  const [packageTypeLoading, setPackageTypeLoading] = useState(false);
   const [pageMode, setPageMode] = useState("list");
   const [showPackageTypeModal, setShowPackageTypeModal] = useState(false);
   const [form, setForm] = useState(emptyPackage);
+  const [formServerErrors, setFormServerErrors] = useState({});
   const [toast, setToast] = useState("");
   const [selectedPackageId, setSelectedPackageId] = useState(null);
 
@@ -1807,45 +1833,47 @@ export default function TicketPackages() {
   };
 
   const fetchPackages = async () => {
+    let typeLoaded = false;
     try {
       setLoading(true);
-      const [typeRes, pkgRes] = await Promise.all([
-        makeApiCall("GET", "/admin/package-types"),
-        makeApiCall("GET", "/admin/ticket-packages")
-      ]);
-
-      console.log("packageTypes response", typeRes);
-      console.log("ticketPackages response", pkgRes);
-
+      setPackageTypeLoading(true);
+      const typeRes = await makeApiCall("GET", "/admin/package-types");
       const typesArray = typeRes.data?.data || typeRes.data?.packageTypes || (Array.isArray(typeRes.data) ? typeRes.data : []);
-      setCustomPackageTypes(typesArray.map(t => {
-        let shortType = t.name;
-        if (t.name === "Guest Hourly") shortType = "Guest";
-        if (t.name === "Customer Hourly") shortType = "Hourly";
-        if (t.name === "Monthly Pass") shortType = "Monthly";
-        if (t.name === "Fee Rule") shortType = "Penalty";
-        return {
-          ...t,
-          value: shortType,
-        };
-      }));
+      const mappedTypes = typesArray
+        .filter((type) => type.name !== "Fee Rule")
+        .map(packageTypeToOption);
+      setPackageTypes(mappedTypes);
+      setCustomPackageTypes(mappedTypes);
+      typeLoaded = true;
+    } catch (err) {
+      console.error("Package types load error", err);
+      showToast(err.response?.data?.message || err.message || "Failed to load package types.");
+    } finally {
+      setPackageTypeLoading(false);
+    }
+
+    try {
+      const pkgRes = await makeApiCall("GET", "/admin/ticket-packages");
 
       const pkgsArray = pkgRes.data?.data || pkgRes.data?.packages || (Array.isArray(pkgRes.data) ? pkgRes.data : []);
-      setPackages(pkgsArray.map(p => ({
-        ...p,
-        id: p._id,
-        type: p.packageTypeName === "Guest Hourly" ? "Guest" :
-              p.packageTypeName === "Customer Hourly" ? "Hourly" :
-              p.packageTypeName === "Monthly Pass" ? "Monthly" :
-              p.packageTypeName === "Fee Rule" ? "Penalty" : p.packageTypeName
-      })));
+      setPackages(
+        pkgsArray
+          .map(mapApiPackage)
+          .filter((pkg) => pkg.type !== "Penalty" && pkg.packageTypeName !== "Fee Rule"),
+      );
     } catch (err) {
       console.error("TicketPackages load error", err);
-      const msg = err.message && err.message !== "API error" ? err.message : "Failed to load data from backend.";
+      const msg =
+        err.response?.data?.message ||
+        (err.message && err.message !== "API error"
+          ? err.message
+          : "Failed to load ticket packages from backend.");
       showToast(msg, "error");
     } finally {
       setLoading(false);
     }
+
+    return typeLoaded;
   };
 
   useEffect(() => {
@@ -1896,15 +1924,15 @@ export default function TicketPackages() {
           pkg.code.toLowerCase().includes(term),
       )
       .sort((a, b) => {
-        if (sortOrder === "PriceDesc") return sortablePrice(b) - sortablePrice(a);
-        if (sortOrder === "PriceAsc") return sortablePrice(a) - sortablePrice(b);
+        if (sortOrder === "PriceDesc") return sortablePrice(b, customPackageTypes) - sortablePrice(a, customPackageTypes);
+        if (sortOrder === "PriceAsc") return sortablePrice(a, customPackageTypes) - sortablePrice(b, customPackageTypes);
 
         const dateA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
         const dateB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
         const diff = (isNaN(dateB) ? 0 : dateB) - (isNaN(dateA) ? 0 : dateA);
         return sortOrder === "Newest" ? diff : -diff;
       });
-  }, [packageTypeFilter, packages, search, sortOrder, statusFilter]);
+  }, [customPackageTypes, packageTypeFilter, packages, search, sortOrder, statusFilter]);
 
   useEffect(() => {
     if (!filteredPackages.length) {
@@ -1945,26 +1973,24 @@ export default function TicketPackages() {
   const openAdd = () => {
     setForm({
       ...emptyPackage,
-      code: `PKG-${String(packages.length + 1).padStart(3, "0")}`,
+      code: nextPackageCode(packages),
     });
+    setFormServerErrors({});
     setPageMode("add");
   };
 
   const openEdit = (pkg) => {
     setForm(pkg);
+    setFormServerErrors({});
     setSelectedPackageId(pkg.id);
     setPageMode("edit");
   };
 
   const createPackageType = async (newType) => {
     const name = newType.name.trim();
-    const exists = [
-      "Guest Hourly",
-      "Customer Hourly",
-      "Monthly Pass",
-      "Fee Rule",
-      ...customPackageTypes.map((type) => type.name),
-    ].some((typeName) => typeName.toLowerCase() === name.toLowerCase());
+    const exists = packageTypes.some(
+      (type) => type.name.toLowerCase() === name.toLowerCase(),
+    );
 
     if (!name || exists || !newType.pricingMode) return null;
 
@@ -1976,19 +2002,49 @@ export default function TicketPackages() {
         pricingMode: newType.pricingMode
       });
       if (res.data?.success) {
-        const created = {
-          ...res.data.data,
-          value: res.data.data.name,
-        };
-        setCustomPackageTypes((prev) => [...prev, created]);
-        setShowPackageTypeModal(false);
+        await fetchPackages();
         showToast("Package type created successfully.");
-        return created;
+        return packageTypeToOption(res.data.data);
       }
     } catch (err) {
-      showToast(err.response?.data?.message || "Failed to create package type.");
+      const data = err.response?.data;
+      showToast(data?.message || "Failed to create package type.");
+      return { errors: backendErrorsToFields(data) };
     }
     return null;
+  };
+
+  const updatePackageType = async (id, updates) => {
+    try {
+      const res = await makeApiCall("PUT", `/admin/package-types/${id}`, updates);
+      if (res.data?.success) {
+        await fetchPackages();
+        showToast("Package type updated successfully.");
+        return packageTypeToOption(res.data.data);
+      }
+    } catch (err) {
+      const data = err.response?.data;
+      showToast(data?.message || "Failed to update package type.");
+      return { errors: backendErrorsToFields(data) };
+    }
+    return null;
+  };
+
+  const deletePackageType = async (id) => {
+    const type = packageTypes.find((item) => item.id === id);
+    if (!type) return;
+    if (!window.confirm(`Delete package type "${type.name}"?`)) return;
+
+    try {
+      const res = await makeApiCall("DELETE", `/admin/package-types/${id}`);
+      if (res.data?.success) {
+        await fetchPackages();
+        if (packageTypeFilter === type.value) setPackageTypeFilter("All");
+        showToast("Package type deleted successfully.");
+      }
+    } catch (err) {
+      showToast(err.response?.data?.message || "Failed to delete package type.");
+    }
   };
 
   const openDetail = (pkg) => {
@@ -2007,16 +2063,8 @@ export default function TicketPackages() {
       return;
     }
 
-    let packageTypeName = form.type;
-    if (form.type === "Guest") packageTypeName = "Guest Hourly";
-    if (form.type === "Hourly") packageTypeName = "Customer Hourly";
-    if (form.type === "Monthly") packageTypeName = "Monthly Pass";
-    if (form.type === "Penalty") packageTypeName = "Fee Rule";
-
-    const payload = {
-      ...form,
-      packageTypeName
-    };
+    const payload = packageToApiPayload(form, packageTypes);
+    setFormServerErrors({});
 
     try {
       let res;
@@ -2027,21 +2075,20 @@ export default function TicketPackages() {
       }
       if (res.data?.success) {
         await fetchPackages();
-        setSelectedPackageId(res.data.data._id);
+        setSelectedPackageId(res.data.data._id || res.data.data.id);
         setPageMode("list");
         showToast(pageMode === "edit" ? "Ticket package updated." : "Ticket package created.");
       }
     } catch (err) {
+      const data = err.response?.data;
       const msg = err.response?.data?.message || "Failed to save package.";
-      if (err.response?.data?.errors) {
-        showToast(err.response.data.errors[0]?.message || msg);
-      } else {
-        showToast(msg);
-      }
+      if (data?.errors) setFormServerErrors(backendErrorsToFields(data));
+      showToast(data?.errors?.[0]?.message || msg);
     }
   };
 
   const deletePackage = async (id) => {
+    if (!window.confirm("Delete this ticket package?")) return;
     try {
       const res = await makeApiCall("DELETE", `/admin/ticket-packages/${id}`);
       if (res.data?.success) {
@@ -2064,6 +2111,14 @@ export default function TicketPackages() {
         form={form}
         setForm={setForm}
         customTypes={customPackageTypes}
+        serverErrors={formServerErrors}
+        onFieldChange={(field) =>
+          setFormServerErrors((prev) => {
+            const next = { ...prev };
+            delete next[field];
+            return next;
+          })
+        }
         onBack={backToList}
         onSave={savePackage}
         onInvalid={() => showToast("Please complete required fields before saving.")}
@@ -2120,7 +2175,10 @@ export default function TicketPackages() {
               </button>
 
               <button
-                onClick={() => setShowPackageTypeModal(true)}
+                onClick={() => {
+                  setShowPackageTypeModal(true);
+                  fetchPackages();
+                }}
                 className="flex items-center gap-2 rounded-xl border border-[#F5C542]/30 bg-[#F5C542]/10 px-4 py-2.5 text-sm font-black text-[#F5C542] transition-all hover:-translate-y-0.5 hover:bg-[#F5C542] hover:text-black hover:shadow-[0_0_24px_rgba(245,197,66,0.22)]"
               >
                 <Layers size={16} />
@@ -2262,16 +2320,13 @@ export default function TicketPackages() {
         </main>
       </div>
 
-      <CustomPackageTypeCreator
+      <PackageTypeManagerModal
         open={showPackageTypeModal}
-        existingNames={[
-          "Guest Hourly",
-          "Customer Hourly",
-          "Monthly Pass",
-          "Fee Rule",
-          ...customPackageTypes.map((type) => type.name),
-        ]}
+        packageTypes={packageTypes}
+        loading={packageTypeLoading}
         onCreate={createPackageType}
+        onUpdate={updatePackageType}
+        onDelete={deletePackageType}
         onCancel={() => setShowPackageTypeModal(false)}
         showToast={showToast}
       />

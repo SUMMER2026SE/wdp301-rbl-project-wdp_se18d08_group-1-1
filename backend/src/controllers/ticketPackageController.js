@@ -2,7 +2,6 @@ const mongoose = require("mongoose");
 const PackageType = require("../models/PackageType");
 const TicketPackage = require("../models/TicketPackage");
 
-
 const allowedIcons = [
   "Ticket",
   "Clock",
@@ -13,6 +12,7 @@ const allowedIcons = [
   "QrCode",
   "ParkingCircle",
 ];
+const allowedPackageTypePricingModes = ["Hourly", "Monthly"];
 
 const toNumber = (value, fallback = 0) => {
   if (value === undefined || value === null || value === "") return fallback;
@@ -27,19 +27,6 @@ const isNonNegative = (value) =>
   Number.isFinite(Number(value)) && Number(value) >= 0;
 const isPositiveInteger = (value) =>
   Number.isInteger(Number(value)) && Number(value) > 0;
-
-const defaultFlowSteps = (typeName) => {
-  if (typeName === "Guest Hourly") {
-    return ["Kiosk Entry", "QR Ticket", "Parking", "Checkout Payment"];
-  }
-  if (typeName === "Monthly Pass") {
-    return ["Register Pass", "Fixed Slot", "AI Plate Check", "Unlimited Entry"];
-  }
-  if (typeName === "Fee Rule") {
-    return ["Detect", "Charge", "Review", "Block"];
-  }
-  return ["Booking", "AI Plate Check", "Parking", "Wallet Payment"];
-};
 
 const nextPackageCode = async () => {
   const latest = await TicketPackage.findOne({ code: /^PKG-\d{3}$/ })
@@ -118,8 +105,8 @@ const validatePackagePayload = async (body, existingId = null) => {
       message: `${packageType.name} must apply to Customer.`,
     });
   }
-  if (packageType.name === "Fee Rule" && !["Customer", "All"].includes(appliesTo)) {
-    errors.push({ field: "appliesTo", message: "Fee Rule can apply to Customer or All." });
+  if (packageType.name === "Fee Rule") {
+    errors.push({ field: "type", message: "Fee Rule is no longer supported for ticket packages." });
   }
 
   const firstBlockPrice = toNumber(body.firstBlockPrice ?? body.basePrice);
@@ -132,9 +119,6 @@ const validatePackagePayload = async (body, existingId = null) => {
   const durationDays = toNumber(body.durationDays);
   const vehicleLimit = toNumber(body.vehicleLimit, 1);
   const overtimeFee = toNumber(body.overtimeFee);
-  const noShowFee = toNumber(body.noShowFee);
-  const feeAmount = toNumber(body.feeAmount ?? body.penaltyAmount);
-  const feeType = trimString(body.feeType);
   const feeDescription = trimString(body.feeDescription ?? body.description);
 
   if (packageType.name === "Guest Hourly") {
@@ -153,8 +137,6 @@ const validatePackagePayload = async (body, existingId = null) => {
       errors.push({ field: "firstBlockDuration", message: "Duration must be greater than 0 minutes." });
     if (!isNonNegative(overtimeFee))
       errors.push({ field: "overtimeFee", message: "Overtime fee must be 0 or greater." });
-    if (!isNonNegative(noShowFee))
-      errors.push({ field: "noShowFee", message: "No-show fee must be 0 or greater." });
   } else if (packageType.pricingMode === "Monthly") {
     if (!isPositive(monthlyPrice))
       errors.push({ field: "monthlyPrice", message: "Monthly price must be greater than 0." });
@@ -162,12 +144,6 @@ const validatePackagePayload = async (body, existingId = null) => {
       errors.push({ field: "durationDays", message: "Duration in days must be greater than 0." });
     if (!isPositiveInteger(vehicleLimit))
       errors.push({ field: "vehicleLimit", message: "Vehicle limit must be at least 1." });
-  } else if (packageType.pricingMode === "Fixed Fee") {
-    if (!feeType) errors.push({ field: "feeType", message: "Fee type is required." });
-    if (!isPositive(feeAmount))
-      errors.push({ field: "penaltyAmount", message: "Fee amount must be greater than 0." });
-    if (feeDescription.length < 5)
-      errors.push({ field: "description", message: "Description must be at least 5 characters." });
   }
 
   return { errors, packageType };
@@ -179,7 +155,6 @@ const buildPackageData = async (body, packageType, existingCode) => {
   const firstBlockDuration = toNumber(body.firstBlockDuration ?? body.duration);
   const basePrice = toNumber(body.basePrice ?? body.firstBlockPrice);
   const duration = toNumber(body.duration ?? body.firstBlockDuration);
-  const feeAmount = toNumber(body.feeAmount ?? body.penaltyAmount);
   const feeDescription = trimString(body.feeDescription ?? body.description);
 
   return {
@@ -200,27 +175,34 @@ const buildPackageData = async (body, packageType, existingCode) => {
     monthlyPrice: toNumber(body.monthlyPrice),
     vehicleLimit: toNumber(body.vehicleLimit, 1),
     overtimeFee: toNumber(body.overtimeFee),
-    noShowFee: toNumber(body.noShowFee),
-    feeAmount,
-    feeType: trimString(body.feeType),
     feeDescription,
     fixedSlotEnabled: Boolean(body.fixedSlotEnabled ?? body.fixedSlot),
     unlimitedEntryEnabled: Boolean(body.unlimitedEntryEnabled ?? body.unlimitedEntry),
     icon: body.icon || packageType.icon,
-    flowSteps: Array.isArray(body.flowSteps) && body.flowSteps.length
-      ? body.flowSteps
-      : defaultFlowSteps(packageType.name),
   };
 };
 
 exports.getPackageTypes = async (_req, res, next) => {
   try {
-    const packageTypes = await PackageType.find().sort({ isDefault: -1, createdAt: 1 });
+    const packageTypes = await PackageType.find({ name: { $ne: "Fee Rule" } }).sort({ isDefault: -1, createdAt: 1 });
     res.status(200).json({
       success: true,
       count: packageTypes.length,
       data: packageTypes,
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.getPackageTypeById = async (req, res, next) => {
+  try {
+    const packageType = await PackageType.findById(req.params.id);
+    if (!packageType) {
+      return res.status(404).json({ success: false, message: "Package type not found." });
+    }
+
+    res.status(200).json({ success: true, data: packageType });
   } catch (error) {
     next(error);
   }
@@ -234,7 +216,10 @@ exports.createPackageType = async (req, res, next) => {
     const errors = [];
 
     if (!name) errors.push({ field: "name", message: "Type name is required." });
-    if (!pricingMode || !["Hourly", "Monthly", "Fixed Fee"].includes(pricingMode)) {
+    else if (name.length < 3) errors.push({ field: "name", message: "Type name must be at least 3 characters." });
+    else if (name.length > 50) errors.push({ field: "name", message: "Type name must be 50 characters or less." });
+    else if (name.toLowerCase() === "fee rule") errors.push({ field: "name", message: "Fee Rule package type is no longer supported." });
+    if (!pricingMode || !allowedPackageTypePricingModes.includes(pricingMode)) {
       errors.push({ field: "pricingMode", message: "Pricing mode is required." });
     }
     if (!icon || !allowedIcons.includes(icon)) {
@@ -268,36 +253,85 @@ exports.createPackageType = async (req, res, next) => {
 
 exports.updatePackageType = async (req, res, next) => {
   try {
-    const type = await PackageType.findById(req.params.id);
-    if (!type) return res.status(404).json({ success: false, message: "Package type not found." });
+    const packageType = await PackageType.findById(req.params.id);
+    if (!packageType) return res.status(404).json({ success: false, message: "Package type not found." });
 
-    const name = trimString(req.body.name);
-    const pricingMode = req.body.pricingMode;
-    const icon = req.body.icon || "Ticket";
+    const updates = {};
     const errors = [];
 
-    if (!name) errors.push({ field: "name", message: "Type name is required." });
-    if (!pricingMode || !["Hourly", "Monthly", "Fixed Fee"].includes(pricingMode)) {
-      errors.push({ field: "pricingMode", message: "Pricing mode is required." });
-    }
-    if (!icon || !allowedIcons.includes(icon)) {
-      errors.push({ field: "icon", message: "Icon is required." });
+    if (packageType.isDefault) {
+      if (
+        req.body.name !== undefined &&
+        trimString(req.body.name).toLowerCase() !== packageType.name.toLowerCase()
+      ) {
+        errors.push({ field: "name", message: "Default package type name cannot be changed." });
+      }
+      if (
+        req.body.pricingMode !== undefined &&
+        req.body.pricingMode !== packageType.pricingMode
+      ) {
+        errors.push({ field: "pricingMode", message: "Default package type pricing mode cannot be changed." });
+      }
+    } else {
+      if (req.body.name !== undefined) {
+        const name = trimString(req.body.name);
+        if (!name) errors.push({ field: "name", message: "Type name is required." });
+        else if (name.length < 3) errors.push({ field: "name", message: "Type name must be at least 3 characters." });
+        else if (name.length > 50) errors.push({ field: "name", message: "Type name must be 50 characters or less." });
+        else if (name.toLowerCase() === "fee rule") errors.push({ field: "name", message: "Fee Rule package type is no longer supported." });
+        else {
+          const duplicate = await PackageType.findOne({
+            _id: { $ne: packageType._id },
+            name: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i"),
+          }).lean();
+          if (duplicate) errors.push({ field: "name", message: "Type name must be unique." });
+          updates.name = name;
+        }
+      }
+
+      if (req.body.pricingMode !== undefined) {
+        if (!allowedPackageTypePricingModes.includes(req.body.pricingMode)) {
+          errors.push({ field: "pricingMode", message: "Pricing mode is required." });
+        } else {
+          updates.pricingMode = req.body.pricingMode;
+        }
+      }
     }
 
-    if (name && name.toLowerCase() !== type.name.toLowerCase()) {
-      const duplicate = await PackageType.findOne({ name: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i") }).lean();
-      if (duplicate) errors.push({ field: "name", message: "Type name must be unique." });
+    if (req.body.icon !== undefined) {
+      const icon = req.body.icon;
+      if (!icon || !allowedIcons.includes(icon)) {
+        errors.push({ field: "icon", message: "Icon is required." });
+      } else {
+        updates.icon = icon;
+      }
+    }
+
+    if (req.body.description !== undefined) {
+      updates.description = trimString(req.body.description);
     }
 
     if (errors.length) return res.status(400).json(buildValidationError(errors));
 
-    type.name = name;
-    type.description = trimString(req.body.description);
-    type.icon = icon;
-    type.pricingMode = pricingMode;
-    await type.save();
+    const updated = await PackageType.findByIdAndUpdate(packageType._id, updates, {
+      new: true,
+      runValidators: true,
+    });
 
-    res.status(200).json({ success: true, message: "Package type updated.", data: type });
+    if (updates.name || updates.pricingMode || updates.icon) {
+      await TicketPackage.updateMany(
+        { packageTypeId: updated._id },
+        {
+          $set: {
+            packageTypeName: updated.name,
+            pricingMode: updated.pricingMode,
+            icon: updated.icon,
+          },
+        },
+      );
+    }
+
+    res.status(200).json({ success: true, message: "Package type updated successfully.", data: updated });
   } catch (error) {
     next(error);
   }
@@ -311,13 +345,16 @@ exports.deletePackageType = async (req, res, next) => {
       return res.status(400).json({ success: false, message: "Default package types cannot be deleted." });
     }
 
-    const linkedPackages = await TicketPackage.countDocuments({ packageTypeId: type._id });
-    if (linkedPackages > 0) {
-      return res.status(400).json({ success: false, message: "Cannot delete type with linked packages." });
+    const usageCount = await TicketPackage.countDocuments({ packageTypeId: type._id });
+    if (usageCount > 0) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot delete this package type because ${usageCount} ticket package(s) are using it.`,
+      });
     }
 
     await type.deleteOne();
-    res.status(200).json({ success: true, message: "Package type deleted." });
+    res.status(200).json({ success: true, message: "Package type deleted successfully.", data: {} });
   } catch (error) {
     next(error);
   }
@@ -325,7 +362,7 @@ exports.deletePackageType = async (req, res, next) => {
 
 exports.getTicketPackages = async (req, res, next) => {
   try {
-    const filter = {};
+    const filter = { packageTypeName: { $ne: "Fee Rule" } };
     if (req.query.status && ["Active", "Inactive"].includes(req.query.status)) {
       filter.status = req.query.status;
     }

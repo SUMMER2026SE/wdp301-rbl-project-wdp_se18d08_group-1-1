@@ -53,17 +53,10 @@ const ticketPackageSchema = new mongoose.Schema(
     monthlyPrice: { type: Number, default: 0, min: 0 },
     vehicleLimit: { type: Number, default: 1, min: 0 },
     overtimeFee: { type: Number, default: 0, min: 0 },
-    noShowFee: { type: Number, default: 0, min: 0 },
-    feeAmount: { type: Number, default: 0, min: 0 },
-    feeType: { type: String, trim: true, default: "" },
     feeDescription: { type: String, trim: true, default: "" },
     fixedSlotEnabled: { type: Boolean, default: false },
     unlimitedEntryEnabled: { type: Boolean, default: false },
     icon: { type: String, trim: true, default: "Ticket" },
-    flowSteps: {
-      type: [String],
-      default: [],
-    },
   },
   { timestamps: true },
 );
