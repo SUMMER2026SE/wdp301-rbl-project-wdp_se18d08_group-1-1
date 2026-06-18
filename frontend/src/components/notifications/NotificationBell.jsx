@@ -4,13 +4,6 @@ import { Bell, CheckCheck, ExternalLink } from 'lucide-react';
 import { useNotifications } from '../../hooks/useNotifications';
 import NotificationItem from './NotificationItem';
 
-/**
- * NotificationBell — bell icon with badge + dropdown panel.
- * Used in both Navbar (light mode) and DashboardLayout (dark mode).
- *
- * Props:
- * - dark: boolean — true for dark mode styling (DashboardLayout)
- */
 export default function NotificationBell({ dark = false }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -22,7 +15,6 @@ export default function NotificationBell({ dark = false }) {
     markAllAsRead,
   } = useNotifications({ autoFetch: true, limit: 5 });
 
-  // Close on outside click
   useEffect(() => {
     const handler = (e) => {
       if (ref.current && !ref.current.contains(e.target)) setOpen(false);
@@ -34,13 +26,13 @@ export default function NotificationBell({ dark = false }) {
   const recentNotifs = notifications.slice(0, 5);
 
   if (dark) {
-    // ── DARK MODE (DashboardLayout) ──
     return (
       <div className="relative" ref={ref}>
         <button
           onClick={() => setOpen((o) => !o)}
           id="notif-bell-dark"
           className="relative w-9 h-9 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-gray-400 hover:text-white transition-colors"
+          title="Notifications"
         >
           <Bell size={17} />
           {unreadCount > 0 && (
@@ -52,9 +44,8 @@ export default function NotificationBell({ dark = false }) {
 
         {open && (
           <div className="absolute right-0 top-[calc(100%+8px)] w-[340px] bg-[#1A1A1A] border border-white/10 rounded-2xl shadow-2xl overflow-hidden z-50 animate-in">
-            {/* Header */}
             <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
-              <p className="text-white font-bold text-sm">Thông báo</p>
+              <p className="text-white font-bold text-sm">Notifications</p>
               <div className="flex items-center gap-2">
                 {unreadCount > 0 && (
                   <button
@@ -62,25 +53,24 @@ export default function NotificationBell({ dark = false }) {
                     className="flex items-center gap-1 text-[10px] font-semibold text-yellow-400 hover:text-yellow-300 transition-colors"
                   >
                     <CheckCheck size={12} />
-                    Đọc tất cả
+                    Mark all as read
                   </button>
                 )}
               </div>
             </div>
 
-            {/* List */}
             <div className="max-h-[320px] overflow-y-auto">
               {loading && recentNotifs.length === 0 ? (
                 <div className="p-8 text-center">
                   <div className="w-6 h-6 border-2 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin mx-auto" />
-                  <p className="text-gray-500 text-xs mt-3">Đang tải...</p>
+                  <p className="text-gray-500 text-xs mt-3">Loading...</p>
                 </div>
               ) : recentNotifs.length === 0 ? (
                 <div className="p-8 text-center">
                   <div className="w-12 h-12 rounded-2xl bg-white/5 flex items-center justify-center mx-auto mb-3">
                     <Bell size={20} className="text-gray-600" />
                   </div>
-                  <p className="text-gray-500 text-xs font-medium">Chưa có thông báo nào</p>
+                  <p className="text-gray-500 text-xs font-medium">No notifications</p>
                 </div>
               ) : (
                 recentNotifs.map((n) => (
@@ -95,14 +85,13 @@ export default function NotificationBell({ dark = false }) {
               )}
             </div>
 
-            {/* Footer */}
             <div className="border-t border-white/5 p-2">
               <Link
                 to="/customer/notifications"
                 onClick={() => setOpen(false)}
                 className="flex items-center justify-center gap-2 w-full py-2 rounded-xl text-xs font-semibold text-yellow-400 hover:bg-yellow-500/10 transition-colors"
               >
-                Xem tất cả
+                View all
                 <ExternalLink size={12} />
               </Link>
             </div>
@@ -112,7 +101,6 @@ export default function NotificationBell({ dark = false }) {
     );
   }
 
-  // ── LIGHT MODE (Navbar) ──
   return (
     <div className="relative" ref={ref}>
       <button
@@ -131,33 +119,31 @@ export default function NotificationBell({ dark = false }) {
 
       {open && (
         <div className="absolute right-0 top-[calc(100%+8px)] w-[340px] bg-white/90 backdrop-blur-2xl rounded-2xl shadow-[0_16px_64px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.06)] border border-white/60 overflow-hidden z-50">
-          {/* Header */}
           <div className="px-4 py-3 border-b border-gray-100/80 flex items-center justify-between">
-            <p className="text-gray-900 font-bold text-sm">Thông báo</p>
+            <p className="text-gray-900 font-bold text-sm">Notifications</p>
             {unreadCount > 0 && (
               <button
                 onClick={() => markAllAsRead()}
                 className="flex items-center gap-1 text-[10px] font-semibold text-amber-600 hover:text-amber-700 transition-colors"
               >
                 <CheckCheck size={12} />
-                Đọc tất cả
+                Mark all as read
               </button>
             )}
           </div>
 
-          {/* List — light mode version */}
           <div className="max-h-[320px] overflow-y-auto">
             {loading && recentNotifs.length === 0 ? (
               <div className="p-8 text-center">
                 <div className="w-6 h-6 border-2 border-amber-300/30 border-t-amber-500 rounded-full animate-spin mx-auto" />
-                <p className="text-gray-400 text-xs mt-3">Đang tải...</p>
+                <p className="text-gray-400 text-xs mt-3">Loading...</p>
               </div>
             ) : recentNotifs.length === 0 ? (
               <div className="p-8 text-center">
                 <div className="w-12 h-12 rounded-2xl bg-gray-50 flex items-center justify-center mx-auto mb-3">
                   <Bell size={20} className="text-gray-300" />
                 </div>
-                <p className="text-gray-400 text-xs font-medium">Chưa có thông báo nào</p>
+                <p className="text-gray-400 text-xs font-medium">No notifications</p>
               </div>
             ) : (
               recentNotifs.map((n) => (
@@ -186,7 +172,7 @@ export default function NotificationBell({ dark = false }) {
                         const now = new Date();
                         const d = new Date(n.createdAt);
                         const s = Math.floor((now - d) / 1000);
-                        if (s < 60) return 'Vừa xong';
+                        if (s < 60) return 'Just now';
                         if (s < 3600) return `${Math.floor(s / 60)}m`;
                         if (s < 86400) return `${Math.floor(s / 3600)}h`;
                         return `${Math.floor(s / 86400)}d`;
@@ -198,14 +184,13 @@ export default function NotificationBell({ dark = false }) {
             )}
           </div>
 
-          {/* Footer */}
           <div className="border-t border-gray-100/80 p-2">
             <Link
               to="/customer/notifications"
               onClick={() => setOpen(false)}
               className="flex items-center justify-center gap-2 w-full py-2 rounded-xl text-xs font-semibold text-amber-600 hover:bg-amber-50 transition-colors"
             >
-              Xem tất cả
+              View all
               <ExternalLink size={12} />
             </Link>
           </div>

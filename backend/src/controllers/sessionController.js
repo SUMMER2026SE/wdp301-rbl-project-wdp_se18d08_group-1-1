@@ -340,7 +340,12 @@ exports.kioskCheckout = async (req, res, next) => {
         return res.status(400).json({ success: false, message: 'Guest cannot pay via wallet' });
       }
       const { debitWallet } = require('../services/walletService');
-      await debitWallet(session.userId, totalPrice, `Thanh toán Kiosk - Biển số ${session.licensePlate}`, { allowNegative: true });
+      await debitWallet(
+        session.userId,
+        totalPrice,
+        `Kiosk payment - Plate ${session.licensePlate}`,
+        { allowNegative: true, refSource: 'parking', refSourceId: session._id }
+      );
     }
 
     session.status = 'completed';
