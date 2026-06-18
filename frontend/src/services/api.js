@@ -71,12 +71,34 @@ async function refreshToken() {
 export async function apiFetch(endpoint, options = {}, _isRetry = false) {
   const { headers = {}, ...rest } = options;
 
-  const res = await fetch(`${API_BASE}${endpoint}`, {
-    headers: { "Content-Type": "application/json", ...headers },
-    ...rest,
-  });
+  let res;
+  try {
+    res = await fetch(`${API_BASE}${endpoint}`, {
+      headers: { "Content-Type": "application/json", ...headers },
+      ...rest,
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      status: 0,
+      data: {
+        success: false,
+        message:
+          "Cannot connect to the server. Please check that the backend is running.",
+      },
+      error,
+    };
+  }
 
-  const data = await res.json();
+  let data;
+  try {
+    data = await res.json();
+  } catch {
+    data = {
+      success: res.ok,
+      message: res.ok ? "OK" : `Request failed with status ${res.status}`,
+    };
+  }
 
   // If we get a 401 and we haven't already retried, try to refresh the token
   if (res.status === 401 && !_isRetry && endpoint !== "/auth/refresh-token") {

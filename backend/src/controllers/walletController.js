@@ -124,8 +124,7 @@ const getTopUpStatus = async (req, res, next) => {
 
     // Explicitly cancel if requested by frontend
     if (cancel === 'true' && transaction.status === 'PENDING') {
-      await walletService.cancelPendingTopUp(parseInt(orderCode));
-      transaction.status = 'CANCELLED';
+      const cancelledTransaction = await walletService.cancelPendingTopUp(parseInt(orderCode));
       try {
         await payos.paymentRequests.cancel(parseInt(orderCode));
       } catch (err) {
@@ -133,12 +132,19 @@ const getTopUpStatus = async (req, res, next) => {
       }
       return res.json({
         success: true,
-        data: { status: 'CANCELLED' }
+        data: {
+          transactionId: cancelledTransaction?._id || transaction._id,
+          orderCode: transaction.payosOrderCode,
+          amount: transaction.amount,
+          status: cancelledTransaction?.status || 'CANCELLED',
+          createdAt: transaction.createdAt,
+        }
       });
     }
 
     // If still pending, check with payOS
     let payosStatus = null;
+    let currentTransaction = transaction;
     if (transaction.status === 'PENDING') {
       try {
         const payosInfo = await payos.paymentRequests.get(parseInt(orderCode));
@@ -150,18 +156,16 @@ const getTopUpStatus = async (req, res, next) => {
             parseInt(orderCode),
             payosInfo.transactions?.[0]?.reference || null
           );
-          transaction.status = 'COMPLETED';
-          transaction.balanceAfter = result.newBalance;
+          currentTransaction = result.transaction;
 
           // Fire-and-forget: notify top-up success (in case webhook didn't fire)
-          if (!result.alreadyProcessed && transaction.userId) {
+          if (!result.alreadyProcessed && currentTransaction.userId) {
             notifTriggers.notifyTopUpSuccess(
-              req.app, transaction.userId, transaction.amount, result.newBalance
+              req.app, currentTransaction.userId, currentTransaction.amount, result.newBalance
             ).catch(err => console.error('Failed to send top-up notification:', err));
           }
         } else if (payosInfo.status === 'CANCELLED') {
-          await walletService.cancelPendingTopUp(parseInt(orderCode));
-          transaction.status = 'CANCELLED';
+          currentTransaction = await walletService.cancelPendingTopUp(parseInt(orderCode)) || transaction;
         }
       } catch (payosError) {
         console.error('Error checking payOS status:', payosError.message);
@@ -171,12 +175,12 @@ const getTopUpStatus = async (req, res, next) => {
     res.status(200).json({
       success: true,
       data: {
-        transactionId: transaction._id,
-        orderCode: transaction.payosOrderCode,
-        amount: transaction.amount,
-        status: transaction.status,
+        transactionId: currentTransaction._id,
+        orderCode: currentTransaction.payosOrderCode,
+        amount: currentTransaction.amount,
+        status: currentTransaction.status,
         payosStatus,
-        createdAt: transaction.createdAt,
+        createdAt: currentTransaction.createdAt,
       },
     });
   } catch (error) {

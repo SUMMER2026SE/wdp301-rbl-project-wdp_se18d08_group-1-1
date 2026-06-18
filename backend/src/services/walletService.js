@@ -12,11 +12,19 @@ const WalletTransaction = require('../models/WalletTransaction');
  * @param {string} userId - User's ObjectId
  * @returns {Object} Wallet document
  */
-const getOrCreateWallet = async (userId) => {
-  let wallet = await Wallet.findOne({ userId });
+const getOrCreateWallet = async (userId, options = {}) => {
+  const { session } = options;
+  let query = Wallet.findOne({ userId });
+  if (session) query = query.session(session);
+  let wallet = await query;
 
   if (!wallet) {
-    wallet = await Wallet.create({ userId });
+    if (session) {
+      const created = await Wallet.create([{ userId }], { session });
+      wallet = created[0];
+    } else {
+      wallet = await Wallet.create({ userId });
+    }
   }
 
   return wallet;
@@ -115,7 +123,7 @@ const creditWallet = async (userId, amount, type, description, options = {}) => 
   session.startTransaction();
 
   try {
-    const wallet = await getOrCreateWallet(userId);
+    const wallet = await getOrCreateWallet(userId, { session });
 
     // Check wallet status
     if (wallet.status === 'frozen') {
@@ -187,7 +195,7 @@ const debitWallet = async (userId, amount, description, options = {}) => {
   session.startTransaction();
 
   try {
-    const wallet = await getOrCreateWallet(userId);
+    const wallet = await getOrCreateWallet(userId, { session });
 
     // Check wallet status
     if (wallet.status === 'frozen') {

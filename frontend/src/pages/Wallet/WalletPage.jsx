@@ -140,7 +140,11 @@ export default function WalletPage() {
 
         const walletData = walletRes.data?.data || {};
         setWallet(walletData);
-        setTransactions(transactionsRes.data?.data || []);
+        setTransactions(
+          Array.isArray(transactionsRes.data?.data)
+            ? transactionsRes.data.data
+            : [],
+        );
         window.dispatchEvent(
           new CustomEvent("valo_balance_change", {
             detail: walletData.balance || 0,
@@ -192,7 +196,9 @@ export default function WalletPage() {
     const intervalId = setInterval(async () => {
       try {
         const statusRes = await getTopUpStatus(pollingOrderCode);
-        const txStatus = statusRes.data?.data?.status;
+        if (!statusRes.ok) return;
+
+        const txStatus = String(statusRes.data?.data?.status || "").toUpperCase();
 
         if (["COMPLETED", "SUCCESS", "PAID"].includes(txStatus)) {
           clearInterval(intervalId);
@@ -202,7 +208,7 @@ export default function WalletPage() {
           fetchWalletData();
         }
 
-        if (["CANCELLED", "FAILED"].includes(txStatus)) {
+        if (["CANCELLED", "CANCELED", "FAILED"].includes(txStatus)) {
           clearInterval(intervalId);
           setPollingOrderCode(null);
           setVerifyingPayment(false);
@@ -671,7 +677,7 @@ function TopUpModal({ wallet, onClose, onStartPolling }) {
       alert(res.data?.message || "Unable to create top-up session");
     } catch (err) {
       console.error(err);
-      alert("Network error");
+      alert("Cannot connect to the server. Please check that the backend is running.");
     } finally {
       setLoading(false);
     }
