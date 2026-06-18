@@ -1,16 +1,16 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { Bell, CheckCheck, Search, ChevronDown } from 'lucide-react';
 import { useNotifications } from '../../hooks/useNotifications';
 import NotificationItem from '../../components/notifications/NotificationItem';
 
 const TYPE_FILTERS = [
-  { value: '', label: 'Tất cả' },
-  { value: 'PARKING', label: 'Đỗ xe' },
-  { value: 'WALLET', label: 'Ví' },
-  { value: 'PAYMENT', label: 'Thanh toán' },
-  { value: 'BOOKING', label: 'Đặt chỗ' },
-  { value: 'ACCOUNT', label: 'Tài khoản' },
-  { value: 'SYSTEM', label: 'Hệ thống' },
+  { value: '', label: 'All' },
+  { value: 'PARKING', label: 'Parking' },
+  { value: 'WALLET', label: 'Wallet' },
+  { value: 'PAYMENT', label: 'Payment' },
+  { value: 'BOOKING', label: 'Booking' },
+  { value: 'ACCOUNT', label: 'Account' },
+  { value: 'SYSTEM', label: 'System' },
 ];
 
 export default function CustomerNotifications() {
@@ -37,12 +37,11 @@ export default function CustomerNotifications() {
   return (
     <div className="min-h-screen bg-[#0D0D0D] text-gray-100 px-4 py-6 lg:px-8">
       <div className="max-w-4xl mx-auto space-y-6">
-        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-white">Thông báo</h1>
+            <h1 className="text-2xl font-bold text-white">Notifications</h1>
             <p className="text-sm text-gray-500 mt-1">
-              {unreadCount > 0 ? `${unreadCount} thông báo chưa đọc` : 'Tất cả đã đọc'}
+              {unreadCount > 0 ? `${unreadCount} unread notifications` : 'All caught up'}
             </p>
           </div>
           {unreadCount > 0 && (
@@ -51,12 +50,11 @@ export default function CustomerNotifications() {
               className="flex items-center gap-2 px-4 py-2 rounded-xl bg-yellow-500/10 text-yellow-400 text-sm font-semibold hover:bg-yellow-500/20 transition-colors"
             >
               <CheckCheck size={16} />
-              Đọc tất cả
+              Mark all as read
             </button>
           )}
         </div>
 
-        {/* Filters */}
         <div className="flex flex-wrap gap-3 items-center">
           <div className="flex flex-wrap gap-2">
             {TYPE_FILTERS.map((f) => (
@@ -78,7 +76,7 @@ export default function CustomerNotifications() {
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
               <input
                 type="text"
-                placeholder="Tìm kiếm thông báo..."
+                placeholder="Search notifications..."
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 className="w-full pl-9 pr-4 py-2 rounded-xl bg-white/5 border border-white/10 text-sm text-gray-200 placeholder-gray-500 outline-none focus:border-yellow-500/30 transition-colors"
@@ -87,20 +85,19 @@ export default function CustomerNotifications() {
           </form>
         </div>
 
-        {/* Notification List */}
         <div className="space-y-2">
           {loading && notifications.length === 0 ? (
             <div className="flex flex-col items-center py-16">
               <div className="w-8 h-8 border-2 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin" />
-              <p className="text-gray-500 text-sm mt-4">Đang tải thông báo...</p>
+              <p className="text-gray-500 text-sm mt-4">Loading notifications...</p>
             </div>
           ) : notifications.length === 0 ? (
             <div className="flex flex-col items-center py-16">
               <div className="w-16 h-16 rounded-2xl bg-white/5 flex items-center justify-center mb-4">
                 <Bell size={28} className="text-gray-600" />
               </div>
-              <p className="text-gray-400 font-medium">Chưa có thông báo nào</p>
-              <p className="text-gray-600 text-sm mt-1">Thông báo mới sẽ xuất hiện ở đây</p>
+              <p className="text-gray-400 font-medium">No notifications</p>
+              <p className="text-gray-600 text-sm mt-1">New notifications will appear here</p>
             </div>
           ) : (
             <>
@@ -124,7 +121,7 @@ export default function CustomerNotifications() {
                   ) : (
                     <>
                       <ChevronDown size={16} />
-                      Tải thêm
+                      Load more
                     </>
                   )}
                 </button>
