@@ -2,15 +2,34 @@ const Service = require('../models/Service');
 const { uploadToCloudinary } = require('../middlewares/uploadMiddleware');
 const cloudinary = require('../config/cloudinary');
 
+const normalizeService = (service) => {
+  const serviceObject = service.toObject ? service.toObject() : service;
+  return {
+    ...serviceObject,
+    timeCost: serviceObject.timeCost ?? 30,
+  };
+};
+
 // @desc    Create a new service
 // @route   POST /api/admin/services
 // @access  Private/Admin
 exports.createService = async (req, res, next) => {
   try {
-    const { name, description, price, isActive } = req.body;
+    const { name, description, price, timeCost, isActive } = req.body;
 
-    if (!name || !description || !price) {
+    if (!name || !description || price === undefined || price === '') {
       return res.status(400).json({ success: false, message: 'Please provide all required fields' });
+    }
+
+    const parsedPrice = Number(price);
+    const parsedTimeCost = timeCost === undefined || timeCost === '' ? 30 : Number(timeCost);
+
+    if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+      return res.status(400).json({ success: false, message: 'Price must be a valid non-negative number' });
+    }
+
+    if (!Number.isInteger(parsedTimeCost) || parsedTimeCost < 1) {
+      return res.status(400).json({ success: false, message: 'Time cost must be a whole number of minutes and at least 1 minute' });
     }
 
     if (!req.file) {
@@ -25,7 +44,8 @@ exports.createService = async (req, res, next) => {
     const service = await Service.create({
       name,
       description,
-      price: Number(price),
+      price: parsedPrice,
+      timeCost: parsedTimeCost,
       isActive: isActive === 'true' || isActive === true,
       imageUrl: result.secure_url,
       cloudinary_id: result.public_id,
@@ -33,7 +53,7 @@ exports.createService = async (req, res, next) => {
 
     res.status(201).json({
       success: true,
-      data: service,
+      data: normalizeService(service),
     });
   } catch (error) {
     next(error);
@@ -57,7 +77,7 @@ exports.getAllServices = async (req, res, next) => {
     res.status(200).json({
       success: true,
       count: services.length,
-      data: services,
+      data: services.map(normalizeService),
     });
   } catch (error) {
     next(error);
@@ -77,7 +97,7 @@ exports.getServiceById = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      data: service,
+      data: normalizeService(service),
     });
   } catch (error) {
     next(error);
@@ -100,6 +120,30 @@ exports.updateService = async (req, res, next) => {
     // Parse boolean if it's passed as string from FormData
     if (updateData.isActive !== undefined) {
       updateData.isActive = updateData.isActive === 'true' || updateData.isActive === true;
+    }
+
+    if (updateData.price !== undefined) {
+      if (updateData.price === '') {
+        return res.status(400).json({ success: false, message: 'Price is required' });
+      }
+
+      updateData.price = Number(updateData.price);
+
+      if (!Number.isFinite(updateData.price) || updateData.price < 0) {
+        return res.status(400).json({ success: false, message: 'Price must be a valid non-negative number' });
+      }
+    }
+
+    if (updateData.timeCost !== undefined) {
+      if (updateData.timeCost === '') {
+        return res.status(400).json({ success: false, message: 'Time cost is required' });
+      }
+
+      updateData.timeCost = Number(updateData.timeCost);
+
+      if (!Number.isInteger(updateData.timeCost) || updateData.timeCost < 1) {
+        return res.status(400).json({ success: false, message: 'Time cost must be a whole number of minutes and at least 1 minute' });
+      }
     }
 
     // If new image is uploaded, handle replacement
@@ -125,7 +169,7 @@ exports.updateService = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      data: service,
+      data: normalizeService(service),
     });
   } catch (error) {
     next(error);

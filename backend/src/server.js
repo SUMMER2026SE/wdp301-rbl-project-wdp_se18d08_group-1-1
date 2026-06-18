@@ -16,6 +16,7 @@ dotenv.config();
 // Import routes
 const authRoutes = require('./routes/authRoutes');
 const profileRoutes = require('./routes/profileRoutes');
+const serviceRoutes = require('./routes/serviceRoutes');
 
 // Initialize express app
 const app = express();
@@ -52,6 +53,7 @@ app.use("/api/wallet", require("./routes/walletRoutes"));
 app.use("/api/ai", require("./routes/aiRoutes"));
 app.use("/api/vehicles", require("./routes/vehicleRoutes"));
 app.use("/api/admin", require("./routes/adminRoutes"));
+app.use("/api", serviceRoutes);
 app.use("/api/staff", require("./routes/staffRoutes"));
 app.use("/api/sessions", require("./routes/sessionRoutes"));
 app.use("/api/parking-floors", require("./routes/parkingFloorRoutes"));
