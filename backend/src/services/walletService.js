@@ -12,11 +12,19 @@ const WalletTransaction = require('../models/WalletTransaction');
  * @param {string} userId - User's ObjectId
  * @returns {Object} Wallet document
  */
-const getOrCreateWallet = async (userId) => {
-  let wallet = await Wallet.findOne({ userId });
+const getOrCreateWallet = async (userId, options = {}) => {
+  const { session } = options;
+  let query = Wallet.findOne({ userId });
+  if (session) query = query.session(session);
+  let wallet = await query;
 
   if (!wallet) {
-    wallet = await Wallet.create({ userId });
+    if (session) {
+      const created = await Wallet.create([{ userId }], { session });
+      wallet = created[0];
+    } else {
+      wallet = await Wallet.create({ userId });
+    }
   }
 
   return wallet;
@@ -25,16 +33,73 @@ const getOrCreateWallet = async (userId) => {
 /**
  * Get wallet balance
  * @param {string} userId - User's ObjectId
- * @returns {Object} { balance, totalTopUp, totalSpent, totalRefunded }
+ * @returns {Object} { balance, totalTopUp, totalSpent, totalRefunded, totalTransactions, totalParkingPayments }
  */
 const getBalance = async (userId) => {
   const wallet = await getOrCreateWallet(userId);
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+
+  const [lifetimeAgg, monthlyAgg] = await Promise.all([
+    WalletTransaction.aggregate([
+      { $match: { userId: new mongoose.Types.ObjectId(userId), status: 'COMPLETED' } },
+      {
+        $group: {
+          _id: '$type',
+          amount: { $sum: '$amount' },
+          count: { $sum: 1 },
+        },
+      },
+    ]),
+    WalletTransaction.aggregate([
+      {
+        $match: {
+          userId: new mongoose.Types.ObjectId(userId),
+          status: 'COMPLETED',
+          createdAt: { $gte: monthStart },
+        },
+      },
+      {
+        $group: {
+          _id: '$type',
+          amount: { $sum: '$amount' },
+          count: { $sum: 1 },
+        },
+      },
+    ]),
+  ]);
+
+  const toSummary = (rows) =>
+    rows.reduce(
+      (acc, row) => {
+        acc[row._id] = { amount: row.amount || 0, count: row.count || 0 };
+        return acc;
+      },
+      {}
+    );
+
+  const lifetime = toSummary(lifetimeAgg);
+  const monthly = toSummary(monthlyAgg);
+
+  const [totalTransactions, totalParkingPayments] = await Promise.all([
+    WalletTransaction.countDocuments({ userId }),
+    WalletTransaction.countDocuments({ userId, type: 'PAYMENT', status: 'COMPLETED' }),
+  ]);
+
   return {
     balance: wallet.balance,
-    totalTopUp: wallet.totalTopUp,
-    totalSpent: wallet.totalSpent,
-    totalRefunded: wallet.totalRefunded,
+    totalTopUp: lifetime.TOP_UP?.amount || wallet.totalTopUp,
+    totalSpent: lifetime.PAYMENT?.amount || wallet.totalSpent,
+    totalRefunded: lifetime.REFUND?.amount || wallet.totalRefunded,
+    monthlyTopUp: monthly.TOP_UP?.amount || 0,
+    monthlySpent: monthly.PAYMENT?.amount || 0,
+    monthlyRefunded: monthly.REFUND?.amount || 0,
+    monthlyParkingPayments: monthly.PAYMENT?.count || 0,
+    totalTransactions,
+    totalParkingPayments,
     status: wallet.status,
+    overdraftLimit: -100000,
   };
 };
 
@@ -58,7 +123,7 @@ const creditWallet = async (userId, amount, type, description, options = {}) => 
   session.startTransaction();
 
   try {
-    const wallet = await getOrCreateWallet(userId);
+    const wallet = await getOrCreateWallet(userId, { session });
 
     // Check wallet status
     if (wallet.status === 'frozen') {
@@ -130,7 +195,7 @@ const debitWallet = async (userId, amount, description, options = {}) => {
   session.startTransaction();
 
   try {
-    const wallet = await getOrCreateWallet(userId);
+    const wallet = await getOrCreateWallet(userId, { session });
 
     // Check wallet status
     if (wallet.status === 'frozen') {
