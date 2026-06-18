@@ -211,6 +211,15 @@ exports.createBooking = async (req, res, next) => {
     const serviceAmount = services.reduce((total, service) => total + Number(service.price || 0), 0);
     const totalAmount = prepaidAmount + serviceAmount;
 
+    // Check wallet balance BEFORE creating the booking to avoid ghost CANCELLED bookings
+    const wallet = await walletService.getBalance(req.user._id);
+    if (!wallet || wallet.balance < totalAmount) {
+      return res.status(400).json({
+        success: false,
+        message: 'Insufficient wallet balance',
+      });
+    }
+
     const booking = await Booking.create({
       userId: req.user._id,
       floorId: selectedSlot.floorId,

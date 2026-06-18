@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import {
   AlertCircle,
   CalendarClock,
@@ -14,6 +14,7 @@ import {
   Sparkles,
   Wallet,
 } from 'lucide-react';
+import ParkingMapViewer from '../../components/ParkingMapViewer';
 import { getServices } from '../../services/extraServiceApi';
 import { getMyVehicles } from '../../services/vehicleService';
 import { getWalletInfo } from '../../services/walletService';
@@ -24,6 +25,8 @@ import {
   getAvailableBookingSlots,
   getMyBookings,
 } from '../../services/bookingService';
+import { QRCodeSVG } from 'qrcode.react';
+import { createTopUpUrl, getTopUpStatus } from '../../services/walletService';
 
 const formatMoney = (value = 0) => `${Number(value || 0).toLocaleString('vi-VN')} VND`;
 
@@ -91,6 +94,19 @@ export default function BookingPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
+  // New states for Booking flow
+  const [showTopUpModal, setShowTopUpModal] = useState(false);
+  const [topUpData, setTopUpData] = useState(null); // { qrCode, checkoutUrl, amount }
+  const [topUpLoading, setTopUpLoading] = useState(false);
+  const [topUpSuccess, setTopUpSuccess] = useState(false);
+
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [bookingInfo, setBookingInfo] = useState(null);
+
+  // Map state
+  const [floors, setFloors] = useState([]);
+  const [currentFloorId, setCurrentFloorId] = useState(null);
+
   const durationHours = useMemo(() => {
     const start = new Date(startTime);
     const end = new Date(endTime);
@@ -112,16 +128,17 @@ export default function BookingPage() {
 
   const selectedSlot = slots.find((slot) => `${slot.floorId}:${slot.slotCode}` === selectedSlotKey);
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (silent = false) => {
+    if (!silent) setLoading(true);
     setError('');
 
     try {
-      const [vehicleRes, serviceRes, walletRes, bookingRes] = await Promise.all([
+      const [vehicleRes, serviceRes, walletRes, bookingRes, floorsRes] = await Promise.all([
         getMyVehicles(),
         getServices(true),
         getWalletInfo(),
         getMyBookings(),
+        fetch(`${import.meta.env.VITE_API_BASE_URL}/parking-floors`).then(res => res.json().catch(() => ({})))
       ]);
 
       if (vehicleRes.ok) {
@@ -134,6 +151,13 @@ export default function BookingPage() {
       if (serviceRes.ok) setServices(serviceRes.data?.data || []);
       if (walletRes.ok) setWallet(walletRes.data?.data || null);
       if (bookingRes.ok) setBookings(bookingRes.data?.data || []);
+      
+      if (floorsRes?.success) {
+        setFloors(floorsRes.data);
+        if (floorsRes.data.length > 0) {
+          setCurrentFloorId(prev => prev || floorsRes.data[0]._id);
+        }
+      }
     } catch {
       setError('Could not load booking data.');
     } finally {
@@ -145,6 +169,44 @@ export default function BookingPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData();
   }, []);
+
+  const latestActions = useRef({ loadData, handleCreateBooking: null });
+  useEffect(() => {
+    latestActions.current.loadData = loadData;
+  });
+
+  useEffect(() => {
+    if (!showTopUpModal || !topUpData?.orderCode) return undefined;
+
+    const intervalId = setInterval(async () => {
+      try {
+        const statusRes = await getTopUpStatus(topUpData.orderCode);
+        const txStatus = String(statusRes.data?.data?.status || "").toUpperCase();
+
+        if (["COMPLETED", "SUCCESS", "PAID"].includes(txStatus)) {
+          clearInterval(intervalId);
+          setTopUpSuccess(true);
+          await latestActions.current.loadData(true);
+          if (latestActions.current.handleCreateBooking) {
+            await latestActions.current.handleCreateBooking();
+          }
+          setShowTopUpModal(false);
+          setTopUpData(null);
+          setTopUpSuccess(false);
+        } else if (["CANCELLED", "CANCELED", "FAILED"].includes(txStatus)) {
+          clearInterval(intervalId);
+          setShowTopUpModal(false);
+          setTopUpData(null);
+          setTopUpSuccess(false);
+          setError("Payment was cancelled or failed.");
+        }
+      } catch (err) {
+        console.error("Polling error:", err);
+      }
+    }, 3000);
+
+    return () => clearInterval(intervalId);
+  }, [showTopUpModal, topUpData?.orderCode]);
 
   const handleFindSlots = async () => {
     setCheckingSlots(true);
@@ -215,21 +277,51 @@ export default function BookingPage() {
       });
 
       if (!res.ok) {
-        setError(res.data?.message || 'Could not create booking.');
+        const errorMessage = res.data?.message || '';
+        if (errorMessage.toLowerCase().includes('insufficient wallet balance')) {
+          // Calculate required amount, minimum 10,000 VND for payOS
+          const shortfall = Math.max(grandTotal - (wallet?.balance || 0), 0);
+          const amountToTopUp = Math.max(shortfall, 10000);
+          
+          setTopUpLoading(true);
+          try {
+            const topUpRes = await createTopUpUrl(amountToTopUp);
+            if (topUpRes.ok) {
+              setTopUpData(topUpRes.data?.data);
+              setShowTopUpModal(true);
+            } else {
+              setError('Insufficient balance and failed to generate top-up QR.');
+            }
+          } catch {
+            setError('Insufficient balance. Network error while generating top-up QR.');
+          } finally {
+            setTopUpLoading(false);
+          }
+          return;
+        }
+
+        setError(errorMessage || 'Could not create booking.');
         return;
       }
 
+      setBookingInfo(res.data?.data?.booking);
+      setShowSuccessModal(true);
+      
       setSuccess(`Booking created for slot ${selectedSlot.slotCode}. Wallet charged ${formatMoney(grandTotal)}.`);
       setSelectedServices([]);
       setSlots((current) => current.filter((slot) => `${slot.floorId}:${slot.slotCode}` !== selectedSlotKey));
       setSelectedSlotKey('');
-      await loadData();
+      await loadData(true);
     } catch {
       setError('Network error while creating booking.');
     } finally {
       setSubmitting(false);
     }
   };
+
+  useEffect(() => {
+    latestActions.current.handleCreateBooking = handleCreateBooking;
+  });
 
   const handleBookingAction = async (bookingId, action) => {
     setActionId(`${action}:${bookingId}`);
@@ -255,7 +347,7 @@ export default function BookingPage() {
         setSuccess('Checked in successfully. Slot is now occupied on the live map.');
       }
 
-      await loadData();
+      await loadData(true);
     } catch {
       setError(`Network error while processing ${action}.`);
     } finally {
@@ -439,55 +531,35 @@ export default function BookingPage() {
           </button>
         </section>
 
-        <section className="xl:col-span-7 rounded-3xl bg-[#101010] border border-white/10 p-5 md:p-6">
+        <section className="xl:col-span-7 rounded-3xl bg-[#101010] border border-white/10 p-5 md:p-6 flex flex-col">
           <div className="flex items-center justify-between gap-4 mb-5">
             <div>
-              <h2 className="text-lg font-black">Available Slots</h2>
-              <p className="text-sm text-white/40">Slots come from ParkingFloor.layoutData JSON.</p>
+              <h2 className="text-lg font-black">Available Slots Map</h2>
+              <p className="text-sm text-white/40">Select a white slot on the map to book. Red slots are occupied or unavailable.</p>
             </div>
-            <div className="text-sm text-white/50">{slots.length} slot(s)</div>
+            <div className="text-sm text-white/50 font-bold px-3 py-1 bg-white/5 rounded-full">{slots.length} slot(s) available</div>
           </div>
 
-          {slots.length === 0 ? (
-            <div className="min-h-[360px] rounded-2xl border border-dashed border-white/10 bg-white/[0.02] flex flex-col items-center justify-center text-center p-8">
-              <MapPin className="w-10 h-10 text-white/20 mb-3" />
-              <p className="font-bold text-white/70">No slots loaded yet</p>
-              <p className="text-sm text-white/35 mt-1">Pick a time range and press Check available slots.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-h-[580px] overflow-auto pr-1">
-              {slots.map((slot) => {
-                const key = `${slot.floorId}:${slot.slotCode}`;
-                const active = key === selectedSlotKey;
-
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setSelectedSlotKey(key)}
-                    className={`rounded-2xl border p-4 text-left transition ${
-                      active
-                        ? 'bg-yellow-500 text-black border-yellow-400 shadow-lg shadow-yellow-500/15'
-                        : 'bg-white/[0.03] border-white/10 hover:border-yellow-500/40'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-xl font-black">{slot.slotCode}</span>
-                      <Car size={18} />
-                    </div>
-                    <div className={`text-xs mt-2 ${active ? 'text-black/60' : 'text-white/45'}`}>
-                      {slot.floorName}
-                    </div>
-                    {slot.zoneName && (
-                      <div className={`text-[11px] mt-1 ${active ? 'text-black/55' : 'text-white/35'}`}>
-                        {slot.zoneName}
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
+          <div className="flex-1 w-full relative min-h-[500px] rounded-2xl overflow-hidden border border-white/10 bg-[#0b0e16]">
+            {slots.length === 0 && !checkingSlots && (
+              <div className="absolute inset-0 z-10 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center text-center p-8">
+                <MapPin className="w-12 h-12 text-white/20 mb-4" />
+                <p className="font-bold text-white text-lg">Select time range to view available slots</p>
+                <p className="text-sm text-white/50 mt-2">Pick a start/end time and press "Check available slots" to unlock the map.</p>
+              </div>
+            )}
+            
+            <ParkingMapViewer
+              floors={floors}
+              currentFloorId={currentFloorId}
+              onFloorSelect={setCurrentFloorId}
+              availableSlots={slots.length > 0 ? slots : null}
+              selectedSlotId={selectedSlot?.slotCode}
+              onSelectSlot={(slot, floorId) => setSelectedSlotKey(`${floorId}:${slot.id}`)}
+              is2DMode={true}
+              hideUI={false}
+            />
+          </div>
         </section>
       </div>
 
@@ -568,6 +640,97 @@ export default function BookingPage() {
           </div>
         )}
       </section>
+
+      {/* SUCCESS MODAL */}
+      {showSuccessModal && bookingInfo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-[#111] border border-emerald-500/30 rounded-3xl p-8 max-w-sm w-full flex flex-col items-center text-center shadow-2xl shadow-emerald-500/10">
+            <div className="w-16 h-16 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 mb-4">
+              <CheckCircle2 size={32} />
+            </div>
+            <h2 className="text-2xl font-black mb-1">Booking Confirmed</h2>
+            <p className="text-white/50 text-sm mb-6">Scan this QR code at the Kiosk to check in.</p>
+            
+            <div className="bg-white p-4 rounded-2xl mb-6">
+              <QRCodeSVG value={bookingInfo._id} size={200} />
+            </div>
+            
+            <div className="w-full bg-white/[0.03] border border-white/10 rounded-2xl p-4 text-left space-y-2 mb-6">
+              <div className="flex justify-between text-sm">
+                <span className="text-white/50">Slot</span>
+                <span className="font-bold text-yellow-400">{bookingInfo.slotCode}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-white/50">Valid from</span>
+                <span className="font-bold">{formatDateTime(bookingInfo.startTime)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-white/50">Valid until</span>
+                <span className="font-bold">{formatDateTime(bookingInfo.endTime)}</span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                setShowSuccessModal(false);
+                setBookingInfo(null);
+              }}
+              className="w-full bg-emerald-500 text-black font-black py-3 rounded-2xl hover:bg-emerald-400 transition"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* TOP UP MODAL */}
+      {showTopUpModal && topUpData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-[#111] border border-rose-500/30 rounded-3xl p-8 max-w-sm w-full flex flex-col items-center text-center shadow-2xl shadow-rose-500/10">
+            <div className="w-16 h-16 rounded-full bg-rose-500/20 flex items-center justify-center text-rose-400 mb-4">
+              <AlertCircle size={32} />
+            </div>
+            <h2 className="text-2xl font-black mb-1">Insufficient Balance</h2>
+            <p className="text-white/50 text-sm mb-6">
+              You need to top up {formatMoney(topUpData.amount)} to complete this booking.
+            </p>
+            
+            <div className="bg-white p-4 rounded-2xl mb-4">
+              {topUpData.qrCode ? (
+                <QRCodeSVG value={topUpData.qrCode} size={200} />
+              ) : (
+                <div className="w-[200px] h-[200px] flex items-center justify-center text-black/50 text-sm">
+                  No QR data
+                </div>
+              )}
+            </div>
+
+            <p className="text-xs text-white/40 mb-6">
+              Scan with your banking app or e-wallet to pay.<br/>
+              Alternatively, <a href={topUpData.checkoutUrl} target="_blank" rel="noreferrer" className="text-blue-400 underline">click here to checkout</a>.
+            </p>
+            
+            <div className="flex items-center justify-center gap-2 mb-6 text-sm text-yellow-400 font-bold">
+              <Loader2 size={16} className="animate-spin" />
+              {topUpSuccess ? "Payment received! Processing booking..." : "Waiting for your payment..."}
+            </div>
+
+            <div className="flex gap-3 w-full">
+              <button
+                disabled={topUpSuccess}
+                onClick={() => {
+                  setShowTopUpModal(false);
+                  setTopUpData(null);
+                  setTopUpSuccess(false);
+                }}
+                className="w-full bg-white/10 hover:bg-white/20 text-white font-bold py-3 rounded-2xl transition disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { Maximize, Car, Zap, Accessibility, Bike, Info, TreePine, ArrowRight, Navigation, Layers, MonitorSmartphone } from 'lucide-react';
 
-export default function ParkingMapViewer({ floors, currentFloorId, onFloorSelect, activeSessions = [], onSelectSlot, selectedSlotId, is2DMode = false, hideUI = false }) {
+export default function ParkingMapViewer({ floors, currentFloorId, onFloorSelect, activeSessions = [], availableSlots = null, onSelectSlot, selectedSlotId, is2DMode = false, hideUI = false }) {
   const [camera, setCamera] = useState(
     is2DMode
       ? { rotX: 0, rotZ: 0, panX: 0, panY: 0, zoom: 0.55 }
@@ -82,8 +82,17 @@ export default function ParkingMapViewer({ floors, currentFloorId, onFloorSelect
       if (isSlot) {
         // Check if occupied
         const slotName = el.name || el.id;
-        const occupiedSession = activeSessions.find(s => s.floorId === floorId && s.parkingSlot === slotName);
-        const isOccupied = !!occupiedSession;
+        let isOccupied = false;
+
+        // If availableSlots is provided, use it to determine occupancy (slots NOT in availableSlots are occupied/red)
+        if (availableSlots) {
+          isOccupied = !availableSlots.some(s => s.floorId === floorId && s.slotCode === slotName);
+        } else {
+          // Fallback to activeSessions logic for Kiosk
+          const occupiedSession = activeSessions.find(s => s.floorId === floorId && s.parkingSlot === slotName);
+          isOccupied = !!occupiedSession;
+        }
+
         const isSelected = selectedSlotId === slotName;
 
         const slotZ = isSelected ? 15 : 5;
