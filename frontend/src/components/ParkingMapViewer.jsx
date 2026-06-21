@@ -393,10 +393,10 @@ export default function ParkingMapViewer({ floors, currentFloorId, onFloorSelect
                   targetZ = (idx - centerIndex) * 200;
                 } else {
                   targetZ = (idx - currentFloorIndex) * 150;
-                  if (isAbove) { 
-                    targetZ += 500; 
-                    targetOpacity = 0; 
-                    pointerEvents = 'none'; 
+                  if (isAbove) {
+                    targetZ += 500;
+                    targetOpacity = 0;
+                    pointerEvents = 'none';
                   }
                   else if (isBelow) { targetOpacity = 0.2; }
                 }
