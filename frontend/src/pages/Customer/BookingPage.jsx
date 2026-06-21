@@ -151,7 +151,7 @@ export default function BookingPage() {
       if (serviceRes.ok) setServices(serviceRes.data?.data || []);
       if (walletRes.ok) setWallet(walletRes.data?.data || null);
       if (bookingRes.ok) setBookings(bookingRes.data?.data || []);
-      
+
       if (floorsRes?.success) {
         setFloors(floorsRes.data);
         if (floorsRes.data.length > 0) {
@@ -282,7 +282,7 @@ export default function BookingPage() {
           // Calculate required amount, minimum 10,000 VND for payOS
           const shortfall = Math.max(grandTotal - (wallet?.balance || 0), 0);
           const amountToTopUp = Math.max(shortfall, 10000);
-          
+
           setTopUpLoading(true);
           try {
             const topUpRes = await createTopUpUrl(amountToTopUp);
@@ -306,7 +306,7 @@ export default function BookingPage() {
 
       setBookingInfo(res.data?.data?.booking);
       setShowSuccessModal(true);
-      
+
       setSuccess(`Booking created for slot ${selectedSlot.slotCode}. Wallet charged ${formatMoney(grandTotal)}.`);
       setSelectedServices([]);
       setSlots((current) => current.filter((slot) => `${slot.floorId}:${slot.slotCode}` !== selectedSlotKey));
@@ -387,11 +387,10 @@ export default function BookingPage() {
       </div>
 
       {(error || success) && (
-        <div className={`mb-6 rounded-2xl border px-4 py-3 flex items-start gap-3 ${
-          error
+        <div className={`mb-6 rounded-2xl border px-4 py-3 flex items-start gap-3 ${error
             ? 'bg-rose-500/10 border-rose-500/25 text-rose-200'
             : 'bg-emerald-500/10 border-emerald-500/25 text-emerald-200'
-        }`}>
+          }`}>
           {error ? <AlertCircle size={18} className="mt-0.5 shrink-0" /> : <CheckCircle2 size={18} className="mt-0.5 shrink-0" />}
           <span className="text-sm font-medium">{error || success}</span>
         </div>
@@ -472,11 +471,10 @@ export default function BookingPage() {
                     key={service._id}
                     type="button"
                     onClick={() => toggleService(service._id)}
-                    className={`w-full rounded-xl border px-4 py-3 text-left transition ${
-                      selectedServices.includes(service._id)
+                    className={`w-full rounded-xl border px-4 py-3 text-left transition ${selectedServices.includes(service._id)
                         ? 'bg-yellow-500/10 border-yellow-500/40'
                         : 'bg-white/[0.03] border-white/10 hover:border-white/20'
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div>
@@ -548,7 +546,7 @@ export default function BookingPage() {
                 <p className="text-sm text-white/50 mt-2">Pick a start/end time and press "Check available slots" to unlock the map.</p>
               </div>
             )}
-            
+
             <ParkingMapViewer
               floors={floors}
               currentFloorId={currentFloorId}
@@ -650,11 +648,11 @@ export default function BookingPage() {
             </div>
             <h2 className="text-2xl font-black mb-1">Booking Confirmed</h2>
             <p className="text-white/50 text-sm mb-6">Scan this QR code at the Kiosk to check in.</p>
-            
+
             <div className="bg-white p-4 rounded-2xl mb-6">
               <QRCodeSVG value={bookingInfo._id} size={200} />
             </div>
-            
+
             <div className="w-full bg-white/[0.03] border border-white/10 rounded-2xl p-4 text-left space-y-2 mb-6">
               <div className="flex justify-between text-sm">
                 <span className="text-white/50">Slot</span>
@@ -694,7 +692,7 @@ export default function BookingPage() {
             <p className="text-white/50 text-sm mb-6">
               You need to top up {formatMoney(topUpData.amount)} to complete this booking.
             </p>
-            
+
             <div className="bg-white p-4 rounded-2xl mb-4">
               {topUpData.qrCode ? (
                 <QRCodeSVG value={topUpData.qrCode} size={200} />
@@ -706,10 +704,10 @@ export default function BookingPage() {
             </div>
 
             <p className="text-xs text-white/40 mb-6">
-              Scan with your banking app or e-wallet to pay.<br/>
+              Scan with your banking app or e-wallet to pay.<br />
               Alternatively, <a href={topUpData.checkoutUrl} target="_blank" rel="noreferrer" className="text-blue-400 underline">click here to checkout</a>.
             </p>
-            
+
             <div className="flex items-center justify-center gap-2 mb-6 text-sm text-yellow-400 font-bold">
               <Loader2 size={16} className="animate-spin" />
               {topUpSuccess ? "Payment received! Processing booking..." : "Waiting for your payment..."}
