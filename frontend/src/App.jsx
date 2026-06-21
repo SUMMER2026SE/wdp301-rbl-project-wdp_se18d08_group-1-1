@@ -34,6 +34,7 @@ import StaffProfile from "./pages/Staff/StaffProfile";
 import StaffSessionManagement from "./pages/Staff/SessionManagement";
 import StaffAccountManagement from "./pages/Staff/AccountManagement";
 import NotificationManagement from "./pages/Staff/NotificationManagement";
+import LiveGridMonitor from "./pages/Staff/LiveGridMonitor";
 
 // Pages – Customer
 import CustomerProfile from "./pages/Customer/CustomerProfile";
@@ -125,6 +126,7 @@ export default function App() {
               path="/staff/notifications"
               element={<NotificationManagement />}
             />
+            <Route path="/staff/live-grid" element={<LiveGridMonitor />} />
           </Route>
 
           {/* ── Customer section ── */}

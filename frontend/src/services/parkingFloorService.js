@@ -35,3 +35,10 @@ export const deleteFloor = async (id) => {
     headers: getAuthHeaders(),
   });
 };
+
+export const getFloorSlots = async (id) => {
+  return await apiFetch(`/parking-floors/${id}/slots`, {
+    method: "GET",
+    headers: getAuthHeaders(),
+  });
+};

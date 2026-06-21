@@ -9,37 +9,50 @@ exports.scanPlate = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Image is required' });
     }
 
-    // Extract base64 part
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(500).json({
+        success: false,
+        message: 'Gemini API key is not configured',
+      });
+    }
+
+    // Strip data URL prefix if present
     const base64Data = image.replace(/^data:image\/\w+;base64,/, '');
-    const buffer = Buffer.from(base64Data, 'base64');
-    
-    // PlateRecognizer expects multipart form-data
-    const formData = new FormData();
-    formData.append('upload', buffer, { filename: 'capture.jpg', contentType: 'image/jpeg' });
-    formData.append('regions', 'vn'); // Optimize for Vietnamese plates
+    const mimeMatch = image.match(/^data:(image\/\w+);base64,/);
+    const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
 
-    // Ensure token is present
-    if (!process.env.PLATE_RECOGNIZER_TOKEN) {
-      return res.status(500).json({ success: false, message: 'AI API Token is not configured' });
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
+
+    const prompt = `Analyze this image containing a vehicle and read the license plate (Biển số xe Việt Nam).
+Extract ONLY the license plate number as a single string.
+Remove all spaces, dots, dashes, and special characters. Just letters and numbers (e.g., 43D189750, 29A12345).
+If you cannot find or read any license plate clearly, return the exact string "NOT_FOUND".
+Do NOT include any explanation, markdown, or extra text. Return ONLY the license plate string.`;
+
+    const result = await model.generateContent([
+      prompt,
+      {
+        inlineData: {
+          mimeType,
+          data: base64Data,
+        },
+      },
+    ]);
+
+    let text = result.response.text().trim();
+    // Sometimes model might include markdown despite instructions
+    text = text.replace(/`/g, '').trim();
+    
+    if (text === "NOT_FOUND" || text.length < 5) {
+       return res.status(400).json({ success: false, message: 'No license plate found in the image' });
     }
 
-    const response = await axios.post('https://api.platerecognizer.com/v1/plate-reader/', formData, {
-      headers: {
-        ...formData.getHeaders(),
-        'Authorization': `Token ${process.env.PLATE_RECOGNIZER_TOKEN}`
-      }
-    });
+    return res.status(200).json({ success: true, plate: text });
 
-    const data = response.data;
-    
-    if (data.results && data.results.length > 0) {
-      const plate = data.results[0].plate.toUpperCase();
-      return res.status(200).json({ success: true, plate });
-    } else {
-      return res.status(400).json({ success: false, message: 'No license plate found in the image' });
-    }
   } catch (error) {
-    console.error('ALPR Error:', error.response?.data || error.message);
+    const detail = error?.message || 'Unknown error';
+    console.error('Gemini ALPR Error:', detail);
     res.status(500).json({ success: false, message: 'Error analyzing the image' });
   }
 };
