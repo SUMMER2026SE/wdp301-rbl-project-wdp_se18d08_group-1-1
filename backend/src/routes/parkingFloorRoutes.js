@@ -4,13 +4,15 @@ const {
   getAllFloors,
   createFloor,
   updateFloorLayout,
-  deleteFloor
+  deleteFloor,
+  getFloorSlots
 } = require("../controllers/parkingFloorController");
 
 const router = express.Router();
 
 // Public route: get all floors (for Kiosk and users)
 router.get("/", getAllFloors);
+router.get("/:id/slots", getFloorSlots);
 
 router.use(protect);
 

@@ -10,6 +10,33 @@ export default function LiveGridMonitor() {
   const [loading, setLoading] = useState(true);
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [activeSessions, setActiveSessions] = useState([]);
+  const [dbSlots, setDbSlots] = useState([]);
+
+  useEffect(() => {
+    const fetchDbSlots = async () => {
+      try {
+        const { getFloorSlots } = await import('../../services/parkingFloorService');
+        if (currentFloorId) {
+          const res = await getFloorSlots(currentFloorId);
+          if (res.ok && res.data.success) {
+            setDbSlots(res.data.data);
+          }
+        } else {
+          if (floors.length === 0) {
+            setDbSlots([]);
+            return;
+          }
+          const promises = floors.map(f => getFloorSlots(f._id));
+          const results = await Promise.all(promises);
+          const allSlots = results.flatMap(r => (r.ok && r.data.success) ? r.data.data : []);
+          setDbSlots(allSlots);
+        }
+      } catch (e) {
+        console.error("Failed to fetch slots", e);
+      }
+    };
+    fetchDbSlots();
+  }, [currentFloorId, floors]);
 
   useEffect(() => {
     document.body.classList.add("bg-[#0b0e16]");
@@ -85,6 +112,7 @@ export default function LiveGridMonitor() {
           onFloorSelect={setCurrentFloorId}
           onSlotClick={setSelectedSlot}
           activeSessions={activeSessions}
+          dbSlots={dbSlots}
           loading={loading}
           isEditMode={false} // Staff cannot edit layout
         />
@@ -110,31 +138,52 @@ export default function LiveGridMonitor() {
             <div className="mb-4 flex-1 overflow-y-auto pr-2">
                 <h3 className="text-slate-500 text-[11px] font-bold uppercase tracking-[0.15em] mb-4">Slot Details</h3>
                 
-                {selectedSlot.session ? (
-                    <div className="flex flex-col gap-4">
-                        <div className="bg-emerald-900/20 border border-emerald-500/30 rounded-xl p-4 flex flex-col items-center justify-center mb-2">
-                            <span className="text-xs text-emerald-400 uppercase tracking-widest font-bold mb-1">Status</span>
-                            <span className="text-lg text-white font-black uppercase">Occupied</span>
+                {(() => {
+                  const dbSlotInfo = dbSlots.find(s => s.slotNumber === selectedSlot.id && s.floorID === selectedSlot.floorId);
+                  const isMaintenance = dbSlotInfo?.status === 'maintenance';
+
+                  if (isMaintenance) {
+                    return (
+                      <div className="flex flex-col gap-4 h-full items-center justify-center text-center py-10 opacity-80">
+                          <div className="w-16 h-16 rounded-full bg-red-900/30 flex items-center justify-center border border-red-500/50 mb-2">
+                              <span className="text-red-500 font-bold text-2xl">⚠</span>
+                          </div>
+                          <p className="text-red-400 font-bold uppercase tracking-widest">Under Maintenance</p>
+                          <p className="text-xs text-red-500 max-w-[200px]">This slot is currently locked for maintenance.</p>
+                      </div>
+                    );
+                  }
+
+                  if (selectedSlot.session) {
+                    return (
+                        <div className="flex flex-col gap-4">
+                            <div className="bg-emerald-900/20 border border-emerald-500/30 rounded-xl p-4 flex flex-col items-center justify-center mb-2">
+                                <span className="text-xs text-emerald-400 uppercase tracking-widest font-bold mb-1">Status</span>
+                                <span className="text-lg text-white font-black uppercase">Occupied</span>
+                            </div>
+                            <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">License Plate</span><span className="font-mono text-base font-semibold text-white bg-slate-800/80 px-3 py-1 rounded border border-slate-700/50">{selectedSlot.session.licensePlate}</span></div>
+                            <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Phone</span><span className="font-medium text-white">{selectedSlot.session.phone || <span className="text-slate-500 italic">Guest</span>}</span></div>
+                            {selectedSlot.session.userId?.email && (
+                                <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Email</span><span className="font-medium text-emerald-400">{selectedSlot.session.userId.email}</span></div>
+                            )}
+                            <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Vehicle Type</span><span className="font-medium text-white uppercase">{selectedSlot.session.vehicleType || 'Unknown'}</span></div>
+                            <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Check-in Time</span><span className="font-medium text-white">{new Date(selectedSlot.session.checkInTime).toLocaleString('vi-VN')}</span></div>
+                            <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Expected Duration</span><span className="font-medium text-white">{selectedSlot.session.expectedDurationHours} hr(s)</span></div>
+                            <div className="flex justify-between items-center"><span className="text-slate-400 text-sm">Expiration Time</span><span className="font-bold text-emerald-400">{new Date(new Date(selectedSlot.session.checkInTime).getTime() + (selectedSlot.session.expectedDurationHours || 0) * 3600000).toLocaleString('vi-VN')}</span></div>
                         </div>
-                        <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">License Plate</span><span className="font-mono text-base font-semibold text-white bg-slate-800/80 px-3 py-1 rounded border border-slate-700/50">{selectedSlot.session.licensePlate}</span></div>
-                        <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Phone</span><span className="font-medium text-white">{selectedSlot.session.phone || <span className="text-slate-500 italic">Guest</span>}</span></div>
-                        {selectedSlot.session.userId?.email && (
-                            <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Email</span><span className="font-medium text-emerald-400">{selectedSlot.session.userId.email}</span></div>
-                        )}
-                        <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Vehicle Type</span><span className="font-medium text-white uppercase">{selectedSlot.session.vehicleType || 'Unknown'}</span></div>
-                        <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Check-in Time</span><span className="font-medium text-white">{new Date(selectedSlot.session.checkInTime).toLocaleString('vi-VN')}</span></div>
-                        <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Expected Duration</span><span className="font-medium text-white">{selectedSlot.session.expectedDurationHours} hr(s)</span></div>
-                        <div className="flex justify-between items-center"><span className="text-slate-400 text-sm">Expiration Time</span><span className="font-bold text-emerald-400">{new Date(new Date(selectedSlot.session.checkInTime).getTime() + (selectedSlot.session.expectedDurationHours || 0) * 3600000).toLocaleString('vi-VN')}</span></div>
-                    </div>
-                ) : (
-                    <div className="flex flex-col gap-4 h-full items-center justify-center text-center py-10 opacity-70">
-                        <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center border border-slate-700 mb-2">
-                            <MonitorCheck size={24} className="text-slate-500" />
-                        </div>
-                        <p className="text-slate-400 font-bold uppercase tracking-widest">Slot is Empty</p>
-                        <p className="text-xs text-slate-500 max-w-[200px]">Ready for next incoming vehicle assignment.</p>
-                    </div>
-                )}
+                    );
+                  }
+
+                  return (
+                      <div className="flex flex-col gap-4 h-full items-center justify-center text-center py-10 opacity-70">
+                          <div className="w-16 h-16 rounded-full bg-slate-800 flex items-center justify-center border border-slate-700 mb-2">
+                              <MonitorCheck size={24} className="text-slate-500" />
+                          </div>
+                          <p className="text-slate-400 font-bold uppercase tracking-widest">Slot is Empty</p>
+                          <p className="text-xs text-slate-500 max-w-[200px]">Ready for next incoming vehicle assignment.</p>
+                      </div>
+                  );
+                })()}
             </div>
 
             {selectedSlot.session && (
