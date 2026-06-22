@@ -1,15 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   AlertCircle,
   CalendarClock,
   CheckCircle2,
   Loader2,
-  LogIn,
-  LogOut,
+  Wifi,
 } from 'lucide-react';
 import {
   getMyBookings,
 } from '../../services/bookingService';
+import { useSocket } from '../../contexts/SocketProvider';
 
 const formatMoney = (value = 0) => `${Number(value || 0).toLocaleString('vi-VN')} VND`;
 
@@ -28,10 +28,12 @@ const statusClass = (status) => {
 };
 
 export default function BookingPage() {
+  const socket = useSocket();
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const lastEventRef = useRef(null);
 
   const loadData = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -50,6 +52,43 @@ export default function BookingPage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    if (!socket) return undefined;
+
+    const handleBookingChanged = (payload) => {
+      lastEventRef.current = payload;
+      setSuccess('Booking status updated automatically.');
+      loadData(true);
+    };
+
+    socket.on('booking:changed', handleBookingChanged);
+    return () => {
+      socket.off('booking:changed', handleBookingChanged);
+    };
+  }, [socket]);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        loadData(true);
+      }
+    }, 15000);
+
+    const handleFocus = () => loadData(true);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!success) return undefined;
+    const timer = setTimeout(() => setSuccess(''), 2500);
+    return () => clearTimeout(timer);
+  }, [success]);
 
 
 
@@ -93,13 +132,19 @@ export default function BookingPage() {
             <h2 className="text-lg font-black">All Reservations</h2>
             <p className="text-sm text-white/40">Present your booking QR code at the Kiosk to check in.</p>
           </div>
-          <button
-            type="button"
-            onClick={() => loadData()}
-            className="rounded-xl border border-white/10 px-3 py-2 text-sm text-white/60 hover:text-white hover:bg-white/5 transition"
-          >
-            Refresh
-          </button>
+          <div className="flex items-center gap-3">
+            <div className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-[11px] font-bold text-emerald-300 flex items-center gap-2">
+              <Wifi size={12} />
+              Live sync
+            </div>
+            <button
+              type="button"
+              onClick={() => loadData()}
+              className="rounded-xl border border-white/10 px-3 py-2 text-sm text-white/60 hover:text-white hover:bg-white/5 transition"
+            >
+              Refresh
+            </button>
+          </div>
         </div>
 
         {bookings.length === 0 ? (

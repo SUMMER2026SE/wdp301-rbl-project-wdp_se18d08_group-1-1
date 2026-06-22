@@ -6,13 +6,10 @@ import { API_BASE } from '../../services/api';
 import { normalizeLicensePlate } from '../../utils/licensePlate';
 
 const SCAN_ATTEMPTS = 8;
-const SCAN_RETRY_DELAY_MS = 400;
-const CAMERA_WARMUP_MS = 1500;
-const SCAN_TIMEOUT_MS = 8500;
+const SCAN_RETRY_DELAY_MS = 900;
+const CAMERA_WARMUP_MS = 1200;
+const SCAN_TIMEOUT_MS = 7000;
 const VIDEO_READY_TIMEOUT_MS = 5000;
-const SCAN_IMAGE_WIDTH = 1920;
-const SCAN_IMAGE_HEIGHT = 1800;
-const FULL_FRAME_HEIGHT = 1080;
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -35,6 +32,7 @@ export default function KioskWelcome({ onStart, updateFormData }) {
   const [isScanning, setIsScanning] = useState(false);
   const [scanMessage, setScanMessage] = useState('');
   const videoRef = useRef(null);
+  const canvasRef = useRef(null);
   const streamRef = useRef(null);
 
   const stopCamera = () => {
@@ -52,9 +50,9 @@ export default function KioskWelcome({ onStart, updateFormData }) {
     const cameraOptions = [
       {
         video: {
-          facingMode: { exact: 'environment' },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
           aspectRatio: { ideal: 16 / 9 },
           frameRate: { ideal: 30, max: 30 },
         },
@@ -137,102 +135,20 @@ export default function KioskWelcome({ onStart, updateFormData }) {
     return false;
   };
 
-  const drawCrop = (ctx, video, crop, target) => {
-    const sourceWidth = video.videoWidth || video.width;
-    const sourceHeight = video.videoHeight || video.height;
-    const sx = Math.max(0, Math.round(crop.x * sourceWidth));
-    const sy = Math.max(0, Math.round(crop.y * sourceHeight));
-    const sw = Math.min(sourceWidth - sx, Math.round(crop.w * sourceWidth));
-    const sh = Math.min(sourceHeight - sy, Math.round(crop.h * sourceHeight));
-    ctx.drawImage(video, sx, sy, sw, sh, target.x, target.y, target.w, target.h);
-  };
-
-  const drawFilteredCrop = (ctx, source, crop, target, filter) => {
-    ctx.save();
-    ctx.filter = filter;
-    drawCrop(ctx, source, crop, target);
-    ctx.restore();
-  };
-
-  const drawContain = (ctx, video, target) => {
-    const sourceWidth = video.videoWidth || video.width;
-    const sourceHeight = video.videoHeight || video.height;
-    const videoRatio = sourceWidth / sourceHeight;
-    const targetRatio = target.w / target.h;
-    let dw = target.w;
-    let dh = target.h;
-    let dx = target.x;
-    let dy = target.y;
-
-    if (videoRatio > targetRatio) {
-      dh = Math.round(target.w / videoRatio);
-      dy += Math.round((target.h - dh) / 2);
-    } else {
-      dw = Math.round(target.h * videoRatio);
-      dx += Math.round((target.w - dw) / 2);
-    }
-
-    ctx.drawImage(video, 0, 0, sourceWidth, sourceHeight, dx, dy, dw, dh);
-  };
-
-  const captureHighQualitySource = async () => {
-    const track = streamRef.current?.getVideoTracks?.()[0];
-    if (track && 'ImageCapture' in window) {
-      try {
-        const imageCapture = new window.ImageCapture(track);
-        if (imageCapture.takePhoto) {
-          const blob = await imageCapture.takePhoto();
-          const bitmap = await createImageBitmap(blob);
-          return bitmap;
-        }
-        if (imageCapture.grabFrame) {
-          return await imageCapture.grabFrame();
-        }
-      } catch (error) {
-        console.info('[Kiosk scan] ImageCapture fallback to video frame', error?.message || error);
-      }
-    }
-
-    return videoRef.current;
-  };
-
   const buildScanImageBase64 = async () => {
-    const source = await captureHighQualitySource();
-    const sourceWidth = source?.videoWidth || source?.width;
-    const sourceHeight = source?.videoHeight || source?.height;
-    if (!source || !sourceWidth || !sourceHeight) return null;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas || !video.videoWidth || !video.videoHeight) return null;
 
-    const canvas = document.createElement('canvas');
-    canvas.width = SCAN_IMAGE_WIDTH;
-    canvas.height = SCAN_IMAGE_HEIGHT;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#111827';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    drawContain(ctx, source, { x: 0, y: 0, w: SCAN_IMAGE_WIDTH, h: FULL_FRAME_HEIGHT });
-
-    const panels = [
-      { x: 0, y: FULL_FRAME_HEIGHT, w: 960, h: 360 },
-      { x: 960, y: FULL_FRAME_HEIGHT, w: 960, h: 360 },
-      { x: 0, y: FULL_FRAME_HEIGHT + 360, w: 960, h: 360 },
-      { x: 960, y: FULL_FRAME_HEIGHT + 360, w: 960, h: 360 },
-    ];
-
-    const crops = [
-      { x: 0.02, y: 0.24, w: 0.96, h: 0.6 },
-      { x: 0.1, y: 0.3, w: 0.8, h: 0.5 },
-      { x: 0.18, y: 0.36, w: 0.64, h: 0.38 },
-      { x: 0.26, y: 0.4, w: 0.48, h: 0.28 },
-    ];
-
-    drawCrop(ctx, source, crops[0], panels[0]);
-    drawFilteredCrop(ctx, source, crops[1], panels[1], 'contrast(1.35) saturate(1.15) brightness(1.06)');
-    drawFilteredCrop(ctx, source, crops[2], panels[2], 'grayscale(1) contrast(1.85) brightness(1.12)');
-    drawFilteredCrop(ctx, source, crops[3], panels[3], 'contrast(1.6) brightness(1.08) saturate(0.85)');
-    if (source !== videoRef.current && source?.close) source.close();
-    return canvas.toDataURL('image/jpeg', 0.92);
+    return canvas.toDataURL('image/jpeg', 0.82);
   };
 
   const formatVietnamesePlate = (plate) => {
@@ -326,11 +242,12 @@ export default function KioskWelcome({ onStart, updateFormData }) {
 
     if (verifyData.isMonthly || verifyData.hasPreBooking) {
       updateFormData({
-        step3Mode: 'welcome',
+        step3Mode: 'fastpass',
         licensePlate: formatted,
         entryImageBase64: imageBase64,
         phone: verifyData.phone || '',
         isMonthly: verifyData.isMonthly,
+        membershipType: verifyData.membershipType || null,
         hasPreBooking: verifyData.hasPreBooking,
         selectedSlot: verifyData.assignedSlot,
         floorId: verifyData.assignedFloorId || null,
@@ -354,6 +271,7 @@ export default function KioskWelcome({ onStart, updateFormData }) {
         phone: verifyData.phone || '',
         isVIP: !!verifyData.isVIP,
         isRegisteredVehicle: true,
+        membershipType: verifyData.membershipType || null,
         pricingPackage: verifyData.pricingPackage || null,
         pricingSource: verifyData.pricingSource || 'default',
         ticketPackageId: verifyData.pricingPackage?._id || null,
@@ -372,6 +290,7 @@ export default function KioskWelcome({ onStart, updateFormData }) {
       pricingSource: verifyData.pricingSource || 'default',
       ticketPackageId: verifyData.pricingPackage?._id || null,
       bookingMode: 'hourly',
+      membershipType: verifyData.membershipType || null,
     });
     return false;
   };
@@ -495,6 +414,11 @@ export default function KioskWelcome({ onStart, updateFormData }) {
         className="absolute h-px w-px opacity-0 pointer-events-none"
         playsInline
         muted
+        aria-hidden="true"
+      />
+      <canvas
+        ref={canvasRef}
+        className="absolute h-px w-px opacity-0 pointer-events-none"
         aria-hidden="true"
       />
     </div>

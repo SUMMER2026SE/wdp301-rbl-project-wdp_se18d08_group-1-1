@@ -8,6 +8,7 @@ const Slot = require('../models/Slot');
 const TicketPackage = require('../models/TicketPackage');
 const walletService = require('../services/walletService');
 const { normalizeLicensePlate } = require('../utils/licensePlateUtils');
+const { emitToUser } = require('../sockets/notificationSocket');
 
 const BOOKING_STATUSES_THAT_BLOCK_SLOT = ['confirmed', 'active'];
 
@@ -164,6 +165,21 @@ const getBookingServices = async (bookingIds) => {
     acc[key].push(service);
     return acc;
   }, {});
+};
+
+const emitBookingChanged = (app, booking, extra = {}) => {
+  if (!app || !booking?.userId) return;
+
+  const io = app.get('io');
+  if (!io) return;
+
+  emitToUser(io, booking.userId, 'booking:changed', {
+    bookingId: String(booking._id),
+    status: booking.status,
+    slotCode: booking.slotCode,
+    floorId: booking.floorId ? String(booking.floorId) : null,
+    ...extra,
+  });
 };
 
 exports.getAvailableSlots = async (req, res, next) => {
@@ -330,6 +346,8 @@ exports.createBooking = async (req, res, next) => {
         slot: selectedSlot,
       },
     });
+
+    emitBookingChanged(req.app, booking, { action: 'created' });
   } catch (error) {
     next(error);
   }
@@ -414,6 +432,8 @@ exports.checkInBooking = async (req, res, next) => {
     booking.sessionId = parkingSession._id;
     await booking.save();
 
+    emitBookingChanged(req.app, booking, { action: 'checked_in' });
+
     res.status(200).json({
       success: true,
       message: 'Booking checked in successfully',
@@ -485,6 +505,12 @@ exports.checkOutBooking = async (req, res, next) => {
     parkingSession.refundAmount = refundAmount;
     parkingSession.paymentStatus = refundAmount > 0 ? 'refunded' : 'paid';
     await parkingSession.save();
+
+    emitBookingChanged(req.app, booking, {
+      action: 'checked_out',
+      refundAmount,
+      finalAmount,
+    });
 
     res.status(200).json({
       success: true,

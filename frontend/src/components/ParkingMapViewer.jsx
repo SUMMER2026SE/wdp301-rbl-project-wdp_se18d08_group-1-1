@@ -37,8 +37,18 @@ const SlotElement = React.memo(({ el, floorId, style, isOccupied, isSelected, is
     textColor = '#06b6d4';
   }
 
+  const slotStatusLabel = isMaintenance
+    ? `${slotName}: Maintenance`
+    : isOccupied
+      ? `${slotName}: Occupied${session?.licensePlate ? ` - ${session.licensePlate}` : ''}`
+      : hasName
+        ? `${slotName}: Available`
+        : 'Unavailable slot';
+
   return (
     <div
+      title={slotStatusLabel}
+      aria-label={slotStatusLabel}
       style={{
         ...style,
         ...maintenanceStyle,

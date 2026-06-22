@@ -1,9 +1,22 @@
 import React, { useState } from 'react';
 import { Clock, CreditCard, Car, RefreshCw, ShieldCheck, Ban, ShieldAlert, Check } from 'lucide-react';
+import { Navigate } from 'react-router-dom';
 import KioskFastPass from './KioskFastPass';
 
 export default function KioskStep3({ formData, onConfirm, onBack, onAutoCheckIn, onComplete }) {
-  if (formData.step3Mode === 'welcome') {
+  const isFastPassMode = formData.step3Mode === 'fastpass';
+  const hasPolicyContext = Boolean(formData.licensePlate && formData.selectedSlot && formData.floorId);
+  const hasFastPassContext = Boolean(formData.licensePlate && formData.selectedSlot && formData.floorId);
+
+  if (isFastPassMode && !hasFastPassContext) {
+    return <Navigate to="/kiosk" replace />;
+  }
+
+  if (!isFastPassMode && !hasPolicyContext) {
+    return <Navigate to="/kiosk" replace />;
+  }
+
+  if (isFastPassMode) {
     return (
       <KioskFastPass
         formData={formData}

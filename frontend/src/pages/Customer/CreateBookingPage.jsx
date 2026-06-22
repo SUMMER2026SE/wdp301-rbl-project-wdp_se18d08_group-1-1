@@ -19,6 +19,7 @@ import ParkingMapViewer from '../../components/ParkingMapViewer';
 import { getServices } from '../../services/extraServiceApi';
 import { getMyVehicles } from '../../services/vehicleService';
 import { getWalletInfo } from '../../services/walletService';
+import { apiFetch } from '../../services/api';
 import {
   createBooking,
   getAvailableBookingSlots,
@@ -203,6 +204,7 @@ export default function CreateBookingPage() {
   const [floors, setFloors] = useState([]);
   const [currentFloorId, setCurrentFloorId] = useState(null);
   const [dbSlots, setDbSlots] = useState([]);
+  const [activeSessions, setActiveSessions] = useState([]);
 
   useEffect(() => {
     const fetchDbSlots = async () => {
@@ -222,6 +224,22 @@ export default function CreateBookingPage() {
     };
     fetchDbSlots();
   }, [currentFloorId]);
+
+  const fetchActiveSessions = async () => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const res = await apiFetch('/sessions/active-status', {
+        method: 'GET',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+
+      if (res.ok && res.data?.success) {
+        setActiveSessions(res.data.data || []);
+      }
+    } catch (err) {
+      console.error('Failed to fetch active parking sessions', err);
+    }
+  };
 
   const handleStartChange = (newDate, newTime) => {
     setStartDate(newDate);
@@ -317,7 +335,22 @@ export default function CreateBookingPage() {
 
   useEffect(() => {
     loadData();
+    fetchActiveSessions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const refreshLiveMap = () => {
+      fetchActiveSessions();
+    };
+
+    const intervalId = setInterval(refreshLiveMap, 15000);
+    window.addEventListener('focus', refreshLiveMap);
+
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener('focus', refreshLiveMap);
+    };
   }, []);
 
   const latestActions = useRef({ loadData, handleCreateBooking: null });
@@ -765,7 +798,9 @@ export default function CreateBookingPage() {
             <div className="flex items-center justify-between gap-4 mb-3 px-2 pt-2">
               <div>
                 <h2 className="text-lg font-black text-gray-900">Available Slots Map</h2>
-                <p className="text-sm font-medium text-gray-500">Select an available slot on the map to book.</p>
+                <p className="text-sm font-medium text-gray-500">
+                  Select an available slot on the map. Occupied slots are shown live in red.
+                </p>
               </div>
               <div className="text-sm text-emerald-600 font-bold px-3 py-1 bg-emerald-50 rounded-full border border-emerald-100">{slots.length} slot(s) available</div>
             </div>
@@ -812,7 +847,7 @@ export default function CreateBookingPage() {
                 floors={floors}
                 currentFloorId={currentFloorId}
                 onFloorSelect={setCurrentFloorId}
-                availableSlots={slots.length > 0 ? slots : null}
+                activeSessions={activeSessions}
                 dbSlots={dbSlots}
                 selectedSlotId={selectedSlot?.slotCode}
                 onSelectSlot={(slot, floorId) => setSelectedSlotKey(`${floorId}:${slot.id}`)}
@@ -853,35 +888,52 @@ export default function CreateBookingPage() {
       {/* SUCCESS MODAL */}
       {showSuccessModal && bookingInfo && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-md">
-          <div className="bg-white border border-gray-100 rounded-3xl p-8 max-w-sm w-full flex flex-col items-center text-center shadow-2xl">
-            <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-500 mb-4 shadow-sm">
-              <CheckCircle2 size={32} />
-            </div>
-            <h2 className="text-2xl font-black text-gray-900 mb-1">Booking Confirmed</h2>
-            <p className="text-gray-500 font-medium text-sm mb-6">Scan this QR code at the Kiosk to check in.</p>
+          <div className="relative bg-white border border-emerald-100 rounded-[32px] p-7 max-w-[360px] w-full flex flex-col items-center text-center shadow-[0_30px_90px_rgba(16,185,129,0.18)] overflow-hidden">
+            <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-emerald-300 via-teal-300 to-cyan-300" />
+            <div className="absolute -top-16 -right-10 w-36 h-36 rounded-full bg-emerald-100/70 blur-2xl" />
+            <div className="absolute -bottom-14 -left-8 w-28 h-28 rounded-full bg-cyan-100/70 blur-2xl" />
 
-            <div className="bg-gray-50 border border-gray-100 p-4 rounded-2xl mb-6 shadow-inner">
-              <QRCodeSVG value={bookingInfo._id} size={200} />
+            <div className="relative w-16 h-16 rounded-full bg-gradient-to-br from-emerald-100 to-teal-50 flex items-center justify-center text-emerald-500 mb-4 shadow-sm border border-emerald-200/70">
+              <CheckCircle2 size={30} />
+            </div>
+            <div className="relative inline-flex items-center rounded-full bg-emerald-50 border border-emerald-100 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.24em] text-emerald-600 mb-3">
+              Sweet Success
+            </div>
+            <h2 className="text-[32px] leading-none font-black text-gray-900 mb-2">Booking Confirmed</h2>
+            <p className="text-gray-500 font-medium text-sm mb-5 max-w-[260px]">
+              Mọi thứ đã sẵn sàng. Dùng QR này tại kiosk để check-in thật nhanh.
+            </p>
+
+            <div className="relative bg-white border border-gray-100 p-4 rounded-[24px] mb-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.8),0_12px_30px_rgba(15,23,42,0.06)]">
+              <div className="absolute inset-x-6 -top-2 h-3 rounded-full bg-emerald-100/70 blur-md" />
+              <QRCodeSVG value={bookingInfo._id} size={176} />
             </div>
 
-            <div className="w-full bg-gray-50 border border-gray-100 rounded-2xl p-4 text-left space-y-2 mb-6">
-              <div className="flex justify-between text-sm">
+            <div className="w-full bg-[#f8fafc] border border-gray-100 rounded-[24px] p-4 text-left space-y-3 mb-5">
+              <div className="flex items-center justify-between text-sm">
                 <span className="text-gray-500 font-semibold">Slot</span>
-                <span className="font-black text-gray-900">{bookingInfo.slotCode}</span>
+                <span className="font-black text-gray-900 text-lg">{bookingInfo.slotCode}</span>
               </div>
-              <div className="flex justify-between text-sm">
+              <div className="flex justify-between text-sm gap-4">
                 <span className="text-gray-500 font-semibold">Valid from</span>
-                <span className="font-bold text-gray-900">{formatDateTime(bookingInfo.startTime)}</span>
+                <span className="font-bold text-gray-900 text-right">{formatDateTime(bookingInfo.startTime)}</span>
               </div>
-              <div className="flex justify-between text-sm">
+              <div className="flex justify-between text-sm gap-4">
                 <span className="text-gray-500 font-semibold">Valid until</span>
-                <span className="font-bold text-gray-900">{formatDateTime(bookingInfo.endTime)}</span>
+                <span className="font-bold text-gray-900 text-right">{formatDateTime(bookingInfo.endTime)}</span>
               </div>
             </div>
 
-            <div className="w-full bg-emerald-50 border border-emerald-100 text-emerald-700 font-bold py-3.5 rounded-2xl text-sm">
-              Bạn đã booking thành công. Tự động chuyển tới My Bookings sau {successRedirectCountdown}s...
+            <div className="w-full bg-gradient-to-r from-emerald-50 to-cyan-50 border border-emerald-100 text-emerald-700 font-bold py-3.5 px-4 rounded-[22px] text-sm leading-relaxed">
+              Bạn đã booking thành công. Tự động chuyển tới My Bookings sau{" "}
+              <span className="inline-flex min-w-8 justify-center rounded-full bg-white/80 px-2 py-0.5 text-emerald-600 shadow-sm">
+                {successRedirectCountdown}s
+              </span>
             </div>
+
+            <p className="mt-3 text-[11px] text-gray-400 font-medium">
+              Booking status sẽ tự đồng bộ khi kiosk cập nhật.
+            </p>
           </div>
         </div>
       )}

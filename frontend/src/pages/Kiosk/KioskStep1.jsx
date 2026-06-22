@@ -166,8 +166,9 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
       }
       else if (data.success && (verifyData.isMonthly || verifyData.hasPreBooking)) {
         updateFormData({
-          step3Mode: 'welcome',
+          step3Mode: 'fastpass',
           isMonthly: verifyData.isMonthly,
+          membershipType: verifyData.membershipType || null,
           hasPreBooking: verifyData.hasPreBooking,
           selectedSlot: verifyData.assignedSlot,
           floorId: verifyData.assignedFloorId || null,
@@ -187,6 +188,7 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
           step3Mode: 'policy',
           isVIP: !!verifyData.isVIP,
           isRegisteredVehicle: true,
+          membershipType: verifyData.membershipType || null,
           phone: verifyData.phone || phone,
           licensePlate: plate,
           pricingPackage: verifyData.pricingPackage || formData.pricingPackage || null,
@@ -206,6 +208,7 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
           pricingSource: verifyData.pricingSource || formData.pricingSource || 'default',
           ticketPackageId: verifyData.pricingPackage?._id || formData.ticketPackageId || null,
           bookingMode: formData.bookingMode || 'hourly',
+          membershipType: verifyData.membershipType || null,
         });
         setIsVerifying(false);
         onNext('2');
@@ -222,6 +225,7 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
           pricingSource: verifyData.pricingSource || formData.pricingSource || 'default',
           ticketPackageId: verifyData.pricingPackage?._id || formData.ticketPackageId || null,
           bookingMode: formData.bookingMode || 'hourly',
+          membershipType: verifyData.membershipType || null,
         });
         if (hasValidPhone) {
           onNext('2');

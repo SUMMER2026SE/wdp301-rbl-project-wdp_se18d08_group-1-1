@@ -8,6 +8,9 @@ const { LOW_BALANCE_THRESHOLD } = require('../services/parkingScheduler');
 const { normalizeLicensePlate } = require('../utils/licensePlateUtils');
 const { resolveKioskPricingPackage } = require('../utils/kioskPricing');
 const Booking = require('../models/Booking');
+const Subscription = require('../models/Subscription');
+const Slot = require('../models/Slot');
+const { emitToUser } = require('../sockets/notificationSocket');
 
 const BOOKING_EARLY_CHECKIN_MINUTES = 30;
 const BOOKING_LATE_GRACE_MINUTES = 15;
@@ -51,6 +54,21 @@ const syncBookingStatusFromSession = async (session, overrides = {}) => {
   return booking;
 };
 
+const emitBookingChanged = (app, booking, extra = {}) => {
+  if (!app || !booking?.userId) return;
+
+  const io = app.get('io');
+  if (!io) return;
+
+  emitToUser(io, booking.userId, 'booking:changed', {
+    bookingId: String(booking._id),
+    status: booking.status,
+    slotCode: booking.slotCode,
+    floorId: booking.floorId ? String(booking.floorId) : null,
+    ...extra,
+  });
+};
+
 const hasActiveVipMembership = (user) => {
   if (!user?.membership?.isVip || !user?.membership?.packageId || !user?.membership?.expireAt) {
     return false;
@@ -58,6 +76,58 @@ const hasActiveVipMembership = (user) => {
 
   const expireAt = new Date(user.membership.expireAt);
   return !Number.isNaN(expireAt.getTime()) && expireAt > new Date();
+};
+
+const resolveActiveSubscriptionAccess = async (userId) => {
+  if (!userId) {
+    return {
+      isSubscriptionActive: false,
+      membershipType: null,
+      assignedSlot: null,
+      assignedFloorId: null,
+      assignedFloorName: null,
+      ticketPackageId: null,
+    };
+  }
+
+  const now = new Date();
+  const subscription = await Subscription.findOne({
+    user: userId,
+    status: 'active',
+    paymentStatus: 'paid',
+    expireAt: { $gt: now },
+  })
+    .populate('ticketPackage', 'name type price')
+    .populate('slots.floorId', 'name floorNumber')
+    .sort({ expireAt: -1, createdAt: -1 });
+
+  const membershipType = subscription?.ticketPackage?.type || null;
+  const isSubscriptionActive = ['monthly', 'yearly'].includes(membershipType);
+
+  let assignedSlot = subscription?.slots?.[0] || null;
+  let assignedFloorId = assignedSlot?.floorId?._id || assignedSlot?.floorId || null;
+  let assignedFloorName = assignedSlot?.floorId?.name || null;
+
+  if (!assignedSlot) {
+    const reservedSlot = await Slot.findOne({ reservedFor: userId })
+      .populate('floorID', 'name floorNumber')
+      .sort({ updatedAt: -1, createdAt: -1 });
+
+    if (reservedSlot) {
+      assignedSlot = reservedSlot;
+      assignedFloorId = reservedSlot.floorID?._id || reservedSlot.floorID || null;
+      assignedFloorName = reservedSlot.floorID?.name || null;
+    }
+  }
+
+  return {
+    isSubscriptionActive,
+    membershipType,
+    assignedSlot: subscription?.slots?.[0]?.slotCode || assignedSlot?.slotCode || assignedSlot?.slotNumber || null,
+    assignedFloorId,
+    assignedFloorName,
+    ticketPackageId: subscription?.ticketPackage?._id || null,
+  };
 };
 
 const resolveCheckoutBilling = async (session) => {
@@ -146,6 +216,7 @@ exports.verifyPlate = async (req, res, next) => {
     let isVIP = false;
     let isRegisteredVehicle = false;
     let phone = null;
+    let registeredUser = null;
 
     if (registeredVehicle) {
        isRegisteredVehicle = true;
@@ -154,11 +225,13 @@ exports.verifyPlate = async (req, res, next) => {
           phone = userDetail.phone;
        }
        
-       const user = await User.findById(registeredVehicle.owner);
-       if (user && user.membership && user.membership.isVip && new Date(user.membership.expireAt) > new Date()) {
+       registeredUser = await User.findById(registeredVehicle.owner);
+       if (registeredUser && registeredUser.membership && registeredUser.membership.isVip && new Date(registeredUser.membership.expireAt) > new Date()) {
            isVIP = true;
        }
     }
+
+    const membershipAccess = await resolveActiveSubscriptionAccess(registeredVehicle?.owner || null);
 
     const pricing = await resolveKioskPricingPackage({
       userId: registeredVehicle?.owner || null,
@@ -173,7 +246,7 @@ exports.verifyPlate = async (req, res, next) => {
     }
 
     const preBooking = await findEligiblePreBooking(normalizedPlate);
-    const isMonthly = false;
+    const isMonthly = membershipAccess.isSubscriptionActive;
     const hasPreBooking = !!preBooking;
 
     return res.status(200).json({
@@ -184,17 +257,25 @@ exports.verifyPlate = async (req, res, next) => {
         hasPreBooking,
         isVIP,
         isRegisteredVehicle,
+        membershipType: membershipAccess.membershipType,
         phone: phone,
         isKnownGuest: !!phone || isVIP || isRegisteredVehicle,
         bookingId: preBooking?._id || null,
-        assignedSlot: preBooking?.slotCode || null,
-        assignedFloorId: preBooking?.floorId?._id || null,
-        assignedFloorName: preBooking?.floorId?.name || null,
+        assignedSlot: preBooking?.slotCode || membershipAccess.assignedSlot || null,
+        assignedFloorId: preBooking?.floorId?._id || membershipAccess.assignedFloorId || null,
+        assignedFloorName: preBooking?.floorId?.name || membershipAccess.assignedFloorName || null,
         bookingStartTime: preBooking?.startTime || null,
         bookingEndTime: preBooking?.endTime || null,
-        bookingDurationHours: preBooking?.paidHours || null,
-        bookingTicketPackageId: preBooking?.ticketPackageId?._id || null,
-        bookingMode: preBooking?.ticketPackageId?.type === 'daily' ? 'daily' : 'hourly',
+        bookingDurationHours:
+          preBooking?.paidHours || (membershipAccess.isSubscriptionActive ? 24 : null),
+        bookingTicketPackageId:
+          preBooking?.ticketPackageId?._id || membershipAccess.ticketPackageId || null,
+        bookingMode:
+          preBooking?.ticketPackageId?.type === 'daily'
+            ? 'daily'
+            : membershipAccess.isSubscriptionActive
+              ? 'daily'
+              : 'hourly',
         pricingPackage: pricing.package,
         pricingSource: pricing.source,
       }
@@ -360,6 +441,7 @@ exports.createKioskSession = async (req, res, next) => {
       preBooking.status = 'active';
       preBooking.sessionId = newSession._id;
       await preBooking.save();
+      emitBookingChanged(req.app, preBooking, { action: 'kiosk_checked_in' });
     }
 
     // Send check-in notification email if user has a registered email
@@ -478,7 +560,7 @@ exports.kioskExitScan = async (req, res, next) => {
         );
 
         if (linkedSession?.status === 'completed') {
-          await syncBookingStatusFromSession(linkedSession, {
+          const repairedBooking = await syncBookingStatusFromSession(linkedSession, {
             status: 'completed',
             finalAmount:
               typeof linkedSession.totalPrice === 'number'
@@ -488,6 +570,7 @@ exports.kioskExitScan = async (req, res, next) => {
             paymentStatus:
               activeBooking.paymentStatus === 'failed' ? 'paid' : activeBooking.paymentStatus,
           });
+          emitBookingChanged(req.app, repairedBooking, { action: 'status_repaired' });
 
           return res.status(409).json({
             success: false,
@@ -661,13 +744,14 @@ exports.kioskCheckout = async (req, res, next) => {
 
     await session.save();
 
-    await syncBookingStatusFromSession(session, {
+    const syncedBooking = await syncBookingStatusFromSession(session, {
       status: 'completed',
       finalAmount:
         typeof billing.recordedSessionTotal === 'number' ? billing.recordedSessionTotal : totalPrice,
       refundAmount: billing.linkedBooking?.refundAmount || 0,
       paymentStatus: billing.linkedBooking?.paymentStatus || 'paid',
     });
+    emitBookingChanged(req.app, syncedBooking, { action: 'kiosk_checked_out' });
 
     // Send checkout email if linked to user
     if (session.userId) {

@@ -9,31 +9,34 @@ import KioskLayout from './KioskLayout';
 import { API_BASE } from '../../services/api';
 import { formatLicensePlateDisplay } from '../../utils/licensePlate';
 
+const createEmptyKioskFormData = () => ({
+  licensePlate: '',
+  phone: '',
+  selectedSlot: null,
+  floorId: null,
+  bookingId: null,
+  bookingFloorName: null,
+  step3Mode: 'policy',
+  durationHours: 1,
+  entryImageBase64: null,
+  ticketPackageId: null,
+  pricingPackage: null,
+  pricingSource: 'default',
+  bookingMode: 'hourly',
+  isMonthly: false,
+  membershipType: null,
+  hasPreBooking: false,
+  isVIP: false,
+  isRegisteredVehicle: false,
+});
+
 export default function KioskFlow() {
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successSession, setSuccessSession] = useState(null); // stores the successful session data
 
   // Shared State across steps
-  const [formData, setFormData] = useState({
-    licensePlate: '',
-    phone: '',
-    selectedSlot: null,
-    floorId: null,
-    bookingId: null,
-    bookingFloorName: null,
-    step3Mode: 'policy',
-    durationHours: 1,
-    entryImageBase64: null,
-    ticketPackageId: null,
-    pricingPackage: null,
-    pricingSource: 'default',
-    bookingMode: 'hourly',
-    isMonthly: false,
-    hasPreBooking: false,
-    isVIP: false,
-    isRegisteredVehicle: false,
-  });
+  const [formData, setFormData] = useState(createEmptyKioskFormData);
 
   const updateFormData = (data) => {
     setFormData(prev => ({ ...prev, ...data }));
@@ -86,28 +89,20 @@ export default function KioskFlow() {
     }
   };
 
-  const handleCloseSuccess = () => {
+  const resetKioskFlow = () => {
     setSuccessSession(null);
-    setFormData({
-      licensePlate: '',
-      phone: '',
-      selectedSlot: null,
-      floorId: null,
-      bookingId: null,
-      bookingFloorName: null,
-      step3Mode: 'policy',
-      durationHours: 1,
-      entryImageBase64: null,
-      ticketPackageId: null,
-      pricingPackage: null,
-      pricingSource: 'default',
-      bookingMode: 'hourly',
-      isMonthly: false,
-      hasPreBooking: false,
-      isVIP: false,
-      isRegisteredVehicle: false,
-    });
-    navigate('/kiosk');
+    setFormData(createEmptyKioskFormData());
+    navigate('/kiosk', { replace: true });
+  };
+
+  const handleCloseSuccess = () => {
+    resetKioskFlow();
+  };
+
+  const handleFastPassComplete = () => {
+    setSuccessSession(null);
+    setFormData(createEmptyKioskFormData());
+    window.location.replace('/kiosk');
   };
 
   const handleFastPassEntry = async () => {
@@ -188,7 +183,7 @@ export default function KioskFlow() {
 
       <Routes>
         {/* Step 0: Welcome Screen (Full width, no split layout) */}
-        <Route path="/" element={<KioskWelcome onStart={(step = 1) => handleNext(step)} updateFormData={updateFormData} />} />
+        <Route index element={<KioskWelcome onStart={(step = 1) => handleNext(step)} updateFormData={updateFormData} />} />
 
         {/* Steps 1-3 use the Split-Screen KioskLayout */}
         <Route element={<KioskLayout />}>
@@ -206,9 +201,9 @@ export default function KioskFlow() {
               <KioskStep3
                 formData={formData}
                 onConfirm={handleConfirm}
-                onBack={() => handleBack(formData.step3Mode === 'welcome' ? 0 : 2)}
+                onBack={() => handleBack(formData.step3Mode === 'fastpass' ? 0 : 2)}
                 onAutoCheckIn={handleFastPassEntry}
-                onComplete={handleCloseSuccess}
+                onComplete={handleFastPassComplete}
               />
             }
           />
