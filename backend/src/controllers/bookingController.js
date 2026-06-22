@@ -154,6 +154,58 @@ const resolveLicensePlate = async (userId, { vehicleId, licensePlate }) => {
   return plate;
 };
 
+const getSessionExpectedEndTime = (session) => {
+  const start = new Date(session.checkInTime);
+  if (Number.isNaN(start.getTime())) return null;
+
+  const expectedHours = Math.max(Number(session.expectedDurationHours || 1), 1);
+  return new Date(start.getTime() + expectedHours * 60 * 60 * 1000);
+};
+
+const findVehicleUsageConflict = async ({ licensePlate, start, end }) => {
+  const [overlappingBooking, activeSessions] = await Promise.all([
+    Booking.findOne({
+      licensePlate,
+      status: { $in: BOOKING_STATUSES_THAT_BLOCK_SLOT },
+      startTime: { $lt: end },
+      endTime: { $gt: start },
+    })
+      .select('slotCode startTime endTime status')
+      .lean(),
+    Session.find({
+      licensePlate,
+      status: 'active',
+    })
+      .select('parkingSlot checkInTime expectedDurationHours')
+      .lean(),
+  ]);
+
+  if (overlappingBooking) {
+    return {
+      type: 'booking',
+      message: 'This vehicle already has another booking during the selected time range. One license plate can only park once at a time.',
+      conflict: overlappingBooking,
+    };
+  }
+
+  const overlappingSession = activeSessions.find((session) => {
+    const sessionStart = new Date(session.checkInTime);
+    const sessionEnd = getSessionExpectedEndTime(session);
+    if (Number.isNaN(sessionStart.getTime()) || !sessionEnd) return false;
+    return sessionStart < end && sessionEnd > start;
+  });
+
+  if (overlappingSession) {
+    return {
+      type: 'session',
+      message: 'This vehicle is already scheduled to be parked during the selected time range. Please choose a later time.',
+      conflict: overlappingSession,
+    };
+  }
+
+  return null;
+};
+
 const getBookingServices = async (bookingIds) => {
   const services = await BookingService.find({ bookingId: { $in: bookingIds } })
     .sort({ createdAt: 1 })
@@ -208,6 +260,23 @@ exports.createBooking = async (req, res, next) => {
     const { start, end } = parseBookingTimeRange(startTime, endTime);
     const plate = await resolveLicensePlate(req.user._id, { vehicleId, licensePlate });
     const requestedServiceIds = [...new Set((serviceIds || []).map(String))];
+
+    const vehicleUsageConflict = await findVehicleUsageConflict({
+      licensePlate: plate,
+      start,
+      end,
+    });
+
+    if (vehicleUsageConflict) {
+      return res.status(409).json({
+        success: false,
+        message: vehicleUsageConflict.message,
+        data: {
+          conflictType: vehicleUsageConflict.type,
+          conflict: vehicleUsageConflict.conflict,
+        },
+      });
+    }
 
     // Determine if user is VIP
     const User = require('../models/User'); // Ensure imported

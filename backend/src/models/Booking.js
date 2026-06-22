@@ -103,6 +103,7 @@ bookingSchema.pre('validate', function validateBookingTime(next) {
 });
 
 bookingSchema.index({ floorId: 1, slotCode: 1, startTime: 1, endTime: 1, status: 1 });
+bookingSchema.index({ licensePlate: 1, status: 1, startTime: 1, endTime: 1 });
 bookingSchema.index({ userId: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Booking', bookingSchema);

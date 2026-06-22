@@ -78,4 +78,6 @@ sessionSchema.pre('validate', function normalizePlate(next) {
   next();
 });
 
+sessionSchema.index({ licensePlate: 1, status: 1, checkInTime: 1 });
+
 module.exports = mongoose.model('Session', sessionSchema);
