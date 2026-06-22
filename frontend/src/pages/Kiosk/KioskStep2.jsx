@@ -8,6 +8,26 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack })
   const [currentFloorId, setCurrentFloorId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [dbSlots, setDbSlots] = useState([]);
+
+  useEffect(() => {
+    const fetchDbSlots = async () => {
+      if (!currentFloorId) {
+        setDbSlots([]);
+        return;
+      }
+      try {
+        const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/parking-floors/${currentFloorId}/slots`);
+        const data = await res.json();
+        if (data.success) {
+          setDbSlots(data.data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch slots", err);
+      }
+    };
+    fetchDbSlots();
+  }, [currentFloorId]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -92,6 +112,7 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack })
               currentFloorId={currentFloorId}
               onFloorSelect={setCurrentFloorId}
               activeSessions={activeSessions}
+              dbSlots={dbSlots}
               selectedSlotId={formData.selectedSlot}
               onSelectSlot={(slot, floorId) => updateFormData({ selectedSlot: slot.id, floorId })}
               is2DMode={true}

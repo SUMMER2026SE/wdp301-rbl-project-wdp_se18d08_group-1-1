@@ -11,6 +11,7 @@ export default function ParkingLots() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selectedSlot, setSelectedSlot] = useState(null);
+  const [dbSlots, setDbSlots] = useState([]);
 
   // activeSessions to track live cars - mock or fetch if admin wants live too
   const [activeSessions, setActiveSessions] = useState([]);
@@ -70,6 +71,34 @@ export default function ParkingLots() {
     }, 0);
     return () => clearTimeout(timer);
   }, [fetchFloors]);
+
+  // Fetch Slots for current floor to know maintenance status
+  const fetchDbSlots = useCallback(async (floorId) => {
+    try {
+      const { getFloorSlots } = await import('../../services/parkingFloorService');
+      if (floorId) {
+        const res = await getFloorSlots(floorId);
+        if (res.ok && res.data.success) {
+          setDbSlots(res.data.data);
+        }
+      } else {
+        if (floors.length === 0) {
+          setDbSlots([]);
+          return;
+        }
+        const promises = floors.map(f => getFloorSlots(f._id));
+        const results = await Promise.all(promises);
+        const allSlots = results.flatMap(r => (r.ok && r.data.success) ? r.data.data : []);
+        setDbSlots(allSlots);
+      }
+    } catch (e) {
+      console.error("Failed to fetch slots", e);
+    }
+  }, [floors]);
+
+  useEffect(() => {
+    fetchDbSlots(currentFloorId);
+  }, [currentFloorId, fetchDbSlots]);
 
   const handleCreateFloor = async () => {
     const floorNumber = floors.length + 1;
@@ -199,6 +228,7 @@ export default function ParkingLots() {
       if (res.ok) {
         setIsEditMode(false);
         fetchFloors();
+        fetchDbSlots(currentFloorId);
       } else {
         alert("Failed to save map. Backend returned an error: " + (res.data?.message || "Unknown error"));
         console.error("Save Map Error:", res);
@@ -285,6 +315,7 @@ export default function ParkingLots() {
           onFloorSelect={setCurrentFloorId}
           onSlotClick={setSelectedSlot}
           activeSessions={activeSessions}
+          dbSlots={dbSlots}
           loading={loading}
           isEditMode={isEditMode}
         />
@@ -293,7 +324,31 @@ export default function ParkingLots() {
       {/* Slide-over panel for slots */}
       <div className={`absolute inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity duration-300 ${selectedSlot ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} onClick={() => setSelectedSlot(null)}></div>
       <div className={`absolute top-0 right-0 bottom-0 w-[420px] bg-[#0f172a]/80 backdrop-blur-2xl border-l border-cyan-500/20 p-8 flex flex-col shadow-[-20px_0_50px_rgba(8,145,178,0.1)] text-slate-200 z-50 transform transition-transform duration-300 ease-in-out ${selectedSlot ? 'translate-x-0' : 'translate-x-full'}`}>
-        {selectedSlot && (
+        {selectedSlot && (() => {
+           const dbSlotInfo = dbSlots.find(s => s.slotNumber === selectedSlot.id && s.floorID === selectedSlot.floorId);
+           const isMaintenance = dbSlotInfo?.status === 'maintenance';
+
+           const handleToggleMaintenance = async () => {
+             try {
+               const { startMaintenance, endMaintenance } = await import('../../services/maintenanceService');
+               if (isMaintenance) {
+                 const res = await endMaintenance({ slotID: dbSlotInfo._id });
+                 if (res.ok) fetchDbSlots(currentFloorId);
+                 else alert("Failed to end maintenance: " + (res.data?.message || "Unknown error"));
+               } else {
+                 const reason = prompt("Enter reason for maintenance:");
+                 if (!reason) return;
+                 const res = await startMaintenance({ slotID: dbSlotInfo._id, reason });
+                 if (res.ok) fetchDbSlots(currentFloorId);
+                 else alert("Failed to start maintenance: " + (res.data?.message || "Unknown error"));
+               }
+             } catch (e) {
+               console.error("Maintenance toggle failed", e);
+               alert("Network error while trying to toggle maintenance.");
+             }
+           };
+
+           return (
            <>
               <div className="flex justify-between items-start mb-6 flex-shrink-0">
                 <div>
@@ -308,7 +363,27 @@ export default function ParkingLots() {
             </div>
             <div className="mb-4 flex-1 overflow-y-auto pr-2">
                 <h3 className="text-slate-500 text-[11px] font-bold uppercase tracking-[0.15em] mb-4">Slot Details</h3>
-                {selectedSlot.session ? (
+                
+                {dbSlotInfo && (
+                  <div className="mb-4">
+                    <button 
+                      onClick={handleToggleMaintenance}
+                      className={`w-full py-2 rounded font-bold transition-all ${isMaintenance ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/30' : 'bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30'}`}
+                    >
+                      {isMaintenance ? "End Maintenance" : "Start Maintenance"}
+                    </button>
+                  </div>
+                )}
+
+                {isMaintenance ? (
+                  <div className="flex flex-col gap-4 h-full items-center justify-center text-center py-10 opacity-80">
+                      <div className="w-16 h-16 rounded-full bg-red-900/30 flex items-center justify-center border border-red-500/50 mb-2">
+                          <span className="text-red-500 font-bold text-2xl">⚠</span>
+                      </div>
+                      <p className="text-red-400 font-bold uppercase tracking-widest">Under Maintenance</p>
+                      <p className="text-xs text-red-500 max-w-[200px]">This slot is currently locked for maintenance.</p>
+                  </div>
+                ) : selectedSlot.session ? (
                   <div className="flex flex-col gap-4">
                       <div className="bg-rose-900/20 border border-rose-500/30 rounded-xl p-4 flex flex-col items-center justify-center mb-2">
                           <span className="text-xs text-rose-400 uppercase tracking-widest font-bold mb-1">Status</span>
@@ -335,7 +410,7 @@ export default function ParkingLots() {
                 )}
             </div>
            </>
-        )}
+        )})()}
       </div>
 
     </div>

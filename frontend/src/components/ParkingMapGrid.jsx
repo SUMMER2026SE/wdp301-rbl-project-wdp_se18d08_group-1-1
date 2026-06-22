@@ -1,5 +1,84 @@
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { Car, Zap, ZoomIn, ZoomOut, Maximize, TreePine, ArrowRight, Accessibility, Bike, Navigation, Layers, MonitorSmartphone } from "lucide-react";
+
+const SlotElement = React.memo(({ el, floorId, style, isHovered, session, isMaintenance, onMouseEnter, onMouseLeave, onClick }) => {
+  const slotZ = 5;
+  const slotTransition = 'all 0.2s ease-in-out';
+  const hasName = !!el.name && el.name.trim() !== '';
+  const handleClick = (e, type) => {
+    e.stopPropagation();
+    if (!hasName) return;
+    if (onClick) {
+      onClick({ id: el.name || el.id, type, session, floorId });
+    }
+  };
+
+  const maintenanceStyle = isMaintenance ? {
+    backgroundImage: 'repeating-linear-gradient(45deg, rgba(239, 68, 68, 0.2), rgba(239, 68, 68, 0.2) 10px, rgba(127, 29, 29, 0.3) 10px, rgba(127, 29, 29, 0.3) 20px)'
+  } : {};
+
+  const isOccupied = !!session;
+
+  if (el.type === 'slot') {
+    let bgColor = '#ffffff';
+    let borderColor = '#94a3b8';
+    if (isMaintenance) { bgColor = '#fee2e2'; borderColor = '#ef4444'; }
+    else if (isOccupied) { bgColor = '#fecdd3'; borderColor = '#e11d48'; } 
+    else if (isHovered) { bgColor = '#67e8f9'; borderColor = '#06b6d4'; }
+
+    return (
+      <div style={{...style, ...maintenanceStyle, opacity: hasName ? 1 : 0.3, cursor: hasName ? 'pointer' : 'not-allowed', transform: `translateZ(${slotZ}px) rotateZ(${el.rot || 0}deg)`, borderColor, backgroundColor: bgColor, transition: slotTransition }} className="border-[2px] border-solid rounded-lg shadow-sm flex flex-col items-center justify-center group"
+           onMouseEnter={() => onMouseEnter(el.id)}
+           onMouseLeave={onMouseLeave}
+           onClick={(e) => handleClick(e, 'hourly')}>
+        <span className={`text-[10px] font-bold mb-1 ${isMaintenance ? 'text-red-700' : isOccupied ? 'text-rose-700' : 'text-slate-500 group-hover:text-[#0891b2]'}`} style={{ transform: 'translateZ(2px)' }}>
+          {isOccupied ? session.licensePlate : (hasName ? el.name : '')}
+        </span>
+        <Car size={20} className={isMaintenance ? 'text-red-500' : isOccupied ? 'text-rose-500' : 'text-slate-400 group-hover:text-[#06b6d4]'} style={{ transform: 'translateZ(5px)' }} />
+      </div>
+    );
+  }
+
+  if (el.type === 'slot-ev') {
+    let bgColor = '#ecfdf5';
+    let borderColor = '#10b981';
+    if (isMaintenance) { bgColor = '#fee2e2'; borderColor = '#ef4444'; }
+    else if (isOccupied) { bgColor = '#fecdd3'; borderColor = '#e11d48'; }
+    else if (isHovered) { bgColor = '#6ee7b7'; borderColor = '#059669'; }
+    return (
+      <div style={{...style, ...maintenanceStyle, opacity: hasName ? 1 : 0.3, cursor: hasName ? 'pointer' : 'not-allowed', transform: `translateZ(${slotZ}px) rotateZ(${el.rot || 0}deg)`, borderColor, backgroundColor: bgColor, transition: slotTransition }} className="border-[2px] border-solid rounded-lg shadow-sm flex flex-col items-center justify-center group"
+           onMouseEnter={() => onMouseEnter(el.id)}
+           onMouseLeave={onMouseLeave}
+           onClick={(e) => handleClick(e, 'ev')}>
+        <span className={`text-[10px] font-bold mb-1 ${isMaintenance ? 'text-red-700' : isOccupied ? 'text-rose-700' : 'text-emerald-600'}`} style={{ transform: 'translateZ(2px)' }}>
+          {isOccupied ? session.licensePlate : (hasName ? el.name : '')}
+        </span>
+        <Zap size={20} className={isMaintenance ? 'text-red-500' : isOccupied ? 'text-rose-500' : 'text-emerald-500'} style={{ transform: 'translateZ(5px)' }} />
+      </div>
+    );
+  }
+
+  if (el.type === 'slot-handicap') {
+    let bgColor = '#eff6ff';
+    let borderColor = '#3b82f6';
+    if (isMaintenance) { bgColor = '#fee2e2'; borderColor = '#ef4444'; }
+    else if (isOccupied) { bgColor = '#fecdd3'; borderColor = '#e11d48'; }
+    else if (isHovered) { bgColor = '#93c5fd'; borderColor = '#2563eb'; }
+    return (
+      <div style={{...style, ...maintenanceStyle, opacity: hasName ? 1 : 0.3, cursor: hasName ? 'pointer' : 'not-allowed', transform: `translateZ(${slotZ}px) rotateZ(${el.rot || 0}deg)`, borderColor, backgroundColor: bgColor, transition: slotTransition }} className="border-[2px] border-solid rounded-lg shadow-sm flex flex-col items-center justify-center group"
+           onMouseEnter={() => onMouseEnter(el.id)}
+           onMouseLeave={onMouseLeave}
+           onClick={(e) => handleClick(e, 'handicap')}>
+        <span className={`text-[10px] font-bold mb-1 ${isMaintenance ? 'text-red-700' : isOccupied ? 'text-rose-700' : 'text-blue-600'}`} style={{ transform: 'translateZ(2px)' }}>
+          {isOccupied ? session.licensePlate : (hasName ? el.name : '')}
+        </span>
+        <Accessibility size={20} className={isMaintenance ? 'text-red-500' : isOccupied ? 'text-rose-500' : 'text-blue-500'} style={{ transform: 'translateZ(5px)' }} />
+      </div>
+    );
+  }
+
+  return null;
+});
 
 export default function ParkingMapGrid({ 
   floors = [], 
@@ -7,6 +86,7 @@ export default function ParkingMapGrid({
   onFloorSelect, 
   onSlotClick,
   activeSessions = [], // Array of sessions to determine slot status
+  dbSlots = [], // Array of slot data from DB to check maintenance status
   loading = false,
   isEditMode = false // In case we want to reuse something, but currently builder is separated
 }) {
@@ -15,6 +95,24 @@ export default function ParkingMapGrid({
   const [isDragging, setIsDragging] = useState(false);
   const [hoveredSlotId, setHoveredSlotId] = useState(null);
   const containerRef = useRef(null);
+
+  // O(1) Lookup Maps for Performance Optimization
+  const sessionMap = useMemo(() => {
+    return activeSessions.reduce((acc, curr) => {
+      acc[`${curr.floorId}-${curr.parkingSlot}`] = curr;
+      return acc;
+    }, {});
+  }, [activeSessions]);
+
+  const dbSlotMap = useMemo(() => {
+    return dbSlots.reduce((acc, curr) => {
+      acc[`${curr.floorID}-${curr.slotNumber}`] = curr;
+      return acc;
+    }, {});
+  }, [dbSlots]);
+
+  const handleMouseEnterSlot = useCallback((id) => setHoveredSlotId(id), []);
+  const handleMouseLeaveSlot = useCallback(() => setHoveredSlotId(null), []);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -71,11 +169,7 @@ export default function ParkingMapGrid({
 
   const handleContextMenu = (e) => e.preventDefault();
 
-  const getSlotSession = (slotName) => {
-    return activeSessions.find(s => s.parkingSlot === slotName);
-  };
-
-  const renderDynamicElements = (elements) => {
+  const renderDynamicElements = (elements, floorId) => {
     if (!elements) return null;
     return elements.map(el => {
       const style = {
@@ -95,98 +189,34 @@ export default function ParkingMapGrid({
         
         return (
           <div key={el.id} style={{...style, transform: `translateZ(2px) rotateZ(${el.rot || 0}deg)`, borderColor: borderColors[themeColor] || '#a855f7', backgroundColor: bgColors[themeColor] || 'rgba(168,85,247,0.1)' }} className="border-[2px] border-solid shadow-md rounded-xl pointer-events-none">
-             <div className="absolute -top-4 left-4 px-3 py-1 bg-white border-[2px] border-solid rounded-full shadow-md flex items-center justify-center" style={{ borderColor: borderColors[themeColor] || '#a855f7', transform: 'translateZ(10px)' }}>
-                <span className="font-black tracking-widest text-[10px] uppercase leading-none" style={{ color: borderColors[themeColor] || '#a855f7' }}>{el.name}</span>
-             </div>
-          </div>
-        );
-      }
-      
-      const isHovered = hoveredSlotId === el.id;
-      const slotZ = 5;
-      const slotTransition = 'all 0.2s ease-in-out';
-      
-      // Determine if slot is occupied
-      const session = getSlotSession(el.name || el.id);
-      const isOccupied = !!session;
-
-      const handleClick = (e, type) => {
-        e.stopPropagation();
-        if (onSlotClick) {
-          onSlotClick({ id: el.name || el.id, type, session });
-        }
-      };
-
-      if (el.type === 'slot') {
-        let bgColor = '#ffffff';
-        let borderColor = '#94a3b8';
-        if (isOccupied) { bgColor = '#fecdd3'; borderColor = '#e11d48'; } // red-200 : rose-600
-        else if (isHovered) { bgColor = '#67e8f9'; borderColor = '#06b6d4'; }
-
-        return (
-          <div key={el.id} style={{...style, transform: `translateZ(${slotZ}px) rotateZ(${el.rot || 0}deg)`, borderColor, backgroundColor: bgColor, transition: slotTransition }} className="border-[2px] border-solid rounded-lg cursor-pointer shadow-sm flex flex-col items-center justify-center group"
-               onMouseEnter={() => setHoveredSlotId(el.id)}
-               onMouseLeave={() => setHoveredSlotId(null)}
-               onClick={(e) => handleClick(e, 'hourly')}>
-            <span className={`text-[10px] font-bold mb-1 ${isOccupied ? 'text-rose-700' : 'text-slate-500 group-hover:text-[#0891b2]'}`} style={{ transform: 'translateZ(2px)' }}>
-              {isOccupied ? session.licensePlate : (el.name || el.id)}
-            </span>
-            <Car size={20} className={isOccupied ? 'text-rose-500' : 'text-slate-400 group-hover:text-[#06b6d4]'} style={{ transform: 'translateZ(5px)' }} />
+             {el.name && el.name.trim() !== '' && (
+               <div className="absolute -top-4 left-4 px-3 py-1 bg-white border-[2px] border-solid rounded-full shadow-md flex items-center justify-center" style={{ borderColor: borderColors[themeColor] || '#a855f7', transform: 'translateZ(10px)' }}>
+                  <span className="font-black tracking-widest text-[10px] uppercase leading-none" style={{ color: borderColors[themeColor] || '#a855f7' }}>{el.name}</span>
+               </div>
+             )}
           </div>
         );
       }
 
-      if (el.type === 'slot-ev') {
-        let bgColor = '#ecfdf5';
-        let borderColor = '#10b981';
-        if (isOccupied) { bgColor = '#fecdd3'; borderColor = '#e11d48'; }
-        else if (isHovered) { bgColor = '#6ee7b7'; borderColor = '#059669'; }
-        return (
-          <div key={el.id} style={{...style, transform: `translateZ(${slotZ}px) rotateZ(${el.rot || 0}deg)`, borderColor, backgroundColor: bgColor, transition: slotTransition }} className="border-[2px] border-solid rounded-lg cursor-pointer shadow-sm flex flex-col items-center justify-center group"
-               onMouseEnter={() => setHoveredSlotId(el.id)}
-               onMouseLeave={() => setHoveredSlotId(null)}
-               onClick={(e) => handleClick(e, 'ev')}>
-            <span className={`text-[10px] font-bold mb-1 ${isOccupied ? 'text-rose-700' : 'text-emerald-600'}`} style={{ transform: 'translateZ(2px)' }}>
-              {isOccupied ? session.licensePlate : (el.name || 'EV')}
-            </span>
-            <Zap size={20} className={isOccupied ? 'text-rose-500' : 'text-emerald-500'} style={{ transform: 'translateZ(5px)' }} />
-          </div>
-        );
-      }
+      if (el.type.startsWith('slot')) {
+        const isHovered = hoveredSlotId === el.id;
+        const session = sessionMap[`${floorId}-${el.name || el.id}`];
+        const dbSlot = dbSlotMap[`${floorId}-${el.name || el.id}`];
+        const isMaintenance = dbSlot?.status === 'maintenance';
 
-      if (el.type === 'slot-handicap') {
-        let bgColor = '#eff6ff';
-        let borderColor = '#3b82f6';
-        if (isOccupied) { bgColor = '#fecdd3'; borderColor = '#e11d48'; }
-        else if (isHovered) { bgColor = '#93c5fd'; borderColor = '#2563eb'; }
         return (
-          <div key={el.id} style={{...style, transform: `translateZ(${slotZ}px) rotateZ(${el.rot || 0}deg)`, borderColor, backgroundColor: bgColor, transition: slotTransition }} className="border-[2px] border-solid rounded-lg cursor-pointer shadow-sm flex flex-col items-center justify-center group"
-               onMouseEnter={() => setHoveredSlotId(el.id)}
-               onMouseLeave={() => setHoveredSlotId(null)}
-               onClick={(e) => handleClick(e, 'handicap')}>
-            <span className={`text-[10px] font-bold mb-1 ${isOccupied ? 'text-rose-700' : 'text-blue-600'}`} style={{ transform: 'translateZ(2px)' }}>
-              {isOccupied ? session.licensePlate : (el.name || '♿')}
-            </span>
-            <Accessibility size={20} className={isOccupied ? 'text-rose-500' : 'text-blue-500'} style={{ transform: 'translateZ(5px)' }} />
-          </div>
-        );
-      }
-
-      if (el.type === 'slot-moto') {
-        let bgColor = '#fffbeb';
-        let borderColor = '#f59e0b';
-        if (isOccupied) { bgColor = '#fecdd3'; borderColor = '#e11d48'; }
-        else if (isHovered) { bgColor = '#fcd34d'; borderColor = '#d97706'; }
-        return (
-          <div key={el.id} style={{...style, transform: `translateZ(${slotZ}px) rotateZ(${el.rot || 0}deg)`, borderColor, backgroundColor: bgColor, transition: slotTransition }} className="border-[2px] border-solid rounded-lg cursor-pointer shadow-sm flex flex-col items-center justify-center group"
-               onMouseEnter={() => setHoveredSlotId(el.id)}
-               onMouseLeave={() => setHoveredSlotId(null)}
-               onClick={(e) => handleClick(e, 'moto')}>
-            <span className={`text-[8px] font-bold mb-1 ${isOccupied ? 'text-rose-700' : 'text-amber-600'}`} style={{ transform: 'translateZ(2px)' }}>
-              {isOccupied ? session.licensePlate : (el.name || 'MOTO')}
-            </span>
-            <Bike size={16} className={isOccupied ? 'text-rose-500' : 'text-amber-500'} style={{ transform: 'translateZ(5px)' }} />
-          </div>
+          <SlotElement
+            key={el.id}
+            el={el}
+            floorId={floorId}
+            style={style}
+            isHovered={isHovered}
+            session={session}
+            isMaintenance={isMaintenance}
+            onMouseEnter={handleMouseEnterSlot}
+            onMouseLeave={handleMouseLeaveSlot}
+            onClick={onSlotClick}
+          />
         );
       }
 
@@ -328,11 +358,11 @@ export default function ParkingMapGrid({
 
                   if (isOverview) {
                       const centerIndex = (floors.length - 1) / 2;
-                      targetZ = (idx - centerIndex) * 300;
+                      targetZ = (idx - centerIndex) * 200;
                   } else {
-                      targetZ = (idx - currentFloorIndex) * 300;
+                      targetZ = (idx - currentFloorIndex) * 150;
                       if (isAbove) {
-                          targetZ += 1200;
+                          targetZ += 500;
                           targetOpacity = 0;
                           pointerEvents = 'none';
                       } else if (isBelow) {
@@ -376,7 +406,7 @@ export default function ParkingMapGrid({
                            style={{ backgroundImage: `linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)`, backgroundSize: '40px 40px' }} />
 
                       <div className="absolute inset-0" style={{ pointerEvents: !isCurrent ? 'none' : 'auto', transformStyle: 'preserve-3d' }}>
-                        {renderDynamicElements(floor.layoutData?.elements)}
+                        {renderDynamicElements(floor.layoutData?.elements, floor._id)}
                       </div>
                       
                       {floor.layoutData?.elements?.length === 0 && (
