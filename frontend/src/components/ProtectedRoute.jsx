@@ -3,13 +3,13 @@ import { Navigate } from 'react-router-dom';
 
 /**
  * ProtectedRoute
- * @param {string[]} allowedRoles - mảng role được phép vào trang này, e.g. ['admin'] hoặc ['admin','manager']
+ * @param {string[]} allowedRoles - array of roles allowed to access this route, e.g. ['admin'] or ['admin','manager']
  * @param {React.ReactNode} children
  *
  * Logic:
- *  - Chưa login          → redirect /login
- *  - Login nhưng sai role → redirect /unauthorized
- *  - Đúng role           → render children
+ *  - Not logged in          → redirect /login
+ *  - Logged in with the wrong role → redirect /unauthorized
+ *  - Correct role           → render children
  */
 export default function ProtectedRoute({ allowedRoles = [], children }) {
   const raw = sessionStorage.getItem('valo_user');

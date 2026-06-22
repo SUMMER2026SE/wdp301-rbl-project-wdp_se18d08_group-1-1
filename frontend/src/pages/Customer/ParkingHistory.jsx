@@ -9,13 +9,18 @@ import {
   CreditCard,
   Image as ImageIcon,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  X,
+  Camera,
+  LogIn,
+  LogOut
 } from "lucide-react";
 
 export default function ParkingHistory() {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [selectedSession, setSelectedSession] = useState(null);
 
   useEffect(() => {
     fetchHistory();
@@ -92,6 +97,45 @@ export default function ParkingHistory() {
       minute: "2-digit",
     });
   };
+
+  const renderSnapshotPanel = ({
+    title,
+    icon,
+    time,
+    imageUrl,
+    emptyLabel,
+  }) => (
+    <div className="bg-[#101018] border border-gray-800/70 rounded-2xl p-5">
+      <div className="flex items-center gap-2 text-sm font-black text-white mb-4 uppercase tracking-wide">
+        {icon}
+        <span>{title}</span>
+      </div>
+
+      <div className="mb-4">
+        <p className="text-[11px] font-bold uppercase tracking-widest text-gray-500 mb-2">
+          Time
+        </p>
+        <p className="text-lg font-bold text-gray-100">
+          {time ? formatDate(time) : emptyLabel}
+        </p>
+      </div>
+
+      <div className="overflow-hidden rounded-2xl border border-gray-800 bg-[#07070a] min-h-[240px]">
+        {imageUrl ? (
+          <img
+            src={imageUrl}
+            alt={title}
+            className="w-full h-[260px] object-cover"
+          />
+        ) : (
+          <div className="w-full h-[260px] flex flex-col items-center justify-center text-center px-6 text-gray-500">
+            <Camera size={34} className="mb-3 text-gray-600" />
+            <p className="font-semibold">{emptyLabel}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
   return (
     <div
@@ -231,18 +275,73 @@ export default function ParkingHistory() {
                       <ImageIcon size={14} className="shrink-0" /> Entry Snapshot Captured
                     </span>
                     <a
-                      href={session.entryImage_url}
-                      target="_blank"
-                      rel="noreferrer"
+                      href="#"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        setSelectedSession(session);
+                      }}
                       className="text-[11px] md:text-xs font-bold text-yellow-500 hover:text-yellow-400 transition-colors w-fit border border-yellow-500/30 px-3 py-1.5 rounded-lg hover:bg-yellow-500/10"
                     >
-                      View Image
+                      View Details
                     </a>
                   </div>
                 )}
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {selectedSession && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-6xl max-h-[90vh] overflow-y-auto bg-[#09090d] border border-yellow-500/20 rounded-3xl shadow-[0_25px_80px_rgba(0,0,0,0.55)]">
+            <div className="flex items-start justify-between gap-4 p-6 md:p-7 border-b border-gray-800/70">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-yellow-500 mb-2">
+                  Session Details
+                </p>
+                <h2 className="text-2xl md:text-3xl font-black text-white">
+                  {selectedSession.licensePlate}
+                </h2>
+                <p className="text-sm text-gray-400 mt-2">
+                  Slot {selectedSession.parkingSlot || "Unassigned"} •{" "}
+                  {selectedSession.totalPrice
+                    ? `$${selectedSession.totalPrice.toFixed(2)}`
+                    : "No charge"}
+                </p>
+              </div>
+
+              <button
+                onClick={() => setSelectedSession(null)}
+                className="shrink-0 w-11 h-11 rounded-xl border border-gray-800 text-gray-400 hover:text-white hover:border-gray-700 hover:bg-white/5 transition-colors flex items-center justify-center"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 md:p-7">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {renderSnapshotPanel({
+                  title: "Check-In",
+                  icon: <LogIn size={18} className="text-emerald-400" />,
+                  time: selectedSession.checkInTime,
+                  imageUrl: selectedSession.entryImage_url,
+                  emptyLabel: "No check-in image captured",
+                })}
+
+                {renderSnapshotPanel({
+                  title: "Check-Out",
+                  icon: <LogOut size={18} className="text-sky-400" />,
+                  time: selectedSession.checkOutTime,
+                  imageUrl: selectedSession.exitImage_url,
+                  emptyLabel:
+                    selectedSession.status === "active"
+                      ? "Vehicle has not checked out yet"
+                      : "No check-out image captured",
+                })}
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

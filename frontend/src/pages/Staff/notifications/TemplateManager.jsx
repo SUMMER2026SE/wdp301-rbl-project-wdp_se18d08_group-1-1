@@ -37,11 +37,11 @@ export default function TemplateManager({ templates, onCreate, onUpdate, onDelet
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="text-sm text-sky-400 uppercase tracking-[0.2em] font-semibold">
-            Mẫu
+            Templates
           </p>
-          <h2 className="mt-2 text-2xl font-semibold text-white">Quản lý mẫu thông báo</h2>
+          <h2 className="mt-2 text-2xl font-semibold text-white">Manage notification templates</h2>
           <p className="mt-2 text-sm text-gray-400 max-w-2xl">
-            Tạo, chỉnh sửa và xoá mẫu thông báo để dùng nhanh trong tab Soạn.
+            Create, edit, and delete notification templates for quick use in the Compose tab.
           </p>
         </div>
       </div>
@@ -50,7 +50,7 @@ export default function TemplateManager({ templates, onCreate, onUpdate, onDelet
         <div className="rounded-3xl border border-gray-700/60 bg-gray-900/70 p-5">
           <div className="flex items-center gap-3 text-sky-400 mb-5">
             <FileText size={18} />
-            <h3 className="text-lg font-semibold text-white">Danh sách mẫu</h3>
+            <h3 className="text-lg font-semibold text-white">Template list</h3>
           </div>
           <div className="space-y-3">
             {templates.map((template) => (
@@ -73,7 +73,7 @@ export default function TemplateManager({ templates, onCreate, onUpdate, onDelet
                       className="inline-flex items-center gap-2 rounded-2xl border border-gray-700/80 bg-gray-900 px-3 py-2 text-xs text-sky-200 hover:bg-sky-500/10"
                     >
                       <Edit3 size={14} />
-                      Sửa
+                      Edit
                     </button>
                     <button
                       type="button"
@@ -81,7 +81,7 @@ export default function TemplateManager({ templates, onCreate, onUpdate, onDelet
                       className="inline-flex items-center gap-2 rounded-2xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-200 hover:bg-red-500/15"
                     >
                       <Trash2 size={14} />
-                      Xoá
+                      Delete
                     </button>
                   </div>
                 </div>
@@ -94,34 +94,34 @@ export default function TemplateManager({ templates, onCreate, onUpdate, onDelet
           <div className="flex items-center gap-3 text-sky-400 mb-5">
             <Plus size={18} />
             <h3 className="text-lg font-semibold text-white">
-              {editingId ? "Chỉnh sửa mẫu" : "Tạo mẫu mới"}
+              {editingId ? "Edit template" : "Create new template"}
             </h3>
           </div>
           <div className="space-y-4">
             <div>
-              <label className="mb-2 block text-sm font-semibold text-gray-300">Tên mẫu</label>
+              <label className="mb-2 block text-sm font-semibold text-gray-300">Template name</label>
               <input
                 value={formState.name}
                 onChange={(event) =>
                   setFormState((prev) => ({ ...prev, name: event.target.value }))
                 }
                 className="w-full rounded-2xl border border-gray-700/80 bg-gray-900 px-4 py-3 text-sm text-gray-100 outline-none focus:border-sky-400"
-                placeholder="Ví dụ: Thông báo bảo trì"
+                placeholder="Example: Maintenance notice"
               />
             </div>
             <div>
-              <label className="mb-2 block text-sm font-semibold text-gray-300">Tiêu đề</label>
+              <label className="mb-2 block text-sm font-semibold text-gray-300">Title</label>
               <input
                 value={formState.title}
                 onChange={(event) =>
                   setFormState((prev) => ({ ...prev, title: event.target.value }))
                 }
                 className="w-full rounded-2xl border border-gray-700/80 bg-gray-900 px-4 py-3 text-sm text-gray-100 outline-none focus:border-sky-400"
-                placeholder="Tiêu đề thông báo"
+                placeholder="Title notifications"
               />
             </div>
             <div>
-              <label className="mb-2 block text-sm font-semibold text-gray-300">Nội dung</label>
+              <label className="mb-2 block text-sm font-semibold text-gray-300">Content</label>
               <textarea
                 rows={5}
                 value={formState.message}
@@ -129,11 +129,11 @@ export default function TemplateManager({ templates, onCreate, onUpdate, onDelet
                   setFormState((prev) => ({ ...prev, message: event.target.value }))
                 }
                 className="w-full rounded-3xl border border-gray-700/80 bg-gray-900 px-4 py-4 text-sm text-gray-100 outline-none focus:border-sky-400 resize-none"
-                placeholder="Nội dung mẫu thông báo"
+                placeholder="Notification template content"
               />
             </div>
             <div>
-              <label className="mb-2 block text-sm font-semibold text-gray-300">Mức độ ưu tiên</label>
+              <label className="mb-2 block text-sm font-semibold text-gray-300">Priority</label>
               <select
                 value={formState.priority}
                 onChange={(event) =>
@@ -154,7 +154,7 @@ export default function TemplateManager({ templates, onCreate, onUpdate, onDelet
               className="inline-flex items-center justify-center gap-2 rounded-3xl bg-sky-500 px-5 py-3 text-sm font-semibold text-white hover:bg-sky-400"
             >
               <Plus size={16} />
-              {editingId ? "Cập nhật mẫu" : "Tạo mẫu mới"}
+              {editingId ? "Update template" : "Create new template"}
             </button>
           </div>
         </div>

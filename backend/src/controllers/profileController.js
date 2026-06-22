@@ -2,7 +2,27 @@ const { validationResult } = require("express-validator");
 const User = require("../models/User");
 const UserDetail = require("../models/UserDetail");
 const Session = require("../models/Session");
+const TicketPackage = require("../models/TicketPackage");
 const { uploadToCloudinary } = require("../middlewares/uploadMiddleware");
+
+const buildMembershipPayload = async (membership = {}) => {
+  const raw =
+    typeof membership.toObject === "function" ? membership.toObject() : membership;
+  let packageType = null;
+
+  if (raw?.packageId) {
+    const ticketPackage = await TicketPackage.findById(raw.packageId).select("type").lean();
+    packageType = ticketPackage?.type || null;
+  }
+
+  return {
+    isVip: raw?.isVip || false,
+    expireAt: raw?.expireAt || null,
+    packageId: raw?.packageId || null,
+    freeServiceCount: raw?.freeServiceCount || 0,
+    packageType,
+  };
+};
 
 /**
  * @desc    Get user profile (User + UserDetail)
@@ -20,6 +40,8 @@ const getProfile = async (req, res, next) => {
         message: "User not found.",
       });
     }
+
+    const membership = await buildMembershipPayload(user.membership);
 
     res.status(200).json({
       success: true,
@@ -39,6 +61,7 @@ const getProfile = async (req, res, next) => {
           gender: userDetail?.gender || "",
           avatar: userDetail?.avatar || "",
         },
+        membership,
       },
     });
   } catch (error) {
@@ -86,6 +109,8 @@ const updateProfile = async (req, res, next) => {
       claimedSessions = result.modifiedCount || 0;
     }
 
+    const membership = await buildMembershipPayload(user.membership);
+
     res.status(200).json({
       success: true,
       message: "Profile updated successfully",
@@ -103,6 +128,7 @@ const updateProfile = async (req, res, next) => {
           gender: userDetail.gender,
           avatar: userDetail.avatar,
         },
+        membership,
       },
     });
   } catch (error) {

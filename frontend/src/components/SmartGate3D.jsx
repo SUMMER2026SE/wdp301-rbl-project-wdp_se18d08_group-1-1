@@ -3,7 +3,7 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, useGLTF, ContactShadows, Environment, Text } from '@react-three/drei';
 import * as THREE from 'three';
 
-// 1. Xe thật
+// 1. Real car
 function RealCarModel({ position }) {
   const ref = useRef();
   const { scene } = useGLTF('/car.glb'); 
@@ -11,18 +11,18 @@ function RealCarModel({ position }) {
   useFrame((state) => {
     const t = state.clock.getElapsedTime() % 10;
     
-    // Giai đoạn di chuyển
-    if (t < 2.6) ref.current.position.z = THREE.MathUtils.lerp(25, 9.2, t / 2.6); // Tiến tới trước barrier
-    else if (t < 4.4) ref.current.position.z = 9.2; // Dừng lại để quét
-    else if (t < 5.3) ref.current.position.z = 9.2; // Chờ barrier mở xong
-    else if (t < 9) ref.current.position.z = THREE.MathUtils.lerp(9.2, -20, (t - 5.3) / 3.7); // Đi qua
+    // Movement phase
+    if (t < 2.6) ref.current.position.z = THREE.MathUtils.lerp(25, 9.2, t / 2.6); // Move toward the barrier
+    else if (t < 4.4) ref.current.position.z = 9.2; // Stop for scanning
+    else if (t < 5.3) ref.current.position.z = 9.2; // Wait for the barrier to open
+    else if (t < 9) ref.current.position.z = THREE.MathUtils.lerp(9.2, -20, (t - 5.3) / 3.7); // Pass through
     else ref.current.position.z = 25; // Reset
   });
 
   return <primitive ref={ref} object={scene} scale={1.5} position={position} rotation={[0, 0, 0]} />;
 }
 
-// 2. Trạm Booth, Camera AI và Barrier
+// 2. Booth station, camera AI, and barrier
 function BarrierAndCamera({ position = [2, 0, 5], rotationY = 0, enabled = true, showPlate = false }) {
   const arm = useRef();
   const light = useRef();
@@ -31,14 +31,14 @@ function BarrierAndCamera({ position = [2, 0, 5], rotationY = 0, enabled = true,
   useFrame((state) => {
     const t = state.clock.getElapsedTime() % 10;
     
-    // Logic Camera quét: Sáng lên khi xe dừng (t từ 2.6 đến 4.4)
+    // Camera scan logic: Lights up when the car stops (t from 2.6 to 4.4)
     if (t > 2.6 && t < 4.4) {
       light.current.intensity = Math.abs(Math.sin(t * 10)) * 5;
     } else {
       light.current.intensity = 0;
     }
 
-    // Logic Barrier: Mở lên sau khi quét xong (t từ 4.5)
+    // Barrier logic: Opens after scanning (t from 4.5)
     arm.current.rotation.x = 0;
     arm.current.rotation.y = 0;
     if (!enabled) {
@@ -50,15 +50,15 @@ function BarrierAndCamera({ position = [2, 0, 5], rotationY = 0, enabled = true,
       plateRef.current.visible = showPlate && t > 2.6 && t < 8.8;
     }
 
-    if (t < 4.4) arm.current.rotation.z = 0; // Đóng
-    else if (t < 5.3) arm.current.rotation.z = THREE.MathUtils.lerp(0, -Math.PI / 2, (t - 4.4) / 0.9); // Mở thẳng lên 90 độ
-    else if (t < 8.8) arm.current.rotation.z = -Math.PI / 2; // Giữ mở
-    else arm.current.rotation.z = THREE.MathUtils.lerp(-Math.PI / 2, 0, (t - 8.8) / 1.2); // Đóng lại
+    if (t < 4.4) arm.current.rotation.z = 0; // Closed
+    else if (t < 5.3) arm.current.rotation.z = THREE.MathUtils.lerp(0, -Math.PI / 2, (t - 4.4) / 0.9); // Open straight up 90 degrees
+    else if (t < 8.8) arm.current.rotation.z = -Math.PI / 2; // Keep open
+    else arm.current.rotation.z = THREE.MathUtils.lerp(-Math.PI / 2, 0, (t - 8.8) / 1.2); // Close again
   });
 
   return (
     <group position={position} rotation={[0, rotationY, 0]}>
-      {/* Camera/Đèn quét AI */}
+      {/* Camera / AI scan light */}
       <pointLight ref={light} position={[1.2, 5.35, -0.35]} color="#38bdf8" intensity={0} distance={8} />
       <group position={[1.2, 5.2, -0.45]} rotation={[0.25, -Math.PI / 8, 0]}>
         <mesh>
@@ -79,7 +79,7 @@ function BarrierAndCamera({ position = [2, 0, 5], rotationY = 0, enabled = true,
         </mesh>
       </group>
 
-      {/* Khung cổng thu phí (gantry) */}
+      {/* Toll gate frame (gantry) */}
       <group position={[-2.5, 0, 0]} rotation={[0, 0, 0]}>
         <mesh position={[0, 2.6, 0]}>
           <boxGeometry args={[0.4, 5.2, 0.4]} />
@@ -110,7 +110,7 @@ function BarrierAndCamera({ position = [2, 0, 5], rotationY = 0, enabled = true,
         </Text>
       </group>
 
-      {/* Hộp motor và cần barrier kiểu VETC */}
+      {/* Motor box and VETC-style barrier arm */}
       <group position={[2.6, 0, 0]}>
         <mesh position={[0, 1.1, 0]}>
           <boxGeometry args={[0.9, 1.2, 1.1]} />
@@ -122,7 +122,7 @@ function BarrierAndCamera({ position = [2, 0, 5], rotationY = 0, enabled = true,
         </mesh>
       </group>
 
-      {/* Cần barrier */}
+      {/* Barrier arm */}
       <group position={[2.8, 1.8, 0]} ref={arm}>
         <mesh position={[-2.8, 0, 0]}>
           <boxGeometry args={[5.6, 0.12, 0.12]} />
@@ -137,7 +137,7 @@ function BarrierAndCamera({ position = [2, 0, 5], rotationY = 0, enabled = true,
   );
 }
 
-// 3. Canvas chính
+// 3. Main canvas
 export default function SmartGate3D() {
   return (
     <div className="w-full h-[520px] rounded-2xl overflow-hidden relative bg-gradient-to-br from-slate-100 via-slate-50 to-stone-100 ring-1 ring-black/5">
@@ -186,7 +186,7 @@ export default function SmartGate3D() {
             <meshStandardMaterial color="#e7e5e4" roughness={0.9} metalness={0.05} />
           </mesh>
 
-          {/* Hai làn song song */}
+          {/* Two parallel lanes */}
           <mesh position={[-6, -0.04, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
             <planeGeometry args={[6, 80]} />
             <meshStandardMaterial color="#d4d4d4" roughness={0.95} />
@@ -208,7 +208,7 @@ export default function SmartGate3D() {
             <meshStandardMaterial color="#f5c04b" />
           </mesh>
 
-          {/* Lề đường */}
+          {/* Road shoulder */}
           <mesh position={[-11.5, 0.15, 0]} receiveShadow>
             <boxGeometry args={[2, 0.3, 80]} />
             <meshStandardMaterial color="#cbd5e1" />
@@ -218,7 +218,7 @@ export default function SmartGate3D() {
             <meshStandardMaterial color="#cbd5e1" />
           </mesh>
 
-          {/* Biển vào bãi */}
+          {/* Entrance sign */}
           <group position={[-12, 2.2, 6]}>
             <mesh position={[0, 0, 0]}>
               <boxGeometry args={[2.6, 1.4, 0.2]} />
@@ -230,7 +230,7 @@ export default function SmartGate3D() {
             </mesh>
           </group>
 
-          {/* Cột đèn bãi xe */}
+          {/* Parking lot light pole */}
           <group position={[-10, 0, -14]}>
             <mesh position={[0, 3.2, 0]}>
               <cylinderGeometry args={[0.08, 0.08, 6.4, 16]} />
@@ -242,7 +242,7 @@ export default function SmartGate3D() {
             </mesh>
           </group>
 
-          {/* Cọc tiêu */}
+          {/* Traffic bollard */}
           <mesh position={[-3.5, 0.2, 9]}>
             <cylinderGeometry args={[0.25, 0.35, 0.4, 16]} />
             <meshStandardMaterial color="#f97316" />

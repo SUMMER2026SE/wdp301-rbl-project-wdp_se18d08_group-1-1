@@ -79,9 +79,9 @@ exports.updateFloorLayout = async (req, res) => {
 
       for (const sEl of slotElements) {
         // -------------------------------------------------------------
-        // OPTIMIZATION: Nếu ô đỗ chưa được đặt tên (name rỗng),
-        // KHÔNG lưu xuống DB để tránh quá tải và rác dữ liệu.
-        // Ô đỗ vẫn nằm trong layoutData để hiển thị ở builder nhưng không book được.
+        // OPTIMIZATION: If a parking slot has not been named,
+        // do not save it to the database to avoid overload and stale data.
+        // The slot remains in layoutData for builder display but cannot be booked.
         // -------------------------------------------------------------
         if (!sEl.name || sEl.name.trim() === '') {
           continue;
@@ -110,7 +110,7 @@ exports.updateFloorLayout = async (req, res) => {
         if (!matchedZoneId) {
           return res.status(400).json({ 
             success: false, 
-            message: `Lỗi: Ô đỗ ${slotIdentifier} đang nằm ngoài tất cả các Khu vực (Zone). Vui lòng kéo ô đỗ này vào một Zone hợp lệ.` 
+            message: `Error: Parking slot ${slotIdentifier} is outside every Zone. Please drag this slot into a valid Zone.`
           });
         }
 

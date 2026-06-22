@@ -34,6 +34,11 @@ const slotSchema = new mongoose.Schema(
       enum: ["available", "occupied", "maintenance", "booked"],
       default: "available",
     },
+    reservedFor: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
   },
   {
     timestamps: true,

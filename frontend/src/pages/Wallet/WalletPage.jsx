@@ -25,6 +25,7 @@ import {
   getTransactionsHistory,
   getWalletInfo,
 } from "../../services/walletService";
+import { clearAuthSession } from "../../services/authStorage";
 
 const DEFAULT_TRANSACTION_LIMIT = 6;
 const ALL_TRANSACTION_LIMIT = 50;
@@ -121,9 +122,7 @@ export default function WalletPage() {
         ]);
 
         if (walletRes.status === 401 || transactionsRes.status === 401) {
-          localStorage.removeItem("accessToken");
-          localStorage.removeItem("refreshToken");
-          sessionStorage.removeItem("valo_user");
+          clearAuthSession();
           window.location.href = "/login";
           return;
         }
@@ -662,8 +661,7 @@ function TopUpModal({ wallet, onClose, onStartPolling }) {
     try {
       const res = await createTopUpUrl(numericAmount);
       if (res.status === 401) {
-        localStorage.removeItem("accessToken");
-        localStorage.removeItem("refreshToken");
+        clearAuthSession();
         window.location.href = "/login";
         return;
       }

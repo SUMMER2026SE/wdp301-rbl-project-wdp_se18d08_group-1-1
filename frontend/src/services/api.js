@@ -3,8 +3,10 @@
  * All service files should import from here.
  */
 
+import { clearAuthSession, notifyAuthChange } from "./authStorage";
+
 export const API_BASE =
-  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5000/api";
+  import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5001/api";
 
 let isRefreshing = false;
 let refreshPromise = null;
@@ -38,15 +40,12 @@ async function refreshToken() {
       const data = await response.json();
       if (data.data && data.data.accessToken) {
         localStorage.setItem("accessToken", data.data.accessToken);
-        window.dispatchEvent(new Event("valo_auth_change"));
+        notifyAuthChange();
         return data.data.accessToken;
       }
       throw new Error("No access token in response");
     } catch (error) {
-      // Clear tokens and redirect to login
-      localStorage.removeItem("accessToken");
-      localStorage.removeItem("refreshToken");
-      sessionStorage.removeItem("valo_user");
+      clearAuthSession();
       window.location.href = "/login";
       throw error;
     } finally {

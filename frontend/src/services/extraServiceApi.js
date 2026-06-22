@@ -4,17 +4,17 @@ const authHeader = () => ({
   Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
 });
 
-/** GET /api/services — Lấy danh sách dịch vụ (public) */
+/** GET /api/services — Get service list (public) */
 export const getServices = (activeOnly = true) =>
   apiFetch(`/services?activeOnly=${activeOnly}`);
 
-/** GET /api/services/:id — Lấy chi tiết dịch vụ (public) */
+/** GET /api/services/:id — Get service details (public) */
 export const getServiceById = (id) =>
   apiFetch(`/services/${id}`);
 
 /** 
- * POST /api/admin/services — Thêm dịch vụ mới (cần upload file) 
- * Vì có FormData, chúng ta dùng fetch thuần thay vì apiFetch (do apiFetch mặc định Content-Type: application/json)
+ * POST /api/admin/services — Add new service (requires file upload)
+ * Because this uses FormData, use native fetch instead of apiFetch because apiFetch defaults to Content-Type: application/json
  */
 export const createService = async (formData) => {
   const res = await fetch(`${API_BASE}/admin/services`, {
@@ -27,7 +27,7 @@ export const createService = async (formData) => {
 };
 
 /** 
- * PUT /api/admin/services/:id — Cập nhật dịch vụ 
+ * PUT /api/admin/services/:id — Update service
  */
 export const updateService = async (id, formData) => {
   const res = await fetch(`${API_BASE}/admin/services/${id}`, {
@@ -39,7 +39,7 @@ export const updateService = async (id, formData) => {
   return { ok: res.ok, status: res.status, data };
 };
 
-/** DELETE /api/admin/services/:id — Xóa dịch vụ */
+/** DELETE /api/admin/services/:id — Delete service */
 export const deleteService = (id) =>
   apiFetch(`/admin/services/${id}`, {
     method: 'DELETE',

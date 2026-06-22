@@ -107,7 +107,7 @@ const getBalance = async (userId) => {
  * Credit wallet (add money) - Used for TOP_UP and REFUND
  * Uses MongoDB transactions for atomicity
  * @param {string} userId - User's ObjectId
- * @param {number} amount - Amount to add (VNĐ)
+ * @param {number} amount - Amount to add (VND)
  * @param {string} type - 'TOP_UP' or 'REFUND'
  * @param {string} description - Transaction description
  * @param {Object} [options] - Additional options
@@ -183,7 +183,7 @@ const creditWallet = async (userId, amount, type, description, options = {}) => 
  * Debit wallet (subtract money) - Used for PAYMENT
  * Uses MongoDB transactions for atomicity
  * @param {string} userId - User's ObjectId
- * @param {number} amount - Amount to subtract (VNĐ)
+ * @param {number} amount - Amount to subtract (VND)
  * @param {string} description - Transaction description
  * @param {Object} [options] - Additional options
  * @param {string} [options.refSource] - Reference source (e.g., 'parking', 'booking')

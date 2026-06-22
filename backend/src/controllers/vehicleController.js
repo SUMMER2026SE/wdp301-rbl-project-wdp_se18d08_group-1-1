@@ -2,6 +2,7 @@ const { validationResult } = require('express-validator');
 const Vehicle = require('../models/Vehicle');
 const cloudinary = require('../config/cloudinary');
 const streamifier = require('streamifier');
+const { normalizeLicensePlate } = require('../utils/licensePlateUtils');
 
 // ─── Cloudinary 3D model auto-discovery ──────────────────────────────────────
 const normalizeSlug = (str = '') =>
@@ -94,10 +95,11 @@ const addVehicle = async (req, res) => {
 
     const { licensePlate, vehicleType, brand, model, color, nickname, isDefault, hexColor, registrationCardImage } =
       req.body;
+    const normalizedPlate = normalizeLicensePlate(licensePlate);
 
     // Check duplicate license plate
     const existing = await Vehicle.findOne({
-      licensePlate: licensePlate.toUpperCase().trim(),
+      licensePlate: normalizedPlate,
     });
     if (existing) {
       return res.status(409).json({
@@ -129,7 +131,7 @@ const addVehicle = async (req, res) => {
 
     const vehicle = await Vehicle.create({
       owner: req.user._id,
-      licensePlate,
+      licensePlate: normalizedPlate,
       vehicleType,
       brand,
       model,
@@ -186,8 +188,9 @@ const updateVehicle = async (req, res) => {
 
     // Check duplicate license plate (excluding this vehicle)
     if (licensePlate) {
+      const normalizedPlate = normalizeLicensePlate(licensePlate);
       const duplicate = await Vehicle.findOne({
-        licensePlate: licensePlate.toUpperCase().trim(),
+        licensePlate: normalizedPlate,
         _id: { $ne: req.params.id },
       });
       if (duplicate) {
@@ -196,7 +199,7 @@ const updateVehicle = async (req, res) => {
           message: 'This license plate is already registered',
         });
       }
-      vehicle.licensePlate = licensePlate;
+      vehicle.licensePlate = normalizedPlate;
     }
 
     if (vehicleType !== undefined) vehicle.vehicleType = vehicleType;

@@ -15,9 +15,9 @@ import * as notifApi from "../../services/notificationService";
 
 const TABS = [
   { key: "live", label: "Live feed", icon: Bell },
-  { key: "compose", label: "Gửi thông báo", icon: Send },
-  { key: "rules", label: "Luật tự động", icon: Zap },
-  { key: "templates", label: "Mẫu", icon: FileText },
+  { key: "compose", label: "Send notifications", icon: Send },
+  { key: "rules", label: "Automation rules", icon: Zap },
+  { key: "templates", label: "Templates", icon: FileText },
 ];
 
 const PRIORITIES = ["INFO", "LOW", "MEDIUM", "HIGH", "URGENT"];
@@ -31,9 +31,9 @@ const PRIORITY_BADGE = {
 };
 
 const TARGET_TYPES = [
-  { value: "ALL", label: "Tất cả" },
-  { value: "ROLE", label: "Theo vai trò" },
-  { value: "USER", label: "Người dùng cụ thể" },
+  { value: "ALL", label: "All" },
+  { value: "ROLE", label: "By role" },
+  { value: "USER", label: "Specific user" },
 ];
 
 const ROLE_OPTIONS = ["admin", "staff", "customer"];
@@ -50,7 +50,7 @@ const defaultForm = {
 };
 
 function formatDate(value) {
-  if (!value) return "Không có dữ liệu";
+  if (!value) return "No data";
   return new Intl.DateTimeFormat("vi-VN", {
     hour: "2-digit",
     minute: "2-digit",
@@ -63,7 +63,7 @@ function formatDate(value) {
 function normalizeNotification(item) {
   return {
     id: item._id || item.id,
-    title: item.title || "Không có tiêu đề",
+    title: item.title || "No title",
     content: item.content || item.message || "",
     priority: item.priority || "INFO",
     targetType: item.targetType || "ALL",
@@ -134,7 +134,7 @@ export default function NotificationManagement() {
         : data?.notifications || data?.data || [];
       setLiveNotifications(items.map(normalizeNotification));
     } catch (err) {
-      setError(err?.response?.data?.message || "Không tải được danh sách thông báo.");
+      setError(err?.response?.data?.message || "Could not load notifications.");
     } finally {
       setLoading(false);
     }
@@ -147,7 +147,7 @@ export default function NotificationManagement() {
       const items = Array.isArray(data) ? data : data?.items || data?.rules || [];
       setAutoRules(items);
     } catch (err) {
-      setError(err?.response?.data?.message || "Không tải được luật thông báo.");
+      setError(err?.response?.data?.message || "Could not load notification rules.");
     } finally {
       setRulesLoading(false);
     }
@@ -201,7 +201,7 @@ export default function NotificationManagement() {
   const handleSendNotification = async (event) => {
     event.preventDefault();
     if (!form.title.trim() || !form.content.trim()) {
-      setError("Vui lòng nhập tiêu đề và nội dung.");
+      setError("Please enter a title and content.");
       return;
     }
 
@@ -235,11 +235,11 @@ export default function NotificationManagement() {
     setNotice("");
     try {
       await notifApi.createNotification(payload);
-      setNotice("Đã gửi thông báo.");
+      setNotice("Notifications sent.");
       setForm(defaultForm);
       await fetchLiveFeed();
     } catch (err) {
-      setError(err?.response?.data?.message || "Gửi thông báo thất bại.");
+      setError(err?.response?.data?.message || "Failed to send notifications.");
     } finally {
       setSaving(false);
     }
@@ -274,7 +274,7 @@ export default function NotificationManagement() {
 
   const testRule = async (rule) => {
     await notifApi.testAutoRule(rule._id || rule.id);
-    setNotice(`Đã gửi thử luật "${rule.name}".`);
+    setNotice(`Tested rule "${rule.name}".`);
   };
 
   return (
@@ -284,7 +284,7 @@ export default function NotificationManagement() {
           <div>
             <p className="text-sm font-medium text-slate-500">Admin</p>
             <h1 className="mt-1 text-2xl font-semibold text-slate-950">
-              Quản lý thông báo
+              Manage notifications
             </h1>
           </div>
           <button
@@ -293,15 +293,15 @@ export default function NotificationManagement() {
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800"
           >
             <Inbox size={16} />
-            Làm mới
+            Refresh
           </button>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatCard label="Tổng thông báo" value={stats.total} icon={Bell} />
-          <StatCard label="Chưa đọc" value={stats.unread} icon={Inbox} />
-          <StatCard label="Khẩn cấp" value={stats.urgent} icon={Globe} />
-          <StatCard label="Luật đang bật" value={stats.rules} icon={Zap} />
+          <StatCard label="Total notifications" value={stats.total} icon={Bell} />
+          <StatCard label="Unread" value={stats.unread} icon={Inbox} />
+          <StatCard label="Urgent" value={stats.urgent} icon={Globe} />
+          <StatCard label="Active rules" value={stats.rules} icon={Zap} />
         </div>
 
         {(error || notice) && (
@@ -342,7 +342,7 @@ export default function NotificationManagement() {
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="Tìm theo tiêu đề hoặc nội dung"
+                placeholder="Search by title or content"
                 className="min-h-10 flex-1 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900"
               />
               <select
@@ -350,7 +350,7 @@ export default function NotificationManagement() {
                 onChange={(event) => setPriorityFilter(event.target.value)}
                 className="min-h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900"
               >
-                <option value="ALL">Tất cả mức ưu tiên</option>
+                <option value="ALL">All priorities</option>
                 {PRIORITIES.map((priority) => (
                   <option key={priority} value={priority}>
                     {priority}
@@ -364,13 +364,13 @@ export default function NotificationManagement() {
                 className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <CheckCircle2 size={16} />
-                Đánh dấu đã đọc
+                Mark as read
               </button>
             </div>
 
             <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
               {loading ? (
-                <p className="p-6 text-sm text-slate-500">Đang tải thông báo...</p>
+                <p className="p-6 text-sm text-slate-500">Loading notifications...</p>
               ) : liveNotifications.length ? (
                 <div className="divide-y divide-slate-100">
                   {liveNotifications.map((item) => (
@@ -394,7 +394,7 @@ export default function NotificationManagement() {
                           </span>
                           {!item.read && (
                             <span className="rounded-full bg-slate-900 px-2 py-0.5 text-xs font-semibold text-white">
-                              Mới
+                              New
                             </span>
                           )}
                         </div>
@@ -414,7 +414,7 @@ export default function NotificationManagement() {
                             type="button"
                             onClick={() => markAsRead(item.id)}
                             className="grid h-9 w-9 place-items-center rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50"
-                            aria-label="Đánh dấu đã đọc"
+                            aria-label="Mark as read"
                           >
                             <CheckCircle2 size={16} />
                           </button>
@@ -423,7 +423,7 @@ export default function NotificationManagement() {
                           type="button"
                           onClick={() => removeNotification(item.id)}
                           className="grid h-9 w-9 place-items-center rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50"
-                          aria-label="Xóa thông báo"
+                          aria-label="Delete notifications"
                         >
                           <Trash2 size={16} />
                         </button>
@@ -432,7 +432,7 @@ export default function NotificationManagement() {
                   ))}
                 </div>
               ) : (
-                <p className="p-6 text-sm text-slate-500">Chưa có thông báo.</p>
+                <p className="p-6 text-sm text-slate-500">No notifications yet.</p>
               )}
             </div>
           </section>
@@ -445,7 +445,7 @@ export default function NotificationManagement() {
           >
             <div className="grid gap-4 lg:grid-cols-2">
               <label className="grid gap-2 text-sm font-medium text-slate-700">
-                Tiêu đề
+                Title
                 <input
                   value={form.title}
                   onChange={(event) => updateForm("title", event.target.value)}
@@ -453,7 +453,7 @@ export default function NotificationManagement() {
                 />
               </label>
               <label className="grid gap-2 text-sm font-medium text-slate-700">
-                Mức ưu tiên
+                Priority
                 <select
                   value={form.priority}
                   onChange={(event) => updateForm("priority", event.target.value)}
@@ -469,7 +469,7 @@ export default function NotificationManagement() {
             </div>
 
             <label className="grid gap-2 text-sm font-medium text-slate-700">
-              Nội dung
+              Content
               <textarea
                 value={form.content}
                 onChange={(event) => updateForm("content", event.target.value)}
@@ -480,7 +480,7 @@ export default function NotificationManagement() {
 
             <div className="grid gap-4 lg:grid-cols-3">
               <label className="grid gap-2 text-sm font-medium text-slate-700">
-                Đối tượng
+                Audience
                 <select
                   value={form.targetType}
                   onChange={(event) => updateForm("targetType", event.target.value)}
@@ -494,7 +494,7 @@ export default function NotificationManagement() {
                 </select>
               </label>
               <label className="grid gap-2 text-sm font-medium text-slate-700">
-                Hết hạn sau giờ
+                Expires after hours
                 <input
                   type="number"
                   min="1"
@@ -504,7 +504,7 @@ export default function NotificationManagement() {
                 />
               </label>
               <div className="grid gap-2 text-sm font-medium text-slate-700">
-                Kênh gửi
+                Delivery channels
                 <div className="flex min-h-10 flex-wrap items-center gap-2">
                   {["IN_APP", "EMAIL"].map((channel) => (
                     <label
@@ -547,7 +547,7 @@ export default function NotificationManagement() {
                 <input
                   value={form.targetUsers}
                   onChange={(event) => updateForm("targetUsers", event.target.value)}
-                  placeholder="Nhập các ID, cách nhau bằng dấu phẩy"
+                  placeholder="Enter IDs separated by commas"
                   className="min-h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900"
                 />
               </label>
@@ -560,7 +560,7 @@ export default function NotificationManagement() {
                 className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Send size={16} />
-                {saving ? "Đang gửi..." : "Gửi thông báo"}
+                {saving ? "Sending..." : "Send notifications"}
               </button>
             </div>
           </form>
@@ -569,7 +569,7 @@ export default function NotificationManagement() {
         {activeTab === "rules" && (
           <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
             {rulesLoading ? (
-              <p className="p-6 text-sm text-slate-500">Đang tải luật tự động...</p>
+              <p className="p-6 text-sm text-slate-500">Loading automation rules...</p>
             ) : autoRules.length ? (
               <div className="divide-y divide-slate-100">
                 {autoRules.map((rule) => (
@@ -594,7 +594,7 @@ export default function NotificationManagement() {
                         </span>
                       </div>
                       <p className="mt-2 text-sm leading-6 text-slate-600">
-                        {rule.description || rule.content || "Không có mô tả."}
+                        {rule.description || rule.content || "No description."}
                       </p>
                       <p className="mt-2 text-xs font-medium text-slate-400">
                         Channels: {(rule.channels || ["IN_APP"]).join(", ")}
@@ -609,7 +609,7 @@ export default function NotificationManagement() {
                             updateRule(rule, { enabled: event.target.checked })
                           }
                         />
-                        Bật
+                        On
                       </label>
                       <button
                         type="button"
@@ -624,7 +624,7 @@ export default function NotificationManagement() {
                 ))}
               </div>
             ) : (
-              <p className="p-6 text-sm text-slate-500">Chưa có luật tự động.</p>
+              <p className="p-6 text-sm text-slate-500">No automation rules yet.</p>
             )}
           </section>
         )}
@@ -663,7 +663,7 @@ export default function NotificationManagement() {
                   }
                   className="mt-4 inline-flex min-h-10 items-center justify-center rounded-lg border border-slate-300 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                 >
-                  Dùng mẫu
+                  Use template
                 </button>
               </article>
             ))}
