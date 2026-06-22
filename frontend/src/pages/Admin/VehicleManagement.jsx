@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { apiFetch, API_BASE } from '../../services/api';
 import CarViewer from '../../components/CarViewer';
+import { formatLicensePlateDisplay } from '../../utils/licensePlate';
 
 // ── helpers ────────────────────────────────────────────────────────────────
 const authHeader = () => {
@@ -161,7 +162,7 @@ function PendingCard({ vehicle, models, processing, onApprove, onReject, onPrevi
         </div>
 
         <p className="text-lg font-black font-mono text-gray-700 dark:text-gray-200 tracking-widest mb-2">
-          {vehicle.licensePlate}
+          {formatLicensePlateDisplay(vehicle.licensePlateDisplay || vehicle.licensePlate)}
         </p>
 
         <div className="flex items-center gap-2 flex-wrap text-sm text-gray-500 dark:text-gray-400 mb-3">

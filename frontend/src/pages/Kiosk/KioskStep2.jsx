@@ -1,6 +1,13 @@
-import React, { useState, useEffect } from 'react';
-import { Info, AlertCircle, X, Clock, CreditCard, ArrowRight, Minus, Plus, CarFront } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { AlertCircle, ArrowRight, CarFront, Clock, CreditCard, Minus, Plus, X } from 'lucide-react';
 import ParkingMapViewer from '../../components/ParkingMapViewer';
+import { API_BASE } from '../../services/api';
+
+const DEFAULT_PRICING = {
+  name: 'Standard',
+  type: 'hourly',
+  price: 10000,
+};
 
 export default function KioskStep2({ formData, updateFormData, onNext, onBack }) {
   const [floors, setFloors] = useState([]);
@@ -9,8 +16,10 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack })
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dbSlots, setDbSlots] = useState([]);
-  const [ticketPackages, setTicketPackages] = useState([]);
-  const [selectedPackageId, setSelectedPackageId] = useState('');
+
+  const bookingMode = formData.bookingMode || 'hourly';
+  const appliedPricing = formData.pricingPackage || DEFAULT_PRICING;
+  const hourlyRate = Number(appliedPricing.price || DEFAULT_PRICING.price);
 
   useEffect(() => {
     const fetchDbSlots = async () => {
@@ -19,15 +28,16 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack })
         return;
       }
       try {
-        const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/parking-floors/${currentFloorId}/slots`);
+        const res = await fetch(`${API_BASE}/parking-floors/${currentFloorId}/slots`);
         const data = await res.json();
         if (data.success) {
           setDbSlots(data.data);
         }
       } catch (err) {
-        console.error("Failed to fetch slots", err);
+        console.error('Failed to fetch slots', err);
       }
     };
+
     fetchDbSlots();
   }, [currentFloorId]);
 
@@ -35,8 +45,8 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack })
     const fetchData = async () => {
       try {
         setLoading(true);
-        // Fetch Floors
-        const floorRes = await fetch(`${import.meta.env.VITE_API_BASE_URL}/parking-floors`);
+
+        const floorRes = await fetch(`${API_BASE}/parking-floors`);
         const floorData = await floorRes.json();
         if (floorData.success) {
           setFloors(floorData.data);
@@ -47,22 +57,10 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack })
           setError(floorData.message);
         }
 
-        // Fetch Active Sessions
-        const sessionRes = await fetch(`${import.meta.env.VITE_API_BASE_URL}/sessions/active-status`);
+        const sessionRes = await fetch(`${API_BASE}/sessions/active-status`);
         const sessionData = await sessionRes.json();
         if (sessionData.success) {
           setActiveSessions(sessionData.data);
-        }
-        // Fetch Ticket Packages
-        const packagesRes = await fetch(`${import.meta.env.VITE_API_BASE_URL}/ticket-packages/active`);
-        const packagesData = await packagesRes.json();
-        if (packagesData.success) {
-          const pkgList = packagesData.data || [];
-          setTicketPackages(pkgList);
-          if (pkgList.length > 0) {
-            setSelectedPackageId(pkgList[0]._id);
-            updateFormData({ ticketPackageId: pkgList[0]._id });
-          }
         }
       } catch (err) {
         setError('Failed to fetch data. Please check network.');
@@ -70,53 +68,59 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack })
         setLoading(false);
       }
     };
+
     fetchData();
   }, []);
-
-  const handleDurationChange = (delta) => {
-    const newVal = formData.durationHours + delta;
-    if (newVal >= 1 && newVal <= 24) {
-      updateFormData({ durationHours: newVal });
-    }
-  };
-
-  const estimatedCharge = React.useMemo(() => {
-    const pkg = ticketPackages.find(p => p._id === selectedPackageId);
-    if (!pkg) return 0;
-    if (pkg.type === 'hourly') {
-      return formData.durationHours * pkg.price;
-    } else if (pkg.type === 'daily') {
-      const days = Math.ceil(formData.durationHours / 24);
-      return days * pkg.price;
-    }
-    return 0;
-  }, [ticketPackages, selectedPackageId, formData.durationHours]);
 
   const closePanel = () => {
     updateFormData({ selectedSlot: null, floorId: null });
   };
 
+  const handleModeChange = (mode) => {
+    updateFormData({
+      bookingMode: mode,
+      durationHours: mode === 'daily' ? 24 : 1,
+    });
+  };
+
+  const handleDurationChange = (delta) => {
+    const step = bookingMode === 'daily' ? 24 : 1;
+    const minHours = bookingMode === 'daily' ? 24 : 1;
+    const maxHours = bookingMode === 'daily' ? 24 * 30 : 24;
+    const currentHours = Number(formData.durationHours || minHours);
+    const nextHours = currentHours + delta * step;
+
+    if (nextHours >= minHours && nextHours <= maxHours) {
+      updateFormData({ durationHours: nextHours });
+    }
+  };
+
+  const effectiveHours = Number(formData.durationHours || (bookingMode === 'daily' ? 24 : 1));
+  const displayDuration = bookingMode === 'daily'
+    ? Math.max(1, Math.round(effectiveHours / 24))
+    : effectiveHours;
+
+  const estimatedCharge = useMemo(
+    () => Math.max(1, effectiveHours) * hourlyRate,
+    [effectiveHours, hourlyRate]
+  );
+
   return (
     <div className="flex flex-col flex-1 w-full mx-auto pb-0 relative h-full">
-
-      {/* ─── MAIN FRAME containing Map and Overlays ─── */}
       <div className="flex-1 rounded-[32px] overflow-hidden relative flex flex-col w-full min-h-0 pt-0 pb-0 shadow-sm border border-[#0b0e16]">
-        
-        {/* ─── FULL WIDTH 2D MAP ─── */}
         <div className="flex-1 w-full relative overflow-hidden bg-[#0b0e16] shadow-inner flex items-center justify-center">
-          
-          {/* Floor Selection (Overlay Top) */}
           <div className="absolute top-6 left-0 right-0 flex justify-center gap-2 z-30 px-6 pointer-events-auto">
-            {floors.map(f => (
+            {floors.map((floor) => (
               <button
-                key={f._id}
-                onClick={() => setCurrentFloorId(f._id)}
-                className={`px-8 py-2 rounded-full font-bold text-sm transition-all shadow-sm ${currentFloorId === f._id
-                  ? 'bg-cyan-500 text-white shadow-lg shadow-cyan-500/20'
-                  : 'bg-[#181c23]/80 border border-white/10 text-gray-400 hover:text-white hover:bg-[#1f242d]/80 backdrop-blur'
-                  }`}
+                key={floor._id}
+                onClick={() => setCurrentFloorId(floor._id)}
+                className={`px-8 py-2 rounded-full font-bold text-sm transition-all shadow-sm ${
+                  currentFloorId === floor._id
+                    ? 'bg-cyan-500 text-white shadow-lg shadow-cyan-500/20'
+                    : 'bg-[#181c23]/80 border border-white/10 text-gray-400 hover:text-white hover:bg-[#1f242d]/80 backdrop-blur'
+                }`}
               >
-                {f.name}
+                {floor.name}
               </button>
             ))}
           </div>
@@ -146,7 +150,6 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack })
             />
           )}
 
-          {/* Legend Overlay (Bottom) */}
           <div className="absolute bottom-6 left-0 right-0 flex justify-center z-30 pointer-events-none px-4">
             <div className="bg-[#181c23]/80 backdrop-blur border border-white/10 px-6 py-3 rounded-full flex items-center gap-4 shadow-lg pointer-events-auto">
               <p className="text-cyan-400 font-black text-[10px] uppercase tracking-widest pr-2 hidden sm:block">Status Legend</p>
@@ -163,15 +166,16 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack })
                 <span className="text-[10px] text-gray-300 font-bold tracking-wide">Selected</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <div className="w-3.5 h-3.5 rounded-sm bg-red-200 border border-red-500" style={{ backgroundImage: 'repeating-linear-gradient(45deg, rgba(239, 68, 68, 0.2), rgba(239, 68, 68, 0.2) 4px, rgba(127, 29, 29, 0.3) 4px, rgba(127, 29, 29, 0.3) 8px)' }}></div>
+                <div
+                  className="w-3.5 h-3.5 rounded-sm bg-red-200 border border-red-500"
+                  style={{ backgroundImage: 'repeating-linear-gradient(45deg, rgba(239, 68, 68, 0.2), rgba(239, 68, 68, 0.2) 4px, rgba(127, 29, 29, 0.3) 4px, rgba(127, 29, 29, 0.3) 8px)' }}
+                ></div>
                 <span className="text-[10px] text-gray-300 font-bold tracking-wide">Maintenance</span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* ─── SLIDING RIGHT PANEL ─── */}
-        {/* Dimmed Background Overlay */}
         <div
           className={`absolute inset-0 bg-black/40 backdrop-blur-[2px] transition-opacity duration-500 z-40 rounded-[32px]
         ${formData.selectedSlot ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
@@ -179,12 +183,10 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack })
         ></div>
 
         <div className="absolute top-0 right-0 h-full z-50 overflow-hidden rounded-r-[32px] pointer-events-none">
-          {/* Sliding Panel */}
           <div
             className={`relative w-[400px] h-full bg-white shadow-[-20px_0_40px_rgba(0,0,0,0.15)] flex flex-col transition-transform duration-500 ease-out pointer-events-auto
           ${formData.selectedSlot ? 'translate-x-0' : 'translate-x-full'}`}
           >
-            {/* Header */}
             <div className="flex justify-between items-center p-6 border-b border-gray-100">
               <h3 className="text-sm font-black text-[#0f172a] tracking-widest uppercase flex items-center gap-2">
                 Booking Details
@@ -195,10 +197,7 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack })
             </div>
 
             <div className="p-6 flex-1 flex flex-col overflow-y-auto">
-
-              {/* Premium Slot Card */}
-              <div className="bg-[#0f172a] rounded-[24px] p-6 mb-8 text-white shadow-xl relative overflow-hidden shrink-0">
-                {/* Decorative background element */}
+              <div className="bg-[#0f172a] rounded-[24px] p-6 mb-6 text-white shadow-xl relative overflow-hidden shrink-0">
                 <div className="absolute -top-10 -right-10 opacity-10 pointer-events-none">
                   <CarFront size={120} />
                 </div>
@@ -213,55 +212,71 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack })
 
                 <div className="flex justify-between items-end border-t border-white/10 pt-4 mt-2">
                   <div>
-                    <p className="text-[10px] text-gray-400 font-medium">Zone</p>
-                    <p className="font-bold text-sm">Standard</p>
+                    <p className="text-[10px] text-gray-400 font-medium">Applied Pricing</p>
+                    <p className="font-bold text-sm">{appliedPricing.name}</p>
                   </div>
                   <div className="text-right">
                     <p className="text-[10px] text-gray-400 font-medium">Rate</p>
-                    <p className="font-bold text-sm text-[#FFDF00]">$6.00 / hr</p>
+                    <p className="font-bold text-sm text-[#FFDF00]">
+                      {bookingMode === 'daily'
+                        ? `${(hourlyRate * 24).toLocaleString('vi-VN')} VND / day`
+                        : `${hourlyRate.toLocaleString('vi-VN')} VND / hr`}
+                    </p>
                   </div>
                 </div>
               </div>
 
-              {/* Ticket Package Selection */}
               <div className="mb-6">
                 <div className="flex items-center gap-2 text-gray-500 mb-2">
                   <CreditCard size={16} />
-                  <span className="text-xs font-bold uppercase tracking-widest">Select Package</span>
+                  <span className="text-xs font-bold uppercase tracking-widest">Booking Type</span>
                 </div>
-                <div className="grid grid-cols-1 gap-2">
-                  {ticketPackages.map(pkg => (
-                    <button
-                      key={pkg._id}
-                      onClick={() => {
-                        setSelectedPackageId(pkg._id);
-                        updateFormData({ ticketPackageId: pkg._id });
-                        // Default duration if daily
-                        if (pkg.type === 'daily' && formData.durationHours < 24) {
-                          updateFormData({ durationHours: 24 });
-                        }
-                      }}
-                      className={`text-left p-3 rounded-xl border-2 transition-all ${selectedPackageId === pkg._id ? 'border-cyan-500 bg-cyan-50 text-cyan-900 shadow-sm' : 'border-gray-200 bg-white hover:border-cyan-300'}`}
-                    >
-                      <div className="flex justify-between items-center mb-1">
-                        <span className="font-bold text-sm">{pkg.name}</span>
-                        <span className="font-black text-cyan-600">{pkg.price.toLocaleString('vi-VN')} VND</span>
-                      </div>
-                      <span className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">
-                        {pkg.type} / {pkg.type === 'daily' ? '1 Day' : '1 Hour'}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => handleModeChange('hourly')}
+                    className={`rounded-2xl border-2 p-4 text-left transition-all ${
+                      bookingMode === 'hourly'
+                        ? 'border-cyan-500 bg-cyan-50 shadow-sm'
+                        : 'border-gray-200 bg-white hover:border-cyan-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-black text-[#0f172a]">Giờ</span>
+                      <span className={`text-[10px] font-bold uppercase tracking-widest ${bookingMode === 'hourly' ? 'text-cyan-600' : 'text-gray-400'}`}>
+                        Phổ biến
                       </span>
-                    </button>
-                  ))}
+                    </div>
+                    <p className="text-[11px] text-gray-500 mt-2">Tính theo số giờ thực tế.</p>
+                  </button>
+
+                  <button
+                    onClick={() => handleModeChange('daily')}
+                    className={`rounded-2xl border-2 p-4 text-left transition-all ${
+                      bookingMode === 'daily'
+                        ? 'border-purple-500 bg-purple-50 shadow-sm'
+                        : 'border-gray-200 bg-white hover:border-purple-300'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-black text-[#0f172a]">Cả ngày</span>
+                      <span className={`text-[10px] font-bold uppercase tracking-widest ${bookingMode === 'daily' ? 'text-purple-600' : 'text-gray-400'}`}>
+                        24h
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-gray-500 mt-2">Tính theo block 24 giờ.</p>
+                  </button>
                 </div>
               </div>
 
-              {/* Premium Duration Stepper */}
               <div className="mb-8">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2 text-gray-500">
                     <Clock size={16} />
                     <span className="text-xs font-bold uppercase tracking-widest">Duration</span>
                   </div>
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
+                    {bookingMode === 'daily' ? 'Days' : 'Hours'}
+                  </span>
                 </div>
 
                 <div className="flex items-center justify-between bg-white border border-gray-200 shadow-sm rounded-full p-2">
@@ -272,9 +287,11 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack })
                     <Minus size={20} strokeWidth={2.5} />
                   </button>
 
-                  <div className="flex flex-col items-center justify-center min-w-[80px]">
-                    <span className="text-3xl font-black text-[#0f172a] leading-none mb-0.5">{formData.durationHours}</span>
-                    <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Hours</span>
+                  <div className="flex flex-col items-center justify-center min-w-[100px]">
+                    <span className="text-3xl font-black text-[#0f172a] leading-none mb-0.5">{displayDuration}</span>
+                    <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">
+                      {bookingMode === 'daily' ? 'Days' : 'Hours'}
+                    </span>
                   </div>
 
                   <button
@@ -286,7 +303,6 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack })
                 </div>
               </div>
 
-              {/* Receipt / Total Section */}
               <div className="mt-auto">
                 <div className="border-t-2 border-dashed border-gray-200 pt-6 pb-2">
                   <div className="flex justify-between items-center mb-2">
@@ -295,7 +311,7 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack })
                   </div>
                   <div className="flex justify-between items-center mb-4">
                     <span className="text-xs text-gray-500 font-medium">Taxes & Fees</span>
-                    <span className="text-sm font-bold text-gray-700">$0.00</span>
+                    <span className="text-sm font-bold text-gray-700">0 VND</span>
                   </div>
 
                   <div className="flex justify-between items-end bg-gray-50 p-4 rounded-2xl">
@@ -308,11 +324,10 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack })
                     </div>
                   </div>
                   <p className="text-[10px] text-gray-500 text-center mt-3 font-medium">
-                    * Payment will be processed at checkout based on actual parking duration.
+                    * Giá được tính theo gói member đã được admin cấu hình, không cần chọn gói tại kiosk.
                   </p>
                 </div>
 
-                {/* Action Buttons */}
                 <div className="flex justify-between items-center gap-3 mt-4">
                   <button
                     onClick={onBack}
@@ -323,10 +338,11 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack })
                   <button
                     onClick={onNext}
                     disabled={!formData.selectedSlot}
-                    className={`flex-[2] flex items-center justify-center gap-2 text-lg font-bold py-4 rounded-2xl transition-all ${!formData.selectedSlot
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                      : 'bg-[#FFDF00] text-[#0f172a] hover:bg-[#e6c800] shadow-[0_8px_20px_rgba(255,223,0,0.3)] active:scale-95'
-                      }`}
+                    className={`flex-[2] flex items-center justify-center gap-2 text-lg font-bold py-4 rounded-2xl transition-all ${
+                      !formData.selectedSlot
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        : 'bg-[#FFDF00] text-[#0f172a] hover:bg-[#e6c800] shadow-[0_8px_20px_rgba(255,223,0,0.3)] active:scale-95'
+                    }`}
                   >
                     Next Step
                     <ArrowRight size={20} strokeWidth={3} />
@@ -337,9 +353,7 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack })
           </div>
         </div>
       </div>
-      {/* ─── END MAIN DARK FRAME ─── */}
 
-      {/* Floating Back Button (Space always reserved) */}
       <div className={`mt-6 flex justify-center z-50 transition-all duration-500 shrink-0 ${formData.selectedSlot ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
         <button
           onClick={onBack}

@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { normalizeLicensePlate } = require('../utils/licensePlateUtils');
 
 const sessionSchema = new mongoose.Schema(
   {
@@ -69,5 +70,12 @@ const sessionSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+sessionSchema.pre('validate', function normalizePlate(next) {
+  if (this.licensePlate) {
+    this.licensePlate = normalizeLicensePlate(this.licensePlate);
+  }
+  next();
+});
 
 module.exports = mongoose.model('Session', sessionSchema);

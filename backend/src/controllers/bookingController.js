@@ -7,10 +7,10 @@ const Vehicle = require('../models/Vehicle');
 const Slot = require('../models/Slot');
 const TicketPackage = require('../models/TicketPackage');
 const walletService = require('../services/walletService');
+const { normalizeLicensePlate } = require('../utils/licensePlateUtils');
 
 const BOOKING_STATUSES_THAT_BLOCK_SLOT = ['confirmed', 'active'];
 
-const normalizePlate = (plate = '') => String(plate).trim().toUpperCase();
 const normalizeSlotCode = (slotCode = '') => String(slotCode).trim().toUpperCase();
 
 const buildSlotKey = (floorId, slotCode) => `${String(floorId)}:${normalizeSlotCode(slotCode)}`;
@@ -143,10 +143,10 @@ const resolveLicensePlate = async (userId, { vehicleId, licensePlate }) => {
     if (!vehicle) {
       throw Object.assign(new Error('Vehicle not found'), { statusCode: 404 });
     }
-    return normalizePlate(vehicle.licensePlate);
+    return normalizeLicensePlate(vehicle.licensePlate);
   }
 
-  const plate = normalizePlate(licensePlate);
+  const plate = normalizeLicensePlate(licensePlate);
   if (!plate) {
     throw Object.assign(new Error('licensePlate or vehicleId is required'), { statusCode: 400 });
   }

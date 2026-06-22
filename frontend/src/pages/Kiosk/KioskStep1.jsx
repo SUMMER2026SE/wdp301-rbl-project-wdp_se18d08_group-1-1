@@ -1,21 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { Delete } from 'lucide-react';
 import { API_BASE } from '../../services/api';
 
 export default function KioskStep1({ formData, updateFormData, onNext }) {
   const [activeField, setActiveField] = useState('plate'); // Default to plate
-  const [isScanning, setIsScanning] = useState(false);
-  const isScanningRef = useRef(false);
   const [isVerifying, setIsVerifying] = useState(false);
-  const videoRef = useRef(null);
-  const streamRef = useRef(null);
-
-  const stopCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-  };
 
   const formatVietnamesePlate = (plate) => {
     if (!plate) return null;
@@ -41,145 +30,6 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
     return null;
   };
 
-  const startSilentScan = async () => {
-    setIsScanning(true);
-    isScanningRef.current = true;
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        await new Promise((resolve) => {
-          videoRef.current.onloadedmetadata = () => {
-            videoRef.current.play();
-            setTimeout(resolve, 1500);
-          };
-        });
-        let success = false;
-        for (let i = 0; i < 3; i++) {
-          if (!isScanningRef.current) return; // Abort if user started typing manually
-
-          const rawResult = await captureAndAnalyze();
-          if (rawResult && rawResult.plate) {
-            const formatted = formatVietnamesePlate(rawResult.plate);
-            if (formatted) {
-              try {
-                const response = await fetch(`${API_BASE}/sessions/verify-plate`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ licensePlate: formatted })
-                });
-                const data = await response.json();
-
-                if (data.success && data.data.isActive) {
-                  alert('This vehicle is already inside the parking lot!');
-                  updateFormData({ licensePlate: formatted, entryImageBase64: rawResult.imageBase64 });
-                  stopCamera(); setIsScanning(false); return;
-                } else if (data.success && (data.data.isMonthly || data.data.hasPreBooking)) {
-                  updateFormData({
-                    licensePlate: formatted, entryImageBase64: rawResult.imageBase64,
-                    isMonthly: data.data.isMonthly, hasPreBooking: data.data.hasPreBooking, selectedSlot: data.data.assignedSlot
-                  });
-                  stopCamera(); setIsScanning(false); onNext('fastpass'); return;
-                } else if (data.success && data.data.isVIP) {
-                  updateFormData({
-                    licensePlate: formatted,
-                    entryImageBase64: rawResult.imageBase64,
-                    phone: data.data.phone || formData.phone,
-                    isVIP: true
-                  });
-                  stopCamera(); setIsScanning(false); onNext('2'); return;
-                } else if (data.success && data.data.isKnownGuest && data.data.phone && data.data.phone.length >= 10) {
-                  updateFormData({
-                    licensePlate: formatted,
-                    entryImageBase64: rawResult.imageBase64,
-                    phone: data.data.phone
-                  });
-                  stopCamera(); setIsScanning(false); onNext('2'); return;
-                } else {
-                  // Guest -> Auto-fill plate and phone (if known), but stay on Step 1
-                  updateFormData({
-                    licensePlate: formatted,
-                    entryImageBase64: rawResult.imageBase64,
-                    phone: data.data.phone || formData.phone
-                  });
-                  if (!data.data.phone || data.data.phone.length < 10) {
-                    setActiveField('phone'); // focus phone so they can type it
-                  }
-                  success = true;
-                  break;
-                }
-              } catch (e) {
-                console.error("verify-plate error", e);
-                updateFormData({ licensePlate: formatted, entryImageBase64: rawResult.imageBase64 });
-                setActiveField('phone');
-                success = true;
-                break;
-              }
-            }
-          }
-          await new Promise(r => setTimeout(r, 1000));
-        }
-
-        if (!isScanningRef.current) return; // Abort if user started typing manually
-
-        if (!success) {
-          updateFormData({ licensePlate: '' }); // Let user type manually
-        }
-        stopCamera();
-        setIsScanning(false);
-        isScanningRef.current = false;
-      }
-    } catch (err) {
-      console.error("Camera access error:", err);
-      updateFormData({ licensePlate: '' });
-      stopCamera();
-      setIsScanning(false);
-      isScanningRef.current = false;
-    }
-  };
-
-  const captureAndAnalyze = async () => {
-    if (!videoRef.current) return null;
-    try {
-      const canvas = document.createElement('canvas');
-      canvas.width = videoRef.current.videoWidth;
-      canvas.height = videoRef.current.videoHeight;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-      const imageBase64 = canvas.toDataURL('image/jpeg', 0.8);
-
-      const response = await fetch(`${API_BASE}/ai/scan-plate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: imageBase64 })
-      });
-
-      const data = await response.json();
-      if (response.ok && data.success && data.plate) {
-        return { plate: data.plate, imageBase64 };
-      }
-    } catch (error) {
-      console.error('Scan error:', error);
-    }
-    return null;
-  };
-
-  useEffect(() => {
-    let timerId = null;
-    if (!formData.licensePlate || formData.licensePlate === 'SCANNING...' || formData.licensePlate === 'TAP TO ENTER') {
-      timerId = setTimeout(startSilentScan, 0);
-    }
-    return () => {
-      if (timerId) clearTimeout(timerId);
-      stopCamera();
-    };
-    // Run once on mount; scanner owns its async lifecycle through refs.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const handleKeyClick = (key) => {
     if (activeField === 'phone') {
       const currentPhone = formData.phone || '';
@@ -202,7 +52,6 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
         } else {
           updateFormData({ licensePlate: currentRaw.toUpperCase() });
         }
-        setIsScanning(false);
       }
     }
   };
@@ -218,7 +67,6 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
   const handleSpace = () => {
     if (activeField === 'plate') {
       updateFormData({ licensePlate: (formData.licensePlate || '') + ' ' });
-      setIsScanning(false);
     }
   };
 
@@ -300,46 +148,97 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
   const handleManualNext = async () => {
     setIsVerifying(true);
     try {
+      const plate = (formData.licensePlate || '').trim();
+      const phone = (formData.phone || '').trim();
+      const hasValidPhone = /^0[35789]\d{8}$/.test(phone);
       const response = await fetch(`${API_BASE}/sessions/verify-plate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ licensePlate: formData.licensePlate })
+        body: JSON.stringify({ licensePlate: plate })
       });
       const data = await response.json();
+      const verifyData = data.data || {};
 
-      if (data.success && data.data.isActive) {
+      if (data.success && verifyData.isActive) {
         alert('This vehicle is already inside the parking lot!');
         setIsVerifying(false);
         return;
       }
-      else if (data.success && (data.data.isMonthly || data.data.hasPreBooking)) {
+      else if (data.success && (verifyData.isMonthly || verifyData.hasPreBooking)) {
         updateFormData({
-          isMonthly: data.data.isMonthly,
-          hasPreBooking: data.data.hasPreBooking,
-          selectedSlot: data.data.assignedSlot
+          step3Mode: 'welcome',
+          isMonthly: verifyData.isMonthly,
+          hasPreBooking: verifyData.hasPreBooking,
+          selectedSlot: verifyData.assignedSlot,
+          floorId: verifyData.assignedFloorId || null,
+          bookingId: verifyData.bookingId || null,
+          bookingFloorName: verifyData.assignedFloorName || null,
+          durationHours: verifyData.bookingDurationHours || formData.durationHours || 1,
+          licensePlate: plate,
+          phone: verifyData.phone || phone,
+          ticketPackageId: verifyData.bookingTicketPackageId || formData.ticketPackageId || null,
+          bookingMode: verifyData.bookingMode || formData.bookingMode || 'hourly',
         });
         setIsVerifying(false);
-        onNext('fastpass');
+        onNext('3');
       }
-      else {
-        if (data.success && data.data.isVIP) {
-          updateFormData({ isVIP: true });
-        }
+      else if (data.success && (verifyData.isVIP || verifyData.isRegisteredVehicle)) {
+        updateFormData({
+          step3Mode: 'policy',
+          isVIP: !!verifyData.isVIP,
+          isRegisteredVehicle: true,
+          phone: verifyData.phone || phone,
+          licensePlate: plate,
+          pricingPackage: verifyData.pricingPackage || formData.pricingPackage || null,
+          pricingSource: verifyData.pricingSource || formData.pricingSource || 'default',
+          ticketPackageId: verifyData.pricingPackage?._id || formData.ticketPackageId || null,
+          bookingMode: formData.bookingMode || 'hourly',
+        });
         setIsVerifying(false);
         onNext('2');
+      }
+      else if (data.success && verifyData.phone && verifyData.phone.length >= 10) {
+        updateFormData({
+          step3Mode: 'policy',
+          phone: verifyData.phone,
+          licensePlate: plate,
+          pricingPackage: verifyData.pricingPackage || formData.pricingPackage || null,
+          pricingSource: verifyData.pricingSource || formData.pricingSource || 'default',
+          ticketPackageId: verifyData.pricingPackage?._id || formData.ticketPackageId || null,
+          bookingMode: formData.bookingMode || 'hourly',
+        });
+        setIsVerifying(false);
+        onNext('2');
+      }
+      else {
+        setIsVerifying(false);
+        updateFormData({
+          step3Mode: 'policy',
+          licensePlate: plate,
+          phone,
+          isVIP: false,
+          isRegisteredVehicle: false,
+          pricingPackage: verifyData.pricingPackage || formData.pricingPackage || null,
+          pricingSource: verifyData.pricingSource || formData.pricingSource || 'default',
+          ticketPackageId: verifyData.pricingPackage?._id || formData.ticketPackageId || null,
+          bookingMode: formData.bookingMode || 'hourly',
+        });
+        if (hasValidPhone) {
+          onNext('2');
+          return;
+        }
+        setActiveField('phone');
+        alert('Vui lòng nhập số điện thoại hợp lệ để tiếp tục.');
       }
     } catch (e) {
       console.error("verify-plate backend error", e);
       setIsVerifying(false);
-      onNext('2');
+      alert('Không thể xác minh biển số. Vui lòng thử lại.');
     }
   };
 
   return (
     <div className="flex flex-col items-center justify-center flex-1 w-full max-w-[650px] mx-auto pb-4">
-      {/* Hidden Video for silent scanning */}
-      <video ref={videoRef} className="hidden" playsInline muted />
-
       {/* ─── Yellow Card Container (Flat & Soft) ─── */}
       <div className="bg-[#FFDF00] w-full rounded-[32px] py-6 px-4 sm:px-8 flex flex-col items-center transition-all duration-500">
 
@@ -347,15 +246,14 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
         <div className="w-full text-center mb-4">
           <label className="block text-xs font-bold text-[#0f172a] tracking-widest mb-2 uppercase">
             License Plate Number
-            {isScanning && <span className="ml-2 text-red-500 animate-pulse font-normal lowercase tracking-normal">(camera scanning...)</span>}
             {isVerifying && <span className="ml-2 text-blue-500 animate-pulse font-normal lowercase tracking-normal">(verifying...)</span>}
           </label>
           <div
             className={`relative bg-white rounded-2xl h-[60px] flex items-center justify-center w-[90%] mx-auto transition-all border-2 cursor-pointer ${activeField === 'plate' ? 'border-[#0f172a] shadow-[0_4px_15px_rgba(0,0,0,0.05)]' : 'border-transparent'}`}
             onClick={() => setActiveField('plate')}
           >
-            <span className={`text-2xl font-bold font-mono tracking-[0.2em] ${isScanning ? 'text-gray-400' : 'text-[#0f172a]'}`}>
-              {isScanning ? 'SCANNING...' : (formData.licensePlate || 'TAP TO ENTER')}
+            <span className="text-2xl font-bold font-mono tracking-[0.2em] text-[#0f172a]">
+              {formData.licensePlate || 'TAP TO ENTER'}
             </span>
             {activeField === 'plate' && (
               <span className="w-0.5 h-[26px] bg-[#0f172a] animate-pulse ml-1"></span>
@@ -391,8 +289,8 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
       {/* Next Step Button */}
       <button
         onClick={handleManualNext}
-        disabled={((formData.phone || '').length !== 10) || isScanning || isVerifying || !(formData.licensePlate || '')}
-        className={`mt-6 mb-2 font-bold text-[18px] px-16 py-[16px] rounded-full transition-all border-2 ${(((formData.phone || '').length !== 10) || isScanning || isVerifying || !(formData.licensePlate || ''))
+        disabled={isVerifying || !(formData.licensePlate || '')}
+        className={`mt-6 mb-2 font-bold text-[18px] px-16 py-[16px] rounded-full transition-all border-2 ${(isVerifying || !(formData.licensePlate || ''))
           ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
           : 'bg-[#0f172a] border-[#0f172a] text-white hover:bg-black shadow-[0_10px_20px_rgba(0,0,0,0.2)] active:scale-95'
           }`}

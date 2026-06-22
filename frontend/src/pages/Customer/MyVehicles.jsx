@@ -10,6 +10,7 @@ import {
 } from '../../services/vehicleService';
 import CarViewer from '../../components/CarViewer';
 import garageBg from '../../assets/images/garage-bg.png';
+import { formatLicensePlateDisplay, normalizeLicensePlate } from '../../utils/licensePlate';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const VEHICLE_TYPES = [
@@ -83,7 +84,7 @@ function VehicleCard({ vehicle, onDelete, onSetDefault, onEdit }) {
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-bold text-base text-gray-900 dark:text-white tracking-wide">
-            {vehicle.licensePlate}
+            {formatLicensePlateDisplay(vehicle.licensePlateDisplay || vehicle.licensePlate)}
           </p>
           <p className="text-sm text-gray-500 dark:text-gray-400 truncate flex items-center gap-1.5">
             {vehicle.hexColor && vehicle.hexColor !== '#ffffff' && (
@@ -157,7 +158,7 @@ function VehicleCard({ vehicle, onDelete, onSetDefault, onEdit }) {
 function VehicleModal({ editVehicle, onClose, onSaved }) {
   const [form, setForm] = useState(editVehicle
     ? {
-        licensePlate: editVehicle.licensePlate,
+        licensePlate: editVehicle.licensePlateDisplay || editVehicle.licensePlate,
         vehicleType: editVehicle.vehicleType,
         brand: editVehicle.brand || '',
         model: editVehicle.model || '',
@@ -212,7 +213,7 @@ function VehicleModal({ editVehicle, onClose, onSaved }) {
         const { nickname, brand, model, licensePlate, hexColor: aiHex } = res.data.data;
         console.log('[AI Scan] response data:', res.data.data);
         console.log('[AI Scan] hexColor from AI:', aiHex);
-        const cleanPlate = licensePlate ? licensePlate.replace(/\./g, '') : '';
+        const cleanPlate = normalizeLicensePlate(licensePlate);
         setForm((f) => ({
           ...f,
           nickname: nickname || f.nickname,
@@ -710,7 +711,7 @@ export default function MyVehicles() {
             </div>
             {/* Big license plate */}
             <p className="text-2xl font-black text-white tracking-[0.18em] mt-0.5 leading-tight">
-              {selected?.licensePlate}
+              {formatLicensePlateDisplay(selected?.licensePlateDisplay || selected?.licensePlate)}
             </p>
           </div>
 

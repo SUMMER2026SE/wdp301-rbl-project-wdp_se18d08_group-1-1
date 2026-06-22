@@ -197,6 +197,7 @@ export default function CreateBookingPage() {
 
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [bookingInfo, setBookingInfo] = useState(null);
+  const [successRedirectCountdown, setSuccessRedirectCountdown] = useState(4);
 
   // Map state
   const [floors, setFloors] = useState([]);
@@ -356,6 +357,33 @@ export default function CreateBookingPage() {
 
     return () => clearInterval(intervalId);
   }, [showTopUpModal, topUpData?.orderCode]);
+
+  useEffect(() => {
+    if (!showSuccessModal || !bookingInfo) return undefined;
+
+    setSuccessRedirectCountdown(4);
+
+    const countdownTimer = setInterval(() => {
+      setSuccessRedirectCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(countdownTimer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    const redirectTimer = setTimeout(() => {
+      setShowSuccessModal(false);
+      setBookingInfo(null);
+      window.location.href = '/customer/booking';
+    }, 4000);
+
+    return () => {
+      clearInterval(countdownTimer);
+      clearTimeout(redirectTimer);
+    };
+  }, [showSuccessModal, bookingInfo]);
 
   const handleFindSlots = async () => {
     setCheckingSlots(true);
@@ -851,16 +879,9 @@ export default function CreateBookingPage() {
               </div>
             </div>
 
-            <button
-              onClick={() => {
-                setShowSuccessModal(false);
-                setBookingInfo(null);
-                window.location.href = '/customer/booking'; // Navigate back to my bookings
-              }}
-              className="w-full bg-emerald-500 text-white font-bold py-3.5 rounded-2xl hover:bg-emerald-600 transition shadow-lg shadow-emerald-500/20 active:scale-[0.98]"
-            >
-              Done & View Bookings
-            </button>
+            <div className="w-full bg-emerald-50 border border-emerald-100 text-emerald-700 font-bold py-3.5 rounded-2xl text-sm">
+              Bạn đã booking thành công. Tự động chuyển tới My Bookings sau {successRedirectCountdown}s...
+            </div>
           </div>
         </div>
       )}

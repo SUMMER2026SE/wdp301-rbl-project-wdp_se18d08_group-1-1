@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { normalizeLicensePlate } = require('../utils/licensePlateUtils');
 
 const bookingSchema = new mongoose.Schema(
   {
@@ -92,6 +93,9 @@ const bookingSchema = new mongoose.Schema(
 );
 
 bookingSchema.pre('validate', function validateBookingTime(next) {
+  if (this.licensePlate) {
+    this.licensePlate = normalizeLicensePlate(this.licensePlate);
+  }
   if (this.startTime && this.endTime && this.startTime >= this.endTime) {
     return next(new Error('Booking endTime must be after startTime'));
   }

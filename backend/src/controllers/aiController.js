@@ -1,6 +1,27 @@
 const axios = require('axios');
 const FormData = require('form-data');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { normalizeLicensePlate } = require('../utils/licensePlateUtils');
+
+const isLikelyVietnamesePlate = (plate = '') => {
+  const clean = normalizeLicensePlate(plate);
+  return (
+    /^\d{2}[A-Z]{1,2}\d{4,5}$/.test(clean) ||
+    /^\d{2}[A-Z]\d\d{4,5}$/.test(clean)
+  );
+};
+
+const extractRetryDelaySeconds = (detail = '') => {
+  const match = String(detail).match(/retry in\s+(\d+(?:\.\d+)?)s/i);
+  if (!match) return null;
+  return Math.max(1, Math.ceil(Number(match[1])));
+};
+
+const isQuotaError = (error) => {
+  const status = error?.status || error?.response?.status || error?.cause?.status;
+  const detail = error?.message || '';
+  return status === 429 || /quota exceeded|too many requests|429/i.test(detail);
+};
 
 exports.scanPlate = async (req, res, next) => {
   try {
@@ -22,33 +43,73 @@ exports.scanPlate = async (req, res, next) => {
     const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
 
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
 
-    const prompt = `Analyze this image containing a vehicle and read the license plate (Biển số xe Việt Nam).
-Extract ONLY the license plate number as a single string.
-Remove all spaces, dots, dashes, and special characters. Just letters and numbers (e.g., 43D189750, 29A12345).
-If you cannot find or read any license plate clearly, return the exact string "NOT_FOUND".
-Do NOT include any explanation, markdown, or extra text. Return ONLY the license plate string.`;
+    const prompt = `Analyze this image containing a vehicle and read the Vietnamese license plate (Biển số xe Việt Nam).
+The image may be a contact sheet from the same camera frame: a large full-frame view plus zoomed crops along the bottom. Use the clearest view of the physical vehicle license plate.
+Focus on the physical vehicle plate only. Ignore text from the UI, dashboard, walls, stickers, signs, browser, or any other non-plate text.
+Return ONLY one normalized license plate string with spaces, dots, dashes, and special characters removed.
+Valid examples: 43D189750, 29A12345, 29H76919.
+If a plate-like sequence is visible, return your best reading. Return exactly NOT_FOUND only when no physical vehicle plate is visible at all.
+Do NOT include any explanation, markdown, punctuation, confidence score, or extra text.`;
 
-    const result = await model.generateContent([
-      prompt,
-      {
-        inlineData: {
-          mimeType,
-          data: base64Data,
-        },
-      },
-    ]);
+    const modelCandidates = ['gemini-2.5-flash-lite', 'gemini-2.5-flash'];
+    let quotaError = null;
+    let bestAttempt = null;
 
-    let text = result.response.text().trim();
-    // Sometimes model might include markdown despite instructions
-    text = text.replace(/`/g, '').trim();
-    
-    if (text === "NOT_FOUND" || text.length < 5) {
-       return res.status(400).json({ success: false, message: 'No license plate found in the image' });
+    for (const modelName of modelCandidates) {
+      try {
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          generationConfig: {
+            temperature: 0,
+            maxOutputTokens: 20,
+          },
+        });
+
+        const result = await model.generateContent([
+          prompt,
+          {
+            inlineData: {
+              mimeType,
+              data: base64Data,
+            },
+          },
+        ]);
+
+        let text = result.response.text().trim();
+        console.info(`[AI Plate Scan] ${modelName} raw output:`, text);
+        text = normalizeLicensePlate(text.replace(/`/g, '').trim());
+        bestAttempt = { modelName, text };
+
+        if (text !== 'NOTFOUND' && text.length >= 5 && isLikelyVietnamesePlate(text)) {
+          return res.status(200).json({ success: true, plate: text, model: modelName });
+        }
+      } catch (error) {
+        if (isQuotaError(error)) {
+          quotaError = error;
+          console.error(`[AI Plate Scan] ${modelName} quota hit:`, error?.message || error);
+          continue;
+        }
+        throw error;
+      }
     }
 
-    return res.status(200).json({ success: true, plate: text });
+    if (quotaError) {
+      const detail = quotaError?.message || 'AI quota exceeded';
+      const retryAfterSeconds = extractRetryDelaySeconds(detail);
+      return res.status(429).json({
+        success: false,
+        message: 'AI plate scanning is temporarily rate-limited. Please retry shortly.',
+        retryAfterSeconds,
+      });
+    }
+
+    return res.status(400).json({
+      success: false,
+      message: 'No license plate found in the image',
+      attemptedPlate: bestAttempt?.text || null,
+      model: bestAttempt?.modelName || null,
+    });
 
   } catch (error) {
     const detail = error?.message || 'Unknown error';
