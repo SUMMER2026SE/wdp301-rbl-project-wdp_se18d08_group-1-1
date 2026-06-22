@@ -6,6 +6,7 @@ const Session = require('../models/Session');
 const Vehicle = require('../models/Vehicle');
 const Slot = require('../models/Slot');
 const TicketPackage = require('../models/TicketPackage');
+const User = require('../models/User');
 const walletService = require('../services/walletService');
 const { normalizeLicensePlate } = require('../utils/licensePlateUtils');
 const { emitToUser } = require('../sockets/notificationSocket');
@@ -15,6 +16,8 @@ const BOOKING_STATUSES_THAT_BLOCK_SLOT = ['confirmed', 'active'];
 const normalizeSlotCode = (slotCode = '') => String(slotCode).trim().toUpperCase();
 
 const buildSlotKey = (floorId, slotCode) => `${String(floorId)}:${normalizeSlotCode(slotCode)}`;
+
+const sameObjectId = (a, b) => String(a || '') === String(b || '');
 
 const parseBookingTimeRange = (startTime, endTime) => {
   const start = new Date(startTime);
@@ -154,6 +157,56 @@ const resolveLicensePlate = async (userId, { vehicleId, licensePlate }) => {
   return plate;
 };
 
+const getActiveMembershipType = async (user) => {
+  if (!user?.membership?.isVip || !user?.membership?.expireAt || !user?.membership?.packageId) {
+    return null;
+  }
+
+  const expireAt = new Date(user.membership.expireAt);
+  if (Number.isNaN(expireAt.getTime()) || expireAt <= new Date()) {
+    return null;
+  }
+
+  if (user.membership.packageId?.type) {
+    return user.membership.packageId.type;
+  }
+
+  const ticketPackage = await TicketPackage.findById(user.membership.packageId).select('type').lean();
+  return ticketPackage?.type || null;
+};
+
+const findVipRegisteredVehicleBookingRestriction = async ({ userId, licensePlate, floorId, slotCode }) => {
+  const [user, registeredVehicle] = await Promise.all([
+    User.findById(userId).select('membership').lean(),
+    Vehicle.findOne({ owner: userId, licensePlate }).select('_id licensePlate').lean(),
+  ]);
+
+  if (!registeredVehicle) return null;
+
+  const membershipType = await getActiveMembershipType(user);
+  if (!['monthly', 'yearly'].includes(membershipType)) return null;
+
+  const reservedSlots = await Slot.find({ reservedFor: userId })
+    .select('floorID slotNumber')
+    .lean();
+
+  const isSelectedReservedSlot = reservedSlots.some((slot) => (
+    sameObjectId(slot.floorID, floorId) &&
+    normalizeSlotCode(slot.slotNumber) === normalizeSlotCode(slotCode)
+  ));
+
+  if (isSelectedReservedSlot) return null;
+
+  return {
+    membershipType,
+    registeredVehicle,
+    reservedSlots: reservedSlots.map((slot) => ({
+      floorId: slot.floorID,
+      slotCode: normalizeSlotCode(slot.slotNumber),
+    })),
+  };
+};
+
 const getSessionExpectedEndTime = (session) => {
   const start = new Date(session.checkInTime);
   if (Number.isNaN(start.getTime())) return null;
@@ -278,11 +331,6 @@ exports.createBooking = async (req, res, next) => {
       });
     }
 
-    // Determine if user is VIP
-    const User = require('../models/User'); // Ensure imported
-    const user = await User.findById(req.user._id);
-    const isVip = user.membership?.isVip && user.membership?.expireAt > new Date();
-
     const availableSlots = await getAvailableSlotsForRange(start, end, req.user._id);
     let selectedSlot = null;
 
@@ -304,6 +352,26 @@ exports.createBooking = async (req, res, next) => {
       return res.status(409).json({
         success: false,
         message: 'No available parking slot for this time range',
+      });
+    }
+
+    const vipBookingRestriction = await findVipRegisteredVehicleBookingRestriction({
+      userId: req.user._id,
+      licensePlate: plate,
+      floorId: selectedSlot.floorId,
+      slotCode: selectedSlot.slotCode,
+    });
+
+    if (vipBookingRestriction) {
+      return res.status(409).json({
+        success: false,
+        message: 'This registered vehicle is already covered by an active VIP membership. Please use your assigned VIP slot instead of booking another slot.',
+        data: {
+          conflictType: 'active_membership',
+          membershipType: vipBookingRestriction.membershipType,
+          licensePlate: plate,
+          reservedSlots: vipBookingRestriction.reservedSlots,
+        },
       });
     }
 
@@ -332,6 +400,8 @@ exports.createBooking = async (req, res, next) => {
 
     // Check if selected slot is reserved for this user (VIP)
     // We need to fetch the slot from DB to check reservedFor
+    const user = await User.findById(req.user._id);
+    const isVip = user.membership?.isVip && user.membership?.expireAt > new Date();
     const slotDoc = await Slot.findOne({ floorID: selectedSlot.floorId, slotNumber: selectedSlot.slotCode });
     if (isVip && slotDoc && slotDoc.reservedFor && slotDoc.reservedFor.toString() === req.user._id.toString()) {
       prepaidAmount = 0; // Free for VIP parking in their own slot
