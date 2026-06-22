@@ -232,12 +232,12 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
           return;
         }
         setActiveField('phone');
-        alert('Vui lòng nhập số điện thoại hợp lệ để tiếp tục.');
+        alert('Please enter a valid phone number to continue.');
       }
     } catch (e) {
       console.error("verify-plate backend error", e);
       setIsVerifying(false);
-      alert('Không thể xác minh biển số. Vui lòng thử lại.');
+      alert('Could not verify the license plate. Please try again.');
     }
   };
 

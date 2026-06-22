@@ -14,8 +14,8 @@ import { formatLicensePlateDisplay, normalizeLicensePlate } from '../../utils/li
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const VEHICLE_TYPES = [
-  { value: 'car', label: 'Ô tô', icon: <Car size={15} /> },
-  { value: 'electric_car', label: 'Ô tô điện', icon: <Zap size={15} /> },
+  { value: 'car', label: 'Car', icon: <Car size={15} /> },
+  { value: 'electric_car', label: 'Electric car', icon: <Zap size={15} /> },
 ];
 
 const EMPTY_FORM = {
@@ -33,7 +33,7 @@ function VehicleCard({ vehicle, onDelete, onSetDefault, onEdit }) {
   const typeObj = VEHICLE_TYPES.find((t) => t.value === vehicle.vehicleType);
 
   const handleDelete = async () => {
-    if (!window.confirm(`Xóa xe "${vehicle.licensePlate}"?`)) return;
+    if (!window.confirm(`Delete vehicle "${vehicle.licensePlate}"?`)) return;
     setLoading(true);
     await onDelete(vehicle._id);
     setLoading(false);
@@ -60,7 +60,7 @@ function VehicleCard({ vehicle, onDelete, onSetDefault, onEdit }) {
         <span className="absolute top-3 right-3 text-[10px] font-bold
           bg-yellow-500/15 text-yellow-500 dark:text-yellow-400
           border border-yellow-500/30 rounded-full px-2 py-0.5 select-none">
-          Mặc định
+          Default
         </span>
       )}
 
@@ -124,10 +124,10 @@ function VehicleCard({ vehicle, onDelete, onSetDefault, onEdit }) {
             className="flex items-center gap-1.5 text-[11px] font-semibold
               text-gray-500 dark:text-gray-400 hover:text-yellow-500 dark:hover:text-yellow-400
               transition-colors disabled:opacity-50"
-            title="Đặt làm xe mặc định"
+            title="Set as default vehicle"
           >
             <Star size={13} />
-            Mặc định
+            Default
           </button>
         )}
         <div className="flex-1" />
@@ -136,7 +136,7 @@ function VehicleCard({ vehicle, onDelete, onSetDefault, onEdit }) {
           disabled={loading}
           className="p-1.5 rounded-lg text-gray-400 hover:text-yellow-500 dark:hover:text-yellow-400
             hover:bg-yellow-500/10 transition-all disabled:opacity-50"
-          title="Chỉnh sửa"
+          title="Edit"
         >
           <Pencil size={14} />
         </button>
@@ -145,7 +145,7 @@ function VehicleCard({ vehicle, onDelete, onSetDefault, onEdit }) {
           disabled={loading}
           className="p-1.5 rounded-lg text-gray-400 hover:text-red-500
             hover:bg-red-500/10 transition-all disabled:opacity-50"
-          title="Xóa xe"
+          title="Delete vehicle"
         >
           {loading ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
         </button>
@@ -223,10 +223,10 @@ function VehicleModal({ editVehicle, onClose, onSaved }) {
           hexColor: aiHex || f.hexColor,
         }));
       } else {
-        setError(res.data?.message || 'Không đọc được thông tin. Vui lòng nhập tay.');
+        setError(res.data?.message || 'Could not read the information. Please enter it manually.');
       }
     } catch {
-      setError('Lỗi xử lý ảnh.');
+      setError('Image processing error.');
     }
     setScanning(false);
   };
@@ -235,7 +235,7 @@ function VehicleModal({ editVehicle, onClose, onSaved }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!isEdit && !scanPreview) {
-      setError('Đảnh cà vẹt xe là bắt buộc khi thêm xe mới.');
+      setError('Vehicle registration card image is required when adding a new vehicle.');
       return;
     }
     setSaving(true);
@@ -250,7 +250,7 @@ function VehicleModal({ editVehicle, onClose, onSaved }) {
     if (res.ok) {
       onSaved(res.data.data, isEdit ? 'updated' : 'added');
     } else {
-      const msg = res.data?.errors?.[0]?.message || res.data?.message || 'Đã có lỗi xảy ra.';
+      const msg = res.data?.errors?.[0]?.message || res.data?.message || 'An error occurred.';
       setError(msg);
     }
   };
@@ -272,7 +272,7 @@ function VehicleModal({ editVehicle, onClose, onSaved }) {
         <div className="flex items-center justify-between px-6 py-4
           border-b border-gray-200 dark:border-white/10">
           <h2 className="font-bold text-base text-gray-900 dark:text-white">
-            {isEdit ? 'Chỉnh sửa xe' : 'Thêm xe mới'}
+            {isEdit ? 'Edit vehicle' : 'Add new vehicle'}
           </h2>
           <button onClick={onClose}
             className="text-gray-400 hover:text-gray-600 dark:hover:text-white transition-colors p-1">
@@ -290,12 +290,12 @@ function VehicleModal({ editVehicle, onClose, onSaved }) {
               <div className="flex items-center gap-2 mb-1">
                 <ScanLine size={15} className="text-yellow-500 dark:text-yellow-400" />
                 <span className="text-xs font-bold text-yellow-600 dark:text-yellow-400 uppercase tracking-wider">
-                  Quét cà vẹt xe bằng AI
+                  Scan vehicle registration card with AI
                 </span>
-                <span className="text-[10px] text-red-400 font-semibold ml-auto">* Bắt buộc</span>
+                <span className="text-[10px] text-red-400 font-semibold ml-auto">* Required</span>
               </div>
               <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                Tải ảnh đăng ký xe để tự động điền thông tin và màu xe
+                Upload the registration image to automatically fill vehicle information and color
               </p>
 
               {scanPreview && (
@@ -306,7 +306,7 @@ function VehicleModal({ editVehicle, onClose, onSaved }) {
                     bg-green-500/20 border border-green-500/40 text-green-400
                     text-[10px] font-bold px-2 py-0.5 rounded-full backdrop-blur-sm">
                     <Check size={10} />
-                    Đã quét
+                    Scanned
                   </div>
                 </div>
               )}
@@ -323,7 +323,7 @@ function VehicleModal({ editVehicle, onClose, onSaved }) {
                   {scanning
                     ? <Loader2 size={13} className="animate-spin" />
                     : <Upload size={13} />}
-                  {scanning ? 'Đang quét...' : scanPreview ? 'Quét lại' : 'Tải ảnh cà vẹt xe'}
+                  {scanning ? 'Scanning...' : scanPreview ? 'Scan again' : 'Upload vehicle registration card'}
                 </button>
 
                 {/* Auto-detected color preview */}
@@ -333,7 +333,7 @@ function VehicleModal({ editVehicle, onClose, onSaved }) {
                       className="inline-block w-5 h-5 rounded-full border-2 border-white/30 shadow"
                       style={{ backgroundColor: form.hexColor }}
                     />
-                    Màu tự động: <span className="font-mono">{form.hexColor}</span>
+                    Auto color: <span className="font-mono">{form.hexColor}</span>
                   </div>
                 )}
               </div>
@@ -355,7 +355,7 @@ function VehicleModal({ editVehicle, onClose, onSaved }) {
             {/* License plate */}
             <div>
               <label className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-1 block">
-                Biển số xe *
+                License plate *
               </label>
               <input name="licensePlate" value={form.licensePlate}
                 onChange={handleChange} required
@@ -366,7 +366,7 @@ function VehicleModal({ editVehicle, onClose, onSaved }) {
             {/* Vehicle type */}
             <div>
               <label className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-1.5 block">
-                Loại xe *
+                Vehicle type *
               </label>
               <div className="flex gap-2">
                 {VEHICLE_TYPES.map((t) => (
@@ -389,7 +389,7 @@ function VehicleModal({ editVehicle, onClose, onSaved }) {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-1 block">
-                  Hãng xe
+                  Brand
                 </label>
                 <input name="brand" value={form.brand} onChange={handleChange}
                   placeholder="Toyota, Honda..."
@@ -397,10 +397,10 @@ function VehicleModal({ editVehicle, onClose, onSaved }) {
               </div>
               <div>
                 <label className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-1 block">
-                  Dòng xe
+                  Model
                 </label>
                 <input name="model" value={form.model} onChange={handleChange}
-                  placeholder="Camry, Civic..."
+                  placeholder="Orangery, Civic..."
                   className={inputCls} />
               </div>
             </div>
@@ -408,17 +408,17 @@ function VehicleModal({ editVehicle, onClose, onSaved }) {
             {/* Nickname */}
             <div>
               <label className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-1 block">
-                Tên gợi nhớ
+                Nickname
               </label>
               <input name="nickname" value={form.nickname} onChange={handleChange}
-                placeholder="Xe gia đình..."
+                placeholder="Family car..."
                 className={inputCls} />
             </div>
 
-            {/* Màu sơn 3D — auto từ AI, có thể điều chỉnh */}
+            {/* 3D paint color - auto from AI and adjustable */}
             <div>
               <label className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mb-1 block">
-                Màu sơn 3D (HEX) — tự động từ AI
+                3D paint color (HEX) - auto from AI
               </label>
               <div className="flex items-center gap-2">
                 <input
@@ -427,7 +427,7 @@ function VehicleModal({ editVehicle, onClose, onSaved }) {
                   value={form.hexColor}
                   onChange={handleChange}
                   className="h-9 w-9 cursor-pointer rounded-lg border border-gray-300 dark:border-white/15 bg-transparent p-0.5 shrink-0"
-                  title="Điều chỉnh màu sơn xe"
+                  title="Adjust vehicle paint color"
                 />
                 <input
                   name="hexColor"
@@ -446,7 +446,7 @@ function VehicleModal({ editVehicle, onClose, onSaved }) {
                   border border-gray-200 dark:border-white/10
                   text-gray-600 dark:text-gray-400
                   hover:bg-gray-100 dark:hover:bg-white/5 transition-colors">
-                Hủy
+                Cancel
               </button>
               <button type="submit" disabled={saving}
                 className="flex-1 py-2.5 rounded-xl text-sm font-bold
@@ -456,7 +456,7 @@ function VehicleModal({ editVehicle, onClose, onSaved }) {
                 {saving
                   ? <Loader2 size={14} className="animate-spin" />
                   : <Check size={14} />}
-                {isEdit ? 'Lưu thay đổi' : 'Thêm xe'}
+                {isEdit ? 'Save changes' : 'Add vehicle'}
               </button>
             </div>
           </form>
@@ -481,10 +481,10 @@ function NoModelPlaceholder({ hexColor }) {
         <Car size={38} />
       </div>
       <p className="text-sm font-semibold" style={{ color: 'rgba(255,255,255,0.35)' }}>
-        Model 3D chưa có sẵn
+        3D model is not available yet
       </p>
       <p className="text-xs" style={{ color: 'rgba(255,255,255,0.2)' }}>
-        Admin sẽ thêm mô hình xe trong thời gian tới
+        Admin will add the vehicle model soon
       </p>
     </div>
   );
@@ -501,7 +501,7 @@ export default function MyVehicles() {
   const [toast, setToast]             = useState(null);
   const [quickColor, setQuickColor]   = useState(null); // local hex while picking
   const colorInputRef = useRef(null);
-  const colorDebounceRef = useRef(null); // debounce timer để tránh setState quá nhanh
+  const colorDebounceRef = useRef(null); // debounce timer to avoid setting state too quickly
 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
@@ -533,21 +533,21 @@ export default function MyVehicles() {
     setModalOpen(false);
     setEditVehicle(null);
     await fetchVehicles();
-    showToast(action === 'updated' ? 'Cập nhật xe thành công ✓' : 'Thêm xe thành công ✓');
+    showToast(action === 'updated' ? 'Vehicle updated successfully ✓' : 'Vehicle added successfully ✓');
   };
 
   const handleDelete = async () => {
     if (!selected) return;
-    if (!window.confirm(`Xóa xe "${selected.licensePlate}"?`)) return;
+    if (!window.confirm(`Delete vehicle "${selected.licensePlate}"?`)) return;
     setActionLoading(true);
     const { ok } = await deleteVehicle(selected._id);
     setActionLoading(false);
     if (ok) {
       setSelectedIdx(0);
       await fetchVehicles();
-      showToast('Đã xóa xe ✓');
+      showToast('Vehicle deleted ✓');
     } else {
-      showToast('Xóa xe thất bại', 'error');
+      showToast('Failed to delete vehicle', 'error');
     }
   };
 
@@ -558,9 +558,9 @@ export default function MyVehicles() {
     setActionLoading(false);
     if (ok) {
       await fetchVehicles();
-      showToast('Đã đặt xe mặc định ✓');
+      showToast('Default vehicle set ✓');
     } else {
-      showToast('Thao tác thất bại', 'error');
+      showToast('Action failed', 'error');
     }
   };
 
@@ -568,8 +568,8 @@ export default function MyVehicles() {
   const openEdit = () => { if (selected) { setEditVehicle(selected); setModalOpen(true); } };
 
   // ── Inline quick-color ──
-  // Debounce 40ms: bỏ qua các lần gọi liên tục khi user kéo nhanh color picker,
-  // chỉ gọi setQuickColor khi user dừng lại → tránh Maximum update depth error.
+  // Debounce 40ms: ignore continuous calls while the user drags the color picker quickly,
+  // only call setQuickColor when the user stops to avoid Maximum update depth errors.
   const handleQuickColorChange = (hex) => {
     if (!selected) return;
     clearTimeout(colorDebounceRef.current);
@@ -582,7 +582,7 @@ export default function MyVehicles() {
     setActionLoading(false);
     setQuickColor(null);
     await fetchVehicles();
-    showToast('Đã cập nhật màu xe ✓');
+    showToast('Vehicle color updated ✓');
   };
   const activeColor = quickColor ?? selected?.hexColor ?? '#ffffff';
 
@@ -621,10 +621,10 @@ export default function MyVehicles() {
       <div className="relative z-10 flex items-center justify-between px-6 pt-5 pb-2">
         <div>
           <h1 className="text-xl font-black text-white tracking-tight drop-shadow-lg">
-            Gara của tôi
+            My Garage
           </h1>
           <p className="text-sm text-white/55 mt-0.5">
-            {vehicles.length > 0 ? `${vehicles.length} phương tiện` : 'Chưa có xe nào'}
+            {vehicles.length > 0 ? `${vehicles.length} vehicles` : 'No vehicles yet'}
           </p>
         </div>
         <button
@@ -634,7 +634,7 @@ export default function MyVehicles() {
             text-sm font-bold transition-colors shadow-lg shadow-yellow-500/30"
         >
           <Plus size={15} />
-          Thêm xe
+          Add vehicle
         </button>
       </div>
 
@@ -651,7 +651,7 @@ export default function MyVehicles() {
               className="w-9 h-9 rounded-full border-2 border-white/30
                 shadow-lg transition-transform hover:scale-110 cursor-pointer"
               style={{ backgroundColor: activeColor }}
-              title="Đổi màu xe"
+              title="Change vehicle color"
             />
             <input
               ref={colorInputRef}
@@ -670,7 +670,7 @@ export default function MyVehicles() {
                   disabled:opacity-50 shadow-md"
               >
                 {actionLoading ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
-                Lưu màu
+                Save color
               </button>
             )}
             {quickColor && quickColor !== selected?.hexColor && (
@@ -678,7 +678,7 @@ export default function MyVehicles() {
                 onClick={() => setQuickColor(null)}
                 className="p-1.5 rounded-lg text-white/40 hover:text-white/70
                   border border-white/10 hover:border-white/20 transition-colors"
-                title="Huỷ"
+                title="Cancel"
               >
                 <X size={12} />
               </button>
@@ -689,18 +689,18 @@ export default function MyVehicles() {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-sm font-bold text-white/80">
-                {[selected?.brand, selected?.model].filter(Boolean).join(' ') || 'Xe của tôi'}
+                {[selected?.brand, selected?.model].filter(Boolean).join(' ') || 'My vehicle'}
               </span>
               {selected?.isDefault && (
                 <span className="text-[10px] font-bold bg-yellow-500/25 text-yellow-400
                   border border-yellow-500/40 rounded-full px-2 py-0.5">
-                  ★ Mặc định
+                  ★ Default
                 </span>
               )}
               {selected?.status === 'pending' && (
                 <span className="text-[10px] font-bold bg-orange-500/20 text-orange-400
                   border border-orange-500/40 rounded-full px-2 py-0.5">
-                  ⏳ Chờ duyệt
+                  ⏳ Pending approval
                 </span>
               )}
               <span className="inline-flex items-center gap-1 text-[11px] font-semibold
@@ -727,7 +727,7 @@ export default function MyVehicles() {
                   transition-all disabled:opacity-50"
               >
                 <Star size={13} />
-                Mặc định
+                Default
               </button>
             )}
             <button
@@ -736,7 +736,7 @@ export default function MyVehicles() {
               className="p-2.5 rounded-xl text-white/60 hover:text-yellow-400
                 border border-white/15 hover:border-yellow-500/40
                 bg-white/5 hover:bg-yellow-500/10 transition-all disabled:opacity-50"
-              title="Chỉnh sửa"
+              title="Edit"
             >
               <Pencil size={15} />
             </button>
@@ -746,7 +746,7 @@ export default function MyVehicles() {
               className="p-2.5 rounded-xl text-white/60 hover:text-red-400
                 border border-white/15 hover:border-red-500/30
                 bg-white/5 hover:bg-red-500/10 transition-all disabled:opacity-50"
-              title="Xóa xe"
+              title="Delete vehicle"
             >
               {actionLoading
                 ? <Loader2 size={15} className="animate-spin" />
@@ -772,14 +772,14 @@ export default function MyVehicles() {
             <Car size={32} className="text-yellow-400" />
           </div>
           <div>
-            <p className="font-bold text-white text-lg mb-1">Chưa có xe nào</p>
-            <p className="text-white/50 text-sm">Thêm xe để sử dụng tính năng gara 3D</p>
+            <p className="font-bold text-white text-lg mb-1">No vehicles yet</p>
+            <p className="text-white/50 text-sm">Add a vehicle to use the 3D garage feature</p>
           </div>
           <button onClick={openAdd}
             className="flex items-center gap-2 px-6 py-3 rounded-xl
               bg-yellow-500 hover:bg-yellow-400 text-black font-bold transition-colors">
             <Plus size={15} />
-            Thêm xe đầu tiên
+            Add your first vehicle
           </button>
         </div>
       )}

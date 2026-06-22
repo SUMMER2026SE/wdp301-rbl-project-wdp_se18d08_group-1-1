@@ -58,14 +58,14 @@ const getAllBookableSlots = async () => {
 
     return elements
       .filter(isCarSlotElement)
-      .filter(slot => slot.name && slot.name.trim() !== '') // Bỏ qua các ô đỗ trống (ghost slots)
+      .filter(slot => slot.name && slot.name.trim() !== '') // Skip empty parking slots (ghost slots)
       .map((slot) => {
         const zone = slot.parentId ? elementById.get(slot.parentId) : null;
         return {
           floorId: floor._id,
           floorName: floor.name,
           floorNumber: floor.floorNumber,
-          slotCode: normalizeSlotCode(slot.name), // Chắc chắn đã có name vì đã filter ở trên
+          slotCode: normalizeSlotCode(slot.name), // Name is guaranteed because it was filtered above
           slotType: slot.type,
           zoneName: zone?.name || null,
           elementId: slot.id,
@@ -379,7 +379,7 @@ exports.createBooking = async (req, res, next) => {
       await walletService.debitWallet(
         req.user._id,
         totalAmount,
-        `Thanh toan dat cho ${selectedSlot.slotCode} - ${plate}`,
+        `Booking payment for ${selectedSlot.slotCode} - ${plate}`,
         { refSource: 'booking', refSourceId: booking._id }
       );
     } catch (walletError) {
@@ -542,7 +542,7 @@ exports.checkOutBooking = async (req, res, next) => {
     let refundAmount = 0;
     let finalParkingAmount = booking.prepaidAmount;
 
-    // Chỉ hoàn tiền cho gói hourly. Các gói daily không được hoàn tiền nếu về sớm.
+    // Only hourly packages are refundable. Daily packages are not refunded for early exits.
     if (!booking.ticketPackageId || booking.ticketPackageId.type !== 'daily') {
       refundHours = Math.max(booking.paidHours - actualHours, 0);
       refundAmount = refundHours * booking.hourlyRate;
@@ -556,7 +556,7 @@ exports.checkOutBooking = async (req, res, next) => {
         booking.userId,
         refundAmount,
         'REFUND',
-        `Hoan tien dat cho ${booking.slotCode} - ${booking.licensePlate}`,
+        `Booking refund for ${booking.slotCode} - ${booking.licensePlate}`,
         { refSource: 'booking', refSourceId: booking._id }
       );
     }

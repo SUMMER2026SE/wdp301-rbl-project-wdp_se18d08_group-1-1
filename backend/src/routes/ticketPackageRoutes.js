@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const ticketPackageController = require('../controllers/ticketPackageController');
 
-// TODO: Thêm auth middleware nếu cần thiết (e.g. authMiddleware, requireAdmin)
+// TODO: Add auth middleware if needed (e.g. authMiddleware, requireAdmin)
 
 // Public/Customer/Kiosk routes
 router.get('/active', ticketPackageController.getActivePackages);

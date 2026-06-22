@@ -8,7 +8,7 @@ export default function MainLayout() {
     <div className="min-h-screen bg-[#FAFAFA] text-charcoal font-sans overflow-x-hidden">
       <Navbar />
       
-      {/* Nội dung của các trang con sẽ được render tại đây */}
+      {/* Child page content is rendered here */}
       <main>
         <Outlet />
       </main>

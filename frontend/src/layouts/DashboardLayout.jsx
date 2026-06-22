@@ -63,7 +63,7 @@ const NAV_CONFIG = {
     },
     { label: "Services", icon: <Wrench size={18} />, to: "/admin/services" },
     {
-      label: "Quản lý xe & 3D",
+      label: "Vehicles & 3D",
       icon: <Car size={18} />,
       to: "/admin/vehicle-models",
     },

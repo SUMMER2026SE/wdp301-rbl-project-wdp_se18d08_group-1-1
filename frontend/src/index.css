@@ -151,7 +151,7 @@
 
 @layer utilities {
 
-  /* Màu sắc và viền kính */
+  /* Glass colors and borders */
   .text-gold-gradient {
     background: linear-gradient(to right, #C59A3F, #E5C058, #AA771C);
     -webkit-background-clip: text;
@@ -167,7 +167,7 @@
     backdrop-filter: blur(16px);
   }
 
-  /* Hiệu ứng xe lơ lửng/tiến lùi nhẹ */
+  /* Subtle floating/forward-back vehicle animation */
   .animate-float {
     animation: float 4s ease-in-out infinite;
   }
@@ -184,7 +184,7 @@
     }
   }
 
-  /* Hiệu ứng tia sáng lướt qua (cho cảm giác AI đang quét) */
+  /* Sweeping light effect for an AI scanning feel */
   .scan-line {
     position: relative;
     overflow: hidden;
@@ -217,7 +217,7 @@
     }
   }
 
-  /* Hiệu ứng trôi nổi chậm cho hình ảnh xe */
+  /* Slow floating effect for vehicle images */
   .animate-hover-car {
     animation: hoverCar 6s ease-in-out infinite;
   }
@@ -234,13 +234,13 @@
     }
   }
 
-  /* Viền phát sáng nhẹ cho các thẻ tính năng */
+  /* Subtle glowing border for feature cards */
   .hover-glow:hover {
     box-shadow: 0 0 25px rgba(212, 175, 55, 0.15);
     border-color: rgba(212, 175, 55, 0.3);
   }
 
-  /* Hiệu ứng viền chạy cho nét vẽ (Draw line effect) */
+  /* Animated border stroke effect */
   .wireframe-path {
     stroke-dasharray: 300;
     stroke-dashoffset: 300;
@@ -253,7 +253,7 @@
     }
   }
 
-  /* Tạo không gian 3D (Góc nhìn từ trên chéo xuống) */
+  /* Create 3D space with a diagonal top-down view */
   .scene-3d {
     perspective: 1200px;
     transform-style: preserve-3d;
@@ -265,7 +265,7 @@
     box-shadow: 0 50px 50px -20px rgba(0, 0, 0, 0.5);
   }
 
-  /* 1. Hiệu ứng Xe chạy (Dừng lại -> Quét -> Chạy tiếp) */
+  /* 1. Vehicle movement effect (Stop -> Scan -> Continue) */
   .animate-car-3d {
     animation: carDrive3D 8s cubic-bezier(0.25, 1, 0.5, 1) infinite;
   }
@@ -286,19 +286,19 @@
       opacity: 1;
     }
 
-    /* Dừng trước barrier */
+    /* Stop before the barrier */
     45% {
       transform: translateY(50px);
       opacity: 1;
     }
 
-    /* Chờ quét & mở cổng */
+    /* Wait for scan and gate opening */
     60% {
       transform: translateY(-150px);
       opacity: 1;
     }
 
-    /* Lướt qua */
+    /* Pass through */
     70% {
       transform: translateY(-250px);
       opacity: 0;
@@ -310,7 +310,7 @@
     }
   }
 
-  /* 2. Hiệu ứng Thanh chắn Barrier (Mở lên 90 độ) */
+  /* 2. Barrier arm effect (opens to 90 degrees) */
   .animate-barrier-3d {
     transform-origin: bottom left;
     animation: barrierLift3D 8s linear infinite;
@@ -323,22 +323,22 @@
       transform: rotateZ(0deg);
     }
 
-    /* Đóng */
+    /* Closed */
     35%,
     50% {
       transform: rotateZ(-90deg);
     }
 
-    /* Mở */
+    /* Open */
     60%,
     100% {
       transform: rotateZ(0deg);
     }
 
-    /* Đóng lại */
+    /* Close again */
   }
 
-  /* 3. Hiệu ứng Camera AI quét tia Laser */
+  /* 3. Camera AI laser scan effect */
   .animate-laser-scan {
     transform-origin: top center;
     animation: laserScan 8s linear infinite;
@@ -357,7 +357,7 @@
       transform: scaleY(1);
     }
 
-    /* Nháy sáng */
+    /* Flash */
     33% {
       opacity: 1;
       transform: scaleY(1);

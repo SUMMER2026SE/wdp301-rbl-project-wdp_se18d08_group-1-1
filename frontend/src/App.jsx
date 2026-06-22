@@ -102,7 +102,7 @@ export default function App() {
 
           {/* ══════════════════════════════════════════
             ADMIN section — DashboardLayout chung
-            Chỉ role "admin" được vào
+            Only the "admin" role can access this route
         ══════════════════════════════════════════ */}
           <Route
             element={
@@ -125,7 +125,7 @@ export default function App() {
 
           {/* ══════════════════════════════════════════
             STAFF section — DashboardLayout chung
-            Chỉ role "staff" được vào
+            Only the "staff" role can access this route
         ══════════════════════════════════════════ */}
           <Route
             element={

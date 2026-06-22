@@ -300,7 +300,7 @@ exports.createKioskSession = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'License plate is required' });
     }
 
-    // TÌM XEM XE CÓ ĐANG Ở TRONG BÃI KHÔNG (Phòng trường hợp xe bám đuôi đi ra, giờ quay lại)
+    // CHECK WHETHER THE VEHICLE IS CURRENTLY INSIDE THE LOT (In case the vehicle tailgated out and is now returning)
     const existingSession = await Session.findOne({ licensePlate: normalizedPlate, status: 'active' });
     if (existingSession) {
       return res.status(400).json({

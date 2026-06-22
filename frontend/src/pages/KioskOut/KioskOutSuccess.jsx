@@ -22,15 +22,15 @@ export default function KioskOutSuccess({ onFinish }) {
         </div>
         
         <h1 className="text-5xl font-black text-white mb-4 tracking-wider text-center drop-shadow-lg">
-          THANH TOÁN THÀNH CÔNG
+          PAYMENT SUCCESSFUL
         </h1>
         
         <p className="text-xl text-yellow-400 font-semibold mb-8 flex items-center gap-2">
-          <ShieldCheck /> BARRIER ĐANG MỞ
+          <ShieldCheck /> BARRIER OPENING
         </p>
 
         <p className="text-gray-400 text-lg">
-          Chúc quý khách thượng lộ bình an!
+          Have a safe trip!
         </p>
       </div>
 

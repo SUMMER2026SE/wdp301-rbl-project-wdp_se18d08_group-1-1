@@ -55,7 +55,7 @@ exports.createSubscriptionPayment = async (req, res, next) => {
       cancelUrl: process.env.PAYOS_CANCEL_URL || `${process.env.CLIENT_URL}/membership?orderCode=${orderCode}&cancel=true`,
       items: [
         {
-          name: `VIP ${ticketPackage.type === 'monthly' ? 'Tháng' : 'Năm'}`,
+          name: `VIP ${ticketPackage.type === 'monthly' ? 'Month' : 'Year'}`,
           quantity: 1,
           price: parseInt(amount),
         },

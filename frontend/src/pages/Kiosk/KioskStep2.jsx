@@ -241,12 +241,12 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack })
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-black text-[#0f172a]">Giờ</span>
+                      <span className="font-black text-[#0f172a]">Hourly</span>
                       <span className={`text-[10px] font-bold uppercase tracking-widest ${bookingMode === 'hourly' ? 'text-cyan-600' : 'text-gray-400'}`}>
-                        Phổ biến
+                        Popular
                       </span>
                     </div>
-                    <p className="text-[11px] text-gray-500 mt-2">Tính theo số giờ thực tế.</p>
+                    <p className="text-[11px] text-gray-500 mt-2">Calculated by actual hours.</p>
                   </button>
 
                   <button
@@ -258,12 +258,12 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack })
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-black text-[#0f172a]">Cả ngày</span>
+                      <span className="font-black text-[#0f172a]">Full day</span>
                       <span className={`text-[10px] font-bold uppercase tracking-widest ${bookingMode === 'daily' ? 'text-purple-600' : 'text-gray-400'}`}>
                         24h
                       </span>
                     </div>
-                    <p className="text-[11px] text-gray-500 mt-2">Tính theo block 24 giờ.</p>
+                    <p className="text-[11px] text-gray-500 mt-2">Calculated by 24-hour blocks.</p>
                   </button>
                 </div>
               </div>
@@ -324,7 +324,7 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack })
                     </div>
                   </div>
                   <p className="text-[10px] text-gray-500 text-center mt-3 font-medium">
-                    * Giá được tính theo gói member đã được admin cấu hình, không cần chọn gói tại kiosk.
+                    * Price is calculated from the member package configured by admin; no package selection is needed at the kiosk.
                   </p>
                 </div>
 

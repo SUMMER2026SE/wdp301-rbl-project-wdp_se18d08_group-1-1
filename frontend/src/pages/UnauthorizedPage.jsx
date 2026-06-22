@@ -10,13 +10,13 @@ export default function UnauthorizedPage() {
       </div>
       <h1 className="text-4xl font-extrabold text-white mb-3">403 — Access Denied</h1>
       <p className="text-gray-500 max-w-sm leading-relaxed mb-8">
-        Bạn không có quyền truy cập trang này. Vui lòng đăng nhập bằng tài khoản đúng vai trò.
+        You do not have permission to access this page. Please log in with an account that has the correct role.
       </p>
       <Link
         to="/"
         className="inline-flex items-center gap-2 px-6 py-3 bg-gold text-charcoal font-extrabold rounded-xl hover:bg-gold-dark transition-all hover:shadow-xl hover:shadow-gold/20"
       >
-        <ArrowLeft size={16} /> Về trang chủ
+        <ArrowLeft size={16} /> Back to home
       </Link>
     </div>
   );

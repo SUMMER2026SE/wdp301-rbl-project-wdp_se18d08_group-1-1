@@ -61,7 +61,7 @@ const getMinEndTimeStr = (startStr) => {
 const getInitialTimeRange = () => {
   const start = new Date();
   
-  // Làm tròn lên block 15 phút tiếp theo (ví dụ: 9:07 -> 9:15)
+  // Round up to the next 15-minute block (example: 9:07 -> 9:15)
   const minutes = start.getMinutes();
   const remainder = minutes % 15;
   const addMinutes = remainder === 0 ? 0 : 15 - remainder;
@@ -69,7 +69,7 @@ const getInitialTimeRange = () => {
   start.setMinutes(minutes + addMinutes);
   start.setSeconds(0, 0);
 
-  // Mặc định check out sau check in 30 phút
+  // Default checkout is 30 minutes after check-in
   const end = new Date(start);
   end.setMinutes(end.getMinutes() + 30);
 
@@ -106,7 +106,7 @@ const CustomTimePicker = ({ value, onChange, options, minTime }) => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Cuộn tới vị trí giờ hiện tại khi mở dropdown
+  // Scroll to the current time position when opening the dropdown
   useEffect(() => {
     if (isOpen && dropdownRef.current) {
       const activeEl = dropdownRef.current.querySelector('.active-time');
@@ -252,7 +252,7 @@ export default function CreateBookingPage() {
       const minEndObj = new Date(newStartObj);
       minEndObj.setMinutes(minEndObj.getMinutes() + 30);
       
-      // Nếu giờ kết thúc hiện tại nhỏ hơn giờ kết thúc tối thiểu (cách 30p), tự động điều chỉnh
+      // If the current end time is earlier than the minimum end time (30 minutes later), adjust automatically
       if (currentEndObj < minEndObj) {
         const minEndStr = toDateTimeLocal(minEndObj);
         setEndDate(minEndStr.split('T')[0]);
@@ -901,7 +901,7 @@ export default function CreateBookingPage() {
             </div>
             <h2 className="text-[32px] leading-none font-black text-gray-900 mb-2">Booking Confirmed</h2>
             <p className="text-gray-500 font-medium text-sm mb-5 max-w-[260px]">
-              Mọi thứ đã sẵn sàng. Dùng QR này tại kiosk để check-in thật nhanh.
+              Everything is ready. Use this QR at the kiosk for a fast check-in.
             </p>
 
             <div className="relative bg-white border border-gray-100 p-4 rounded-[24px] mb-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.8),0_12px_30px_rgba(15,23,42,0.06)]">
@@ -925,14 +925,14 @@ export default function CreateBookingPage() {
             </div>
 
             <div className="w-full bg-gradient-to-r from-emerald-50 to-cyan-50 border border-emerald-100 text-emerald-700 font-bold py-3.5 px-4 rounded-[22px] text-sm leading-relaxed">
-              Bạn đã booking thành công. Tự động chuyển tới My Bookings sau{" "}
+              Your booking was successful. Automatically redirecting to My Bookings in{" "}
               <span className="inline-flex min-w-8 justify-center rounded-full bg-white/80 px-2 py-0.5 text-emerald-600 shadow-sm">
                 {successRedirectCountdown}s
               </span>
             </div>
 
             <p className="mt-3 text-[11px] text-gray-400 font-medium">
-              Booking status sẽ tự đồng bộ khi kiosk cập nhật.
+              Booking status will sync automatically when the kiosk updates.
             </p>
           </div>
         </div>

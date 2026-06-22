@@ -465,15 +465,15 @@ export default function ParkingMapViewer({ floors, currentFloorId, onFloorSelect
                   pointerEvents = 'none';
                 } else {
                   if (isAbove) {
-                    targetZ = 800; // Tầng trên: bay về phía camera (Zoom in) & mờ đi
+                    targetZ = 800; // Upper floor: moves toward the camera (zoom in) and fades out
                     targetOpacity = 0;
                     pointerEvents = 'none';
                   } else if (isBelow) {
-                    targetZ = -800; // Tầng dưới: bay ra xa camera (Zoom out) & mờ đi
+                    targetZ = -800; // Lower floor: moves away from the camera (zoom out) and fades out
                     targetOpacity = 0;
                     pointerEvents = 'none';
                   } else {
-                    targetZ = 0; // Tầng hiện tại: ở giữa
+                    targetZ = 0; // Current floor: centered
                   }
                 }
               } else {

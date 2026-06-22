@@ -61,8 +61,8 @@ export default function Membership() {
 
     if (orderCode) {
       if (cancel === 'true') {
-        alert('Đã hủy giao dịch thanh toán.');
-        // Xoá query string
+        alert('Payment transaction was cancelled.');
+        // Delete query string
         window.history.replaceState({}, document.title, window.location.pathname);
       } else {
         setVerifying(true);
@@ -71,7 +71,7 @@ export default function Membership() {
             await syncCurrentUserProfile();
             setSuccess(true);
           } else {
-            alert(res.data?.message || 'Giao dịch chưa hoàn tất hoặc thất bại');
+            alert(res.data?.message || 'The transaction is incomplete or failed');
           }
         }).finally(() => {
           setVerifying(false);
@@ -160,11 +160,11 @@ export default function Membership() {
       // Add
       const maxSlots = Math.min(3, vehicles.length);
       if (vehicles.length === 0) {
-        alert("Bạn cần thêm xe vào danh sách trước khi mua thẻ VIP.");
+        alert("You need to add a vehicle before buying a VIP pass.");
         return;
       }
       if (selectedSlots.length >= maxSlots) {
-        alert(`Bạn chỉ được chọn tối đa ${maxSlots} ô đỗ (tương ứng với số lượng xe của bạn).`);
+        alert(`You can select at most ${maxSlots} parking slots (matching your number of vehicles).`);
         return;
       }
       setSelectedSlots(prev => [...prev, { floorId, slotCode: slotData.slotNumber }]);
@@ -173,13 +173,13 @@ export default function Membership() {
 
   const handleConfirmSlots = async () => {
     if (selectedSlots.length === 0) {
-      alert("Vui lòng chọn ít nhất 1 ô đỗ để giữ chỗ.");
+      alert("Please select at least one parking slot to reserve.");
       return;
     }
     
     try {
       setShowSlotModal(false);
-      setVerifying(true); // Hiển thị trạng thái đang xử lý
+      setVerifying(true); // Show the processing state
 
       if (paymentMethod === 'wallet') {
         const res = await paySubscriptionWithWallet(selectedPackage._id, selectedSlots);
@@ -187,21 +187,21 @@ export default function Membership() {
           await syncCurrentUserProfile();
           setSuccess(true);
         } else {
-          alert(res.data?.message || "Lỗi khi thanh toán bằng ví Valo");
+          alert(res.data?.message || "Error while paying with Valo Wallet");
         }
         setVerifying(false);
       } else {
         const res = await createSubscriptionPayment(selectedPackage._id, selectedSlots);
         if (res.ok && res.data?.data?.checkoutUrl) {
-          // Chuyển hướng thẳng sang trang PayOS
+          // Redirect directly to the PayOS page
           window.location.href = res.data.data.checkoutUrl;
         } else {
-          alert(res.data?.message || "Lỗi khi tạo giao dịch PayOS");
+          alert(res.data?.message || "Error creating PayOS transaction");
           setVerifying(false);
         }
       }
     } catch {
-      alert("Lỗi mạng");
+      alert("Network error");
       setVerifying(false);
     }
   };
@@ -210,7 +210,7 @@ export default function Membership() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
         <Loader2 className="w-12 h-12 animate-spin text-gold mb-4" />
-        <p className="text-gray-500 font-medium">Đang xử lý giao dịch, vui lòng đợi...</p>
+        <p className="text-gray-500 font-medium">Processing transaction, please wait...</p>
       </div>
     );
   }
@@ -234,7 +234,7 @@ export default function Membership() {
             </div>
           </div>
           <h1 className="text-4xl md:text-5xl font-black mb-4 tracking-tight">Unlock <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-gold">Premium</span></h1>
-          <p className="text-gray-400 text-lg">Chọn gói phù hợp - Nâng tầm trải nghiệm</p>
+          <p className="text-gray-400 text-lg">Choose the right plan and upgrade your experience</p>
         </div>
       </div>
 
@@ -249,74 +249,74 @@ export default function Membership() {
             </div>
             <h3 className="text-center font-black text-gray-900 tracking-widest text-sm mb-6">MEMBER</h3>
             <div className="text-center py-4 rounded-2xl bg-gray-50 border border-gray-100 mb-8">
-              <div className="text-2xl font-black text-gray-900">Mặc định</div>
+              <div className="text-2xl font-black text-gray-900">Default</div>
             </div>
             <ul className="space-y-4 mb-8 flex-1">
               <li className="flex gap-3 text-gray-600 text-sm">
                 <Check size={18} className="text-gray-400 shrink-0" />
-                <span>Đặt chỗ đỗ xe theo giờ / ngày</span>
+                <span>Book parking by hour or day</span>
               </li>
               <li className="flex gap-3 text-gray-600 text-sm">
                 <Check size={18} className="text-gray-400 shrink-0" />
-                <span>Sử dụng dịch vụ mở rộng (trả phí)</span>
+                <span>Use add-on services (paid)</span>
               </li>
               <li className="flex gap-3 text-gray-400 text-sm">
                 <div className="w-4 h-4 rounded-full border border-gray-300 shrink-0 mt-0.5"></div>
-                <span>Chỗ đỗ xe cố định riêng biệt</span>
+                <span>Dedicated fixed parking slot</span>
               </li>
               <li className="flex gap-3 text-gray-400 text-sm">
                 <div className="w-4 h-4 rounded-full border border-gray-300 shrink-0 mt-0.5"></div>
-                <span>Miễn phí Check-in / Không cần đặt trước</span>
+                <span>Free check-in / No reservation required</span>
               </li>
             </ul>
             <button disabled className="w-full py-4 rounded-xl font-bold text-gray-500 bg-gray-100">
-              Đang sử dụng
+              In use
             </button>
           </div>
 
           {/* Monthly Card */}
           <div className="bg-white rounded-3xl p-8 shadow-xl border-2 border-gold flex flex-col relative z-20 scale-105 transition hover:-translate-y-2">
             <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-gold text-white text-[10px] font-black tracking-widest py-1.5 px-4 rounded-full uppercase">
-              Phổ Biến
+              Popular
             </div>
             <div className="w-12 h-12 rounded-xl bg-gold/10 flex items-center justify-center text-gold mx-auto mb-4">
               <Crown size={24} />
             </div>
-            <h3 className="text-center font-black text-gray-900 tracking-widest text-sm mb-6">VIP THÁNG</h3>
+            <h3 className="text-center font-black text-gray-900 tracking-widest text-sm mb-6">MONTHLY VIP</h3>
             <div className="text-center py-4 rounded-2xl bg-gold/5 border border-gold/20 mb-8">
               <div className="text-2xl font-black text-gold">
-                {packages.monthly?.price ? packages.monthly.price.toLocaleString('vi-VN') : '---'}đ
+                {packages.monthly?.price ? packages.monthly.price.toLocaleString('vi-VN') : '---'} VND
               </div>
-              <div className="text-sm font-medium text-gray-500 mt-1">mỗi tháng</div>
+              <div className="text-sm font-medium text-gray-500 mt-1">per month</div>
             </div>
             <ul className="space-y-4 mb-8 flex-1">
               <li className="flex gap-3 text-gray-600 text-sm">
                 <Check size={18} className="text-gold shrink-0" />
-                <span>Toàn quyền của gói Member</span>
+                <span>All Member benefits</span>
               </li>
               <li className="flex gap-3 text-gray-600 text-sm">
                 <Check size={18} className="text-gold shrink-0" />
-                <span>Sở hữu Ô đỗ cố định mang tên bạn</span>
+                <span>Own a fixed parking slot under your name</span>
               </li>
               <li className="flex gap-3 text-gray-600 text-sm">
                 <Check size={18} className="text-gold shrink-0" />
-                <span>Miễn phí Check-in tự động 24/7</span>
+                <span>Free 24/7 automatic check-in</span>
               </li>
               <li className="flex gap-3 text-gray-600 text-sm">
                 <Check size={18} className="text-gold shrink-0" />
-                <span>Không cần đặt chỗ trước khi đến</span>
+                <span>No need to book before arrival</span>
               </li>
             </ul>
             {isMonthlyVIP || isYearlyVIP ? (
               <button disabled className="w-full py-4 rounded-xl font-bold text-gray-500 bg-gray-100">
-                {isYearlyVIP ? "Đã bao gồm trong gói Năm" : "Đang sử dụng"}
+                {isYearlyVIP ? "Included in the Yearly plan" : "In use"}
               </button>
             ) : (
               <button 
                 onClick={() => handleBuyPackage(packages.monthly)}
                 className="w-full py-4 rounded-xl font-bold text-white bg-gradient-to-r from-yellow-500 to-gold hover:opacity-90 transition shadow-lg shadow-gold/20"
               >
-                Nâng cấp ngay
+                Upgrade now
               </button>
             )}
           </div>
@@ -326,37 +326,37 @@ export default function Membership() {
             <div className="w-12 h-12 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600 mx-auto mb-4">
               <Sparkles size={24} />
             </div>
-            <h3 className="text-center font-black text-gray-900 tracking-widest text-sm mb-6">NOVA NĂM</h3>
+            <h3 className="text-center font-black text-gray-900 tracking-widest text-sm mb-6">YEARLY NOVA</h3>
             <div className="text-center py-4 rounded-2xl bg-purple-50/50 border border-purple-100 mb-8">
               <div className="text-2xl font-black text-purple-600">
-                {packages.yearly?.price ? packages.yearly.price.toLocaleString('vi-VN') : '---'}đ
+                {packages.yearly?.price ? packages.yearly.price.toLocaleString('vi-VN') : '---'} VND
               </div>
-              <div className="text-sm font-medium text-gray-500 mt-1">cho 1 năm</div>
+              <div className="text-sm font-medium text-gray-500 mt-1">for 1 year</div>
             </div>
             <ul className="space-y-4 mb-8 flex-1">
               <li className="flex gap-3 text-gray-600 text-sm">
                 <Check size={18} className="text-purple-500 shrink-0" />
-                <span>Toàn quyền của gói VIP Tháng</span>
+                <span>All Monthly VIP benefits</span>
               </li>
               <li className="flex gap-3 text-gray-600 text-sm font-bold text-purple-600">
                 <Check size={18} className="text-purple-500 shrink-0" />
-                <span>Tặng 12 lần rửa xe / bảo dưỡng miễn phí</span>
+                <span>Includes 12 free washes / maintenance services</span>
               </li>
               <li className="flex gap-3 text-gray-600 text-sm">
                 <Check size={18} className="text-purple-500 shrink-0" />
-                <span>Ưu tiên giải đáp thắc mắc (Support)</span>
+                <span>Priority support</span>
               </li>
             </ul>
             {isYearlyVIP ? (
               <button disabled className="w-full py-4 rounded-xl font-bold text-gray-500 bg-gray-100">
-                Đang sử dụng
+                In use
               </button>
             ) : (
               <button 
                 onClick={() => handleBuyPackage(packages.yearly)}
                 className="w-full py-4 rounded-xl font-bold text-white bg-gradient-to-r from-purple-500 to-purple-600 hover:opacity-90 transition shadow-lg shadow-purple-500/20"
               >
-                Nâng cấp ngay
+                Upgrade now
               </button>
             )}
           </div>
@@ -370,9 +370,9 @@ export default function Membership() {
           <div className="bg-white rounded-3xl w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in fade-in zoom-in-95 duration-200">
             <div className="p-6 border-b border-gray-100 flex items-center justify-between">
               <div>
-                <h3 className="text-xl font-black text-gray-900">Chọn Ô Đỗ Cố Định</h3>
+                <h3 className="text-xl font-black text-gray-900">Choose Fixed Parking Slots</h3>
                 <p className="text-sm text-gray-500 mt-1">
-                  Bạn đang có {vehicles.length} xe đăng ký. Bạn có thể chọn {Math.min(3, vehicles.length)} ô đỗ.
+                  You currently have {vehicles.length} registered vehicles. You can select {Math.min(3, vehicles.length)} parking slots.
                 </p>
               </div>
               <button 
@@ -401,7 +401,7 @@ export default function Membership() {
               
               <div className="w-full md:w-80 bg-white rounded-2xl border border-gray-200 p-6 shadow-sm flex flex-col">
                 <div className="mb-6">
-                  <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Tầng đỗ xe</label>
+                  <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Parking floor</label>
                   <select 
                     className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-semibold text-gray-800 outline-none focus:border-gold focus:ring-1 focus:ring-gold"
                     value={currentFloorId || ''}
@@ -415,7 +415,7 @@ export default function Membership() {
                 
                 <div className="mb-6 flex-1">
                   <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-3">
-                    Phương thức thanh toán
+                    Payment method
                   </label>
                   <div className="grid grid-cols-2 gap-2 mb-4">
                     <button 
@@ -436,7 +436,7 @@ export default function Membership() {
                       </div>
                       <div className="text-center">
                         <div className={`font-black text-xs mb-0.5 ${paymentMethod === 'payos' ? 'text-cyan-400' : 'text-gray-300'}`}>PayOS</div>
-                        <div className="text-[9px] text-gray-500 font-medium">Mã QR / Chuyển khoản</div>
+                        <div className="text-[9px] text-gray-500 font-medium">QR code / Bank transfer</div>
                       </div>
                     </button>
                     
@@ -457,8 +457,8 @@ export default function Membership() {
                         <Wallet size={16} />
                       </div>
                       <div className="text-center">
-                        <div className={`font-black text-xs mb-0.5 ${paymentMethod === 'wallet' ? 'text-gold' : 'text-gray-300'}`}>Ví Valo</div>
-                        <div className="text-[9px] text-gray-500 font-medium">Số dư: {walletBalance.toLocaleString('vi-VN')}đ</div>
+                        <div className={`font-black text-xs mb-0.5 ${paymentMethod === 'wallet' ? 'text-gold' : 'text-gray-300'}`}>Wallet Valo</div>
+                        <div className="text-[9px] text-gray-500 font-medium">Balance: {walletBalance.toLocaleString('vi-VN')} VND</div>
                       </div>
                     </button>
                   </div>
@@ -466,23 +466,23 @@ export default function Membership() {
                   {paymentMethod === 'wallet' && selectedPackage && walletBalance < selectedPackage.price && (
                     <div className="mb-3 p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium flex items-start gap-1.5">
                       <AlertCircle className="shrink-0 w-4 h-4" />
-                      <p>Số dư không đủ. Vui lòng nạp thêm hoặc dùng PayOS.</p>
+                      <p>Insufficient balance. Please top up or use PayOS.</p>
                     </div>
                   )}
 
                   <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-3">
-                    Đã chọn ({selectedSlots.length} / {Math.min(3, vehicles.length)})
+                    Selected ({selectedSlots.length} / {Math.min(3, vehicles.length)})
                   </label>
                   <div className="space-y-2">
                     {selectedSlots.map(s => (
                       <div key={`${s.floorId}-${s.slotCode}`} className="flex items-center justify-between p-3 rounded-xl bg-gold/10 border border-gold/20 text-gold font-bold">
-                        <span>Ô đỗ: {s.slotCode}</span>
+                        <span>Slot: {s.slotCode}</span>
                         <Check size={18} />
                       </div>
                     ))}
                     {selectedSlots.length === 0 && (
                       <div className="text-center py-8 text-gray-400 text-sm">
-                        Hãy nhấp vào bản đồ để chọn ô đỗ.
+                        Click the map to choose a parking slot.
                       </div>
                     )}
                   </div>
@@ -493,7 +493,7 @@ export default function Membership() {
                   disabled={paymentMethod === 'wallet' && selectedPackage && walletBalance < selectedPackage.price}
                   className={`w-full py-4 rounded-xl font-bold text-white transition flex items-center justify-center gap-2 ${paymentMethod === 'wallet' && selectedPackage && walletBalance < selectedPackage.price ? 'bg-gray-800 cursor-not-allowed opacity-50' : 'bg-gray-900 hover:bg-black'}`}
                 >
-                  Thanh toán ngay <ArrowRight size={18} />
+                  Pay now <ArrowRight size={18} />
                 </button>
               </div>
             </div>
@@ -508,14 +508,14 @@ export default function Membership() {
             <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center text-green-500 mx-auto mb-6">
               <Crown size={40} />
             </div>
-            <h3 className="text-2xl font-black text-gray-900 mb-2">Chào mừng VIP!</h3>
-            <p className="text-gray-500 mb-8">Giao dịch thành công. Đặc quyền của bạn đã được kích hoạt và ô đỗ đã được giữ riêng.</p>
+            <h3 className="text-2xl font-black text-gray-900 mb-2">Welcome, VIP!</h3>
+            <p className="text-gray-500 mb-8">Transaction successful. Your benefits are active and your slot has been reserved.</p>
             
             <button 
               onClick={() => window.location.href = '/'}
               className="w-full py-4 rounded-xl font-bold text-white bg-gray-900 hover:bg-black transition"
             >
-              Về trang chủ
+              Back to home
             </button>
           </div>
         </div>

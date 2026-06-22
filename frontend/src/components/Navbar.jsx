@@ -30,11 +30,7 @@ import { useNotifications } from "../hooks/useNotifications";
 import { formatDistanceToNow } from "date-fns";
 import { enUS } from "date-fns/locale";
 
-/* ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
-   VALO PARKING ΓÇô Premium Navbar
-   Phase 1: Expanded transparent bar at top
-   Phase 2: Floating glass pill when scrolled
-   ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ */
+/* VALO PARKING - Premium Navbar */
 
 const guestLinks = [
   { to: "/", label: "Home", icon: Sparkles },
@@ -123,7 +119,7 @@ export default function Navbar() {
   const { notifications, unreadCount, markAsRead, markAllAsRead } =
     useNotifications();
 
-  // ΓöÇΓöÇ Sync user ΓöÇΓöÇ
+  // Sync user
   const syncUser = useCallback(() => {
     const raw = sessionStorage.getItem("valo_user");
     setUser(raw ? JSON.parse(raw) : null);
@@ -139,7 +135,7 @@ export default function Navbar() {
     };
   }, [syncUser]);
 
-  // ΓöÇΓöÇ Scroll detection ΓöÇΓöÇ
+  // Scroll detection
   useEffect(() => {
     const onScroll = () => {
       setScrollY(window.scrollY);
@@ -148,7 +144,7 @@ export default function Navbar() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  // ΓöÇΓöÇ Close on outside click ΓöÇΓöÇ
+  // Close on outside click
   useEffect(() => {
     const handler = (e) => {
       if (profileRef.current && !profileRef.current.contains(e.target))
@@ -160,7 +156,7 @@ export default function Navbar() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  // ΓöÇΓöÇ Close on route change ΓöÇΓöÇ
+  // Close on route change
   useEffect(() => {
     window.requestAnimationFrame(() => {
       setMobileOpen(false);
@@ -169,7 +165,7 @@ export default function Navbar() {
     });
   }, [location.pathname]);
 
-  // ΓöÇΓöÇ Fetch profile if avatar is missing ΓöÇΓöÇ
+  // Fetch profile if avatar is missing
   useEffect(() => {
     const fetchProfileAvatar = async () => {
       if (!user) return;
@@ -202,7 +198,7 @@ export default function Navbar() {
     fetchProfileAvatar();
   }, [user]);
 
-  // ΓöÇΓöÇ Logout ΓöÇΓöÇ
+  // Logout
   const handleLogout = async () => {
     try {
       await logoutUser();
