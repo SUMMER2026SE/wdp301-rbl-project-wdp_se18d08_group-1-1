@@ -85,6 +85,7 @@ export default function ParkingMapGrid({
   currentFloorId = null, 
   onFloorSelect, 
   onSlotClick,
+  onZoneClick,
   activeSessions = [], // Array of sessions to determine slot status
   dbSlots = [], // Array of slot data from DB to check maintenance status
   loading = false,
@@ -188,7 +189,23 @@ export default function ParkingMapGrid({
         const bgColors = { purple: 'rgba(168,85,247,0.1)', emerald: 'rgba(16,185,129,0.1)', blue: 'rgba(59,130,246,0.1)', amber: 'rgba(245,158,11,0.1)' };
         
         return (
-          <div key={el.id} style={{...style, transform: `translateZ(2px) rotateZ(${el.rot || 0}deg)`, borderColor: borderColors[themeColor] || '#a855f7', backgroundColor: bgColors[themeColor] || 'rgba(168,85,247,0.1)' }} className="border-[2px] border-solid shadow-md rounded-xl pointer-events-none">
+          <div
+            key={el.id}
+            style={{...style, transform: `translateZ(2px) rotateZ(${el.rot || 0}deg)`, borderColor: borderColors[themeColor] || '#a855f7', backgroundColor: bgColors[themeColor] || 'rgba(168,85,247,0.1)' }}
+            className="border-[2px] border-solid shadow-md rounded-xl cursor-pointer hover:brightness-125 transition"
+            title={`${el.name || el.id}: Zone details`}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onZoneClick) {
+                onZoneClick({
+                  id: el.id,
+                  name: el.name || el.id,
+                  type: 'zone',
+                  floorId,
+                });
+              }
+            }}
+          >
              {el.name && el.name.trim() !== '' && (
                <div className="absolute -top-4 left-4 px-3 py-1 bg-white border-[2px] border-solid rounded-full shadow-md flex items-center justify-center" style={{ borderColor: borderColors[themeColor] || '#a855f7', transform: 'translateZ(10px)' }}>
                   <span className="font-black tracking-widest text-[10px] uppercase leading-none" style={{ color: borderColors[themeColor] || '#a855f7' }}>{el.name}</span>
