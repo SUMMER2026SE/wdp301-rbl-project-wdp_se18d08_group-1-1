@@ -82,6 +82,11 @@ const bookingSchema = new mongoose.Schema(
       ref: 'Session',
       default: null,
     },
+    ticketPackageId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'TicketPackage',
+      default: null,
+    },
   },
   { timestamps: true }
 );

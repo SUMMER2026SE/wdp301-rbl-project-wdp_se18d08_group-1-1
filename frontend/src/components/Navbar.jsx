@@ -5,6 +5,7 @@ import {
   LogOut,
   User,
   Wallet,
+  Crown,
   ChevronDown,
   Bell,
   CalendarCheck,
@@ -41,11 +42,11 @@ const guestLinks = [
 ];
 
 const customerLinks = [
-  { to: '/',            label: 'Home',         icon: Sparkles },
-  { to: '/booking',     label: 'Booking',      icon: CalendarCheck },
-  { to: '/services',    label: 'Services',     icon: Settings },
-  { to: '/parking-map', label: 'Parking Map',  icon: Map },
-  { to: '/wallet',      label: 'Wallet',       icon: Wallet },
+  { to: '/', label: 'Home', icon: Sparkles },
+  { to: '/booking', label: 'Booking', icon: CalendarCheck },
+  { to: '/services', label: 'Services', icon: Settings },
+  { to: '/parking-map', label: 'Parking Map', icon: Map },
+  { to: '/membership', label: 'Package', icon: Crown },
 ];
 
 const roleBadge = {
@@ -66,6 +67,39 @@ const avatarGradients = [
 const getGradient = (name = "") => {
   const h = [...name].reduce((a, c) => a + c.charCodeAt(0), 0);
   return avatarGradients[h % avatarGradients.length];
+};
+
+const getMembershipTier = (membership = {}) => {
+  const expireAt = membership.expireAt ? new Date(membership.expireAt) : null;
+  const isActiveVip =
+    membership.isVip && (!expireAt || Number.isNaN(expireAt.getTime()) || expireAt > new Date());
+
+  if (!isActiveVip) return "member";
+  if (membership.packageType === "yearly" || membership.freeServiceCount > 0) return "yearly";
+  return "monthly";
+};
+
+const navAvatarThemes = {
+  monthly: {
+    className:
+      "bg-gradient-to-br from-yellow-200 via-amber-300 to-yellow-600 ring-[2px] ring-yellow-400 animate-vip-ripple-sm z-10",
+    style: {
+      "--vip-ripple-strong": "rgba(251, 191, 36, 0.72)",
+      "--vip-ripple-soft": "rgba(251, 191, 36, 0.32)",
+      "--vip-ripple-faint": "rgba(251, 191, 36, 0.12)",
+      "--vip-ripple-clear": "rgba(251, 191, 36, 0)",
+    },
+  },
+  yearly: {
+    className:
+      "bg-gradient-to-br from-purple-300 via-fuchsia-300 to-violet-600 ring-[2px] ring-purple-400 animate-vip-ripple-sm z-10",
+    style: {
+      "--vip-ripple-strong": "rgba(168, 85, 247, 0.74)",
+      "--vip-ripple-soft": "rgba(168, 85, 247, 0.34)",
+      "--vip-ripple-faint": "rgba(217, 70, 239, 0.14)",
+      "--vip-ripple-clear": "rgba(168, 85, 247, 0)",
+    },
+  },
 };
 
 export default function Navbar() {
@@ -136,7 +170,12 @@ export default function Navbar() {
   useEffect(() => {
     const fetchProfileAvatar = async () => {
       if (!user) return;
-      if (user.avatar || user.profile?.avatar || user.avatarUrl) return; // already has it
+      if (
+        (user.avatar || user.profile?.avatar || user.avatarUrl) &&
+        (!user.membership?.isVip || user.membership?.packageType)
+      ) {
+        return;
+      }
 
       const token = localStorage.getItem("accessToken");
       if (!token) return;
@@ -147,18 +186,16 @@ export default function Navbar() {
         });
         if (ok && data?.success) {
           const freshAvatar = data.data.profile?.avatar || "";
-          if (freshAvatar) {
-            const updatedUser = {
-              ...user,
-              ...data.data,
-              avatar: freshAvatar,
-            };
-            sessionStorage.setItem("valo_user", JSON.stringify(updatedUser));
-            setUser(updatedUser);
-            window.dispatchEvent(new Event("valo_auth_change"));
-          }
+          const updatedUser = {
+            ...user,
+            ...data.data,
+            avatar: freshAvatar || user.avatar || user.profile?.avatar || user.avatarUrl || "",
+          };
+          sessionStorage.setItem("valo_user", JSON.stringify(updatedUser));
+          setUser(updatedUser);
+          window.dispatchEvent(new Event("valo_auth_change"));
         }
-      } catch (e) {}
+      } catch (e) { }
     };
 
     fetchProfileAvatar();
@@ -189,16 +226,21 @@ export default function Navbar() {
 
   const displayName = user
     ? [user.profile?.firstName, user.profile?.lastName]
-        .filter(Boolean)
-        .join(" ") ||
-      user.name ||
-      user.fullName ||
-      user.username ||
-      "User"
+      .filter(Boolean)
+      .join(" ") ||
+    user.name ||
+    user.fullName ||
+    user.username ||
+    "User"
     : "User";
 
   const grad = getGradient(displayName);
   const isScrolled = scrollY > 40;
+  const membershipTier = getMembershipTier(user?.membership);
+  const navAvatarTheme = navAvatarThemes[membershipTier];
+  const navAvatarClass = navAvatarTheme?.className || "bg-gradient-to-br from-gray-200 to-gray-400 shadow-sm";
+  const navAvatarLargeClass = navAvatarTheme?.className || "bg-gradient-to-br from-gray-200 to-gray-400 shadow-md";
+  const navAvatarStyle = navAvatarTheme?.style || {};
 
   return (
     <>
@@ -269,10 +311,9 @@ export default function Navbar() {
                         className={`
                           relative flex items-center gap-1.5 px-4 py-2 rounded-xl text-[13px] font-semibold
                           transition-all duration-300 ease-out cursor-pointer select-none
-                          ${
-                            isActive
-                              ? "text-gray-900"
-                              : "text-gray-500 hover:text-gray-800"
+                          ${isActive
+                            ? "text-gray-900"
+                            : "text-gray-500 hover:text-gray-800"
                           }
                         `}
                       >
@@ -283,9 +324,8 @@ export default function Navbar() {
                         <link.icon
                           size={14}
                           strokeWidth={2.2}
-                          className={`relative z-10 transition-colors duration-300 ${
-                            isActive ? "text-gold" : "text-gray-400"
-                          }`}
+                          className={`relative z-10 transition-colors duration-300 ${isActive ? "text-gold" : "text-gray-400"
+                            }`}
                         />
                         <span className="relative z-10">{link.label}</span>
 
@@ -383,9 +423,9 @@ export default function Navbar() {
                                     <div className="ml-auto text-[11px] text-gray-400">
                                       {n.createdAt
                                         ? formatDistanceToNow(
-                                            new Date(n.createdAt),
-                                            { addSuffix: true, locale: enUS },
-                                          )
+                                          new Date(n.createdAt),
+                                          { addSuffix: true, locale: enUS },
+                                        )
                                         : "Just now"}
                                     </div>
                                   </div>
@@ -441,17 +481,19 @@ export default function Navbar() {
                       className={`
                         flex items-center gap-2 pl-[3px] pr-2.5 py-[3px] rounded-2xl
                         transition-all duration-300 nav-btn-hover
-                        ${
-                          profileOpen
-                            ? "bg-black/[0.06] ring-1 ring-black/[0.08]"
-                            : "hover:bg-black/[0.04]"
+                        ${profileOpen
+                          ? "bg-black/[0.06] ring-1 ring-black/[0.08]"
+                          : "hover:bg-black/[0.04]"
                         }
                       `}
                     >
-                      <div className="w-9 h-9 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 flex items-center justify-center text-black font-extrabold text-sm cursor-pointer shadow-sm select-none shrink-0 overflow-hidden">
+                      <div
+                        className={`w-9 h-9 rounded-full flex items-center justify-center text-black font-extrabold text-sm cursor-pointer select-none shrink-0 ${navAvatarClass}`}
+                        style={navAvatarStyle}
+                      >
                         {user?.avatar ||
-                        user?.profile?.avatar ||
-                        user?.avatarUrl ? (
+                          user?.profile?.avatar ||
+                          user?.avatarUrl ? (
                           <img
                             src={
                               user.avatar ||
@@ -459,7 +501,7 @@ export default function Navbar() {
                               user.avatarUrl
                             }
                             alt={displayName}
-                            className="w-full h-full object-cover"
+                            className="w-full h-full rounded-full object-cover"
                           />
                         ) : (
                           <span>{getInitials(displayName)}</span>
@@ -479,10 +521,13 @@ export default function Navbar() {
                         {/* User card */}
                         <div className="p-4 border-b border-gray-100/80">
                           <div className="flex items-center gap-3">
-                            <div className="w-11 h-11 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 flex items-center justify-center text-black font-extrabold text-lg cursor-pointer shadow-lg select-none overflow-hidden shrink-0">
+                            <div
+                              className={`w-11 h-11 rounded-full flex items-center justify-center text-black font-extrabold text-lg cursor-pointer select-none shrink-0 ${navAvatarLargeClass}`}
+                              style={navAvatarStyle}
+                            >
                               {user?.avatar ||
-                              user?.profile?.avatar ||
-                              user?.avatarUrl ? (
+                                user?.profile?.avatar ||
+                                user?.avatarUrl ? (
                                 <img
                                   src={
                                     user.avatar ||
@@ -490,7 +535,7 @@ export default function Navbar() {
                                     user.avatarUrl
                                   }
                                   alt={displayName}
-                                  className="w-full h-full object-cover"
+                                  className="w-full h-full rounded-full object-cover"
                                 />
                               ) : (
                                 <span>{getInitials(displayName)}</span>
@@ -657,22 +702,19 @@ export default function Navbar() {
       </nav>
 
       <div
-        className={`fixed inset-0 z-40 transition-all duration-500 ${
-          mobileOpen ? "pointer-events-auto" : "pointer-events-none"
-        }`}
+        className={`fixed inset-0 z-40 transition-all duration-500 ${mobileOpen ? "pointer-events-auto" : "pointer-events-none"
+          }`}
       >
         <div
-          className={`absolute inset-0 bg-black/20 backdrop-blur-sm transition-opacity duration-500 ${
-            mobileOpen ? "opacity-100" : "opacity-0"
-          }`}
+          className={`absolute inset-0 bg-black/20 backdrop-blur-sm transition-opacity duration-500 ${mobileOpen ? "opacity-100" : "opacity-0"
+            }`}
           onClick={() => setMobileOpen(false)}
         />
 
         {/* Panel */}
         <div
-          className={`absolute top-0 right-0 w-[300px] h-full bg-white/95 backdrop-blur-2xl shadow-2xl transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${
-            mobileOpen ? "translate-x-0" : "translate-x-full"
-          }`}
+          className={`absolute top-0 right-0 w-[300px] h-full bg-white/95 backdrop-blur-2xl shadow-2xl transition-transform duration-500 ease-[cubic-bezier(0.32,0.72,0,1)] ${mobileOpen ? "translate-x-0" : "translate-x-full"
+            }`}
         >
           {/* Close */}
           <div className="flex items-center justify-between p-5 border-b border-gray-100">
@@ -700,10 +742,9 @@ export default function Navbar() {
                 id={`nav-m-${link.label.replace(/\s+/g, "-").toLowerCase()}`}
                 onClick={() => setMobileOpen(false)}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-300 ${
-                    isActive
-                      ? "bg-gold/10 text-gray-900"
-                      : "text-gray-500 hover:bg-gray-50 hover:text-gray-800"
+                  `flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-300 ${isActive
+                    ? "bg-gold/10 text-gray-900"
+                    : "text-gray-500 hover:bg-gray-50 hover:text-gray-800"
                   }`
                 }
                 style={{ animationDelay: `${i * 50}ms` }}

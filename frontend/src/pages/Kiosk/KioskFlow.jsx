@@ -22,6 +22,7 @@ export default function KioskFlow() {
     floorId: null,
     durationHours: 1,
     entryImageBase64: null,
+    ticketPackageId: null,
     isMonthly: false,
     hasPreBooking: false,
   });
@@ -50,7 +51,8 @@ export default function KioskFlow() {
           parkingSlot: formData.selectedSlot,
           floorId: formData.floorId,
           durationHours: formData.durationHours,
-          entryImageBase64: formData.entryImageBase64
+          entryImageBase64: formData.entryImageBase64,
+          ticketPackageId: formData.ticketPackageId
         })
       });
 

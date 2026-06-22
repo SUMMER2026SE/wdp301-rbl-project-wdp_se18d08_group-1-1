@@ -9,6 +9,8 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack })
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dbSlots, setDbSlots] = useState([]);
+  const [ticketPackages, setTicketPackages] = useState([]);
+  const [selectedPackageId, setSelectedPackageId] = useState('');
 
   useEffect(() => {
     const fetchDbSlots = async () => {
@@ -51,8 +53,19 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack })
         if (sessionData.success) {
           setActiveSessions(sessionData.data);
         }
+        // Fetch Ticket Packages
+        const packagesRes = await fetch(`${import.meta.env.VITE_API_BASE_URL}/ticket-packages/active`);
+        const packagesData = await packagesRes.json();
+        if (packagesData.success) {
+          const pkgList = packagesData.data || [];
+          setTicketPackages(pkgList);
+          if (pkgList.length > 0) {
+            setSelectedPackageId(pkgList[0]._id);
+            updateFormData({ ticketPackageId: pkgList[0]._id });
+          }
+        }
       } catch (err) {
-        setError('Failed to fetch parking data. Please check network.');
+        setError('Failed to fetch data. Please check network.');
       } finally {
         setLoading(false);
       }
@@ -67,7 +80,17 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack })
     }
   };
 
-  const estimatedCharge = formData.durationHours * 6; // Mock rate $6/hr
+  const estimatedCharge = React.useMemo(() => {
+    const pkg = ticketPackages.find(p => p._id === selectedPackageId);
+    if (!pkg) return 0;
+    if (pkg.type === 'hourly') {
+      return formData.durationHours * pkg.price;
+    } else if (pkg.type === 'daily') {
+      const days = Math.ceil(formData.durationHours / 24);
+      return days * pkg.price;
+    }
+    return 0;
+  }, [ticketPackages, selectedPackageId, formData.durationHours]);
 
   const closePanel = () => {
     updateFormData({ selectedSlot: null, floorId: null });
@@ -76,33 +99,34 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack })
   return (
     <div className="flex flex-col flex-1 w-full mx-auto pb-0 relative h-full">
 
-      {/* ─── MAIN FRAME containing Floor, Map, and Legend ─── */}
-      <div className="flex-1 bg-[#0b0e16] rounded-[32px] overflow-hidden relative flex flex-col w-full min-h-0 pt-6 pb-6 shadow-sm border border-[#0b0e16]">
+      {/* ─── MAIN FRAME containing Map and Overlays ─── */}
+      <div className="flex-1 rounded-[32px] overflow-hidden relative flex flex-col w-full min-h-0 pt-0 pb-0 shadow-sm border border-[#0b0e16]">
+        
+        {/* ─── FULL WIDTH 2D MAP ─── */}
+        <div className="flex-1 w-full relative overflow-hidden bg-[#0b0e16] shadow-inner flex items-center justify-center">
+          
+          {/* Floor Selection (Overlay Top) */}
+          <div className="absolute top-6 left-0 right-0 flex justify-center gap-2 z-30 px-6 pointer-events-auto">
+            {floors.map(f => (
+              <button
+                key={f._id}
+                onClick={() => setCurrentFloorId(f._id)}
+                className={`px-8 py-2 rounded-full font-bold text-sm transition-all shadow-sm ${currentFloorId === f._id
+                  ? 'bg-cyan-500 text-white shadow-lg shadow-cyan-500/20'
+                  : 'bg-[#181c23]/80 border border-white/10 text-gray-400 hover:text-white hover:bg-[#1f242d]/80 backdrop-blur'
+                  }`}
+              >
+                {f.name}
+              </button>
+            ))}
+          </div>
 
-        {/* 1. Floor Selection (Top) */}
-        <div className="flex justify-center gap-3 shrink-0 mb-2 px-6 z-50 relative">
-          {floors.map(f => (
-            <button
-              key={f._id}
-              onClick={() => setCurrentFloorId(f._id)}
-              className={`px-10 py-1.5 rounded-xl font-bold text-sm transition-all ${currentFloorId === f._id
-                ? 'bg-cyan-500 text-white shadow-lg shadow-cyan-500/20'
-                : 'bg-white/10 text-gray-400 hover:text-white hover:bg-white/20'
-                }`}
-            >
-              {f.name}
-            </button>
-          ))}
-        </div>
-
-        {/* 2. ─── FULL WIDTH 2D MAP (Middle) ─── */}
-        <div className="flex-1 relative w-full min-h-0">
           {loading ? (
-            <div className="flex-1 flex items-center justify-center">
+            <div className="flex-1 flex items-center justify-center z-10">
               <div className="text-cyan-400 font-bold text-xl animate-pulse tracking-widest">LOADING MAP...</div>
             </div>
           ) : error ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-red-400 gap-4">
+            <div className="flex-1 flex flex-col items-center justify-center text-red-400 gap-4 z-10">
               <AlertCircle size={48} />
               <div className="font-bold">{error}</div>
             </div>
@@ -117,25 +141,31 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack })
               onSelectSlot={(slot, floorId) => updateFormData({ selectedSlot: slot.id, floorId })}
               is2DMode={true}
               hideUI={true}
+              theme="dark"
+              initialZoom={0.5}
             />
           )}
-        </div>
 
-        {/* 3. Legend Overlay (Bottom) */}
-        <div className="flex justify-start px-8 shrink-0 mt-2 relative z-50 pointer-events-none">
-          <div className="bg-[#181c23]/80 backdrop-blur px-5 py-3 rounded-full flex items-center gap-4">
-            <p className="text-cyan-400 font-bold text-[10px] uppercase tracking-widest pr-2">Status Legend</p>
-            <div className="flex items-center gap-2">
-              <div className="w-3.5 h-3.5 rounded-sm bg-white border border-gray-300"></div>
-              <span className="text-[10px] text-gray-300 font-medium tracking-wide">Available</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3.5 h-3.5 rounded-sm bg-red-500/20 border border-red-500"></div>
-              <span className="text-[10px] text-gray-300 font-medium tracking-wide">Occupied</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3.5 h-3.5 rounded-sm bg-cyan-500 border border-cyan-400"></div>
-              <span className="text-[10px] text-gray-300 font-medium tracking-wide">Selected</span>
+          {/* Legend Overlay (Bottom) */}
+          <div className="absolute bottom-6 left-0 right-0 flex justify-center z-30 pointer-events-none px-4">
+            <div className="bg-[#181c23]/80 backdrop-blur border border-white/10 px-6 py-3 rounded-full flex items-center gap-4 shadow-lg pointer-events-auto">
+              <p className="text-cyan-400 font-black text-[10px] uppercase tracking-widest pr-2 hidden sm:block">Status Legend</p>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3.5 h-3.5 rounded-sm bg-white border border-gray-300"></div>
+                <span className="text-[10px] text-gray-300 font-bold tracking-wide">Available</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3.5 h-3.5 rounded-sm bg-red-500/20 border border-red-500"></div>
+                <span className="text-[10px] text-gray-300 font-bold tracking-wide">Occupied</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3.5 h-3.5 rounded-sm bg-cyan-500 border border-cyan-400"></div>
+                <span className="text-[10px] text-gray-300 font-bold tracking-wide">Selected</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3.5 h-3.5 rounded-sm bg-red-200 border border-red-500" style={{ backgroundImage: 'repeating-linear-gradient(45deg, rgba(239, 68, 68, 0.2), rgba(239, 68, 68, 0.2) 4px, rgba(127, 29, 29, 0.3) 4px, rgba(127, 29, 29, 0.3) 8px)' }}></div>
+                <span className="text-[10px] text-gray-300 font-bold tracking-wide">Maintenance</span>
+              </div>
             </div>
           </div>
         </div>
@@ -193,6 +223,38 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack })
                 </div>
               </div>
 
+              {/* Ticket Package Selection */}
+              <div className="mb-6">
+                <div className="flex items-center gap-2 text-gray-500 mb-2">
+                  <CreditCard size={16} />
+                  <span className="text-xs font-bold uppercase tracking-widest">Select Package</span>
+                </div>
+                <div className="grid grid-cols-1 gap-2">
+                  {ticketPackages.map(pkg => (
+                    <button
+                      key={pkg._id}
+                      onClick={() => {
+                        setSelectedPackageId(pkg._id);
+                        updateFormData({ ticketPackageId: pkg._id });
+                        // Default duration if daily
+                        if (pkg.type === 'daily' && formData.durationHours < 24) {
+                          updateFormData({ durationHours: 24 });
+                        }
+                      }}
+                      className={`text-left p-3 rounded-xl border-2 transition-all ${selectedPackageId === pkg._id ? 'border-cyan-500 bg-cyan-50 text-cyan-900 shadow-sm' : 'border-gray-200 bg-white hover:border-cyan-300'}`}
+                    >
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="font-bold text-sm">{pkg.name}</span>
+                        <span className="font-black text-cyan-600">{pkg.price.toLocaleString('vi-VN')} VND</span>
+                      </div>
+                      <span className="text-[10px] text-gray-400 uppercase tracking-widest font-bold">
+                        {pkg.type} / {pkg.type === 'daily' ? '1 Day' : '1 Hour'}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Premium Duration Stepper */}
               <div className="mb-8">
                 <div className="flex items-center justify-between mb-3">
@@ -228,8 +290,8 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack })
               <div className="mt-auto">
                 <div className="border-t-2 border-dashed border-gray-200 pt-6 pb-2">
                   <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs text-gray-500 font-medium">Parking Rate (x{formData.durationHours}h)</span>
-                    <span className="text-sm font-bold text-gray-700">${estimatedCharge.toFixed(2)}</span>
+                    <span className="text-xs text-gray-500 font-medium">Estimated Charge</span>
+                    <span className="text-sm font-bold text-gray-700">{estimatedCharge.toLocaleString('vi-VN')} VND</span>
                   </div>
                   <div className="flex justify-between items-center mb-4">
                     <span className="text-xs text-gray-500 font-medium">Taxes & Fees</span>
@@ -241,7 +303,9 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack })
                       <CreditCard size={20} />
                       <span className="text-xs font-bold uppercase tracking-widest">Estimated Fee</span>
                     </div>
-                    <span className="text-3xl font-black text-[#0f172a] leading-none">${estimatedCharge.toFixed(2)}</span>
+                    <div className="flex flex-col items-end">
+                      <span className="text-3xl font-black text-[#0f172a] leading-none">{estimatedCharge.toLocaleString('vi-VN')} VND</span>
+                    </div>
                   </div>
                   <p className="text-[10px] text-gray-500 text-center mt-3 font-medium">
                     * Payment will be processed at checkout based on actual parking duration.

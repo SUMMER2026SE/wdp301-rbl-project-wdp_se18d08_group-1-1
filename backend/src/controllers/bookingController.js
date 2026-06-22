@@ -4,9 +4,10 @@ const ParkingFloor = require('../models/ParkingFloor');
 const Service = require('../models/Service');
 const Session = require('../models/Session');
 const Vehicle = require('../models/Vehicle');
+const Slot = require('../models/Slot');
+const TicketPackage = require('../models/TicketPackage');
 const walletService = require('../services/walletService');
 
-const DEFAULT_HOURLY_RATE = Number(process.env.PARKING_HOURLY_RATE || 10000);
 const BOOKING_STATUSES_THAT_BLOCK_SLOT = ['confirmed', 'active'];
 
 const normalizePlate = (plate = '') => String(plate).trim().toUpperCase();
@@ -56,13 +57,14 @@ const getAllBookableSlots = async () => {
 
     return elements
       .filter(isCarSlotElement)
+      .filter(slot => slot.name && slot.name.trim() !== '') // Bỏ qua các ô đỗ trống (ghost slots)
       .map((slot) => {
         const zone = slot.parentId ? elementById.get(slot.parentId) : null;
         return {
           floorId: floor._id,
           floorName: floor.name,
           floorNumber: floor.floorNumber,
-          slotCode: normalizeSlotCode(slot.name || slot.id),
+          slotCode: normalizeSlotCode(slot.name), // Chắc chắn đã có name vì đã filter ở trên
           slotType: slot.type,
           zoneName: zone?.name || null,
           elementId: slot.id,
@@ -75,7 +77,7 @@ const getAllBookableSlots = async () => {
   });
 };
 
-const getUnavailableSlotKeys = async (start, end) => {
+const getUnavailableSlotKeys = async (start, end, userId = null) => {
   const overlappingBookings = await Booking.find({
     status: { $in: BOOKING_STATUSES_THAT_BLOCK_SLOT },
     startTime: { $lt: end },
@@ -92,6 +94,19 @@ const getUnavailableSlotKeys = async (start, end) => {
     .select('floorId parkingSlot')
     .lean();
 
+  const maintenanceSlots = await Slot.find({ status: 'maintenance' })
+    .select('floorID slotNumber')
+    .lean();
+
+  // Find slots reserved for other users
+  const reservedSlotsQuery = { reservedFor: { $ne: null } };
+  if (userId) {
+    reservedSlotsQuery.reservedFor = { $ne: userId };
+  }
+  const reservedSlots = await Slot.find(reservedSlotsQuery)
+    .select('floorID slotNumber')
+    .lean();
+
   const unavailable = new Set();
 
   overlappingBookings.forEach((booking) => {
@@ -102,13 +117,21 @@ const getUnavailableSlotKeys = async (start, end) => {
     unavailable.add(buildSlotKey(session.floorId, session.parkingSlot));
   });
 
+  maintenanceSlots.forEach((slot) => {
+    unavailable.add(buildSlotKey(slot.floorID, slot.slotNumber));
+  });
+
+  reservedSlots.forEach((slot) => {
+    unavailable.add(buildSlotKey(slot.floorID, slot.slotNumber));
+  });
+
   return unavailable;
 };
 
-const getAvailableSlotsForRange = async (start, end) => {
+const getAvailableSlotsForRange = async (start, end, userId = null) => {
   const [slots, unavailableSlotKeys] = await Promise.all([
     getAllBookableSlots(),
-    getUnavailableSlotKeys(start, end),
+    getUnavailableSlotKeys(start, end, userId),
   ]);
 
   return slots.filter((slot) => !unavailableSlotKeys.has(buildSlotKey(slot.floorId, slot.slotCode)));
@@ -147,14 +170,13 @@ exports.getAvailableSlots = async (req, res, next) => {
   try {
     const { startTime, endTime } = req.query;
     const { start, end } = parseBookingTimeRange(startTime, endTime);
-    const slots = await getAvailableSlotsForRange(start, end);
+    const slots = await getAvailableSlotsForRange(start, end, req.user?._id);
 
     res.status(200).json({
       success: true,
       data: {
         startTime: start,
         endTime: end,
-        hourlyRate: DEFAULT_HOURLY_RATE,
         count: slots.length,
         slots,
       },
@@ -166,12 +188,17 @@ exports.getAvailableSlots = async (req, res, next) => {
 
 exports.createBooking = async (req, res, next) => {
   try {
-    const { startTime, endTime, floorId, slotCode, vehicleId, licensePlate, serviceIds = [] } = req.body;
+    const { startTime, endTime, floorId, slotCode, vehicleId, licensePlate, serviceIds = [], ticketPackageId } = req.body;
     const { start, end } = parseBookingTimeRange(startTime, endTime);
     const plate = await resolveLicensePlate(req.user._id, { vehicleId, licensePlate });
     const requestedServiceIds = [...new Set((serviceIds || []).map(String))];
 
-    const availableSlots = await getAvailableSlotsForRange(start, end);
+    // Determine if user is VIP
+    const User = require('../models/User'); // Ensure imported
+    const user = await User.findById(req.user._id);
+    const isVip = user.membership?.isVip && user.membership?.expireAt > new Date();
+
+    const availableSlots = await getAvailableSlotsForRange(start, end, req.user._id);
     let selectedSlot = null;
 
     if (floorId && slotCode) {
@@ -206,10 +233,36 @@ exports.createBooking = async (req, res, next) => {
       });
     }
 
-    const paidHours = Math.ceil((end.getTime() - start.getTime()) / 3600000);
-    const prepaidAmount = paidHours * DEFAULT_HOURLY_RATE;
-    const serviceAmount = services.reduce((total, service) => total + Number(service.price || 0), 0);
-    const totalAmount = prepaidAmount + serviceAmount;
+    // Auto determine price
+    const durationMs = end.getTime() - start.getTime();
+    let paidHours = Math.ceil(durationMs / 3600000);
+    if (paidHours < 1) paidHours = 1;
+
+    let prepaidAmount = 0;
+    
+    // Fetch default hourly package
+    const hourlyPackage = await TicketPackage.findOne({ type: 'hourly', isActive: true });
+    const hourlyRate = hourlyPackage ? hourlyPackage.price : 10000;
+    prepaidAmount = paidHours * hourlyRate;
+
+    // Check if selected slot is reserved for this user (VIP)
+    // We need to fetch the slot from DB to check reservedFor
+    const slotDoc = await Slot.findOne({ floorID: selectedSlot.floorId, slotNumber: selectedSlot.slotCode });
+    if (isVip && slotDoc && slotDoc.reservedFor && slotDoc.reservedFor.toString() === req.user._id.toString()) {
+      prepaidAmount = 0; // Free for VIP parking in their own slot
+    }
+
+    const serviceTotal = services.reduce((total, service) => total + Number(service.price || 0), 0);
+    let totalAmount = prepaidAmount + serviceTotal;
+      
+    // Handle free services for Yearly VIP
+    if (isVip && user.membership.freeServiceCount > 0 && serviceTotal > 0) {
+      // Use 1 free service count
+      user.membership.freeServiceCount -= 1;
+      await user.save();
+      totalAmount -= serviceTotal; // Free services
+      if (totalAmount < 0) totalAmount = 0;
+    }
 
     // Check wallet balance BEFORE creating the booking to avoid ghost CANCELLED bookings
     const wallet = await walletService.getBalance(req.user._id);
@@ -228,10 +281,11 @@ exports.createBooking = async (req, res, next) => {
       startTime: start,
       endTime: end,
       paidHours,
-      hourlyRate: DEFAULT_HOURLY_RATE,
+      hourlyRate: hourlyRate, // For legacy compatibility or general reference
       prepaidAmount,
-      serviceAmount,
+      serviceAmount: serviceTotal,
       finalAmount: totalAmount,
+      ticketPackageId: hourlyPackage ? hourlyPackage._id : null,
       paymentMethod: 'wallet',
       paymentStatus: 'failed',
     });
@@ -375,7 +429,7 @@ exports.checkInBooking = async (req, res, next) => {
 
 exports.checkOutBooking = async (req, res, next) => {
   try {
-    const booking = await Booking.findOne({ _id: req.params.id, userId: req.user._id });
+    const booking = await Booking.findOne({ _id: req.params.id, userId: req.user._id }).populate('ticketPackageId');
 
     if (!booking) {
       return res.status(404).json({ success: false, message: 'Booking not found' });
@@ -394,9 +448,18 @@ exports.checkOutBooking = async (req, res, next) => {
     const checkOutTime = new Date();
     const durationMs = checkOutTime.getTime() - parkingSession.checkInTime.getTime();
     const actualHours = Math.max(1, Math.ceil(durationMs / 3600000));
-    const refundHours = Math.max(booking.paidHours - actualHours, 0);
-    const refundAmount = refundHours * booking.hourlyRate;
-    const finalParkingAmount = (booking.paidHours - refundHours) * booking.hourlyRate;
+
+    let refundHours = 0;
+    let refundAmount = 0;
+    let finalParkingAmount = booking.prepaidAmount;
+
+    // Chỉ hoàn tiền cho gói hourly. Các gói daily không được hoàn tiền nếu về sớm.
+    if (!booking.ticketPackageId || booking.ticketPackageId.type !== 'daily') {
+      refundHours = Math.max(booking.paidHours - actualHours, 0);
+      refundAmount = refundHours * booking.hourlyRate;
+      finalParkingAmount = (booking.paidHours - refundHours) * booking.hourlyRate;
+    }
+
     const finalAmount = finalParkingAmount + booking.serviceAmount;
 
     if (refundAmount > 0) {

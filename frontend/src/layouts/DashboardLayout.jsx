@@ -27,6 +27,7 @@ import {
   FileWarning,
   ClipboardList,
   BookOpen,
+  CalendarCheck,
   SlidersHorizontal,
   // Common
   Bell,
@@ -132,7 +133,11 @@ const NAV_CONFIG = {
     { label: "Home", icon: <Home size={18} />, to: "/" },
     { label: "Profile", icon: <User size={18} />, to: "/profile" },
     { label: "My Vehicles", icon: <Car size={18} />, to: "/customer/vehicles" },
-    { label: "Booking", icon: <BookOpen size={18} />, to: "/customer/booking" },
+    {
+      label: "My Bookings",
+      icon: <CalendarCheck size={18} />,
+      to: "/customer/booking",
+    },
     { label: "History", icon: <History size={18} />, to: "/customer/history" },
     { label: "Wallet", icon: <Wallet size={18} />, to: "/customer/wallet" },
     {
@@ -269,7 +274,7 @@ export default function DashboardLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-[#0D0D0D] flex font-sans transition-colors duration-300">
+    <div className="h-screen overflow-hidden bg-gray-100 dark:bg-[#0D0D0D] flex font-sans transition-colors duration-300">
       {/* ══════════ SIDEBAR ══════════ */}
       <aside
         className={`

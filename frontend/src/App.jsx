@@ -26,6 +26,7 @@ import VehicleManagement from "./pages/Admin/VehicleManagement";
 import AdminProfile from "./pages/Admin/AdminProfile";
 import ParkingLots from "./pages/Admin/ParkingLots";
 import AdminServiceManager from "./pages/Admin/AdminServiceManager";
+import TicketPackages from "./pages/Admin/TicketPackages";
 import AccountManagement from "./pages/Admin/AccountManagement";
 
 // Pages – Staff
@@ -38,11 +39,13 @@ import LiveGridMonitor from "./pages/Staff/LiveGridMonitor";
 
 // Pages – Customer
 import CustomerProfile from "./pages/Customer/CustomerProfile";
+import Membership from "./pages/Customer/Membership";
 import MyVehicles from "./pages/Customer/MyVehicles";
 import WalletPage from "./pages/Wallet/WalletPage";
 import ParkingHistory from "./pages/Customer/ParkingHistory";
 import CustomerNotifications from "./pages/Customer/CustomerNotifications";
 import BookingPage from "./pages/Customer/BookingPage";
+import CreateBookingPage from "./pages/Customer/CreateBookingPage";
 
 // Misc
 import UnauthorizedPage from "./pages/UnauthorizedPage";
@@ -73,10 +76,27 @@ export default function App() {
           <Route path="/parking-map" element={<ParkingMap />} />
           <Route path="/services" element={<ServiceList />} />
           <Route path="/services/:id" element={<ServiceDetail />} />
-          {/* /pricing, /about... thêm vào đây */}
+          
+          {/* Protected routes that use MainLayout (Light theme with top navbar) */}
+          <Route
+            path="/booking"
+            element={
+              <ProtectedRoute allowedRoles={["customer"]}>
+                <CreateBookingPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/membership"
+            element={
+              <ProtectedRoute allowedRoles={["customer"]}>
+                <Membership />
+              </ProtectedRoute>
+            }
+          />
         </Route>
 
-          {/* ── Standalone auth page ── */}
+        {/* ── Standalone auth page ── */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/oauth/callback" element={<OAuthCallback />} />
 
@@ -99,6 +119,7 @@ export default function App() {
             />
             <Route path="/admin/services" element={<AdminServiceManager />} />
             <Route path="/admin/parking-lots" element={<ParkingLots />} />
+            <Route path="/admin/tickets" element={<TicketPackages />} />
             <Route path="/admin/profile" element={<AdminProfile />} />
           </Route>
 

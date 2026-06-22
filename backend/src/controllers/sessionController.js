@@ -39,10 +39,15 @@ exports.verifyPlate = async (req, res, next) => {
     let phone = null;
 
     if (registeredVehicle) {
-       isVIP = true;
        const userDetail = await UserDetail.findOne({ userId: registeredVehicle.owner });
        if (userDetail) {
           phone = userDetail.phone;
+       }
+       
+       const User = require('../models/User');
+       const user = await User.findById(registeredVehicle.owner);
+       if (user && user.membership && user.membership.isVip && new Date(user.membership.expireAt) > new Date()) {
+           isVIP = true;
        }
     }
 
@@ -80,7 +85,7 @@ exports.verifyPlate = async (req, res, next) => {
  */
 exports.createKioskSession = async (req, res, next) => {
   try {
-    const { licensePlate, phone, vehicleType, parkingSlot, floorId, durationHours, entryImageBase64 } = req.body;
+    const { licensePlate, phone, vehicleType, parkingSlot, floorId, durationHours, entryImageBase64, ticketPackageId } = req.body;
 
     if (!licensePlate) {
       return res.status(400).json({ success: false, message: 'License plate is required' });
@@ -144,6 +149,7 @@ exports.createKioskSession = async (req, res, next) => {
       parkingSlot: parkingSlot || null,
       floorId: floorId || null,
       expectedDurationHours: durationHours ? Number(durationHours) : 1,
+      ticketPackageId: ticketPackageId || null,
       entryImage_url,
       checkInTime: new Date(),
       status: 'active',
@@ -245,7 +251,9 @@ exports.kioskExitScan = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'License plate is required' });
     }
 
-    const session = await Session.findOne({ licensePlate, status: 'active' }).populate('userId');
+    const session = await Session.findOne({ licensePlate, status: 'active' })
+      .populate('userId')
+      .populate('ticketPackageId');
     if (!session) {
       return res.status(404).json({ success: false, message: 'No active session found for this license plate' });
     }
@@ -256,14 +264,30 @@ exports.kioskExitScan = async (req, res, next) => {
 
     // Calculate Price
     const expectedHours = session.expectedDurationHours || 1;
-    let basePrice = expectedHours * 10000;
+    let basePrice = 0;
     let overtimePrice = 0;
 
-    if (durationHours > expectedHours) {
-      const overtimeHours = durationHours - expectedHours;
-      overtimePrice = overtimeHours * 13000; // 30% penalty (10k * 1.3)
+    const packageRate = session.ticketPackageId?.price || 10000;
+    const isDaily = session.ticketPackageId?.type === 'daily';
+
+    if (isDaily) {
+      // Daily package: Charge fixed price for the first 24h. Overstay adds hourly rate.
+      const expectedDays = Math.ceil(expectedHours / 24);
+      basePrice = expectedDays * packageRate;
+
+      if (durationHours > expectedDays * 24) {
+        const overtimeHours = durationHours - expectedDays * 24;
+        overtimePrice = overtimeHours * (packageRate / 24 * 1.3); // 30% penalty of hourly equivalent
+      }
     } else {
-      basePrice = durationHours * 10000;
+      // Hourly package
+      if (durationHours > expectedHours) {
+        const overtimeHours = durationHours - expectedHours;
+        overtimePrice = overtimeHours * (packageRate * 1.3); // 30% penalty
+        basePrice = expectedHours * packageRate;
+      } else {
+        basePrice = durationHours * packageRate;
+      }
     }
 
     const totalPrice = basePrice + overtimePrice;
@@ -308,7 +332,7 @@ exports.kioskCheckout = async (req, res, next) => {
   try {
     const { sessionId, exitImageBase64, paymentMethod } = req.body;
 
-    const session = await Session.findById(sessionId);
+    const session = await Session.findById(sessionId).populate('ticketPackageId');
     if (!session || session.status !== 'active') {
       return res.status(404).json({ success: false, message: 'Active session not found' });
     }
@@ -331,8 +355,29 @@ exports.kioskCheckout = async (req, res, next) => {
     const durationHours = Math.ceil(durationMs / (1000 * 60 * 60)) || 1;
 
     const expectedHours = session.expectedDurationHours || 1;
-    let basePrice = durationHours > expectedHours ? expectedHours * 10000 : durationHours * 10000;
-    let overtimePrice = durationHours > expectedHours ? (durationHours - expectedHours) * 13000 : 0;
+    let basePrice = 0;
+    let overtimePrice = 0;
+
+    const packageRate = session.ticketPackageId?.price || 10000;
+    const isDaily = session.ticketPackageId?.type === 'daily';
+
+    if (isDaily) {
+      const expectedDays = Math.ceil(expectedHours / 24);
+      basePrice = expectedDays * packageRate;
+
+      if (durationHours > expectedDays * 24) {
+        const overtimeHours = durationHours - expectedDays * 24;
+        overtimePrice = overtimeHours * (packageRate / 24 * 1.3);
+      }
+    } else {
+      if (durationHours > expectedHours) {
+        overtimePrice = (durationHours - expectedHours) * (packageRate * 1.3);
+        basePrice = expectedHours * packageRate;
+      } else {
+        basePrice = durationHours * packageRate;
+      }
+    }
+
     const totalPrice = basePrice + overtimePrice;
 
     if (paymentMethod === 'wallet') {

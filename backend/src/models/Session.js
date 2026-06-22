@@ -61,6 +61,11 @@ const sessionSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    ticketPackageId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'TicketPackage',
+      default: null,
+    },
   },
   { timestamps: true }
 );

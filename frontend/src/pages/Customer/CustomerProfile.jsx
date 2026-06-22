@@ -9,6 +9,7 @@ import {
 import {
   Camera,
   Check,
+  Crown,
   X,
   Key,
   User,
@@ -61,9 +62,60 @@ const buildProfile = (raw) => {
     role: raw.role || "Customer",
     wallet: raw.wallet || { balance: 0 },
     vehicles: raw.vehicles || [],
+    membership: raw.membership || { isVip: false, expireAt: null, freeServiceCount: 0 },
     createdAt: raw.createdAt || null,
     isGoogleUser: !!raw.isGoogleUser,
   };
+};
+
+const getMembershipTier = (membership = {}) => {
+  const expireAt = membership.expireAt ? new Date(membership.expireAt) : null;
+  const isActiveVip =
+    membership.isVip && (!expireAt || Number.isNaN(expireAt.getTime()) || expireAt > new Date());
+
+  if (!isActiveVip) return "member";
+  if (membership.packageType === "yearly" || membership.freeServiceCount > 0) return "yearly";
+  if (membership.packageType === "monthly") return "monthly";
+  return "monthly";
+};
+
+const avatarThemes = {
+  monthly: {
+    ringClass: "border-yellow-400 shadow-[0_0_34px_rgba(250,204,21,0.55)]",
+    innerRingClass: "border-yellow-100 shadow-[inset_0_0_18px_rgba(254,240,138,0.45)]",
+    avatarClass: "ring-[4px] ring-yellow-400/80 animate-vip-ripple",
+    badgeClass: "from-yellow-400 via-amber-300 to-gold text-[#181C23] shadow-gold/25",
+    label: "VIP",
+    orbBackground:
+      "linear-gradient(135deg, rgba(234,179,8,0.34), rgba(120,53,15,0.4), rgba(0,0,0,0.92))",
+    halo:
+      "conic-gradient(from 0deg, transparent 0deg, rgba(250,204,21,0.95) 72deg, rgba(255,237,213,0.9) 112deg, transparent 176deg, rgba(245,158,11,0.7) 250deg, transparent 360deg)",
+    spark: "#facc15",
+    glow: "rgba(250,204,21,0.66)",
+    rippleStrong: "rgba(251, 191, 36, 0.7)",
+    rippleSoft: "rgba(251, 191, 36, 0.3)",
+    rippleFaint: "rgba(251, 191, 36, 0.1)",
+    rippleClear: "rgba(251, 191, 36, 0)",
+    innerGlow: "rgba(234, 179, 8, 0.3)",
+  },
+  yearly: {
+    ringClass: "border-purple-300 shadow-[0_0_42px_rgba(168,85,247,0.72)]",
+    innerRingClass: "border-fuchsia-100 shadow-[inset_0_0_22px_rgba(216,180,254,0.48)]",
+    avatarClass: "ring-[4px] ring-purple-400/90 animate-vip-ripple",
+    badgeClass: "from-purple-400 via-fuchsia-300 to-violet-500 text-white shadow-purple-500/30",
+    label: "NOVA",
+    orbBackground:
+      "linear-gradient(135deg, rgba(168,85,247,0.42), rgba(217,70,239,0.28), rgba(8,7,18,0.96))",
+    halo:
+      "conic-gradient(from 0deg, transparent 0deg, rgba(168,85,247,1) 60deg, rgba(244,114,182,0.92) 108deg, transparent 178deg, rgba(129,140,248,0.9) 262deg, transparent 360deg)",
+    spark: "#c084fc",
+    glow: "rgba(168,85,247,0.78)",
+    rippleStrong: "rgba(168, 85, 247, 0.72)",
+    rippleSoft: "rgba(168, 85, 247, 0.32)",
+    rippleFaint: "rgba(217, 70, 239, 0.13)",
+    rippleClear: "rgba(168, 85, 247, 0)",
+    innerGlow: "rgba(168, 85, 247, 0.32)",
+  },
 };
 
 // ─── Gold underline editable field ───────────────────────────────────────────
@@ -177,6 +229,7 @@ export default function CustomerProfile() {
     role: "Customer",
     wallet: { balance: 0 },
     vehicles: [],
+    membership: { isVip: false, expireAt: null, freeServiceCount: 0 },
     createdAt: null,
     isGoogleUser: false,
   });
@@ -581,10 +634,10 @@ export default function CustomerProfile() {
     const payload = isGoogleUser
       ? { newPassword: newPwd, confirmNewPassword: confirm }
       : {
-          currentPassword: current,
-          newPassword: newPwd,
-          confirmNewPassword: confirm,
-        };
+        currentPassword: current,
+        newPassword: newPwd,
+        confirmNewPassword: confirm,
+      };
 
     const { ok, data } = await apiFetch("/profile/change-password", {
       method: "PUT",
@@ -616,6 +669,10 @@ export default function CustomerProfile() {
     if (magneticRef.current)
       magneticRef.current.style.transform = "translate(0, 0)";
   };
+
+  const membershipTier = getMembershipTier(profile.membership);
+  const avatarTheme = avatarThemes[membershipTier];
+  const isVip = Boolean(avatarTheme);
 
   // ───────────────────────────────────────────────────────────────────────────
   // RENDER
@@ -679,32 +736,44 @@ export default function CustomerProfile() {
           >
             {/* Outer rotating ring */}
             <div
-              className="absolute inset-0 rounded-full border border-yellow-500"
+              className={`absolute inset-0 rounded-full border ${isVip ? avatarTheme.ringClass : 'border-gray-600'}`}
               style={{
-                opacity: 0.55,
+                opacity: isVip ? 0.9 : 0.3,
                 animation: "valo-rotateRing 8s linear infinite",
               }}
             />
             {/* Inner rotating ring */}
             <div
-              className="absolute rounded-full border"
+              className={`absolute rounded-full border ${isVip ? avatarTheme.innerRingClass : 'border-gray-500'}`}
               style={{
                 inset: "8px",
-                borderColor: "#ffdea8",
-                opacity: 0.35,
+                opacity: isVip ? 0.75 : 0.2,
                 animation: "valo-rotateRing 5s linear infinite reverse",
               }}
             />
 
+            {isVip && (
+              <div
+                className="absolute inset-[-7px] rounded-full blur-[2px] opacity-80 animate-avatar-halo"
+                style={{ background: avatarTheme.halo }}
+              />
+            )}
+
             {/* Avatar sphere */}
             <div
-              className="w-full h-full rounded-full overflow-hidden"
+              className={`relative w-full h-full rounded-full overflow-hidden transition-all duration-500 ${isVip
+                ? avatarTheme.avatarClass
+                : 'border-2 border-gray-700 shadow-[0_0_20px_rgba(255,255,255,0.02)]'
+                }`}
               style={{
-                border: "2px solid #EAB308",
-                padding: "3px",
-                background: "#1a1b22",
-                boxShadow:
-                  "0 0 36px rgba(255,184,0,0.3), 0 0 80px rgba(255,184,0,0.1)",
+                padding: isVip ? "6px" : "3px",
+                background: isVip ? avatarTheme.orbBackground : "#1a1b22",
+                "--vip-glow": avatarTheme?.glow,
+                "--vip-inner-glow": avatarTheme?.innerGlow,
+                "--vip-ripple-strong": avatarTheme?.rippleStrong,
+                "--vip-ripple-soft": avatarTheme?.rippleSoft,
+                "--vip-ripple-faint": avatarTheme?.rippleFaint,
+                "--vip-ripple-clear": avatarTheme?.rippleClear,
               }}
             >
               {profile.avatar ? (
@@ -783,20 +852,41 @@ export default function CustomerProfile() {
               onChange={handleAvatarChange}
             />
 
-            {/* Spark dot */}
-            <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-yellow-500 rounded-full animate-ping" />
+            {/* Spark dot - Only for VIP */}
+            {isVip && (
+              <>
+                <div
+                  className="absolute -top-1 -right-1 w-3 h-3 rounded-full animate-ping"
+                  style={{
+                    backgroundColor: avatarTheme.spark,
+                    boxShadow: `0 0 12px ${avatarTheme.spark}`,
+                  }}
+                />
+                <div
+                  className="absolute bottom-2 left-2 w-2 h-2 rounded-full animate-avatar-spark"
+                  style={{
+                    backgroundColor: avatarTheme.spark,
+                    boxShadow: `0 0 10px ${avatarTheme.spark}`,
+                  }}
+                />
+              </>
+            )}
           </div>
 
-          {/* ── Name & role ── */}
           <div className="flex-1 text-center md:text-left">
             <h2
-              className="text-3xl font-black leading-none"
+              className="text-3xl font-black leading-none flex items-center justify-center md:justify-start gap-3"
               style={{
                 color: "#ffdea8",
                 textShadow: "0 4px 24px rgba(255,184,0,0.45)",
               }}
             >
               {profile.name || "—"}
+              {isVip && (
+                <span className={`bg-gradient-to-r ${avatarTheme.badgeClass} text-xs px-2.5 py-1 rounded-md uppercase tracking-wider shadow-lg flex items-center gap-1 font-black`}>
+                  <Crown size={12} /> {avatarTheme.label}
+                </span>
+              )}
             </h2>
             <p
               className="mt-1.5 tracking-[0.15em] text-xs font-semibold uppercase"
@@ -813,7 +903,7 @@ export default function CustomerProfile() {
         {/* ── Left: Personal Records ── */}
         <div className="col-span-12 md:col-span-7">
           {!profile.phone && !editMode && (
-            <div 
+            <div
               className="mb-8 rounded-2xl p-5 border cursor-pointer transition-all duration-300 hover:scale-[1.02]"
               style={{ background: "rgba(234, 179, 8, 0.1)", borderColor: "rgba(234, 179, 8, 0.3)" }}
               onClick={enterEdit}
@@ -910,7 +1000,7 @@ export default function CustomerProfile() {
                 icon={Mail}
                 value={profile.email}
                 readOnly
-                onSave={() => {}}
+                onSave={() => { }}
               />
               <GoldUnderlineField
                 field="createdAt"
@@ -919,14 +1009,14 @@ export default function CustomerProfile() {
                 value={
                   profile.createdAt
                     ? new Date(profile.createdAt).toLocaleDateString("vi-VN", {
-                        day: "2-digit",
-                        month: "2-digit",
-                        year: "numeric",
-                      })
+                      day: "2-digit",
+                      month: "2-digit",
+                      year: "numeric",
+                    })
                     : "—"
                 }
                 readOnly
-                onSave={() => {}}
+                onSave={() => { }}
               />
             </div>
           ) : (
@@ -953,7 +1043,7 @@ export default function CustomerProfile() {
                 icon={Mail}
                 value={profile.email}
                 readOnly
-                onSave={() => {}}
+                onSave={() => { }}
               />
               <GoldUnderlineField
                 field="createdAt"
@@ -962,14 +1052,14 @@ export default function CustomerProfile() {
                 value={
                   profile.createdAt
                     ? new Date(profile.createdAt).toLocaleDateString("vi-VN", {
-                        day: "2-digit",
-                        month: "2-digit",
-                        year: "numeric",
-                      })
+                      day: "2-digit",
+                      month: "2-digit",
+                      year: "numeric",
+                    })
                     : "—"
                 }
                 readOnly
-                onSave={() => {}}
+                onSave={() => { }}
               />
             </div>
           )}
@@ -1203,8 +1293,8 @@ export default function CustomerProfile() {
                             (e.currentTarget.style.borderColor = "#EAB308")
                           }
                           onBlur={(e) =>
-                            (e.currentTarget.style.borderColor =
-                              "#EAB308")
+                          (e.currentTarget.style.borderColor =
+                            "#EAB308")
                           }
                         />
                       ))}
@@ -1244,12 +1334,12 @@ export default function CustomerProfile() {
                         className="flex items-center gap-1 text-[11px] transition-colors"
                         style={{ color: "rgba(255,255,255,0.3)" }}
                         onMouseEnter={(e) =>
-                          (e.currentTarget.style.color =
-                            "rgba(255,255,255,0.65)")
+                        (e.currentTarget.style.color =
+                          "rgba(255,255,255,0.65)")
                         }
                         onMouseLeave={(e) =>
-                          (e.currentTarget.style.color =
-                            "rgba(255,255,255,0.3)")
+                        (e.currentTarget.style.color =
+                          "rgba(255,255,255,0.3)")
                         }
                       >
                         <ArrowLeft size={11} /> Back
@@ -1363,8 +1453,8 @@ export default function CustomerProfile() {
                             (e.currentTarget.style.borderColor = "#EAB308")
                           }
                           onBlur={(e) =>
-                            (e.currentTarget.style.borderColor =
-                              "rgba(234,179,8,0.3)")
+                          (e.currentTarget.style.borderColor =
+                            "rgba(234,179,8,0.3)")
                           }
                         />
                         <button
@@ -1491,8 +1581,8 @@ export default function CustomerProfile() {
                               (e.currentTarget.style.borderColor = "#EAB308")
                             }
                             onBlur={(e) =>
-                              (e.currentTarget.style.borderColor =
-                                "#EAB308")
+                            (e.currentTarget.style.borderColor =
+                              "#EAB308")
                             }
                           />
                           <button
@@ -1532,32 +1622,32 @@ export default function CustomerProfile() {
                         style={{
                           background:
                             fpStrength === 4 &&
-                            fpNewPwd === fpConfirmPwd &&
-                            fpConfirmPwd
+                              fpNewPwd === fpConfirmPwd &&
+                              fpConfirmPwd
                               ? "#EAB308"
                               : "rgba(234,179,8,0.12)",
                           color:
                             fpStrength === 4 &&
-                            fpNewPwd === fpConfirmPwd &&
-                            fpConfirmPwd
+                              fpNewPwd === fpConfirmPwd &&
+                              fpConfirmPwd
                               ? "#050505"
                               : "rgba(234,179,8,0.35)",
                           border:
                             fpStrength === 4 &&
-                            fpNewPwd === fpConfirmPwd &&
-                            fpConfirmPwd
+                              fpNewPwd === fpConfirmPwd &&
+                              fpConfirmPwd
                               ? "none"
                               : "1px solid #EAB308",
                           cursor:
                             fpLoading ||
-                            fpStrength < 4 ||
-                            fpNewPwd !== fpConfirmPwd
+                              fpStrength < 4 ||
+                              fpNewPwd !== fpConfirmPwd
                               ? "not-allowed"
                               : "pointer",
                           boxShadow:
                             fpStrength === 4 &&
-                            fpNewPwd === fpConfirmPwd &&
-                            fpConfirmPwd
+                              fpNewPwd === fpConfirmPwd &&
+                              fpConfirmPwd
                               ? "0 0 22px rgba(234,179,8,0.35)"
                               : "none",
                           transition: "all 0.3s",
@@ -1974,12 +2064,11 @@ export default function CustomerProfile() {
             flex items-center gap-2.5 px-5 py-2.5 rounded-full
             text-sm font-semibold shadow-2xl backdrop-blur-md border
             transition-all duration-300
-            ${
-              toast.type === "saving"
-                ? "bg-yellow-500/15 text-yellow-300 border-yellow-500/30"
-                : toast.type === "success"
-                  ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
-                  : "bg-red-500/15 text-red-300 border-red-500/30"
+            ${toast.type === "saving"
+              ? "bg-yellow-500/15 text-yellow-300 border-yellow-500/30"
+              : toast.type === "success"
+                ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+                : "bg-red-500/15 text-red-300 border-red-500/30"
             }
           `}
         >
