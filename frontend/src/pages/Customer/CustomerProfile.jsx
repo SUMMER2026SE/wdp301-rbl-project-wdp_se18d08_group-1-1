@@ -74,7 +74,7 @@ const getMembershipTier = (membership = {}) => {
     membership.isVip && (!expireAt || Number.isNaN(expireAt.getTime()) || expireAt > new Date());
 
   if (!isActiveVip) return "member";
-  if (membership.packageType === "yearly" || membership.freeServiceCount > 0) return "yearly";
+  if (membership.packageType === "yearly") return "yearly";
   if (membership.packageType === "monthly") return "monthly";
   return "monthly";
 };

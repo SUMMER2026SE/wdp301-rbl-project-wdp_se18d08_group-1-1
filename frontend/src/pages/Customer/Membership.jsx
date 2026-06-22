@@ -3,6 +3,8 @@ import { Crown, Sparkles, Check, Loader2, ArrowRight, AlertCircle, QrCode, Walle
 import { getTicketPackages, createSubscriptionPayment, verifySubscriptionPayment, paySubscriptionWithWallet } from '../../services/subscriptionService';
 import { getWalletInfo } from '../../services/walletService';
 import { getMyVehicles } from '../../services/vehicleService';
+import { apiFetch } from '../../services/api';
+import { notifyAuthChange } from '../../services/authStorage';
 import ParkingMapViewer from '../../components/ParkingMapViewer';
 import { QRCodeSVG } from 'qrcode.react';
 
@@ -30,6 +32,27 @@ export default function Membership() {
   const isMonthlyVIP = user?.membership?.isVip && user.membership.packageId === packages.monthly?._id;
   const isYearlyVIP = user?.membership?.isVip && user.membership.packageId === packages.yearly?._id;
 
+  const syncCurrentUserProfile = async () => {
+    const token = localStorage.getItem('accessToken');
+    if (!token) return;
+
+    const { ok, data } = await apiFetch('/profile', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (ok && data?.success) {
+      const cached = JSON.parse(sessionStorage.getItem('valo_user') || 'null');
+      const updatedUser = {
+        ...(cached || {}),
+        ...data.data,
+        avatar: data.data.profile?.avatar || cached?.avatar || cached?.profile?.avatar || '',
+      };
+      sessionStorage.setItem('valo_user', JSON.stringify(updatedUser));
+      setUser(data.data);
+      notifyAuthChange();
+    }
+  };
+
   // Check URL for PayOS return
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
@@ -43,8 +66,9 @@ export default function Membership() {
         window.history.replaceState({}, document.title, window.location.pathname);
       } else {
         setVerifying(true);
-        verifySubscriptionPayment(orderCode).then(res => {
+        verifySubscriptionPayment(orderCode).then(async (res) => {
           if (res.ok) {
+            await syncCurrentUserProfile();
             setSuccess(true);
           } else {
             alert(res.data?.message || 'Giao dịch chưa hoàn tất hoặc thất bại');
@@ -160,6 +184,7 @@ export default function Membership() {
       if (paymentMethod === 'wallet') {
         const res = await paySubscriptionWithWallet(selectedPackage._id, selectedSlots);
         if (res.ok && res.data?.success) {
+          await syncCurrentUserProfile();
           setSuccess(true);
         } else {
           alert(res.data?.message || "Lỗi khi thanh toán bằng ví Valo");
@@ -175,7 +200,7 @@ export default function Membership() {
           setVerifying(false);
         }
       }
-    } catch (err) {
+    } catch {
       alert("Lỗi mạng");
       setVerifying(false);
     }

@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { Link, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { apiFetch } from "../services/api";
+import { logoutUser } from "../services/authService";
+import { clearAuthSession, notifyAuthChange } from "../services/authStorage";
 import {
   LogOut,
   User,
@@ -75,7 +77,8 @@ const getMembershipTier = (membership = {}) => {
     membership.isVip && (!expireAt || Number.isNaN(expireAt.getTime()) || expireAt > new Date());
 
   if (!isActiveVip) return "member";
-  if (membership.packageType === "yearly" || membership.freeServiceCount > 0) return "yearly";
+  if (membership.packageType === "yearly") return "yearly";
+  if (membership.packageType === "monthly") return "monthly";
   return "monthly";
 };
 
@@ -170,12 +173,8 @@ export default function Navbar() {
   useEffect(() => {
     const fetchProfileAvatar = async () => {
       if (!user) return;
-      if (
-        (user.avatar || user.profile?.avatar || user.avatarUrl) &&
-        (!user.membership?.isVip || user.membership?.packageType)
-      ) {
-        return;
-      }
+      const needsProfile = !user.profile || (user.membership?.isVip && !user.membership?.packageType);
+      if (!needsProfile) return;
 
       const token = localStorage.getItem("accessToken");
       if (!token) return;
@@ -193,22 +192,26 @@ export default function Navbar() {
           };
           sessionStorage.setItem("valo_user", JSON.stringify(updatedUser));
           setUser(updatedUser);
-          window.dispatchEvent(new Event("valo_auth_change"));
+          notifyAuthChange();
         }
-      } catch (e) { }
+      } catch {
+        // Profile enrichment is best-effort; keep the cached user if it fails.
+      }
     };
 
     fetchProfileAvatar();
   }, [user]);
 
   // ΓöÇΓöÇ Logout ΓöÇΓöÇ
-  const handleLogout = () => {
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("refreshToken");
-    sessionStorage.removeItem("valo_user");
+  const handleLogout = async () => {
+    try {
+      await logoutUser();
+    } catch {
+      // Still clear local auth state if the server logout request fails.
+    }
+    clearAuthSession();
     setUser(null);
     setProfileOpen(false);
-    window.dispatchEvent(new Event("valo_auth_change"));
     navigate("/");
   };
 
