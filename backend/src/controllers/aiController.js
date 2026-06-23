@@ -1,6 +1,27 @@
 const axios = require('axios');
 const FormData = require('form-data');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { normalizeLicensePlate } = require('../utils/licensePlateUtils');
+
+const isLikelyVietnamesePlate = (plate = '') => {
+  const clean = normalizeLicensePlate(plate);
+  return (
+    /^\d{2}[A-Z]{1,2}\d{4,5}$/.test(clean) ||
+    /^\d{2}[A-Z]\d\d{4,5}$/.test(clean)
+  );
+};
+
+const extractRetryDelaySeconds = (detail = '') => {
+  const match = String(detail).match(/retry in\s+(\d+(?:\.\d+)?)s/i);
+  if (!match) return null;
+  return Math.max(1, Math.ceil(Number(match[1])));
+};
+
+const isQuotaError = (error) => {
+  const status = error?.status || error?.response?.status || error?.cause?.status;
+  const detail = error?.message || '';
+  return status === 429 || /quota exceeded|too many requests|429/i.test(detail);
+};
 
 exports.scanPlate = async (req, res, next) => {
   try {
@@ -9,43 +30,96 @@ exports.scanPlate = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Image is required' });
     }
 
-    // Extract base64 part
-    const base64Data = image.replace(/^data:image\/\w+;base64,/, '');
-    const buffer = Buffer.from(base64Data, 'base64');
-    
-    // PlateRecognizer expects multipart form-data
-    const formData = new FormData();
-    formData.append('upload', buffer, { filename: 'capture.jpg', contentType: 'image/jpeg' });
-    formData.append('regions', 'vn'); // Optimize for Vietnamese plates
-
-    // Ensure token is present
-    if (!process.env.PLATE_RECOGNIZER_TOKEN) {
-      return res.status(500).json({ success: false, message: 'AI API Token is not configured' });
+    if (!process.env.GEMINI_API_KEY) {
+      return res.status(500).json({
+        success: false,
+        message: 'Gemini API key is not configured',
+      });
     }
 
-    const response = await axios.post('https://api.platerecognizer.com/v1/plate-reader/', formData, {
-      headers: {
-        ...formData.getHeaders(),
-        'Authorization': `Token ${process.env.PLATE_RECOGNIZER_TOKEN}`
+    // Strip data URL prefix if present
+    const base64Data = image.replace(/^data:image\/\w+;base64,/, '');
+    const mimeMatch = image.match(/^data:(image\/\w+);base64,/);
+    const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+
+    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+    const prompt = `Analyze this image containing a vehicle and read the Vietnamese license plate.
+The image may be a contact sheet from the same camera frame: a large full-frame view plus zoomed crops along the bottom. Use the clearest view of the physical vehicle license plate.
+Focus on the physical vehicle plate only. Ignore text from the UI, dashboard, walls, stickers, signs, browser, or any other non-plate text.
+Return ONLY one normalized license plate string with spaces, dots, dashes, and special characters removed.
+Valid examples: 43D189750, 29A12345, 29H76919.
+If a plate-like sequence is visible, return your best reading. Return exactly NOT_FOUND only when no physical vehicle plate is visible at all.
+Do NOT include any explanation, markdown, punctuation, confidence score, or extra text.`;
+
+    const modelCandidates = ['gemini-2.5-flash-lite', 'gemini-2.5-flash'];
+    let quotaError = null;
+    let bestAttempt = null;
+
+    for (const modelName of modelCandidates) {
+      try {
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          generationConfig: {
+            temperature: 0,
+            maxOutputTokens: 20,
+          },
+        });
+
+        const result = await model.generateContent([
+          prompt,
+          {
+            inlineData: {
+              mimeType,
+              data: base64Data,
+            },
+          },
+        ]);
+
+        let text = result.response.text().trim();
+        console.info(`[AI Plate Scan] ${modelName} raw output:`, text);
+        text = normalizeLicensePlate(text.replace(/`/g, '').trim());
+        bestAttempt = { modelName, text };
+
+        if (text !== 'NOTFOUND' && text.length >= 5 && isLikelyVietnamesePlate(text)) {
+          return res.status(200).json({ success: true, plate: text, model: modelName });
+        }
+      } catch (error) {
+        if (isQuotaError(error)) {
+          quotaError = error;
+          console.error(`[AI Plate Scan] ${modelName} quota hit:`, error?.message || error);
+          continue;
+        }
+        throw error;
       }
+    }
+
+    if (quotaError) {
+      const detail = quotaError?.message || 'AI quota exceeded';
+      const retryAfterSeconds = extractRetryDelaySeconds(detail);
+      return res.status(429).json({
+        success: false,
+        message: 'AI plate scanning is temporarily rate-limited. Please retry shortly.',
+        retryAfterSeconds,
+      });
+    }
+
+    return res.status(400).json({
+      success: false,
+      message: 'No license plate found in the image',
+      attemptedPlate: bestAttempt?.text || null,
+      model: bestAttempt?.modelName || null,
     });
 
-    const data = response.data;
-    
-    if (data.results && data.results.length > 0) {
-      const plate = data.results[0].plate.toUpperCase();
-      return res.status(200).json({ success: true, plate });
-    } else {
-      return res.status(400).json({ success: false, message: 'No license plate found in the image' });
-    }
   } catch (error) {
-    console.error('ALPR Error:', error.response?.data || error.message);
+    const detail = error?.message || 'Unknown error';
+    console.error('Gemini ALPR Error:', detail);
     res.status(500).json({ success: false, message: 'Error analyzing the image' });
   }
 };
 
 /**
- * @desc    Scan vehicle registration card (cà vẹt xe) using Gemini Vision
+ * @desc    Scan vehicle registration card (vehicle registration card) using Gemini Vision
  *          Extracts: owner name, brand, model code, license plate
  * @route   POST /api/ai/scan-registration-card
  * @access  Private
@@ -76,35 +150,35 @@ exports.scanRegistrationCard = async (req, res) => {
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash-lite' });
 
-    const prompt = `You are reading a Vietnamese vehicle registration card (Giấy đăng ký xe / Cà vẹt xe).
+    const prompt = `You are reading a Vietnamese vehicle registration card.
 Extract ONLY the following fields and return ONLY a valid JSON object with no extra text:
 {
-  "ownerName": "<Tên chủ xe - Owner's full name>",
-  "brand": "<Nhãn hiệu - Brand/Manufacturer, e.g. HONDA, TOYOTA, MG>",
-  "model": "<Số loại / Model code, e.g. WINNER X, VIOS, ZS>",
-  "licensePlate": "<Biển số đăng ký - License plate number, remove all spaces and dots, e.g. 43D1-89750>",
-  "colorText": "<Màu sơn / Color of the vehicle EXACTLY as written on the card>",
+  "ownerName": "<Owner name - Owner's full name>",
+  "brand": "<Brand - Brand/Manufacturer, e.g. HONDA, TOYOTA, MG>",
+  "model": "<Model code / Model code, e.g. WINNER X, VIOS, ZS>",
+  "licensePlate": "<Registration plate - License plate number, remove all spaces and dots, e.g. 43D1-89750>",
+  "colorText": "<Paint color / Color of the vehicle EXACTLY as written on the card>",
   "hexColor": "<Convert colorText to the closest CSS hex color using this reference table:
-    Trắng / Trắng tinh / Trắng ngà → #f5f5f5
-    Đen / Đen bóng / Đen nhám → #1a1a1a
-    Bạc / Xám bạc / Bạc ánh kim / Silver → #c0c0c0
-    Xám / Xám tro / Ghi → #808080
-    Xám đậm → #4a4a4a
-    Đỏ / Đỏ tươi → #cc2200
-    Đỏ đô / Đỏ mận → #8b1a1a
-    Cam → #e65c00
-    Vàng → #f5c400
-    Vàng cát / Be → #c8a86b
-    Xanh dương / Xanh nước biển → #1a4fa0
-    Xanh đen / Xanh navy → #0a1a3a
-    Xanh lá / Xanh lục → #2d7a2d
+    White / pure white / ivory white → #f5f5f5
+    Black / glossy black / matte black → #1a1a1a
+    Silver / metallic silver / silver → #c0c0c0
+    Gray / Gray tro / Gray → #808080
+    Dark gray → #4a4a4a
+    Red / bright red → #cc2200
+    Burgundy / dark red → #8b1a1a
+    Orange → #e65c00
+    Yellow → #f5c400
+    Sand yellow / beige → #c8a86b
+    Blue / Blue → #1a4fa0
+    Dark blue / Navy blue → #0a1a3a
+    Green / Green → #2d7a2d
     Xanh mint → #5fb8a0
-    Nâu / Nâu đồng → #6b3a1f
-    Tím → #6a0dad
-    Hồng → #e75480
-    Vàng đồng / Đồng → #b8860b
-    Nâu vàng / Gold → #c8a84a
-    Nâu đỏ / Đỏ nâu → #7b2d00
+    Brown / copper brown → #6b3a1f
+    Purple → #6a0dad
+    Pink → #e75480
+    Bronze yellow / copper → #b8860b
+    Golden brown / gold → #c8a84a
+    Reddish brown / red brown → #7b2d00
     If colorText does not match any above, pick the nearest color logically.
     Return null ONLY if colorText is also null or completely unreadable.>"
 }

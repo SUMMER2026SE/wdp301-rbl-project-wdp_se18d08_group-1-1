@@ -2,7 +2,7 @@ const Session = require('../models/Session');
 const notifTriggers = require('./notificationTriggers');
 
 const CHECK_INTERVAL_MS = 60 * 1000; // 1 minute
-const LOW_BALANCE_THRESHOLD = 30000; // 30,000 VNĐ
+const LOW_BALANCE_THRESHOLD = 30000; // 30,000 VND
 
 let schedulerInterval = null;
 

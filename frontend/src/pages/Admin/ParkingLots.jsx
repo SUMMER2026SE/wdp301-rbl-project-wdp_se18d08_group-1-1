@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Plus, Edit, Copy, Trash2, X } from "lucide-react";
 import ParkingLotsBuilder from "./ParkingLotsBuilder/ParkingLotsBuilder";
 import ParkingMapGrid from "../../components/ParkingMapGrid";
-import { getAllFloors, createFloor, updateFloorLayout, deleteFloor } from "../../services/parkingFloorService";
+import { getAllFloors, createFloor, updateFloorLayout, deleteFloor, getFloorSlots } from "../../services/parkingFloorService";
+import { startMaintenance, endMaintenance } from "../../services/maintenanceService";
 import { apiFetch } from "../../services/api";
 
 export default function ParkingLots() {
@@ -10,7 +11,8 @@ export default function ParkingLots() {
   const [currentFloorId, setCurrentFloorId] = useState(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [selectedSlot, setSelectedSlot] = useState(null);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [dbSlots, setDbSlots] = useState([]);
 
   // activeSessions to track live cars - mock or fetch if admin wants live too
   const [activeSessions, setActiveSessions] = useState([]);
@@ -21,6 +23,58 @@ export default function ParkingLots() {
   }, []);
 
   const currentFloor = floors.find(f => f._id === currentFloorId);
+
+  const getSlotFloorId = (slot) => String(slot.floorID?._id || slot.floorID || "");
+  const sameId = (a, b) => String(a || "") === String(b || "");
+  const sameSlotCode = (a, b) => String(a || "").trim().toUpperCase() === String(b || "").trim().toUpperCase();
+  const getNextFloorNumber = () => Math.max(0, ...floors.map(f => Number(f.floorNumber) || 0)) + 1;
+
+  const getSlotPrefix = (slotName = "") => {
+    const match = String(slotName).trim().match(/^([a-zA-Z]+)(?=\d|[-_\s]|$)/);
+    return match ? match[1].toUpperCase() : null;
+  };
+
+  const prefixToIndex = (prefix) => {
+    return [...prefix].reduce((total, char) => total * 26 + (char.charCodeAt(0) - 64), 0);
+  };
+
+  const indexToPrefix = (index) => {
+    let next = index;
+    let prefix = "";
+    while (next > 0) {
+      const remainder = (next - 1) % 26;
+      prefix = String.fromCharCode(65 + remainder) + prefix;
+      next = Math.floor((next - 1) / 26);
+    }
+    return prefix;
+  };
+
+  const renameSlotPrefix = (slotName, prefixMapping) => {
+    const prefix = getSlotPrefix(slotName);
+    if (!prefix || !prefixMapping[prefix]) return slotName;
+    return String(slotName).replace(new RegExp(`^${prefix}`, "i"), prefixMapping[prefix]);
+  };
+
+  const renameZoneName = (zoneName, prefixMapping) => {
+    return Object.entries(prefixMapping).reduce((name, [oldPrefix, newPrefix]) => {
+      return name.replace(new RegExp(`\\b${oldPrefix}\\b`, "gi"), newPrefix);
+    }, String(zoneName));
+  };
+
+  const syncFloorSlotsFromLayout = async (floorId) => {
+    const floor = floors.find(f => sameId(f._id, floorId));
+    if (!floor) return false;
+
+    const res = await updateFloorLayout(floor._id, floor.layoutData);
+    if (!res.ok) {
+      alert("Failed to sync slots from layout: " + (res.data?.message || "Unknown error"));
+      return false;
+    }
+
+    setFloors(prev => prev.map(f => sameId(f._id, floor._id) ? res.data.data : f));
+    await fetchDbSlots(floor._id);
+    return true;
+  };
 
   const seedDefaultFloor = useCallback(async () => {
     const defaultLayout = {
@@ -71,8 +125,35 @@ export default function ParkingLots() {
     return () => clearTimeout(timer);
   }, [fetchFloors]);
 
+  // Fetch Slots for current floor to know maintenance status
+  const fetchDbSlots = useCallback(async (floorId) => {
+    try {
+      if (floorId) {
+        const res = await getFloorSlots(floorId);
+        if (res.ok && res.data.success) {
+          setDbSlots(res.data.data);
+        }
+      } else {
+        if (floors.length === 0) {
+          setDbSlots([]);
+          return;
+        }
+        const promises = floors.map(f => getFloorSlots(f._id));
+        const results = await Promise.all(promises);
+        const allSlots = results.flatMap(r => (r.ok && r.data.success) ? r.data.data : []);
+        setDbSlots(allSlots);
+      }
+    } catch (e) {
+      console.error("Failed to fetch slots", e);
+    }
+  }, [floors]);
+
+  useEffect(() => {
+    fetchDbSlots(currentFloorId);
+  }, [currentFloorId, fetchDbSlots]);
+
   const handleCreateFloor = async () => {
-    const floorNumber = floors.length + 1;
+    const floorNumber = getNextFloorNumber();
     const name = `Floor ${floorNumber}`;
     const res = await createFloor({ floorNumber, name });
     if (res.ok && res.data.data) {
@@ -86,17 +167,14 @@ export default function ParkingLots() {
     const currentFloor = floors.find(f => f._id === currentFloorId);
     if (!currentFloor) return;
 
-    // 1. Find max char code used across ALL floors to determine next available letters
-    let maxCharCode = 64; // '@' is before 'A'
+    // 1. Find the highest slot prefix used across all floors.
+    let maxPrefixIndex = 0;
     floors.forEach(f => {
       f.layoutData?.elements?.forEach(el => {
         if (el.type.startsWith('slot') && el.name) {
-          const match = el.name.match(/^([a-zA-Z])/);
-          if (match) {
-            const charCode = match[1].toUpperCase().charCodeAt(0);
-            if (charCode > maxCharCode && charCode <= 90) { // A-Z
-              maxCharCode = charCode;
-            }
+          const prefix = getSlotPrefix(el.name);
+          if (prefix) {
+            maxPrefixIndex = Math.max(maxPrefixIndex, prefixToIndex(prefix));
           }
         }
       });
@@ -106,24 +184,20 @@ export default function ParkingLots() {
     const sourcePrefixes = new Set();
     currentFloor.layoutData?.elements?.forEach(el => {
       if (el.type.startsWith('slot') && el.name) {
-        const match = el.name.match(/^([a-zA-Z])/);
-        if (match) {
-          sourcePrefixes.add(match[1].toUpperCase());
+        const prefix = getSlotPrefix(el.name);
+        if (prefix) {
+          sourcePrefixes.add(prefix);
         }
       }
     });
-    const sortedSourcePrefixes = Array.from(sourcePrefixes).sort();
+    const sortedSourcePrefixes = Array.from(sourcePrefixes).sort((a, b) => prefixToIndex(a) - prefixToIndex(b));
 
     // 3. Create mapping from old prefix to new prefix
     const prefixMapping = {};
-    let nextCharCode = maxCharCode + 1;
+    let nextPrefixIndex = maxPrefixIndex + 1;
     sortedSourcePrefixes.forEach(prefix => {
-      if (nextCharCode <= 90) {
-        prefixMapping[prefix] = String.fromCharCode(nextCharCode);
-        nextCharCode++;
-      } else {
-        prefixMapping[prefix] = prefix; // fallback if out of alphabet
-      }
+      prefixMapping[prefix] = indexToPrefix(nextPrefixIndex);
+      nextPrefixIndex++;
     });
 
     // 4. Duplicate elements with renamed prefixes and new unique IDs
@@ -135,16 +209,9 @@ export default function ParkingLots() {
       let newName = el.name;
       if (newName) {
         if (el.type.startsWith('slot')) {
-          const match = newName.match(/^([a-zA-Z])/);
-          if (match && prefixMapping[match[1].toUpperCase()]) {
-            const oldChar = match[1];
-            const newChar = prefixMapping[oldChar.toUpperCase()];
-            newName = newName.replace(oldChar, newChar);
-          }
+          newName = renameSlotPrefix(newName, prefixMapping);
         } else if (el.type === 'zone') {
-          newName = newName.replace(/\b([a-zA-Z])\b/g, (match) => {
-            return prefixMapping[match.toUpperCase()] || match;
-          });
+          newName = renameZoneName(newName, prefixMapping);
         }
       }
       return { ...el, id: newId, name: newName };
@@ -163,12 +230,21 @@ export default function ParkingLots() {
       elements: finalElements
     };
 
-    const floorNumber = floors.length + 1;
+    const floorNumber = getNextFloorNumber();
     const name = `Floor ${floorNumber}`;
     const res = await createFloor({ floorNumber, name, layoutData: newLayoutData });
     if (res.ok && res.data.data) {
-      setFloors([...floors, res.data.data]);
-      setCurrentFloorId(res.data.data._id);
+      const newFloor = res.data.data;
+      const syncRes = await updateFloorLayout(newFloor._id, newLayoutData);
+      if (!syncRes.ok) {
+        alert("Duplicated the floor layout, but failed to create its slots/zones: " + (syncRes.data?.message || "Unknown error"));
+      }
+      const syncedFloor = syncRes.ok && syncRes.data?.data ? syncRes.data.data : newFloor;
+      setFloors([...floors, syncedFloor]);
+      setCurrentFloorId(syncedFloor._id);
+      await fetchDbSlots(syncedFloor._id);
+    } else {
+      alert("Failed to duplicate floor: " + (res.data?.message || "Unknown error"));
     }
   };
 
@@ -199,6 +275,7 @@ export default function ParkingLots() {
       if (res.ok) {
         setIsEditMode(false);
         fetchFloors();
+        fetchDbSlots(currentFloorId);
       } else {
         alert("Failed to save map. Backend returned an error: " + (res.data?.message || "Unknown error"));
         console.error("Save Map Error:", res);
@@ -283,46 +360,121 @@ export default function ParkingLots() {
           floors={floors}
           currentFloorId={currentFloorId}
           onFloorSelect={setCurrentFloorId}
-          onSlotClick={setSelectedSlot}
+          onSlotClick={setSelectedItem}
+          onZoneClick={setSelectedItem}
           activeSessions={activeSessions}
+          dbSlots={dbSlots}
           loading={loading}
           isEditMode={isEditMode}
         />
       </div>
 
       {/* Slide-over panel for slots */}
-      <div className={`absolute inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity duration-300 ${selectedSlot ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} onClick={() => setSelectedSlot(null)}></div>
-      <div className={`absolute top-0 right-0 bottom-0 w-[420px] bg-[#0f172a]/80 backdrop-blur-2xl border-l border-cyan-500/20 p-8 flex flex-col shadow-[-20px_0_50px_rgba(8,145,178,0.1)] text-slate-200 z-50 transform transition-transform duration-300 ease-in-out ${selectedSlot ? 'translate-x-0' : 'translate-x-full'}`}>
-        {selectedSlot && (
+      <div className={`absolute inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity duration-300 ${selectedItem ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} onClick={() => setSelectedItem(null)}></div>
+      <div className={`absolute top-0 right-0 bottom-0 w-[420px] bg-[#0f172a]/80 backdrop-blur-2xl border-l border-cyan-500/20 p-8 flex flex-col shadow-[-20px_0_50px_rgba(8,145,178,0.1)] text-slate-200 z-50 transform transition-transform duration-300 ease-in-out ${selectedItem ? 'translate-x-0' : 'translate-x-full'}`}>
+        {selectedItem && (() => {
+           const isZone = selectedItem.type === 'zone';
+           const dbSlotInfo = !isZone
+             ? dbSlots.find(s => sameSlotCode(s.slotNumber, selectedItem.id) && sameId(getSlotFloorId(s), selectedItem.floorId))
+             : null;
+           const zoneSlots = isZone
+             ? dbSlots.filter(s => sameId(getSlotFloorId(s), selectedItem.floorId) && s.zoneID?.zoneName === selectedItem.name)
+             : [];
+           const zoneId = zoneSlots[0]?.zoneID?._id || zoneSlots[0]?.zoneID || null;
+           const isMaintenance = isZone
+             ? zoneSlots.length > 0 && zoneSlots.every(s => s.status === 'maintenance')
+             : dbSlotInfo?.status === 'maintenance';
+
+           const handleToggleMaintenance = async () => {
+             try {
+               if (isMaintenance) {
+                 const res = await endMaintenance(isZone ? { zoneID: zoneId } : { slotID: dbSlotInfo._id });
+                 if (res.ok) fetchDbSlots(currentFloorId);
+                 else alert("Failed to end maintenance: " + (res.data?.message || "Unknown error"));
+               } else {
+                 const reason = prompt("Enter reason for maintenance:");
+                 if (!reason) return;
+                 const res = await startMaintenance(isZone ? { zoneID: zoneId, reason } : { slotID: dbSlotInfo._id, reason });
+                 if (res.ok) fetchDbSlots(currentFloorId);
+                 else alert("Failed to start maintenance: " + (res.data?.message || "Unknown error"));
+               }
+             } catch (e) {
+               console.error("Maintenance toggle failed", e);
+               alert("Network error while trying to toggle maintenance.");
+             }
+           };
+
+           return (
            <>
               <div className="flex justify-between items-start mb-6 flex-shrink-0">
                 <div>
-                    <span className="text-cyan-400 text-xs font-bold uppercase tracking-[0.2em] mb-1 block">{selectedSlot.type} Ticket</span>
+                    <span className="text-cyan-400 text-xs font-bold uppercase tracking-[0.2em] mb-1 block">{isZone ? "Maintenance Zone" : `${selectedItem.type} Ticket`}</span>
                     <h2 className="text-4xl font-extrabold text-white flex items-center gap-2">
-                        SLOT <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">{selectedSlot.id}</span>
+                        {isZone ? "ZONE" : "SLOT"} <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">{isZone ? selectedItem.name : selectedItem.id}</span>
                     </h2>
                 </div>
-                <button onClick={() => setSelectedSlot(null)} className="text-slate-400 hover:text-white bg-slate-800/50 hover:bg-slate-700/50 w-8 h-8 rounded-full flex items-center justify-center transition-all border border-white/5 flex-shrink-0">
+                <button onClick={() => setSelectedItem(null)} className="text-slate-400 hover:text-white bg-slate-800/50 hover:bg-slate-700/50 w-8 h-8 rounded-full flex items-center justify-center transition-all border border-white/5 flex-shrink-0">
                     <X size={16} strokeWidth={2} />
                 </button>
             </div>
             <div className="mb-4 flex-1 overflow-y-auto pr-2">
-                <h3 className="text-slate-500 text-[11px] font-bold uppercase tracking-[0.15em] mb-4">Slot Details</h3>
-                {selectedSlot.session ? (
+                <h3 className="text-slate-500 text-[11px] font-bold uppercase tracking-[0.15em] mb-4">{isZone ? "Zone Details" : "Slot Details"}</h3>
+                
+                {(dbSlotInfo || (isZone && zoneId)) && (
+                  <div className="mb-4">
+                    <button 
+                      onClick={handleToggleMaintenance}
+                      className={`w-full py-2 rounded font-bold transition-all ${isMaintenance ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/30' : 'bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30'}`}
+                    >
+                      {isMaintenance ? "End Maintenance" : "Start Maintenance"}
+                    </button>
+                  </div>
+                )}
+
+                {isZone && (
+                  <div className="mb-4 rounded-xl border border-white/10 bg-slate-900/60 p-4 text-sm">
+                    <div className="flex justify-between border-b border-white/5 pb-2"><span className="text-slate-400">Total slots</span><span className="font-bold text-white">{zoneSlots.length}</span></div>
+                    <div className="flex justify-between pt-2"><span className="text-slate-400">Maintenance slots</span><span className="font-bold text-red-400">{zoneSlots.filter(s => s.status === 'maintenance').length}</span></div>
+                  </div>
+                )}
+
+                {((!isZone && !dbSlotInfo) || (isZone && !zoneId)) && (
+                  <div className="mb-4 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4">
+                    <p className="text-xs text-amber-200 mb-3">
+                      This {isZone ? "zone" : "slot"} exists in the layout but is not synced to the database yet.
+                    </p>
+                    <button
+                      onClick={() => syncFloorSlotsFromLayout(selectedItem.floorId)}
+                      className="w-full rounded-lg border border-amber-500/30 bg-amber-500/20 px-3 py-2 text-xs font-bold text-amber-100 hover:bg-amber-500/30 transition"
+                    >
+                      Sync slots from layout
+                    </button>
+                  </div>
+                )}
+
+                {isMaintenance ? (
+                  <div className="flex flex-col gap-4 h-full items-center justify-center text-center py-10 opacity-80">
+                      <div className="w-16 h-16 rounded-full bg-red-900/30 flex items-center justify-center border border-red-500/50 mb-2">
+                          <span className="text-red-500 font-bold text-2xl">⚠</span>
+                      </div>
+                      <p className="text-red-400 font-bold uppercase tracking-widest">Under Maintenance</p>
+                      <p className="text-xs text-red-500 max-w-[200px]">This {isZone ? "zone" : "slot"} is currently locked for maintenance.</p>
+                  </div>
+                ) : !isZone && selectedItem.session ? (
                   <div className="flex flex-col gap-4">
                       <div className="bg-rose-900/20 border border-rose-500/30 rounded-xl p-4 flex flex-col items-center justify-center mb-2">
                           <span className="text-xs text-rose-400 uppercase tracking-widest font-bold mb-1">Status</span>
                           <span className="text-lg text-white font-black uppercase">Occupied</span>
                       </div>
-                      <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">License Plate</span><span className="font-mono text-base font-semibold text-white bg-slate-800/80 px-3 py-1 rounded border border-slate-700/50">{selectedSlot.session.licensePlate}</span></div>
-                      <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Phone</span><span className="font-medium text-white">{selectedSlot.session.phone || <span className="text-slate-500 italic">Guest</span>}</span></div>
-                      {selectedSlot.session.userId?.email && (
-                          <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Email</span><span className="font-medium text-cyan-400">{selectedSlot.session.userId.email}</span></div>
+                      <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">License Plate</span><span className="font-mono text-base font-semibold text-white bg-slate-800/80 px-3 py-1 rounded border border-slate-700/50">{selectedItem.session.licensePlate}</span></div>
+                      <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Phone</span><span className="font-medium text-white">{selectedItem.session.phone || <span className="text-slate-500 italic">Guest</span>}</span></div>
+                      {selectedItem.session.userId?.email && (
+                          <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Email</span><span className="font-medium text-cyan-400">{selectedItem.session.userId.email}</span></div>
                       )}
-                      <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Vehicle Type</span><span className="font-medium text-white uppercase">{selectedSlot.session.vehicleType || 'Unknown'}</span></div>
-                      <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Check-in Time</span><span className="font-medium text-white">{new Date(selectedSlot.session.checkInTime).toLocaleString('vi-VN')}</span></div>
-                      <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Expected Duration</span><span className="font-medium text-white">{selectedSlot.session.expectedDurationHours} hr(s)</span></div>
-                      <div className="flex justify-between items-center"><span className="text-slate-400 text-sm">Expiration Time</span><span className="font-bold text-rose-400">{new Date(new Date(selectedSlot.session.checkInTime).getTime() + (selectedSlot.session.expectedDurationHours || 0) * 3600000).toLocaleString('vi-VN')}</span></div>
+                      <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Vehicle Type</span><span className="font-medium text-white uppercase">{selectedItem.session.vehicleType || 'Unknown'}</span></div>
+                      <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Check-in Time</span><span className="font-medium text-white">{new Date(selectedItem.session.checkInTime).toLocaleString('vi-VN')}</span></div>
+                      <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Expected Duration</span><span className="font-medium text-white">{selectedItem.session.expectedDurationHours} hr(s)</span></div>
+                      <div className="flex justify-between items-center"><span className="text-slate-400 text-sm">Expiration Time</span><span className="font-bold text-rose-400">{new Date(new Date(selectedItem.session.checkInTime).getTime() + (selectedItem.session.expectedDurationHours || 0) * 3600000).toLocaleString('vi-VN')}</span></div>
                   </div>
                 ) : (
                   <div className="flex flex-col gap-4 h-full items-center justify-center text-center py-10 opacity-70">
@@ -335,7 +487,7 @@ export default function ParkingLots() {
                 )}
             </div>
            </>
-        )}
+        )})()}
       </div>
 
     </div>

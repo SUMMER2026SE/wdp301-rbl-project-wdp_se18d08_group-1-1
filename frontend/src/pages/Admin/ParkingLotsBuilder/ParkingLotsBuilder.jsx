@@ -87,11 +87,10 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
       const newZone = {
         id: zoneId,
         type: "zone",
-        x, y, w: 330, h: 220, rot: 0, name: "Zone 10-Slots", color: "purple"
+        x, y, w: 330, h: 220, rot: 0, name: "", color: "purple"
       };
       
       const slots = [];
-      const baseLetter = String.fromCharCode(65 + Math.floor((elements.length || 0) / 10)); // A, B, C...
 
       for (let i = 0; i < 10; i++) {
         const row = Math.floor(i / 5); // 0 or 1
@@ -102,7 +101,7 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
           type: "slot",
           x: x + 20 + (col * 60),
           y: y + 20 + (row * 100),
-          w: 50, h: 80, rot: 0, name: `${baseLetter}${i+1}`, color: "purple"
+          w: 50, h: 80, rot: 0, name: "", color: "purple"
         });
       }
       
@@ -113,8 +112,8 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
     let w = 50, h = 50, name = "";
     if (type === "zone") { w = 200; h = 100; name = "New Zone"; }
     else if (type.startsWith("slot")) { 
-       w = type === "slot-moto" ? 30 : 50; 
-       h = 80; // Changed default height to 80 for rectangular slots
+       w = 50; 
+       h = 80; 
        name = ""; 
     }
     else if (type === "wall") { w = 200; h = 15; name = "Wall"; }
@@ -391,7 +390,6 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
       case 'slot': return <div className="flex flex-col items-center"><span className="text-[10px]">{el.name}</span><Car size={20} className="text-gray-400"/></div>;
       case 'slot-ev': return <div className="flex flex-col items-center"><span className="text-[10px] text-emerald-400">{el.name || 'EV'}</span><Zap size={20} className="text-emerald-400"/></div>;
       case 'slot-handicap': return <div className="flex flex-col items-center"><span className="text-[10px] text-blue-400">{el.name || '♿'}</span><Accessibility size={20} className="text-blue-400"/></div>;
-      case 'slot-moto': return <div className="flex flex-col items-center"><span className="text-[10px] text-amber-400">{el.name || 'MOTO'}</span><Bike size={16} className="text-amber-400"/></div>;
       case 'gate': return <div className="text-green-400 font-bold border border-green-400 px-2 rounded-sm bg-green-400/20">{el.name || 'GATE'}</div>;
       case 'road': return <div className="flex items-center gap-1 text-yellow-400"><ArrowRight size={24}/> <span className="font-bold text-xs">{el.name}</span></div>;
       case 'bump': return <div className="w-full h-full" style={{ backgroundImage: 'repeating-linear-gradient(45deg, #fbbf24, #fbbf24 10px, rgba(0,0,0,0.5) 10px, rgba(0,0,0,0.5) 20px)' }}></div>;
@@ -449,7 +447,6 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
               {renderToolButton(<div className="w-4 h-4 border border-dashed border-current"></div>, "Standard Slot", "slot")}
               {renderToolButton(<Zap size={16}/>, "EV Charging Slot", "slot-ev")}
               {renderToolButton(<Accessibility size={16}/>, "Handicap Slot", "slot-handicap")}
-              {renderToolButton(<Bike size={16}/>, "Moto Slot", "slot-moto")}
             </>
           )}
           {activeCategory === "traffic" && (
@@ -689,7 +686,6 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
                         <option value="slot">Standard Slot</option>
                         <option value="slot-ev">EV Charging Slot</option>
                         <option value="slot-handicap">Handicap Slot</option>
-                        <option value="slot-moto">Moto Slot</option>
                       </select>
                     ) : (
                       <input type="text" value={selectedElement.type} disabled className="w-full bg-black/30 border border-white/10 rounded p-2 text-white opacity-50" />

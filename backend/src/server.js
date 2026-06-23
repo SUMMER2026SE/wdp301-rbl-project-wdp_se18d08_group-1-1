@@ -17,6 +17,8 @@ dotenv.config();
 const authRoutes = require('./routes/authRoutes');
 const profileRoutes = require('./routes/profileRoutes');
 const serviceRoutes = require('./routes/serviceRoutes');
+const ticketPackageRoutes = require('./routes/ticketPackageRoutes');
+const subscriptionRoutes = require('./routes/subscriptionRoutes');
 
 // Initialize express app
 const app = express();
@@ -31,7 +33,7 @@ app.use(
 );
 
 // Body parser
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // Cookie parser
@@ -53,11 +55,15 @@ app.use("/api/wallet", require("./routes/walletRoutes"));
 app.use("/api/ai", require("./routes/aiRoutes"));
 app.use("/api/vehicles", require("./routes/vehicleRoutes"));
 app.use("/api/admin", require("./routes/adminRoutes"));
-app.use("/api", serviceRoutes);
+app.use('/api', serviceRoutes);
+app.use('/api/ticket-packages', ticketPackageRoutes);
+app.use('/api/subscriptions', subscriptionRoutes);
 app.use("/api/staff", require("./routes/staffRoutes"));
 app.use("/api/sessions", require("./routes/sessionRoutes"));
 app.use("/api/parking-floors", require("./routes/parkingFloorRoutes"));
+app.use("/api/maintenance", require("./routes/maintenanceRoutes"));
 app.use("/api/notifications", require("./routes/notificationRoutes"));
+app.use("/api/bookings", require("./routes/bookingRoutes"));
 
 // 404 handler
 app.use((req, res) => {
@@ -71,7 +77,7 @@ app.use((req, res) => {
 app.use(errorHandler);
 
 // Start server
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 const startServer = async () => {
   try {

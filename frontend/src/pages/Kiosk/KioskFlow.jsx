@@ -5,9 +5,30 @@ import KioskWelcome from './KioskWelcome';
 import KioskStep1 from './KioskStep1';
 import KioskStep2 from './KioskStep2';
 import KioskStep3 from './KioskStep3';
-import KioskFastPass from './KioskFastPass';
 import KioskLayout from './KioskLayout';
 import { API_BASE } from '../../services/api';
+import { formatLicensePlateDisplay } from '../../utils/licensePlate';
+
+const createEmptyKioskFormData = () => ({
+  licensePlate: '',
+  phone: '',
+  selectedSlot: null,
+  floorId: null,
+  bookingId: null,
+  bookingFloorName: null,
+  step3Mode: 'policy',
+  durationHours: 1,
+  entryImageBase64: null,
+  ticketPackageId: null,
+  pricingPackage: null,
+  pricingSource: 'default',
+  bookingMode: 'hourly',
+  isMonthly: false,
+  membershipType: null,
+  hasPreBooking: false,
+  isVIP: false,
+  isRegisteredVehicle: false,
+});
 
 export default function KioskFlow() {
   const navigate = useNavigate();
@@ -15,23 +36,14 @@ export default function KioskFlow() {
   const [successSession, setSuccessSession] = useState(null); // stores the successful session data
 
   // Shared State across steps
-  const [formData, setFormData] = useState({
-    licensePlate: '',
-    phone: '',
-    selectedSlot: null,
-    floorId: null,
-    durationHours: 1,
-    entryImageBase64: null,
-    isMonthly: false,
-    hasPreBooking: false,
-  });
+  const [formData, setFormData] = useState(createEmptyKioskFormData);
 
   const updateFormData = (data) => {
     setFormData(prev => ({ ...prev, ...data }));
   };
 
   const handleNext = (step) => {
-    navigate(step === 'fastpass' ? '/kiosk/fastpass' : `/kiosk/step${step}`);
+    navigate(`/kiosk/step${step}`);
   };
 
   const handleBack = (step) => {
@@ -50,8 +62,11 @@ export default function KioskFlow() {
           parkingSlot: formData.selectedSlot,
           floorId: formData.floorId,
           durationHours: formData.durationHours,
-          entryImageBase64: formData.entryImageBase64
-        })
+          entryImageBase64: formData.entryImageBase64,
+          ticketPackageId: formData.ticketPackageId,
+          bookingMode: formData.bookingMode,
+          bookingId: formData.bookingId,
+        }),
       });
 
       const data = await response.json();
@@ -74,17 +89,45 @@ export default function KioskFlow() {
     }
   };
 
-  const handleCloseSuccess = () => {
+  const resetKioskFlow = () => {
     setSuccessSession(null);
-    setFormData({
-      licensePlate: '',
-      phone: '',
-      selectedSlot: null,
-      floorId: null,
-      durationHours: 1,
-      entryImageBase64: null,
+    setFormData(createEmptyKioskFormData());
+    navigate('/kiosk', { replace: true });
+  };
+
+  const handleCloseSuccess = () => {
+    resetKioskFlow();
+  };
+
+  const handleFastPassComplete = () => {
+    setSuccessSession(null);
+    setFormData(createEmptyKioskFormData());
+    window.location.replace('/kiosk');
+  };
+
+  const handleFastPassEntry = async () => {
+    const response = await fetch(`${API_BASE}/sessions/kiosk-entry`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        licensePlate: formData.licensePlate,
+        phone: formData.phone,
+        parkingSlot: formData.selectedSlot,
+        floorId: formData.floorId,
+        durationHours: formData.durationHours,
+        entryImageBase64: formData.entryImageBase64,
+        ticketPackageId: formData.ticketPackageId,
+        bookingMode: formData.bookingMode,
+        bookingId: formData.bookingId,
+      }),
     });
-    navigate('/kiosk');
+
+    const data = await response.json();
+    if (!data.success) {
+      throw new Error(data.message || 'Fast-pass check-in failed.');
+    }
+
+    return data.data;
   };
 
   return (
@@ -117,7 +160,9 @@ export default function KioskFlow() {
             <div className="flex justify-between w-full text-left mb-6 border-t border-gray-100 pt-4">
               <div>
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">License Plate</p>
-                <p className="text-xl font-black text-[#0f172a]">{successSession.licensePlate || formData.licensePlate}</p>
+                <p className="text-xl font-black text-[#0f172a]">
+                  {formatLicensePlateDisplay(successSession.licensePlate || formData.licensePlate)}
+                </p>
               </div>
               <div className="text-right">
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Slot</p>
@@ -138,7 +183,7 @@ export default function KioskFlow() {
 
       <Routes>
         {/* Step 0: Welcome Screen (Full width, no split layout) */}
-        <Route path="/" element={<KioskWelcome onStart={() => handleNext(1)} updateFormData={updateFormData} />} />
+        <Route index element={<KioskWelcome onStart={(step = 1) => handleNext(step)} updateFormData={updateFormData} />} />
 
         {/* Steps 1-3 use the Split-Screen KioskLayout */}
         <Route element={<KioskLayout />}>
@@ -152,11 +197,15 @@ export default function KioskFlow() {
           />
           <Route
             path="step3"
-            element={<KioskStep3 formData={formData} onConfirm={handleConfirm} onBack={() => handleBack(2)} />}
-          />
-          <Route
-            path="fastpass"
-            element={<KioskFastPass formData={formData} isMonthly={formData.isMonthly} onComplete={handleCloseSuccess} />}
+            element={
+              <KioskStep3
+                formData={formData}
+                onConfirm={handleConfirm}
+                onBack={() => handleBack(formData.step3Mode === 'fastpass' ? 0 : 2)}
+                onAutoCheckIn={handleFastPassEntry}
+                onComplete={handleFastPassComplete}
+              />
+            }
           />
         </Route>
       </Routes>

@@ -11,6 +11,7 @@ export default function KioskOutWelcome({ onScanSuccess }) {
   const [recognizedText, setRecognizedText] = useState('');
   const [manualInput, setManualInput] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [alarmState, setAlarmState] = useState(false);
 
   // Start webcam
   useEffect(() => {
@@ -41,6 +42,7 @@ export default function KioskOutWelcome({ onScanSuccess }) {
   const handlePlateDetected = async (plate, imageBase64) => {
     try {
       setErrorMessage(''); // clear previous errors
+      setAlarmState(false);
       const res = await fetch(`${API_BASE}/sessions/kiosk-exit-scan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -50,8 +52,12 @@ export default function KioskOutWelcome({ onScanSuccess }) {
       if (data.success) {
         onScanSuccess(data.data, imageBase64);
       } else {
-        // Not found, maybe continue scanning or show error
-        setErrorMessage(`Vehicle with plate ${plate} is not currently in the parking lot.`);
+        setAlarmState(Boolean(data.alarm));
+        if (data.alarmReason === 'already_checked_out') {
+          setErrorMessage(`Vehicle with plate ${plate} has already checked out.`);
+        } else {
+          setErrorMessage(`Vehicle with plate ${plate} is not currently checked in.`);
+        }
         console.warn(data.message);
       }
     } catch (err) {
@@ -225,9 +231,15 @@ export default function KioskOutWelcome({ onScanSuccess }) {
 
         {/* Error Message for Tailgating / Invalid Sessions */}
         {errorMessage && (
-          <div className="mt-6 bg-red-500/20 border border-red-500/50 rounded-lg p-4 text-center animate-pulse">
+          <div className={`mt-6 rounded-lg p-4 text-center animate-pulse ${
+            alarmState ? 'bg-red-600/25 border border-red-500/70' : 'bg-red-500/20 border border-red-500/50'
+          }`}>
             <p className="text-red-400 font-bold">{errorMessage}</p>
-            <p className="text-gray-300 text-sm mt-1">Barrier cannot open. Please contact security.</p>
+            <p className="text-gray-300 text-sm mt-1">
+              {alarmState
+                ? 'Security alert triggered. Barrier must remain closed.'
+                : 'Barrier cannot open. Please contact security.'}
+            </p>
           </div>
         )}
       </div>

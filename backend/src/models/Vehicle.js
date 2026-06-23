@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { normalizeLicensePlate, formatLicensePlateDisplay } = require('../utils/licensePlateUtils');
 
 const vehicleSchema = new mongoose.Schema(
   {
@@ -14,7 +15,7 @@ const vehicleSchema = new mongoose.Schema(
       trim: true,
       uppercase: true,
       match: [
-        /^[A-Z0-9\-]{4,12}$/,
+        /^[A-Z0-9]{4,12}$/,
         'License plate must be 4-12 alphanumeric characters',
       ],
     },
@@ -80,6 +81,20 @@ const vehicleSchema = new mongoose.Schema(
     timestamps: true,
   }
 );
+
+vehicleSchema.virtual('licensePlateDisplay').get(function licensePlateDisplay() {
+  return formatLicensePlateDisplay(this.licensePlate);
+});
+
+vehicleSchema.set('toJSON', { virtuals: true });
+vehicleSchema.set('toObject', { virtuals: true });
+
+vehicleSchema.pre('validate', function normalizePlate(next) {
+  if (this.licensePlate) {
+    this.licensePlate = normalizeLicensePlate(this.licensePlate);
+  }
+  next();
+});
 
 // Ensure a user can only have one default vehicle at a time
 vehicleSchema.pre('save', async function (next) {

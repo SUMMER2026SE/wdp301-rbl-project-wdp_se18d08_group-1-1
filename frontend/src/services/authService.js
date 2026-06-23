@@ -4,6 +4,7 @@
  */
 
 import { apiFetch } from './api';
+import { getStoredRefreshToken } from './authStorage';
 
 /** POST /api/auth/login */
 export const loginUser = (email, password) =>
@@ -52,6 +53,7 @@ export const logoutUser = () =>
   apiFetch('/auth/logout', {
     method: 'POST',
     headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` },
+    body: JSON.stringify({ refreshToken: getStoredRefreshToken() }),
   });
 
 /** GET /api/auth/me  (protected) */

@@ -5,13 +5,13 @@ const AVAILABLE_CHANNELS = ["In-app", "Email", "SMS", "Push"];
 
 function eventIcon(group) {
   switch (group) {
-    case "Tài khoản":
+    case "Account":
       return <ShieldCheck size={16} />;
-    case "Ví":
+    case "Wallet":
       return <CheckCircle2 size={16} />;
-    case "Đặt chỗ":
+    case "Booking":
       return <Bell size={16} />;
-    case "Đỗ xe":
+    case "Parking":
       return <Zap size={16} />;
     default:
       return <Mail size={16} />;
@@ -32,11 +32,11 @@ export default function AutoRulesTable({ rules, onUpdate, onTest }) {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="text-sm text-sky-400 uppercase tracking-[0.2em] font-semibold">
-            Quy tắc tự động
+            Automation rules
           </p>
-          <h2 className="mt-2 text-2xl font-semibold text-white">Cấu hình hành vi tự động</h2>
+          <h2 className="mt-2 text-2xl font-semibold text-white">Configure automated behavior</h2>
           <p className="mt-2 text-sm text-gray-400 max-w-2xl">
-            Bật/tắt quy tắc, chọn kênh gửi, điều chỉnh throttle để chống spam và kiểm tra trigger ngay.
+            Enable/disable rules, choose delivery channels, adjust throttling to prevent spam, and test triggers immediately.
           </p>
         </div>
       </div>
@@ -50,7 +50,7 @@ export default function AutoRulesTable({ rules, onUpdate, onTest }) {
               </span>
               <div>
                 <p className="text-lg font-semibold">{groupName}</p>
-                <p className="text-sm text-gray-400">Các sự kiện tự động thuộc nhóm {groupName}</p>
+                <p className="text-sm text-gray-400">Automated events in group {groupName}</p>
               </div>
             </div>
 
@@ -90,7 +90,7 @@ export default function AutoRulesTable({ rules, onUpdate, onTest }) {
                       </div>
                       <div className="grid gap-2 sm:grid-cols-[1fr_1fr]">
                         <div className="rounded-2xl border border-gray-700/80 bg-gray-900 px-3 py-2">
-                          <label className="text-xs uppercase tracking-[0.2em] text-gray-500">Throttle (phút)</label>
+                          <label className="text-xs uppercase tracking-[0.2em] text-gray-500">Throttle (minutes)</label>
                           <input
                             type="number"
                             min={1}
@@ -104,7 +104,7 @@ export default function AutoRulesTable({ rules, onUpdate, onTest }) {
                           />
                         </div>
                         <div className="rounded-2xl border border-gray-700/80 bg-gray-900 px-3 py-2">
-                          <label className="text-xs uppercase tracking-[0.2em] text-gray-500">Trạng thái</label>
+                          <label className="text-xs uppercase tracking-[0.2em] text-gray-500">Status</label>
                           <button
                             type="button"
                             onClick={() => onUpdate(rule.eventKey, { enabled: !rule.enabled })}
@@ -114,7 +114,7 @@ export default function AutoRulesTable({ rules, onUpdate, onTest }) {
                                 : "bg-gray-700 text-gray-200"
                             }`}
                           >
-                            {rule.enabled ? "Bật" : "Tắt"}
+                            {rule.enabled ? "On" : "Off"}
                           </button>
                         </div>
                       </div>
@@ -122,14 +122,14 @@ export default function AutoRulesTable({ rules, onUpdate, onTest }) {
                     <div className="flex flex-col gap-3 items-start lg:items-end">
                       <button
                         type="button"
-                        onClick={() => onTest(rule.eventKey, { message: "Kiểm tra quy tắc tự động." })}
+                        onClick={() => onTest(rule.eventKey, { message: "Test the automation rule." })}
                         className="inline-flex items-center gap-2 rounded-3xl bg-sky-500 px-4 py-3 text-sm font-semibold text-white hover:bg-sky-400"
                       >
                         <Zap size={16} />
                         Test
                       </button>
                       <p className="text-xs text-gray-500">
-                        Lần kích hoạt cuối: {rule.lastTriggeredAt ? new Date(rule.lastTriggeredAt).toLocaleString("vi-VN") : "Chưa có"}
+                        Last triggered: {rule.lastTriggeredAt ? new Date(rule.lastTriggeredAt).toLocaleString("vi-VN") : "None yet"}
                       </p>
                     </div>
                   </div>

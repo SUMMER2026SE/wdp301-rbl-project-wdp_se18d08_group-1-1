@@ -6,7 +6,7 @@ const authHeader = () => ({
   Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
 });
 
-const VEHICLE_TYPE_LABELS = { car: 'Ô tô', electric_car: 'Ô tô điện' };
+const VEHICLE_TYPE_LABELS = { car: 'Car', electric_car: 'Electric car' };
 
 export default function VehiclePending() {
   const [vehicles, setVehicles] = useState([]);
@@ -38,15 +38,15 @@ export default function VehiclePending() {
     });
     setProcessing((p) => ({ ...p, [id]: false }));
     if (res.ok) {
-      showToast('Đã duyệt xe ✓');
+      showToast('Vehicle approved ✓');
       setVehicles((v) => v.filter((x) => x._id !== id));
     } else {
-      showToast(res.data?.message || 'Duyệt thất bại', 'error');
+      showToast(res.data?.message || 'Approval failed', 'error');
     }
   };
 
   const handleReject = async (id) => {
-    if (!window.confirm('Xác nhận từ chối và xóa xe này?')) return;
+    if (!window.confirm('Confirm rejection and delete this vehicle?')) return;
     setProcessing((p) => ({ ...p, [id]: true }));
     const res = await apiFetch(`/admin/vehicles/${id}/reject`, {
       method: 'DELETE',
@@ -54,10 +54,10 @@ export default function VehiclePending() {
     });
     setProcessing((p) => ({ ...p, [id]: false }));
     if (res.ok) {
-      showToast('Đã từ chối xe');
+      showToast('Vehicle rejected');
       setVehicles((v) => v.filter((x) => x._id !== id));
     } else {
-      showToast(res.data?.message || 'Thao tác thất bại', 'error');
+      showToast(res.data?.message || 'Action failed', 'error');
     }
   };
 
@@ -67,10 +67,10 @@ export default function VehiclePending() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">
-            Xe chờ duyệt
+            Pending vehicles
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            {vehicles.length > 0 ? `${vehicles.length} xe đang chờ phê duyệt` : 'Không có xe nào chờ duyệt'}
+            {vehicles.length > 0 ? `${vehicles.length} vehicles pending approval` : 'No vehicles pending approval'}
           </p>
         </div>
         <button
@@ -81,7 +81,7 @@ export default function VehiclePending() {
             hover:border-yellow-500/40 hover:text-yellow-500 transition-all"
         >
           <RefreshCw size={14} />
-          Làm mới
+          Refresh
         </button>
       </div>
 
@@ -97,8 +97,8 @@ export default function VehiclePending() {
         <div className="rounded-2xl border border-dashed border-gray-200 dark:border-white/10
           bg-gray-50 dark:bg-white/[0.02] flex flex-col items-center justify-center py-20 text-center">
           <Check size={32} className="text-green-400 mb-3" />
-          <p className="font-bold text-gray-700 dark:text-gray-300">Tất cả xe đã được duyệt</p>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Không có xe nào đang chờ duyệt</p>
+          <p className="font-bold text-gray-700 dark:text-gray-300">All vehicles have been approved</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">No vehicles are pending approval</p>
         </div>
       )}
 
@@ -125,7 +125,7 @@ export default function VehiclePending() {
           onClick={() => setPreviewImg(null)}
         >
           <div className="relative max-w-2xl w-full" onClick={(e) => e.stopPropagation()}>
-            <img src={previewImg} alt="Cà vẹt xe" className="w-full rounded-2xl shadow-2xl" />
+            <img src={previewImg} alt="Vehicle registration card" className="w-full rounded-2xl shadow-2xl" />
             <button
               onClick={() => setPreviewImg(null)}
               className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/60
@@ -173,7 +173,7 @@ function VehicleApprovalCard({ vehicle, processing, onApprove, onReject, onPrevi
           <>
             <img
               src={vehicle.registrationCardImage}
-              alt="Cà vẹt xe"
+              alt="Vehicle registration card"
               className="w-full h-full object-cover"
             />
             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30
@@ -184,7 +184,7 @@ function VehicleApprovalCard({ vehicle, processing, onApprove, onReject, onPrevi
         ) : (
           <div className="flex flex-col items-center gap-1 text-gray-400">
             <Image size={24} />
-            <span className="text-[10px]">Không có ảnh</span>
+            <span className="text-[10px]">No image</span>
           </div>
         )}
       </div>
@@ -193,11 +193,11 @@ function VehicleApprovalCard({ vehicle, processing, onApprove, onReject, onPrevi
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap mb-1">
           <h3 className="font-black text-base text-gray-900 dark:text-white">
-            {[vehicle.brand, vehicle.model].filter(Boolean).join(' ') || 'Chưa có tên'}
+            {[vehicle.brand, vehicle.model].filter(Boolean).join(' ') || 'No name yet'}
           </h3>
           <span className="text-[10px] font-bold bg-orange-500/15 text-orange-400
             border border-orange-500/30 rounded-full px-2 py-0.5">
-            ⏳ Chờ duyệt
+            ⏳ Pending approval
           </span>
         </div>
 
@@ -218,7 +218,7 @@ function VehicleApprovalCard({ vehicle, processing, onApprove, onReject, onPrevi
               <span className="font-mono text-xs">{vehicle.hexColor}</span>
             </span>
           )}
-          <span>Chủ xe: <span className="font-semibold text-gray-700 dark:text-gray-200">
+          <span>Owner: <span className="font-semibold text-gray-700 dark:text-gray-200">
             {vehicle.owner?.name || vehicle.owner?.email || '—'}
           </span></span>
         </div>
@@ -229,7 +229,7 @@ function VehicleApprovalCard({ vehicle, processing, onApprove, onReject, onPrevi
             type="text"
             value={modelUrl}
             onChange={(e) => setModelUrl(e.target.value)}
-            placeholder="Model 3D URL (tùy chọn)"
+            placeholder="3D model URL (optional)"
             className="flex-1 rounded-lg px-3 py-2 text-xs font-medium outline-none
               border border-gray-200 dark:border-white/15
               bg-gray-50 dark:bg-black/30 text-gray-700 dark:text-gray-300
@@ -249,7 +249,7 @@ function VehicleApprovalCard({ vehicle, processing, onApprove, onReject, onPrevi
             transition-colors disabled:opacity-50 shadow-md shadow-green-500/20"
         >
           {processing ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-          Duyệt
+          Approve
         </button>
         <button
           onClick={onReject}
@@ -259,7 +259,7 @@ function VehicleApprovalCard({ vehicle, processing, onApprove, onReject, onPrevi
             transition-colors disabled:opacity-50"
         >
           <X size={14} />
-          Từ chối
+          Reject
         </button>
       </div>
     </div>

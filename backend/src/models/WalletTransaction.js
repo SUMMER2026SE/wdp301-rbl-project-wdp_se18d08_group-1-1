@@ -20,7 +20,7 @@ const walletTransactionSchema = new mongoose.Schema(
     amount: {
       type: Number,
       required: [true, 'Amount is required'],
-      min: [1000, 'Minimum transaction amount is 1,000 VNĐ'],
+      min: [1000, 'Minimum transaction amount is 1,000 VND'],
     },
     balanceBefore: {
       type: Number,

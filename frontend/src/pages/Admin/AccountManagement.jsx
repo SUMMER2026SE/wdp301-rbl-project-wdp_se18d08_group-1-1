@@ -406,7 +406,7 @@ export default function AccountManagement() {
         }
       `}</style>
 
-      {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• LEFT: MAIN PANEL â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
+      {/* Main panel */}
       <div className={`flex flex-col flex-1 min-w-0 overflow-hidden transition-all duration-300`}>
 
         {/* -- Header -- */}

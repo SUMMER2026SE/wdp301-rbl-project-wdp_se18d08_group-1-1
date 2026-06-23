@@ -54,8 +54,14 @@ export default function KioskOutInvoice({ sessionData, exitImage, onCheckoutSucc
     return (
       <div className="w-full h-full flex flex-col items-center justify-center bg-black">
         <div className="w-20 h-20 border-4 border-yellow-400 border-t-transparent rounded-full animate-spin mb-8" />
-        <h2 className="text-3xl font-bold text-yellow-400 mb-2">Processing Auto-Pay (ETC)...</h2>
-        <p className="text-gray-400">Please wait while we verify your wallet and open the barrier.</p>
+        <h2 className="text-3xl font-bold text-yellow-400 mb-2">
+          {totalPrice > 0 ? 'Processing Auto-Pay (ETC)...' : 'Exit Authorized...'}
+        </h2>
+        <p className="text-gray-400">
+          {totalPrice > 0
+            ? 'Please wait while we verify your wallet and open the barrier.'
+            : 'Your booking or membership is valid. The barrier is being opened now.'}
+        </p>
       </div>
     );
   }

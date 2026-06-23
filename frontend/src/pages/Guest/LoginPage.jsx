@@ -85,7 +85,7 @@ export default function LoginPage() {
         const { ok, data } = await loginUser(form.email, form.password);
 
         if (!ok) {
-          showToast('error', data.message || 'Email hoặc mật khẩu không đúng. Vui lòng thử lại.');
+          showToast('error', data.message || 'Email or password is incorrect. Please try again.');
           return;
         }
 
@@ -101,9 +101,9 @@ export default function LoginPage() {
           role: user.role,
         }));
 
-        // Báo Navbar cập nhật ngay lập tức
+        // Notify Navbar to update immediately
         window.dispatchEvent(new Event('valo_auth_change'));
-        showToast('success', `Chào mừng trở lại, ${user.username}!`);
+        showToast('success', `Welcome back, ${user.username}!`);
 
         // ── Redirect theo role ──
         const roleRedirect = {
@@ -115,11 +115,11 @@ export default function LoginPage() {
       } else {
         // ── SIGNUP: basic client-side validation ──
         if (!form.name.trim()) {
-          showToast('error', 'Vui lòng nhập tên tài khoản.');
+          showToast('error', 'Please enter an account name.');
           return;
         }
         if (form.password !== form.confirm) {
-          showToast('error', 'Mật khẩu xác nhận không khớp.');
+          showToast('error', 'Password confirmation does not match.');
           return;
         }
 
@@ -127,7 +127,7 @@ export default function LoginPage() {
         const { ok, data } = await registerUser(form.name, form.email, form.password, form.confirm);
 
         if (!ok) {
-          const msg = data.errors?.length ? data.errors[0].message : data.message || 'Đăng ký thất bại. Vui lòng thử lại.';
+          const msg = data.errors?.length ? data.errors[0].message : data.message || 'Registration failed. Please try again.';
           showToast('error', msg);
           return;
         }
@@ -136,16 +136,16 @@ export default function LoginPage() {
         const { ok: otpOk, data: otpData } = await sendOTP(form.email);
 
         if (!otpOk) {
-          showToast('error', otpData.message || 'Không gửi được mã xác minh.');
+          showToast('error', otpData.message || 'Could not send the verification code.');
           return;
         }
 
         setRegisteredEmail(form.email);
         setSignupStep('otp');
-        showToast('success', `Mã xác minh đã gửi đến ${form.email}`);
+        showToast('success', `Verification code was sent to ${form.email}`);
       }
     } catch (err) {
-      showToast('error', 'Không thể kết nối đến máy chủ. Vui lòng thử lại sau.');
+      showToast('error', 'Could not connect to the server. Please try again later.');
     } finally {
       setLoading(false);
     }
@@ -177,15 +177,15 @@ export default function LoginPage() {
   const handleVerifyOTP = async (e) => {
     e.preventDefault();
     const code = otpDigits.join('');
-    if (code.length !== 6) { showToast('error', 'Vui lòng nhập đủ 6 chữ số.'); return; }
+    if (code.length !== 6) { showToast('error', 'Please enter all 6 digits.'); return; }
     setOtpLoading(true);
     try {
       const { ok, data } = await verifyOTP(registeredEmail, code);
       if (!ok) {
-        showToast('error', data.message || 'Mã xác minh không đúng.');
+        showToast('error', data.message || 'Verification code is incorrect.');
         return;
       }
-      showToast('success', 'Email đã xác minh! Vui lòng đăng nhập.');
+      showToast('success', 'Email verified! Please log in.');
       setTimeout(() => {
         setSignupStep('form');
         setOtpDigits(Array(6).fill(''));
@@ -193,7 +193,7 @@ export default function LoginPage() {
         setForm({ name: '', email: '', password: '', confirm: '' });
       }, 1500);
     } catch {
-      showToast('error', 'Không thể kết nối đến máy chủ. Vui lòng thử lại sau.');
+      showToast('error', 'Could not connect to the server. Please try again later.');
     } finally {
       setOtpLoading(false);
     }
@@ -203,11 +203,11 @@ export default function LoginPage() {
     setOtpLoading(true);
     try {
       const { ok, data } = await sendOTP(registeredEmail);
-      if (!ok) { showToast('error', data.message || 'Không gửi được mã.'); return; }
-      showToast('success', 'Mã xác minh mới đã được gửi!');
+      if (!ok) { showToast('error', data.message || 'Could not send the code.'); return; }
+      showToast('success', 'A new verification code was sent!');
       setOtpDigits(Array(6).fill(''));
     } catch {
-      showToast('error', 'Không thể kết nối đến máy chủ.');
+      showToast('error', 'Could not connect to the server.');
     } finally {
       setOtpLoading(false);
     }
@@ -238,17 +238,17 @@ export default function LoginPage() {
 
   const handleForgotSendOTP = async (e) => {
     e.preventDefault();
-    if (!forgotEmail) { showToast('error', 'Vui lòng nhập email.'); return; }
+    if (!forgotEmail) { showToast('error', 'Please enter your email.'); return; }
     setForgotLoading(true);
     try {
       const { ok, data } = await forgotPassword(forgotEmail);
-      if (!ok) { showToast('error', data.message || 'Không gửi được mã.'); return; }
+      if (!ok) { showToast('error', data.message || 'Could not send the code.'); return; }
       setForgotStep('otp');
       setForgotVerifiedOTP('');
       setForgotOtpDigits(Array(6).fill(''));
-      showToast('success', `Mã OTP đã gửi đến ${forgotEmail}`);
+      showToast('success', `OTP code was sent to ${forgotEmail}`);
     } catch {
-      showToast('error', 'Không thể kết nối đến máy chủ.');
+      showToast('error', 'Could not connect to the server.');
     } finally {
       setForgotLoading(false);
     }
@@ -257,17 +257,17 @@ export default function LoginPage() {
   const handleForgotVerifyOTP = async (e) => {
     e.preventDefault();
     const code = forgotOtpDigits.join('');
-    if (code.length !== 6) { showToast('error', 'Vui lòng nhập đủ 6 chữ số.'); return; }
+    if (code.length !== 6) { showToast('error', 'Please enter all 6 digits.'); return; }
     setForgotLoading(true);
     try {
       const { ok, data } = await verifyResetPasswordOTP(forgotEmail, code);
-      if (!ok) { showToast('error', data.message || 'Mã OTP không hợp lệ.'); return; }
+      if (!ok) { showToast('error', data.message || 'Invalid OTP code.'); return; }
       setForgotVerifiedOTP(code);
       setForgotOtpDigits(Array(6).fill(''));
       setForgotStep('password');
-      showToast('success', 'OTP hợp lệ. Bạn có thể nhập mật khẩu mới.');
+      showToast('success', 'OTP is valid. You can enter a new password.');
     } catch {
-      showToast('error', 'Không thể kết nối đến máy chủ.');
+      showToast('error', 'Could not connect to the server.');
     } finally {
       setForgotLoading(false);
     }
@@ -275,14 +275,14 @@ export default function LoginPage() {
 
   const handleForgotReset = async (e) => {
     e.preventDefault();
-    if (!forgotVerifiedOTP) { showToast('error', 'Vui lòng xác minh OTP trước.'); return; }
-    if (forgotNewPass.length < 6) { showToast('error', 'Mật khẩu phải ít nhất 6 ký tự.'); return; }
-    if (forgotNewPass !== forgotConfirmPass) { showToast('error', 'Mật khẩu xác nhận không khớp.'); return; }
+    if (!forgotVerifiedOTP) { showToast('error', 'Please verify the OTP first.'); return; }
+    if (forgotNewPass.length < 6) { showToast('error', 'Password must be at least 6 characters.'); return; }
+    if (forgotNewPass !== forgotConfirmPass) { showToast('error', 'Password confirmation does not match.'); return; }
     setForgotLoading(true);
     try {
       const { ok, data } = await resetPassword(forgotEmail, forgotVerifiedOTP, forgotNewPass);
-      if (!ok) { showToast('error', data.message || 'Đặt lại mật khẩu thất bại.'); return; }
-      showToast('success', 'Đặt lại mật khẩu thành công! Vui lòng đăng nhập.');
+      if (!ok) { showToast('error', data.message || 'Password reset failed.'); return; }
+      showToast('success', 'Password reset successful! Please log in.');
       setTimeout(() => {
         setForgotStep(null);
         setForgotEmail('');
@@ -292,7 +292,7 @@ export default function LoginPage() {
         setForgotConfirmPass('');
       }, 1500);
     } catch {
-      showToast('error', 'Không thể kết nối đến máy chủ.');
+      showToast('error', 'Could not connect to the server.');
     } finally {
       setForgotLoading(false);
     }
@@ -302,11 +302,11 @@ export default function LoginPage() {
     setForgotLoading(true);
     try {
       const { ok, data } = await forgotPassword(forgotEmail);
-      if (!ok) { showToast('error', data.message || 'Không gửi được mã.'); return; }
-      showToast('success', 'Mã OTP mới đã được gửi!');
+      if (!ok) { showToast('error', data.message || 'Could not send the code.'); return; }
+      showToast('success', 'A new OTP code was sent!');
       setForgotOtpDigits(Array(6).fill(''));
     } catch {
-      showToast('error', 'Không thể kết nối đến máy chủ.');
+      showToast('error', 'Could not connect to the server.');
     } finally {
       setForgotLoading(false);
     }
@@ -348,7 +348,7 @@ export default function LoginPage() {
 
       const { idToken, error } = event.data;
       if (error || !idToken) {
-        showToast('error', 'Google login bị hủy hoặc thất bại.');
+        showToast('error', 'Google login was cancelled or failed.');
         return;
       }
 
@@ -356,7 +356,7 @@ export default function LoginPage() {
       try {
         const { ok, data } = await loginWithGoogle(idToken);
         if (!ok) {
-          showToast('error', data.message || 'Google login thất bại.');
+          showToast('error', data.message || 'Google login failed.');
           return;
         }
         const { user, accessToken, refreshToken } = data.data;
@@ -366,11 +366,11 @@ export default function LoginPage() {
           id: user.id, name: user.username, email: user.email, role: user.role,
         }));
         window.dispatchEvent(new Event('valo_auth_change'));
-        showToast('success', `Chào mừng, ${user.username}!`);
+        showToast('success', `Welcome, ${user.username}!`);
         const roleRedirect = { admin: '/admin/dashboard', staff: '/staff/dashboard' };
         setTimeout(() => navigate(roleRedirect[user.role] || '/'), 1000);
       } catch {
-        showToast('error', 'Không thể kết nối đến máy chủ.');
+        showToast('error', 'Could not connect to the server.');
       } finally {
         setLoading(false);
       }
@@ -550,8 +550,8 @@ export default function LoginPage() {
                 <div className="w-16 h-16 rounded-full bg-gold/10 border border-gold/20 flex items-center justify-center mx-auto mb-4">
                   <Lock size={28} className="text-gold" />
                 </div>
-                <h2 className="text-xl font-bold text-white mb-2">Quên mật khẩu?</h2>
-                <p className="text-gray-400 text-sm">Nhập email tài khoản để nhận mã OTP đặt lại mật khẩu.</p>
+                <h2 className="text-xl font-bold text-white mb-2">Forgot password?</h2>
+                <p className="text-gray-400 text-sm">Enter your account email to receive a password reset OTP.</p>
               </div>
               <div className="group">
                 <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Email</label>
@@ -573,11 +573,11 @@ export default function LoginPage() {
                 className="w-full flex items-center justify-center gap-2 bg-gold hover:bg-gold-dark text-charcoal font-extrabold py-4 rounded-xl transition-all duration-200 hover:shadow-xl hover:shadow-gold/25 hover:-translate-y-0.5 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed text-sm tracking-wide"
               >
                 {forgotLoading ? (
-                  <><svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Đang gửi…</>
-                ) : (<>Gửi mã OTP <ArrowRight size={16} /></>)}
+                  <><svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Sending...</>
+                ) : (<>Send OTP <ArrowRight size={16} /></>)}
               </button>
               <button type="button" onClick={resetForgot} className="w-full text-sm text-gray-500 hover:text-gray-300 transition-colors text-center">
-                ← Quay lại đăng nhập
+                ← Back to login
               </button>
             </form>
           ) : isLogin && forgotStep === 'otp' ? (
@@ -586,9 +586,9 @@ export default function LoginPage() {
                 <div className="w-16 h-16 rounded-full bg-gold/10 border border-gold/20 flex items-center justify-center mx-auto mb-4">
                   <Mail size={28} className="text-gold" />
                 </div>
-                <h2 className="text-xl font-bold text-white mb-2">Nhập mã OTP</h2>
+                <h2 className="text-xl font-bold text-white mb-2">Enter OTP</h2>
                 <p className="text-gray-400 text-sm leading-relaxed">
-                  Mã đã gửi đến<br /><span className="text-gold font-semibold">{forgotEmail}</span>
+                  Code sent to<br /><span className="text-gold font-semibold">{forgotEmail}</span>
                 </p>
               </div>
               <div className="flex gap-2 justify-center">
@@ -612,15 +612,15 @@ export default function LoginPage() {
                 className="w-full flex items-center justify-center gap-2 bg-gold hover:bg-gold-dark text-charcoal font-extrabold py-4 rounded-xl transition-all duration-200 hover:shadow-xl hover:shadow-gold/25 hover:-translate-y-0.5 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed text-sm tracking-wide"
               >
                 {forgotLoading ? (
-                  <><svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Đang xác minh…</>
-                ) : (<>Xác minh OTP <ArrowRight size={16} /></>)}
+                  <><svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Verifying...</>
+                ) : (<>Verify OTP <ArrowRight size={16} /></>)}
               </button>
               <div className="flex items-center justify-between text-sm">
                 <button type="button" onClick={() => setForgotStep('email')} className="text-gray-500 hover:text-gray-300 transition-colors">
-                  ← Quay lại
+                  ← Back
                 </button>
                 <button type="button" onClick={handleForgotResendOTP} disabled={forgotLoading} className="text-gold hover:text-gold-light font-semibold transition-colors disabled:opacity-50">
-                  Gửi lại mã
+                  Resend code
                 </button>
               </div>
             </form>
@@ -630,11 +630,11 @@ export default function LoginPage() {
                 <div className="w-16 h-16 rounded-full bg-gold/10 border border-gold/20 flex items-center justify-center mx-auto mb-4">
                   <Lock size={28} className="text-gold" />
                 </div>
-                <h2 className="text-xl font-bold text-white mb-2">Tạo mật khẩu mới</h2>
-                <p className="text-gray-400 text-sm">OTP đã xác minh. Nhập mật khẩu mới cho tài khoản của bạn.</p>
+                <h2 className="text-xl font-bold text-white mb-2">Create a new password</h2>
+                <p className="text-gray-400 text-sm">OTP verified. Enter a new password for your account.</p>
               </div>
               <div className="group">
-                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Mật khẩu mới</label>
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">New password</label>
                 <div className="relative">
                   <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 group-focus-within:text-gold transition-colors" />
                   <input
@@ -651,7 +651,7 @@ export default function LoginPage() {
                 </div>
               </div>
               <div className="group">
-                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Xác nhận mật khẩu</label>
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Confirm password</label>
                 <div className="relative">
                   <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 group-focus-within:text-gold transition-colors" />
                   <input
@@ -673,12 +673,12 @@ export default function LoginPage() {
                 className="w-full flex items-center justify-center gap-2 bg-gold hover:bg-gold-dark text-charcoal font-extrabold py-4 rounded-xl transition-all duration-200 hover:shadow-xl hover:shadow-gold/25 hover:-translate-y-0.5 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed text-sm tracking-wide"
               >
                 {forgotLoading ? (
-                  <><svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Đang đặt lại…</>
-                ) : (<>Đặt lại mật khẩu <ArrowRight size={16} /></>)}
+                  <><svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Resetting...</>
+                ) : (<>Reset password <ArrowRight size={16} /></>)}
               </button>
               <div className="flex items-center justify-between text-sm">
                 <button type="button" onClick={() => { setForgotStep('otp'); setForgotVerifiedOTP(''); }} className="text-gray-500 hover:text-gray-300 transition-colors">
-                  ← Quay lại
+                  ← Back
                 </button>
               </div>
             </form>
@@ -688,9 +688,9 @@ export default function LoginPage() {
                 <div className="w-16 h-16 rounded-full bg-gold/10 border border-gold/20 flex items-center justify-center mx-auto mb-4">
                   <Mail size={28} className="text-gold" />
                 </div>
-                <h2 className="text-xl font-bold text-white mb-2">Xác minh Email</h2>
+                <h2 className="text-xl font-bold text-white mb-2">Verify Email</h2>
                 <p className="text-gray-400 text-sm leading-relaxed">
-                  Nhập mã 6 chữ số đã gửi đến<br />
+                  Enter the 6-digit code sent to<br />
                   <span className="text-gold font-semibold">{registeredEmail}</span>
                 </p>
               </div>
@@ -722,10 +722,10 @@ export default function LoginPage() {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
-                    Đang xác minh…
+                    Verifying...
                   </>
                 ) : (
-                  <>Xác minh Email <ArrowRight size={16} /></>
+                  <>Verify Email <ArrowRight size={16} /></>
                 )}
               </button>
 
@@ -735,7 +735,7 @@ export default function LoginPage() {
                   onClick={() => { setSignupStep('form'); setOtpDigits(Array(6).fill('')); }}
                   className="text-gray-500 hover:text-gray-300 transition-colors"
                 >
-                  ← Quay lại
+                  ← Back
                 </button>
                 <button
                   type="button"
@@ -743,7 +743,7 @@ export default function LoginPage() {
                   disabled={otpLoading}
                   className="text-gold hover:text-gold-light font-semibold transition-colors disabled:opacity-50"
                 >
-                  Gửi lại mã
+                  Resend code
                 </button>
               </div>
             </form>
