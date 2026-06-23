@@ -1,63 +1,17 @@
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   AlertCircle,
   CalendarClock,
-  Car,
   CheckCircle2,
-  Clock,
-  CreditCard,
   Loader2,
-  LogIn,
-  LogOut,
-  MapPin,
-  RefreshCw,
-  Sparkles,
-  Wallet,
+  Wifi,
 } from 'lucide-react';
-import ParkingMapViewer from '../../components/ParkingMapViewer';
-import { getServices } from '../../services/extraServiceApi';
-import { getMyVehicles } from '../../services/vehicleService';
-import { getWalletInfo } from '../../services/walletService';
 import {
-  checkInBooking,
-  checkOutBooking,
-  createBooking,
-  getAvailableBookingSlots,
   getMyBookings,
 } from '../../services/bookingService';
-import { QRCodeSVG } from 'qrcode.react';
-import { createTopUpUrl, getTopUpStatus } from '../../services/walletService';
+import { useSocket } from '../../contexts/SocketProvider';
 
 const formatMoney = (value = 0) => `${Number(value || 0).toLocaleString('vi-VN')} VND`;
-
-const toDateTimeLocal = (date) => {
-  const pad = (value) => String(value).padStart(2, '0');
-  return [
-    date.getFullYear(),
-    '-',
-    pad(date.getMonth() + 1),
-    '-',
-    pad(date.getDate()),
-    'T',
-    pad(date.getHours()),
-    ':',
-    pad(date.getMinutes()),
-  ].join('');
-};
-
-const getInitialTimeRange = () => {
-  const start = new Date();
-  start.setMinutes(start.getMinutes() + 30);
-  start.setSeconds(0, 0);
-
-  const end = new Date(start);
-  end.setHours(end.getHours() + 2);
-
-  return {
-    startTime: toDateTimeLocal(start),
-    endTime: toDateTimeLocal(end),
-  };
-};
 
 const formatDateTime = (value) =>
   new Date(value).toLocaleString('vi-VN', {
@@ -74,90 +28,20 @@ const statusClass = (status) => {
 };
 
 export default function BookingPage() {
-  const [initialRange] = useState(() => getInitialTimeRange());
-  const [startTime, setStartTime] = useState(() => initialRange.startTime);
-  const [endTime, setEndTime] = useState(() => initialRange.endTime);
-  const [vehicles, setVehicles] = useState([]);
-  const [vehicleId, setVehicleId] = useState('');
-  const [manualPlate, setManualPlate] = useState('');
-  const [services, setServices] = useState([]);
-  const [selectedServices, setSelectedServices] = useState([]);
-  const [wallet, setWallet] = useState(null);
-  const [slots, setSlots] = useState([]);
-  const [hourlyRate, setHourlyRate] = useState(10000);
-  const [selectedSlotKey, setSelectedSlotKey] = useState('');
+  const socket = useSocket();
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [checkingSlots, setCheckingSlots] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [actionId, setActionId] = useState(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-
-  // New states for Booking flow
-  const [showTopUpModal, setShowTopUpModal] = useState(false);
-  const [topUpData, setTopUpData] = useState(null); // { qrCode, checkoutUrl, amount }
-  const [topUpLoading, setTopUpLoading] = useState(false);
-  const [topUpSuccess, setTopUpSuccess] = useState(false);
-
-  const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [bookingInfo, setBookingInfo] = useState(null);
-
-  // Map state
-  const [floors, setFloors] = useState([]);
-  const [currentFloorId, setCurrentFloorId] = useState(null);
-
-  const durationHours = useMemo(() => {
-    const start = new Date(startTime);
-    const end = new Date(endTime);
-    const diff = end.getTime() - start.getTime();
-    if (!Number.isFinite(diff) || diff <= 0) return 0;
-    return Math.ceil(diff / 3600000);
-  }, [startTime, endTime]);
-
-  const serviceTotal = useMemo(
-    () =>
-      services
-        .filter((service) => selectedServices.includes(service._id))
-        .reduce((total, service) => total + Number(service.price || 0), 0),
-    [services, selectedServices]
-  );
-
-  const parkingTotal = durationHours * hourlyRate;
-  const grandTotal = parkingTotal + serviceTotal;
-
-  const selectedSlot = slots.find((slot) => `${slot.floorId}:${slot.slotCode}` === selectedSlotKey);
+  const lastEventRef = useRef(null);
 
   const loadData = async (silent = false) => {
     if (!silent) setLoading(true);
     setError('');
 
     try {
-      const [vehicleRes, serviceRes, walletRes, bookingRes, floorsRes] = await Promise.all([
-        getMyVehicles(),
-        getServices(true),
-        getWalletInfo(),
-        getMyBookings(),
-        fetch(`${import.meta.env.VITE_API_BASE_URL}/parking-floors`).then(res => res.json().catch(() => ({})))
-      ]);
-
-      if (vehicleRes.ok) {
-        const vehicleList = vehicleRes.data?.data || [];
-        setVehicles(vehicleList);
-        const defaultVehicle = vehicleList.find((vehicle) => vehicle.isDefault) || vehicleList[0];
-        setVehicleId(defaultVehicle?._id || '');
-      }
-
-      if (serviceRes.ok) setServices(serviceRes.data?.data || []);
-      if (walletRes.ok) setWallet(walletRes.data?.data || null);
+      const bookingRes = await getMyBookings();
       if (bookingRes.ok) setBookings(bookingRes.data?.data || []);
-
-      if (floorsRes?.success) {
-        setFloors(floorsRes.data);
-        if (floorsRes.data.length > 0) {
-          setCurrentFloorId(prev => prev || floorsRes.data[0]._id);
-        }
-      }
     } catch {
       setError('Could not load booking data.');
     } finally {
@@ -166,198 +50,51 @@ export default function BookingPage() {
   };
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData();
   }, []);
 
-  const latestActions = useRef({ loadData, handleCreateBooking: null });
   useEffect(() => {
-    latestActions.current.loadData = loadData;
-  });
+    if (!socket) return undefined;
 
-  useEffect(() => {
-    if (!showTopUpModal || !topUpData?.orderCode) return undefined;
+    const handleBookingChanged = (payload) => {
+      lastEventRef.current = payload;
+      setSuccess('Booking status updated automatically.');
+      loadData(true);
+    };
 
-    const intervalId = setInterval(async () => {
-      try {
-        const statusRes = await getTopUpStatus(topUpData.orderCode);
-        const txStatus = String(statusRes.data?.data?.status || "").toUpperCase();
-
-        if (["COMPLETED", "SUCCESS", "PAID"].includes(txStatus)) {
-          clearInterval(intervalId);
-          setTopUpSuccess(true);
-          await latestActions.current.loadData(true);
-          if (latestActions.current.handleCreateBooking) {
-            await latestActions.current.handleCreateBooking();
-          }
-          setShowTopUpModal(false);
-          setTopUpData(null);
-          setTopUpSuccess(false);
-        } else if (["CANCELLED", "CANCELED", "FAILED"].includes(txStatus)) {
-          clearInterval(intervalId);
-          setShowTopUpModal(false);
-          setTopUpData(null);
-          setTopUpSuccess(false);
-          setError("Payment was cancelled or failed.");
-        }
-      } catch (err) {
-        console.error("Polling error:", err);
-      }
-    }, 3000);
-
-    return () => clearInterval(intervalId);
-  }, [showTopUpModal, topUpData?.orderCode]);
-
-  const handleFindSlots = async () => {
-    setCheckingSlots(true);
-    setError('');
-    setSuccess('');
-    setSlots([]);
-    setSelectedSlotKey('');
-
-    try {
-      const res = await getAvailableBookingSlots({
-        startTime: new Date(startTime).toISOString(),
-        endTime: new Date(endTime).toISOString(),
-      });
-
-      if (!res.ok) {
-        setError(res.data?.message || 'Could not check available slots.');
-        return;
-      }
-
-      const nextSlots = res.data?.data?.slots || [];
-      setSlots(nextSlots);
-      setHourlyRate(res.data?.data?.hourlyRate || 10000);
-
-      if (nextSlots[0]) {
-        setSelectedSlotKey(`${nextSlots[0].floorId}:${nextSlots[0].slotCode}`);
-      }
-
-      setSuccess(`${nextSlots.length} slots available for this time range.`);
-    } catch {
-      setError('Network error while checking slots.');
-    } finally {
-      setCheckingSlots(false);
-    }
-  };
-
-  const toggleService = (serviceId) => {
-    setSelectedServices((current) =>
-      current.includes(serviceId)
-        ? current.filter((id) => id !== serviceId)
-        : [...current, serviceId]
-    );
-  };
-
-  const handleCreateBooking = async () => {
-    setSubmitting(true);
-    setError('');
-    setSuccess('');
-
-    try {
-      if (!selectedSlot) {
-        setError('Please select an available slot first.');
-        return;
-      }
-
-      if (!vehicleId && !manualPlate.trim()) {
-        setError('Please select a vehicle or enter a license plate.');
-        return;
-      }
-
-      const res = await createBooking({
-        startTime: new Date(startTime).toISOString(),
-        endTime: new Date(endTime).toISOString(),
-        floorId: selectedSlot.floorId,
-        slotCode: selectedSlot.slotCode,
-        vehicleId: vehicleId || undefined,
-        licensePlate: vehicleId ? undefined : manualPlate,
-        serviceIds: selectedServices,
-      });
-
-      if (!res.ok) {
-        const errorMessage = res.data?.message || '';
-        if (errorMessage.toLowerCase().includes('insufficient wallet balance')) {
-          // Calculate required amount, minimum 10,000 VND for payOS
-          const shortfall = Math.max(grandTotal - (wallet?.balance || 0), 0);
-          const amountToTopUp = Math.max(shortfall, 10000);
-
-          setTopUpLoading(true);
-          try {
-            const topUpRes = await createTopUpUrl(amountToTopUp);
-            if (topUpRes.ok) {
-              setTopUpData(topUpRes.data?.data);
-              setShowTopUpModal(true);
-            } else {
-              setError('Insufficient balance and failed to generate top-up QR.');
-            }
-          } catch {
-            setError('Insufficient balance. Network error while generating top-up QR.');
-          } finally {
-            setTopUpLoading(false);
-          }
-          return;
-        }
-
-        setError(errorMessage || 'Could not create booking.');
-        return;
-      }
-
-      setBookingInfo(res.data?.data?.booking);
-      setShowSuccessModal(true);
-
-      setSuccess(`Booking created for slot ${selectedSlot.slotCode}. Wallet charged ${formatMoney(grandTotal)}.`);
-      setSelectedServices([]);
-      setSlots((current) => current.filter((slot) => `${slot.floorId}:${slot.slotCode}` !== selectedSlotKey));
-      setSelectedSlotKey('');
-      await loadData(true);
-    } catch {
-      setError('Network error while creating booking.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
+    socket.on('booking:changed', handleBookingChanged);
+    return () => {
+      socket.off('booking:changed', handleBookingChanged);
+    };
+  }, [socket]);
 
   useEffect(() => {
-    latestActions.current.handleCreateBooking = handleCreateBooking;
-  });
-
-  const handleBookingAction = async (bookingId, action) => {
-    setActionId(`${action}:${bookingId}`);
-    setError('');
-    setSuccess('');
-
-    try {
-      const res = action === 'check-in'
-        ? await checkInBooking(bookingId)
-        : await checkOutBooking(bookingId);
-
-      if (!res.ok) {
-        setError(res.data?.message || `Could not ${action} booking.`);
-        return;
+    const intervalId = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        loadData(true);
       }
+    }, 15000);
 
-      if (action === 'check-out') {
-        const refundAmount = res.data?.data?.refundAmount || 0;
-        setSuccess(refundAmount > 0
-          ? `Checked out. Refunded ${formatMoney(refundAmount)} to wallet.`
-          : 'Checked out successfully.');
-      } else {
-        setSuccess('Checked in successfully. Slot is now occupied on the live map.');
-      }
+    const handleFocus = () => loadData(true);
+    window.addEventListener('focus', handleFocus);
 
-      await loadData(true);
-    } catch {
-      setError(`Network error while processing ${action}.`);
-    } finally {
-      setActionId(null);
-    }
-  };
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!success) return undefined;
+    const timer = setTimeout(() => setSuccess(''), 2500);
+    return () => clearTimeout(timer);
+  }, [success]);
+
+
 
   if (loading) {
     return (
-      <div className="min-h-full flex items-center justify-center bg-[#050505] text-white">
+      <div className="min-h-full flex items-center justify-center bg-[#050505] text-white p-6 md:p-8">
         <Loader2 className="w-8 h-8 animate-spin text-yellow-400" />
       </div>
     );
@@ -372,17 +109,10 @@ export default function BookingPage() {
               <CalendarClock size={22} />
             </div>
             <div>
-              <h1 className="text-3xl font-black tracking-tight">Book Parking</h1>
-              <p className="text-sm text-white/45">Test hourly booking with JSON slots from ParkingFloor layout.</p>
+              <h1 className="text-3xl font-black tracking-tight">My Bookings</h1>
+              <p className="text-sm text-white/45">Manage your parking reservations and check-in status.</p>
             </div>
           </div>
-        </div>
-
-        <div className="rounded-2xl bg-white/[0.04] border border-white/10 px-5 py-4 min-w-[240px]">
-          <div className="flex items-center gap-2 text-white/50 text-xs uppercase tracking-widest font-bold mb-1">
-            <Wallet size={14} /> Wallet balance
-          </div>
-          <div className="text-2xl font-black text-yellow-400">{formatMoney(wallet?.balance || 0)}</div>
         </div>
       </div>
 
@@ -396,339 +126,77 @@ export default function BookingPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-        <section className="xl:col-span-5 rounded-3xl bg-[#101010] border border-white/10 p-5 md:p-6">
-          <h2 className="text-lg font-black mb-5">Booking Details</h2>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <label className="block">
-              <span className="text-xs text-white/45 uppercase tracking-widest font-bold">Start time</span>
-              <input
-                type="datetime-local"
-                value={startTime}
-                onChange={(event) => setStartTime(event.target.value)}
-                className="mt-2 w-full rounded-xl bg-black/40 border border-white/10 px-3 py-3 text-sm outline-none focus:border-yellow-500"
-              />
-            </label>
-            <label className="block">
-              <span className="text-xs text-white/45 uppercase tracking-widest font-bold">End time</span>
-              <input
-                type="datetime-local"
-                value={endTime}
-                onChange={(event) => setEndTime(event.target.value)}
-                className="mt-2 w-full rounded-xl bg-black/40 border border-white/10 px-3 py-3 text-sm outline-none focus:border-yellow-500"
-              />
-            </label>
-          </div>
-
-          <div className="mt-4">
-            <span className="text-xs text-white/45 uppercase tracking-widest font-bold">Vehicle</span>
-            {vehicles.length > 0 ? (
-              <select
-                value={vehicleId}
-                onChange={(event) => setVehicleId(event.target.value)}
-                className="mt-2 w-full rounded-xl bg-black/40 border border-white/10 px-3 py-3 text-sm outline-none focus:border-yellow-500"
-              >
-                {vehicles.map((vehicle) => (
-                  <option key={vehicle._id} value={vehicle._id}>
-                    {vehicle.licensePlate} - {vehicle.brand || 'Vehicle'} {vehicle.model || ''}
-                  </option>
-                ))}
-                <option value="">Manual plate</option>
-              </select>
-            ) : (
-              <input
-                value={manualPlate}
-                onChange={(event) => setManualPlate(event.target.value)}
-                placeholder="License plate"
-                className="mt-2 w-full rounded-xl bg-black/40 border border-white/10 px-3 py-3 text-sm outline-none focus:border-yellow-500"
-              />
-            )}
-
-            {vehicleId === '' && vehicles.length > 0 && (
-              <input
-                value={manualPlate}
-                onChange={(event) => setManualPlate(event.target.value)}
-                placeholder="License plate"
-                className="mt-3 w-full rounded-xl bg-black/40 border border-white/10 px-3 py-3 text-sm outline-none focus:border-yellow-500"
-              />
-            )}
-          </div>
-
-          <div className="mt-5">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs text-white/45 uppercase tracking-widest font-bold">Extra services</span>
-              <span className="text-xs text-yellow-400">{formatMoney(serviceTotal)}</span>
-            </div>
-            <div className="space-y-2 max-h-52 overflow-auto pr-1">
-              {services.length === 0 ? (
-                <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/45">
-                  No active services.
-                </div>
-              ) : (
-                services.map((service) => (
-                  <button
-                    key={service._id}
-                    type="button"
-                    onClick={() => toggleService(service._id)}
-                    className={`w-full rounded-xl border px-4 py-3 text-left transition ${selectedServices.includes(service._id)
-                        ? 'bg-yellow-500/10 border-yellow-500/40'
-                        : 'bg-white/[0.03] border-white/10 hover:border-white/20'
-                      }`}
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className="font-bold text-sm">{service.name}</div>
-                        <div className="text-xs text-white/45 mt-0.5">{service.timeCost || 30} minutes</div>
-                      </div>
-                      <div className="text-sm font-black text-yellow-400">{formatMoney(service.price)}</div>
-                    </div>
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-
-          <div className="mt-6 rounded-2xl border border-white/10 bg-black/30 p-4 space-y-3">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-white/55 flex items-center gap-2"><Clock size={15} /> Duration</span>
-              <span className="font-bold">{durationHours || 0} hour(s)</span>
-            </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-white/55 flex items-center gap-2"><CreditCard size={15} /> Parking</span>
-              <span className="font-bold">{formatMoney(parkingTotal)}</span>
-            </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-white/55 flex items-center gap-2"><Sparkles size={15} /> Services</span>
-              <span className="font-bold">{formatMoney(serviceTotal)}</span>
-            </div>
-            <div className="pt-3 border-t border-white/10 flex items-center justify-between">
-              <span className="font-black">Wallet charge</span>
-              <span className="text-2xl font-black text-yellow-400">{formatMoney(grandTotal)}</span>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleFindSlots}
-            disabled={checkingSlots || durationHours <= 0}
-            className="mt-5 w-full rounded-2xl bg-white/10 hover:bg-white/15 disabled:opacity-50 px-4 py-3 font-black transition flex items-center justify-center gap-2"
-          >
-            {checkingSlots ? <Loader2 size={18} className="animate-spin" /> : <RefreshCw size={18} />}
-            Check available slots
-          </button>
-
-          <button
-            type="button"
-            onClick={handleCreateBooking}
-            disabled={submitting || !selectedSlot || durationHours <= 0}
-            className="mt-3 w-full rounded-2xl bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 text-black px-4 py-4 font-black transition flex items-center justify-center gap-2"
-          >
-            {submitting ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
-            Create booking
-          </button>
-        </section>
-
-        <section className="xl:col-span-7 rounded-3xl bg-[#101010] border border-white/10 p-5 md:p-6 flex flex-col">
-          <div className="flex items-center justify-between gap-4 mb-5">
-            <div>
-              <h2 className="text-lg font-black">Available Slots Map</h2>
-              <p className="text-sm text-white/40">Select a white slot on the map to book. Red slots are occupied or unavailable.</p>
-            </div>
-            <div className="text-sm text-white/50 font-bold px-3 py-1 bg-white/5 rounded-full">{slots.length} slot(s) available</div>
-          </div>
-
-          <div className="flex-1 w-full relative min-h-[500px] rounded-2xl overflow-hidden border border-white/10 bg-[#0b0e16]">
-            {slots.length === 0 && !checkingSlots && (
-              <div className="absolute inset-0 z-10 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center text-center p-8">
-                <MapPin className="w-12 h-12 text-white/20 mb-4" />
-                <p className="font-bold text-white text-lg">Select time range to view available slots</p>
-                <p className="text-sm text-white/50 mt-2">Pick a start/end time and press "Check available slots" to unlock the map.</p>
-              </div>
-            )}
-
-            <ParkingMapViewer
-              floors={floors}
-              currentFloorId={currentFloorId}
-              onFloorSelect={setCurrentFloorId}
-              availableSlots={slots.length > 0 ? slots : null}
-              selectedSlotId={selectedSlot?.slotCode}
-              onSelectSlot={(slot, floorId) => setSelectedSlotKey(`${floorId}:${slot.id}`)}
-              is2DMode={true}
-              hideUI={false}
-            />
-          </div>
-        </section>
-      </div>
-
-      <section className="mt-6 rounded-3xl bg-[#101010] border border-white/10 p-5 md:p-6">
+      <section className="rounded-3xl bg-[#101010] border border-white/10 p-5 md:p-6">
         <div className="flex items-center justify-between mb-5">
           <div>
-            <h2 className="text-lg font-black">My Bookings</h2>
-            <p className="text-sm text-white/40">Use check-in/check-out buttons to test session and early refund.</p>
+            <h2 className="text-lg font-black">All Reservations</h2>
+            <p className="text-sm text-white/40">Present your booking QR code at the Kiosk to check in.</p>
           </div>
-          <button
-            type="button"
-            onClick={loadData}
-            className="rounded-xl border border-white/10 px-3 py-2 text-sm text-white/60 hover:text-white hover:bg-white/5 transition"
-          >
-            Refresh
-          </button>
+          <div className="flex items-center gap-3">
+            <div className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-[11px] font-bold text-emerald-300 flex items-center gap-2">
+              <Wifi size={12} />
+              Live sync
+            </div>
+            <button
+              type="button"
+              onClick={() => loadData()}
+              className="rounded-xl border border-white/10 px-3 py-2 text-sm text-white/60 hover:text-white hover:bg-white/5 transition"
+            >
+              Refresh
+            </button>
+          </div>
         </div>
 
         {bookings.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-white/10 py-12 text-center text-white/40">
-            No bookings yet.
+          <div className="rounded-2xl border border-dashed border-white/10 py-16 text-center text-white/40 flex flex-col items-center">
+            <CalendarClock size={48} className="mb-4 text-white/20" />
+            <p className="text-lg font-bold text-white/60 mb-2">No bookings yet</p>
+            <p className="text-sm max-w-sm">You haven't made any parking reservations. Click "Booking" on the top navigation bar to reserve a spot.</p>
           </div>
         ) : (
           <div className="space-y-3">
             {bookings.map((booking) => (
-              <div key={booking._id} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 flex flex-col lg:flex-row lg:items-center gap-4 justify-between">
+              <div key={booking._id} className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 flex flex-col lg:flex-row lg:items-center gap-4 justify-between transition hover:border-white/20">
                 <div className="min-w-0">
                   <div className="flex items-center gap-3 flex-wrap">
-                    <span className="text-xl font-black">{booking.slotCode}</span>
+                    <span className="text-xl font-black text-white">{booking.slotCode}</span>
                     <span className={`px-2.5 py-1 rounded-full border text-xs font-bold uppercase ${statusClass(booking.status)}`}>
                       {booking.status}
                     </span>
                     <span className="text-sm text-white/45">{booking.floorId?.name || 'Floor'}</span>
                   </div>
-                  <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2 text-sm text-white/55">
-                    <span>{booking.licensePlate}</span>
-                    <span>{formatDateTime(booking.startTime)} - {formatDateTime(booking.endTime)}</span>
-                    <span>{formatMoney(booking.finalAmount)} paid</span>
+                  <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-y-2 gap-x-6 text-sm text-white/60">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-bold tracking-widest uppercase text-white/30 mb-0.5">License Plate</span>
+                      <span className="font-semibold text-white/80">{booking.licensePlate}</span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-bold tracking-widest uppercase text-white/30 mb-0.5">Time</span>
+                      <span className="font-semibold text-white/80">{formatDateTime(booking.startTime)} - {formatDateTime(booking.endTime)}</span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-bold tracking-widest uppercase text-white/30 mb-0.5">Paid</span>
+                      <span className="font-bold text-yellow-400/90">{formatMoney(booking.finalAmount)}</span>
+                    </div>
                   </div>
                   {booking.services?.length > 0 && (
-                    <div className="mt-2 text-xs text-yellow-300/80">
-                      Services: {booking.services.map((service) => service.serviceName).join(', ')}
+                    <div className="mt-3 text-xs text-yellow-400/70 font-medium">
+                      + Services: {booking.services.map((service) => service.serviceName).join(', ')}
                     </div>
                   )}
                   {booking.refundAmount > 0 && (
-                    <div className="mt-1 text-xs text-emerald-300">
+                    <div className="mt-1 text-xs text-emerald-400/80 font-medium">
                       Refunded: {formatMoney(booking.refundAmount)}
                     </div>
                   )}
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  {booking.status === 'confirmed' && (
-                    <button
-                      type="button"
-                      onClick={() => handleBookingAction(booking._id, 'check-in')}
-                      disabled={actionId === `check-in:${booking._id}`}
-                      className="rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 px-4 py-2 text-sm font-bold hover:bg-emerald-500/20 transition flex items-center gap-2 disabled:opacity-50"
-                    >
-                      {actionId === `check-in:${booking._id}` ? <Loader2 size={15} className="animate-spin" /> : <LogIn size={15} />}
-                      Check in
-                    </button>
-                  )}
-                  {booking.status === 'active' && (
-                    <button
-                      type="button"
-                      onClick={() => handleBookingAction(booking._id, 'check-out')}
-                      disabled={actionId === `check-out:${booking._id}`}
-                      className="rounded-xl bg-yellow-500 text-black px-4 py-2 text-sm font-black hover:bg-yellow-400 transition flex items-center gap-2 disabled:opacity-50"
-                    >
-                      {actionId === `check-out:${booking._id}` ? <Loader2 size={15} className="animate-spin" /> : <LogOut size={15} />}
-                      Check out
-                    </button>
-                  )}
-                </div>
+
               </div>
             ))}
           </div>
         )}
       </section>
-
-      {/* SUCCESS MODAL */}
-      {showSuccessModal && bookingInfo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-[#111] border border-emerald-500/30 rounded-3xl p-8 max-w-sm w-full flex flex-col items-center text-center shadow-2xl shadow-emerald-500/10">
-            <div className="w-16 h-16 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 mb-4">
-              <CheckCircle2 size={32} />
-            </div>
-            <h2 className="text-2xl font-black mb-1">Booking Confirmed</h2>
-            <p className="text-white/50 text-sm mb-6">Scan this QR code at the Kiosk to check in.</p>
-
-            <div className="bg-white p-4 rounded-2xl mb-6">
-              <QRCodeSVG value={bookingInfo._id} size={200} />
-            </div>
-
-            <div className="w-full bg-white/[0.03] border border-white/10 rounded-2xl p-4 text-left space-y-2 mb-6">
-              <div className="flex justify-between text-sm">
-                <span className="text-white/50">Slot</span>
-                <span className="font-bold text-yellow-400">{bookingInfo.slotCode}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-white/50">Valid from</span>
-                <span className="font-bold">{formatDateTime(bookingInfo.startTime)}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-white/50">Valid until</span>
-                <span className="font-bold">{formatDateTime(bookingInfo.endTime)}</span>
-              </div>
-            </div>
-
-            <button
-              onClick={() => {
-                setShowSuccessModal(false);
-                setBookingInfo(null);
-              }}
-              className="w-full bg-emerald-500 text-black font-black py-3 rounded-2xl hover:bg-emerald-400 transition"
-            >
-              Done
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* TOP UP MODAL */}
-      {showTopUpModal && topUpData && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-[#111] border border-rose-500/30 rounded-3xl p-8 max-w-sm w-full flex flex-col items-center text-center shadow-2xl shadow-rose-500/10">
-            <div className="w-16 h-16 rounded-full bg-rose-500/20 flex items-center justify-center text-rose-400 mb-4">
-              <AlertCircle size={32} />
-            </div>
-            <h2 className="text-2xl font-black mb-1">Insufficient Balance</h2>
-            <p className="text-white/50 text-sm mb-6">
-              You need to top up {formatMoney(topUpData.amount)} to complete this booking.
-            </p>
-
-            <div className="bg-white p-4 rounded-2xl mb-4">
-              {topUpData.qrCode ? (
-                <QRCodeSVG value={topUpData.qrCode} size={200} />
-              ) : (
-                <div className="w-[200px] h-[200px] flex items-center justify-center text-black/50 text-sm">
-                  No QR data
-                </div>
-              )}
-            </div>
-
-            <p className="text-xs text-white/40 mb-6">
-              Scan with your banking app or e-wallet to pay.<br />
-              Alternatively, <a href={topUpData.checkoutUrl} target="_blank" rel="noreferrer" className="text-blue-400 underline">click here to checkout</a>.
-            </p>
-
-            <div className="flex items-center justify-center gap-2 mb-6 text-sm text-yellow-400 font-bold">
-              <Loader2 size={16} className="animate-spin" />
-              {topUpSuccess ? "Payment received! Processing booking..." : "Waiting for your payment..."}
-            </div>
-
-            <div className="flex gap-3 w-full">
-              <button
-                disabled={topUpSuccess}
-                onClick={() => {
-                  setShowTopUpModal(false);
-                  setTopUpData(null);
-                  setTopUpSuccess(false);
-                }}
-                className="w-full bg-white/10 hover:bg-white/20 text-white font-bold py-3 rounded-2xl transition disabled:opacity-50"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

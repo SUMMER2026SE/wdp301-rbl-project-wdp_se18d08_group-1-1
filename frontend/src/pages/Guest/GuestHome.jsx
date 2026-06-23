@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Search, ShieldCheck, Zap, Camera, Car, CreditCard, ArrowRight, Smartphone, QrCode, Wrench, Sparkles, Clock, ChevronDown } from 'lucide-react';
 
-// Import hình ảnh
+// Import images
 import CarImage from '../../assets/images/car.png';
 
 // Import Component 3D
@@ -405,7 +405,7 @@ export default function GuestHome() {
         </div>
       </section>
 
-      {/* 2. SECTION MỚI: 3D AI GATE CHECK-IN (REACT THREE FIBER) */}
+      {/* 2. NEW SECTION: 3D AI GATE CHECK-IN (REACT THREE FIBER) */}
       <section className="bg-charcoal text-white py-24 relative overflow-hidden border-y border-gray-800">
         <div className="max-w-7xl mx-auto px-6 flex flex-col lg:flex-row items-center gap-16 relative z-10">
           
@@ -433,7 +433,7 @@ export default function GuestHome() {
 
           <div className="w-full lg:w-1/2 relative">
              <SmartGate3D />
-             {/* Ánh sáng trang trí nền phía sau */}
+             {/* Decorative background lighting behind the scene */}
              <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-gold-gradient opacity-10 blur-[100px] rounded-full pointer-events-none -z-10"></div>
           </div>
 

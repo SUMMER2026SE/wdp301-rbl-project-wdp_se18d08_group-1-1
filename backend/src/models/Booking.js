@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { normalizeLicensePlate } = require('../utils/licensePlateUtils');
 
 const bookingSchema = new mongoose.Schema(
   {
@@ -82,11 +83,19 @@ const bookingSchema = new mongoose.Schema(
       ref: 'Session',
       default: null,
     },
+    ticketPackageId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'TicketPackage',
+      default: null,
+    },
   },
   { timestamps: true }
 );
 
 bookingSchema.pre('validate', function validateBookingTime(next) {
+  if (this.licensePlate) {
+    this.licensePlate = normalizeLicensePlate(this.licensePlate);
+  }
   if (this.startTime && this.endTime && this.startTime >= this.endTime) {
     return next(new Error('Booking endTime must be after startTime'));
   }
@@ -94,6 +103,7 @@ bookingSchema.pre('validate', function validateBookingTime(next) {
 });
 
 bookingSchema.index({ floorId: 1, slotCode: 1, startTime: 1, endTime: 1, status: 1 });
+bookingSchema.index({ licensePlate: 1, status: 1, startTime: 1, endTime: 1 });
 bookingSchema.index({ userId: 1, createdAt: -1 });
 
 module.exports = mongoose.model('Booking', bookingSchema);

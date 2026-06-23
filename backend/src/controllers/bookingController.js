@@ -4,12 +4,14 @@ const ParkingFloor = require('../models/ParkingFloor');
 const Service = require('../models/Service');
 const Session = require('../models/Session');
 const Vehicle = require('../models/Vehicle');
+const Slot = require('../models/Slot');
+const TicketPackage = require('../models/TicketPackage');
 const walletService = require('../services/walletService');
+const { normalizeLicensePlate } = require('../utils/licensePlateUtils');
+const { emitToUser } = require('../sockets/notificationSocket');
 
-const DEFAULT_HOURLY_RATE = Number(process.env.PARKING_HOURLY_RATE || 10000);
 const BOOKING_STATUSES_THAT_BLOCK_SLOT = ['confirmed', 'active'];
 
-const normalizePlate = (plate = '') => String(plate).trim().toUpperCase();
 const normalizeSlotCode = (slotCode = '') => String(slotCode).trim().toUpperCase();
 
 const buildSlotKey = (floorId, slotCode) => `${String(floorId)}:${normalizeSlotCode(slotCode)}`;
@@ -56,13 +58,14 @@ const getAllBookableSlots = async () => {
 
     return elements
       .filter(isCarSlotElement)
+      .filter(slot => slot.name && slot.name.trim() !== '') // Skip empty parking slots (ghost slots)
       .map((slot) => {
         const zone = slot.parentId ? elementById.get(slot.parentId) : null;
         return {
           floorId: floor._id,
           floorName: floor.name,
           floorNumber: floor.floorNumber,
-          slotCode: normalizeSlotCode(slot.name || slot.id),
+          slotCode: normalizeSlotCode(slot.name), // Name is guaranteed because it was filtered above
           slotType: slot.type,
           zoneName: zone?.name || null,
           elementId: slot.id,
@@ -75,7 +78,7 @@ const getAllBookableSlots = async () => {
   });
 };
 
-const getUnavailableSlotKeys = async (start, end) => {
+const getUnavailableSlotKeys = async (start, end, userId = null) => {
   const overlappingBookings = await Booking.find({
     status: { $in: BOOKING_STATUSES_THAT_BLOCK_SLOT },
     startTime: { $lt: end },
@@ -92,6 +95,19 @@ const getUnavailableSlotKeys = async (start, end) => {
     .select('floorId parkingSlot')
     .lean();
 
+  const maintenanceSlots = await Slot.find({ status: 'maintenance' })
+    .select('floorID slotNumber')
+    .lean();
+
+  // Find slots reserved for other users
+  const reservedSlotsQuery = { reservedFor: { $ne: null } };
+  if (userId) {
+    reservedSlotsQuery.reservedFor = { $ne: userId };
+  }
+  const reservedSlots = await Slot.find(reservedSlotsQuery)
+    .select('floorID slotNumber')
+    .lean();
+
   const unavailable = new Set();
 
   overlappingBookings.forEach((booking) => {
@@ -102,13 +118,21 @@ const getUnavailableSlotKeys = async (start, end) => {
     unavailable.add(buildSlotKey(session.floorId, session.parkingSlot));
   });
 
+  maintenanceSlots.forEach((slot) => {
+    unavailable.add(buildSlotKey(slot.floorID, slot.slotNumber));
+  });
+
+  reservedSlots.forEach((slot) => {
+    unavailable.add(buildSlotKey(slot.floorID, slot.slotNumber));
+  });
+
   return unavailable;
 };
 
-const getAvailableSlotsForRange = async (start, end) => {
+const getAvailableSlotsForRange = async (start, end, userId = null) => {
   const [slots, unavailableSlotKeys] = await Promise.all([
     getAllBookableSlots(),
-    getUnavailableSlotKeys(start, end),
+    getUnavailableSlotKeys(start, end, userId),
   ]);
 
   return slots.filter((slot) => !unavailableSlotKeys.has(buildSlotKey(slot.floorId, slot.slotCode)));
@@ -120,14 +144,66 @@ const resolveLicensePlate = async (userId, { vehicleId, licensePlate }) => {
     if (!vehicle) {
       throw Object.assign(new Error('Vehicle not found'), { statusCode: 404 });
     }
-    return normalizePlate(vehicle.licensePlate);
+    return normalizeLicensePlate(vehicle.licensePlate);
   }
 
-  const plate = normalizePlate(licensePlate);
+  const plate = normalizeLicensePlate(licensePlate);
   if (!plate) {
     throw Object.assign(new Error('licensePlate or vehicleId is required'), { statusCode: 400 });
   }
   return plate;
+};
+
+const getSessionExpectedEndTime = (session) => {
+  const start = new Date(session.checkInTime);
+  if (Number.isNaN(start.getTime())) return null;
+
+  const expectedHours = Math.max(Number(session.expectedDurationHours || 1), 1);
+  return new Date(start.getTime() + expectedHours * 60 * 60 * 1000);
+};
+
+const findVehicleUsageConflict = async ({ licensePlate, start, end }) => {
+  const [overlappingBooking, activeSessions] = await Promise.all([
+    Booking.findOne({
+      licensePlate,
+      status: { $in: BOOKING_STATUSES_THAT_BLOCK_SLOT },
+      startTime: { $lt: end },
+      endTime: { $gt: start },
+    })
+      .select('slotCode startTime endTime status')
+      .lean(),
+    Session.find({
+      licensePlate,
+      status: 'active',
+    })
+      .select('parkingSlot checkInTime expectedDurationHours')
+      .lean(),
+  ]);
+
+  if (overlappingBooking) {
+    return {
+      type: 'booking',
+      message: 'This vehicle already has another booking during the selected time range. One license plate can only park once at a time.',
+      conflict: overlappingBooking,
+    };
+  }
+
+  const overlappingSession = activeSessions.find((session) => {
+    const sessionStart = new Date(session.checkInTime);
+    const sessionEnd = getSessionExpectedEndTime(session);
+    if (Number.isNaN(sessionStart.getTime()) || !sessionEnd) return false;
+    return sessionStart < end && sessionEnd > start;
+  });
+
+  if (overlappingSession) {
+    return {
+      type: 'session',
+      message: 'This vehicle is already scheduled to be parked during the selected time range. Please choose a later time.',
+      conflict: overlappingSession,
+    };
+  }
+
+  return null;
 };
 
 const getBookingServices = async (bookingIds) => {
@@ -143,18 +219,32 @@ const getBookingServices = async (bookingIds) => {
   }, {});
 };
 
+const emitBookingChanged = (app, booking, extra = {}) => {
+  if (!app || !booking?.userId) return;
+
+  const io = app.get('io');
+  if (!io) return;
+
+  emitToUser(io, booking.userId, 'booking:changed', {
+    bookingId: String(booking._id),
+    status: booking.status,
+    slotCode: booking.slotCode,
+    floorId: booking.floorId ? String(booking.floorId) : null,
+    ...extra,
+  });
+};
+
 exports.getAvailableSlots = async (req, res, next) => {
   try {
     const { startTime, endTime } = req.query;
     const { start, end } = parseBookingTimeRange(startTime, endTime);
-    const slots = await getAvailableSlotsForRange(start, end);
+    const slots = await getAvailableSlotsForRange(start, end, req.user?._id);
 
     res.status(200).json({
       success: true,
       data: {
         startTime: start,
         endTime: end,
-        hourlyRate: DEFAULT_HOURLY_RATE,
         count: slots.length,
         slots,
       },
@@ -166,12 +256,34 @@ exports.getAvailableSlots = async (req, res, next) => {
 
 exports.createBooking = async (req, res, next) => {
   try {
-    const { startTime, endTime, floorId, slotCode, vehicleId, licensePlate, serviceIds = [] } = req.body;
+    const { startTime, endTime, floorId, slotCode, vehicleId, licensePlate, serviceIds = [], ticketPackageId } = req.body;
     const { start, end } = parseBookingTimeRange(startTime, endTime);
     const plate = await resolveLicensePlate(req.user._id, { vehicleId, licensePlate });
     const requestedServiceIds = [...new Set((serviceIds || []).map(String))];
 
-    const availableSlots = await getAvailableSlotsForRange(start, end);
+    const vehicleUsageConflict = await findVehicleUsageConflict({
+      licensePlate: plate,
+      start,
+      end,
+    });
+
+    if (vehicleUsageConflict) {
+      return res.status(409).json({
+        success: false,
+        message: vehicleUsageConflict.message,
+        data: {
+          conflictType: vehicleUsageConflict.type,
+          conflict: vehicleUsageConflict.conflict,
+        },
+      });
+    }
+
+    // Determine if user is VIP
+    const User = require('../models/User'); // Ensure imported
+    const user = await User.findById(req.user._id);
+    const isVip = user.membership?.isVip && user.membership?.expireAt > new Date();
+
+    const availableSlots = await getAvailableSlotsForRange(start, end, req.user._id);
     let selectedSlot = null;
 
     if (floorId && slotCode) {
@@ -206,10 +318,36 @@ exports.createBooking = async (req, res, next) => {
       });
     }
 
-    const paidHours = Math.ceil((end.getTime() - start.getTime()) / 3600000);
-    const prepaidAmount = paidHours * DEFAULT_HOURLY_RATE;
-    const serviceAmount = services.reduce((total, service) => total + Number(service.price || 0), 0);
-    const totalAmount = prepaidAmount + serviceAmount;
+    // Auto determine price
+    const durationMs = end.getTime() - start.getTime();
+    let paidHours = Math.ceil(durationMs / 3600000);
+    if (paidHours < 1) paidHours = 1;
+
+    let prepaidAmount = 0;
+    
+    // Fetch default hourly package
+    const hourlyPackage = await TicketPackage.findOne({ type: 'hourly', isActive: true });
+    const hourlyRate = hourlyPackage ? hourlyPackage.price : 10000;
+    prepaidAmount = paidHours * hourlyRate;
+
+    // Check if selected slot is reserved for this user (VIP)
+    // We need to fetch the slot from DB to check reservedFor
+    const slotDoc = await Slot.findOne({ floorID: selectedSlot.floorId, slotNumber: selectedSlot.slotCode });
+    if (isVip && slotDoc && slotDoc.reservedFor && slotDoc.reservedFor.toString() === req.user._id.toString()) {
+      prepaidAmount = 0; // Free for VIP parking in their own slot
+    }
+
+    const serviceTotal = services.reduce((total, service) => total + Number(service.price || 0), 0);
+    let totalAmount = prepaidAmount + serviceTotal;
+      
+    // Handle free services for Yearly VIP
+    if (isVip && user.membership.freeServiceCount > 0 && serviceTotal > 0) {
+      // Use 1 free service count
+      user.membership.freeServiceCount -= 1;
+      await user.save();
+      totalAmount -= serviceTotal; // Free services
+      if (totalAmount < 0) totalAmount = 0;
+    }
 
     // Check wallet balance BEFORE creating the booking to avoid ghost CANCELLED bookings
     const wallet = await walletService.getBalance(req.user._id);
@@ -228,10 +366,11 @@ exports.createBooking = async (req, res, next) => {
       startTime: start,
       endTime: end,
       paidHours,
-      hourlyRate: DEFAULT_HOURLY_RATE,
+      hourlyRate: hourlyRate, // For legacy compatibility or general reference
       prepaidAmount,
-      serviceAmount,
+      serviceAmount: serviceTotal,
       finalAmount: totalAmount,
+      ticketPackageId: hourlyPackage ? hourlyPackage._id : null,
       paymentMethod: 'wallet',
       paymentStatus: 'failed',
     });
@@ -240,7 +379,7 @@ exports.createBooking = async (req, res, next) => {
       await walletService.debitWallet(
         req.user._id,
         totalAmount,
-        `Thanh toan dat cho ${selectedSlot.slotCode} - ${plate}`,
+        `Booking payment for ${selectedSlot.slotCode} - ${plate}`,
         { refSource: 'booking', refSourceId: booking._id }
       );
     } catch (walletError) {
@@ -276,6 +415,8 @@ exports.createBooking = async (req, res, next) => {
         slot: selectedSlot,
       },
     });
+
+    emitBookingChanged(req.app, booking, { action: 'created' });
   } catch (error) {
     next(error);
   }
@@ -360,6 +501,8 @@ exports.checkInBooking = async (req, res, next) => {
     booking.sessionId = parkingSession._id;
     await booking.save();
 
+    emitBookingChanged(req.app, booking, { action: 'checked_in' });
+
     res.status(200).json({
       success: true,
       message: 'Booking checked in successfully',
@@ -375,7 +518,7 @@ exports.checkInBooking = async (req, res, next) => {
 
 exports.checkOutBooking = async (req, res, next) => {
   try {
-    const booking = await Booking.findOne({ _id: req.params.id, userId: req.user._id });
+    const booking = await Booking.findOne({ _id: req.params.id, userId: req.user._id }).populate('ticketPackageId');
 
     if (!booking) {
       return res.status(404).json({ success: false, message: 'Booking not found' });
@@ -394,9 +537,18 @@ exports.checkOutBooking = async (req, res, next) => {
     const checkOutTime = new Date();
     const durationMs = checkOutTime.getTime() - parkingSession.checkInTime.getTime();
     const actualHours = Math.max(1, Math.ceil(durationMs / 3600000));
-    const refundHours = Math.max(booking.paidHours - actualHours, 0);
-    const refundAmount = refundHours * booking.hourlyRate;
-    const finalParkingAmount = (booking.paidHours - refundHours) * booking.hourlyRate;
+
+    let refundHours = 0;
+    let refundAmount = 0;
+    let finalParkingAmount = booking.prepaidAmount;
+
+    // Only hourly packages are refundable. Daily packages are not refunded for early exits.
+    if (!booking.ticketPackageId || booking.ticketPackageId.type !== 'daily') {
+      refundHours = Math.max(booking.paidHours - actualHours, 0);
+      refundAmount = refundHours * booking.hourlyRate;
+      finalParkingAmount = (booking.paidHours - refundHours) * booking.hourlyRate;
+    }
+
     const finalAmount = finalParkingAmount + booking.serviceAmount;
 
     if (refundAmount > 0) {
@@ -404,7 +556,7 @@ exports.checkOutBooking = async (req, res, next) => {
         booking.userId,
         refundAmount,
         'REFUND',
-        `Hoan tien dat cho ${booking.slotCode} - ${booking.licensePlate}`,
+        `Booking refund for ${booking.slotCode} - ${booking.licensePlate}`,
         { refSource: 'booking', refSourceId: booking._id }
       );
     }
@@ -422,6 +574,12 @@ exports.checkOutBooking = async (req, res, next) => {
     parkingSession.refundAmount = refundAmount;
     parkingSession.paymentStatus = refundAmount > 0 ? 'refunded' : 'paid';
     await parkingSession.save();
+
+    emitBookingChanged(req.app, booking, {
+      action: 'checked_out',
+      refundAmount,
+      finalAmount,
+    });
 
     res.status(200).json({
       success: true,

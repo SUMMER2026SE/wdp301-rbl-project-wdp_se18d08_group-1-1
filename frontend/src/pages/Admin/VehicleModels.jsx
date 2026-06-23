@@ -63,7 +63,7 @@ function PreviewModal({ model, onClose }) {
         {/* Color picker footer */}
         <div className="flex items-center gap-3 px-5 py-4 border-t border-white/10 bg-gray-950">
           <Palette size={15} className="text-gray-400 shrink-0" />
-          <span className="text-xs text-gray-400 shrink-0">Màu sơn test:</span>
+          <span className="text-xs text-gray-400 shrink-0">Paint color test:</span>
           <div className="flex items-center gap-2 flex-wrap">
             {['#c0392b','#2980b9','#27ae60','#f39c12','#8e44ad','#ecf0f1','#1a1a1a'].map((c) => (
               <button
@@ -81,7 +81,7 @@ function PreviewModal({ model, onClose }) {
               value={color}
               onChange={(e) => setColor(e.target.value)}
               className="w-6 h-6 rounded-full cursor-pointer border border-white/20 bg-transparent p-0"
-              title="Tùy chọn màu"
+              title="Color options"
             />
           </div>
           <span className="ml-auto font-mono text-xs text-gray-500">{color}</span>
@@ -157,19 +157,19 @@ export default function VehicleModels() {
 
   const handleUpload = async (e) => {
     e.preventDefault();
-    if (!brand.trim()) return showToast('Nhập Brand trước', 'error');
-    if (!file) return showToast('Chọn file .glb trước', 'error');
+    if (!brand.trim()) return showToast('Enter Brand first', 'error');
+    if (!file) return showToast('Choose a .glb file first', 'error');
     setUploading(true);
     const { ok, data } = await uploadModel(brand, model, file);
     setUploading(false);
     if (ok) {
       const synced = data.data?.vehiclesSynced ?? 0;
-      showToast(`Đã upload: ${data.data?.publicId}${synced ? ` · cập nhật ${synced} xe` : ''}`);
+      showToast(`Uploaded: ${data.data?.publicId}${synced ? ` · updated ${synced} vehicles` : ''}`);
       setBrand(''); setModel(''); setFile(null);
       if (fileRef.current) fileRef.current.value = '';
       await loadModels();
     } else {
-      showToast(data.message || 'Upload thất bại', 'error');
+      showToast(data.message || 'Upload failed', 'error');
     }
   };
 
@@ -182,10 +182,10 @@ export default function VehicleModels() {
     if (ok) {
       // Show how many vehicle documents had their modelUrl cleared
       const synced = data?.data?.vehiclesSynced ?? 0;
-      showToast(`Đã xóa model${synced ? ` · xóa 3D trên ${synced} xe` : ''}`);
+      showToast(`Model deleted${synced ? ` · removed 3D from ${synced} vehicles` : ''}`);
       await loadModels();
     } else {
-      showToast(data?.message || 'Xóa thất bại', 'error');
+      showToast(data?.message || 'Delete failed', 'error');
     }
   };
 
@@ -194,9 +194,9 @@ export default function VehicleModels() {
     const { ok, data } = await syncModels();
     setSyncing(false);
     if (ok) {
-      showToast(`Đồng bộ xong · ${data.data?.updated ?? 0} xe được cập nhật`);
+      showToast(`Sync complete · ${data.data?.updated ?? 0} vehicles updated`);
     } else {
-      showToast(data?.message || 'Sync thất bại', 'error');
+      showToast(data?.message || 'Sync failed', 'error');
     }
   };
 
@@ -215,7 +215,7 @@ export default function VehicleModels() {
             3D Vehicle Models
           </h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Upload file <code className="font-mono bg-gray-100 dark:bg-white/10 px-1 rounded">.glb</code> cho từng hãng xe. Backend sẽ tự khớp khi user thêm xe.
+            Upload file <code className="font-mono bg-gray-100 dark:bg-white/10 px-1 rounded">.glb</code> for each vehicle brand. The backend will match automatically when the user adds a vehicle.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -225,12 +225,12 @@ export default function VehicleModels() {
             className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-yellow-500/40
               bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-600 dark:text-yellow-400
               text-xs font-bold transition disabled:opacity-50"
-            title="Đồng bộ modelUrl cho tất cả xe hiện có"
+            title="Sync modelUrl for all existing vehicles"
           >
             {syncing
               ? <Loader2 size={14} className="animate-spin" />
               : <RefreshCw size={14} />}
-            Sync xe
+            Sync vehicles
           </button>
           <button onClick={loadModels} className="p-2.5 rounded-xl border border-gray-200 dark:border-white/10 hover:bg-gray-100 dark:hover:bg-white/10 transition" title="Refresh list">
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
@@ -240,24 +240,24 @@ export default function VehicleModels() {
 
       {/* Convention note */}
       <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/8 px-5 py-4 mb-8 text-sm">
-        <p className="font-bold text-yellow-600 dark:text-yellow-400 mb-1.5">Quy tắc đặt tên Cloudinary</p>
+        <p className="font-bold text-yellow-600 dark:text-yellow-400 mb-1.5">Cloudinary naming rules</p>
         <p className="text-gray-700 dark:text-gray-300">
-          Public ID sẽ được tạo tự động:&nbsp;
+          Public ID will be generated automatically:&nbsp;
           <code className="font-mono bg-white/50 dark:bg-white/10 px-1.5 py-0.5 rounded">
             vehicles/&#123;brand&#125;/&#123;model&#125;
           </code>
         </p>
         <ul className="mt-2 space-y-0.5 text-gray-600 dark:text-gray-400 list-disc list-inside">
-          <li>Brand + Model sẽ được chuyển về dạng <em>lowercase-slug</em> (khoảng trắng → dấu gạch)</li>
+          <li>Brand + Model will be converted to <em>lowercase-slug</em> (spaces to hyphens)</li>
           <li>VD: <strong>Toyota</strong> + <strong>Land Cruiser</strong> → <code className="font-mono">vehicles/toyota/land-cruiser</code></li>
-          <li>Nếu để trống Model → dùng <code className="font-mono">default</code> (fallback cho cả hãng)</li>
+          <li>If Model is left blank -> use <code className="font-mono">default</code> (fallback for the whole brand)</li>
         </ul>
       </div>
 
       {/* Upload form */}
       <form onSubmit={handleUpload}
         className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] p-6 mb-8 shadow-sm">
-        <h2 className="text-base font-bold text-gray-800 dark:text-white mb-5">Upload model mới</h2>
+        <h2 className="text-base font-bold text-gray-800 dark:text-white mb-5">Upload new model</h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
           <div>
@@ -273,7 +273,7 @@ export default function VehicleModels() {
           </div>
           <div>
             <label className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-widest font-semibold mb-1 block">
-              Model <span className="text-gray-400">(bỏ trống = default)</span>
+              Model <span className="text-gray-400">(blank = default)</span>
             </label>
             <input
               value={model}
@@ -319,8 +319,8 @@ export default function VehicleModels() {
           ) : (
             <>
               <Upload size={28} className="text-gray-400" />
-              <p className="text-sm text-gray-500">Click để chọn file <strong>.glb</strong></p>
-              <p className="text-xs text-gray-400">Tối đa 50 MB</p>
+              <p className="text-sm text-gray-500">Click to choose a file <strong>.glb</strong></p>
+              <p className="text-xs text-gray-400">Maximum 50 MB</p>
             </>
           )}
         </div>
@@ -333,7 +333,7 @@ export default function VehicleModels() {
             text-black text-sm font-bold transition-colors"
         >
           {uploading ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
-          {uploading ? 'Đang upload…' : 'Upload Model'}
+          {uploading ? 'Uploading...' : 'Upload Model'}
         </button>
       </form>
 
@@ -341,7 +341,7 @@ export default function VehicleModels() {
       <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] shadow-sm overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-100 dark:border-white/8 flex items-center justify-between">
           <h2 className="text-base font-bold text-gray-800 dark:text-white">
-            Danh sách models ({models.length})
+            Model list ({models.length})
           </h2>
         </div>
 
@@ -352,7 +352,7 @@ export default function VehicleModels() {
         ) : models.length === 0 ? (
           <div className="flex flex-col items-center py-12 gap-3">
             <Car size={28} className="text-gray-300 dark:text-white/20" />
-            <p className="text-sm text-gray-500">Chưa có model nào</p>
+            <p className="text-sm text-gray-500">No models yet</p>
           </div>
         ) : (
           <ul className="divide-y divide-gray-100 dark:divide-white/[0.05]">
@@ -389,7 +389,7 @@ export default function VehicleModels() {
                 <button
                   onClick={() => setDeleteTarget(m.publicId)}
                   className="p-2 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition opacity-0 group-hover:opacity-100"
-                  title="Xóa"
+                  title="Delete"
                 >
                   <Trash2 size={15} />
                 </button>
@@ -412,7 +412,7 @@ export default function VehicleModels() {
               <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
                 <AlertCircle size={18} className="text-red-500" />
               </div>
-              <p className="font-bold text-gray-900 dark:text-white">Xóa model này?</p>
+              <p className="font-bold text-gray-900 dark:text-white">Delete this model?</p>
             </div>
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 font-mono bg-gray-100 dark:bg-white/8 rounded-lg px-3 py-2">
               {deleteTarget}
@@ -420,11 +420,11 @@ export default function VehicleModels() {
             <div className="flex gap-3">
               <button onClick={() => setDeleteTarget(null)}
                 className="flex-1 py-2.5 rounded-xl border border-gray-300 dark:border-white/15 text-sm font-semibold hover:bg-gray-50 dark:hover:bg-white/5 transition">
-                Hủy
+                Cancel
               </button>
               <button onClick={handleDelete}
                 className="flex-1 py-2.5 rounded-xl bg-red-500 hover:bg-red-400 text-white text-sm font-bold transition">
-                Xóa
+                Delete
               </button>
             </div>
           </div>

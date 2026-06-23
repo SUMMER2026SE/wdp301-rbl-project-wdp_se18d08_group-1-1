@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { normalizeLicensePlate } = require('../utils/licensePlateUtils');
 
 const sessionSchema = new mongoose.Schema(
   {
@@ -61,8 +62,22 @@ const sessionSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    ticketPackageId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'TicketPackage',
+      default: null,
+    },
   },
   { timestamps: true }
 );
+
+sessionSchema.pre('validate', function normalizePlate(next) {
+  if (this.licensePlate) {
+    this.licensePlate = normalizeLicensePlate(this.licensePlate);
+  }
+  next();
+});
+
+sessionSchema.index({ licensePlate: 1, status: 1, checkInTime: 1 });
 
 module.exports = mongoose.model('Session', sessionSchema);

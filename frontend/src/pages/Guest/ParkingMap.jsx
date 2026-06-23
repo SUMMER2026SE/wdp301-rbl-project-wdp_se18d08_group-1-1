@@ -99,10 +99,10 @@ export default function ParkingMap() {
 
   const getStatusLabel = (status) => {
     const map = {
-      available: 'Trống',
-      occupied: 'Đã đỗ',
-      reserved: 'Đã đặt trước',
-      maintenance: 'Bảo trì',
+      available: 'Available',
+      occupied: 'Occupied',
+      reserved: 'Reserved',
+      maintenance: 'Maintenance',
     };
     return map[status] || status;
   };
@@ -134,22 +134,22 @@ export default function ParkingMap() {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
               </span>
-              Cập nhật trực tiếp thời gian thực
+              Live real-time updates
             </p>
           </div>
 
           <div className="flex gap-4">
             <div className="bg-white px-5 py-3 rounded-2xl shadow-sm border border-gray-100 flex flex-col items-center min-w-[120px]">
               <span className="text-3xl font-black text-gray-900">{totalSlots}</span>
-              <span className="text-xs font-bold text-gray-400 uppercase tracking-wider mt-1">Tổng chỗ</span>
+              <span className="text-xs font-bold text-gray-400 uppercase tracking-wider mt-1">Total spaces</span>
             </div>
             <div className="bg-emerald-50 px-5 py-3 rounded-2xl border border-emerald-100 flex flex-col items-center min-w-[120px] shadow-[0_4px_20px_rgba(16,185,129,0.1)]">
               <span className="text-3xl font-black text-emerald-600">{availableSlots}</span>
-              <span className="text-xs font-bold text-emerald-500 uppercase tracking-wider mt-1">Trống</span>
+              <span className="text-xs font-bold text-emerald-500 uppercase tracking-wider mt-1">Available</span>
             </div>
             <div className="bg-gray-100 px-5 py-3 rounded-2xl border border-gray-200 flex flex-col items-center min-w-[120px]">
               <span className="text-3xl font-black text-gray-500">{occupiedSlots}</span>
-              <span className="text-xs font-bold text-gray-400 uppercase tracking-wider mt-1">Đã đầy</span>
+              <span className="text-xs font-bold text-gray-400 uppercase tracking-wider mt-1">Full</span>
             </div>
           </div>
         </div>
@@ -158,28 +158,28 @@ export default function ParkingMap() {
         <div className="flex flex-wrap items-center gap-6 mb-8 bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
           <div className="flex items-center gap-2 text-sm font-semibold text-gray-600">
             <div className="w-4 h-4 rounded-md border border-emerald-400 bg-emerald-50"></div>
-            Standard (Trống)
+            Standard (Available)
           </div>
           <div className="flex items-center gap-2 text-sm font-semibold text-gray-600">
             <div className="w-4 h-4 rounded-md border border-gold bg-gold/10"></div>
-            VIP (Trống)
+            VIP (Available)
           </div>
           <div className="flex items-center gap-2 text-sm font-semibold text-gray-600">
             <div className="w-4 h-4 rounded-md border border-blue-400 bg-blue-50"></div>
-            EV Charging (Trống)
+            EV Charging (Available)
           </div>
           <div className="w-px h-6 bg-gray-200 mx-2 hidden sm:block"></div>
           <div className="flex items-center gap-2 text-sm font-semibold text-gray-400">
             <div className="w-4 h-4 rounded-md border border-gray-300 bg-gray-100"></div>
-            Đã có xe
+            Occupied
           </div>
           <div className="flex items-center gap-2 text-sm font-semibold text-gray-400">
             <div className="w-4 h-4 rounded-md border border-amber-300 bg-amber-100"></div>
-            Đã đặt trước
+            Reserved
           </div>
           <div className="flex items-center gap-2 text-sm font-semibold text-gray-400">
             <div className="w-4 h-4 rounded-md border border-red-200 bg-red-50"></div>
-            Bảo trì
+            Maintenance
           </div>
         </div>
 
@@ -325,15 +325,15 @@ function SlotCard({ slot, idx, onHover, isHovered, onClick, colorClass, typeIcon
         </div>
         <div className="space-y-1.5">
           <div className="flex items-center justify-between text-xs">
-            <span className="text-gray-500">Trạng thái</span>
+            <span className="text-gray-500">Status</span>
             <span className="font-semibold text-gray-800">{statusLabel}</span>
           </div>
           <div className="flex items-center justify-between text-xs">
-            <span className="text-gray-500">Loại ô</span>
+            <span className="text-gray-500">Slot type</span>
             <span className="font-semibold text-gray-800 uppercase">{slot.type}</span>
           </div>
           <div className="flex items-center justify-between text-xs">
-            <span className="text-gray-500">Giá vé</span>
+            <span className="text-gray-500">Ticket price</span>
             <span className="font-bold text-gold-dark">{slot.price}</span>
           </div>
         </div>
@@ -342,7 +342,7 @@ function SlotCard({ slot, idx, onHover, isHovered, onClick, colorClass, typeIcon
           <div className="mt-3 pt-2 border-t border-gray-100 text-center">
             <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest flex items-center justify-center gap-1">
               <CheckCircle2 size={12} />
-              Nhấn để đặt ngay
+              Click to book now
             </span>
           </div>
         )}
@@ -350,7 +350,7 @@ function SlotCard({ slot, idx, onHover, isHovered, onClick, colorClass, typeIcon
           <div className="mt-3 pt-2 border-t border-gray-100 text-center">
             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest flex items-center justify-center gap-1">
               <Lock size={12} />
-              Không thể đặt
+              Cannot book
             </span>
           </div>
         )}

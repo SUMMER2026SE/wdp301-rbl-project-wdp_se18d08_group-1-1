@@ -123,8 +123,8 @@ const store = persist(
 
   syncOnReconnect: () => {
     get().addNotification({
-      title: "Kết nối lại",
-      message: "Đồng bộ thông báo khi socket kết nối lại.",
+      title: "Reconnected",
+      message: "Sync notifications when the socket reconnects.",
       priority: PRIORITY.SYSTEM,
       target: { type: "system" },
       channels: ["In-app"],
@@ -158,7 +158,7 @@ const store = persist(
       title: `[${rule.group}] ${rule.name}`,
       message:
         payload.message ||
-        `Sự kiện tự động ${rule.name} đã được kích hoạt và gửi qua các kênh ${rule.channels.join(", ")}.`,
+        `Automation event ${rule.name}  was triggered and sent through channels ${rule.channels.join(", ")}.`,
       priority: PRIORITY.INFO,
       target: { type: "system" },
       channels: rule.channels,

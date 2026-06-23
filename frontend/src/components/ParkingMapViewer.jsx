@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react';
 import { Maximize, Car, Zap, Accessibility, Bike, Info, TreePine, ArrowRight, Navigation, Layers, MonitorSmartphone } from 'lucide-react';
 
 const SlotElement = React.memo(({ el, floorId, style, isOccupied, isSelected, isMaintenance, session, onSelectSlot, is2DMode }) => {
@@ -37,8 +37,18 @@ const SlotElement = React.memo(({ el, floorId, style, isOccupied, isSelected, is
     textColor = '#06b6d4';
   }
 
+  const slotStatusLabel = isMaintenance
+    ? `${slotName}: Maintenance`
+    : isOccupied
+      ? `${slotName}: Occupied${session?.licensePlate ? ` - ${session.licensePlate}` : ''}`
+      : hasName
+        ? `${slotName}: Available`
+        : 'Unavailable slot';
+
   return (
     <div
+      title={slotStatusLabel}
+      aria-label={slotStatusLabel}
       style={{
         ...style,
         ...maintenanceStyle,
@@ -63,11 +73,13 @@ const SlotElement = React.memo(({ el, floorId, style, isOccupied, isSelected, is
   );
 });
 
-export default function ParkingMapViewer({ floors, currentFloorId, onFloorSelect, activeSessions = [], dbSlots = [], onSelectSlot, selectedSlotId, is2DMode = false, hideUI = false }) {
+export default function ParkingMapViewer({ floors, currentFloorId, onFloorSelect, activeSessions = [], dbSlots = [], onSelectSlot, selectedSlotId, is2DMode = false, hideUI = false, theme = 'dark', initialZoom, staticFit = false }) {
+  const isLight = theme === 'light';
+
   const [camera, setCamera] = useState(
     is2DMode
-      ? { rotX: 0, rotZ: 0, panX: 0, panY: 0, zoom: 0.55 }
-      : { rotX: 60, rotZ: -30, panX: 0, panY: 0, zoom: 0.7 }
+      ? { rotX: 0, rotZ: 0, panX: 0, panY: 0, zoom: initialZoom || 0.65 }
+      : { rotX: 60, rotZ: -30, panX: 0, panY: 0, zoom: initialZoom || 0.7 }
   );
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState(null);
@@ -94,12 +106,82 @@ export default function ParkingMapViewer({ floors, currentFloorId, onFloorSelect
     }
   }, [onSelectSlot]);
 
+  // Auto-fit bounds
+  useEffect(() => {
+    if (!staticFit || !is2DMode || !floors || floors.length === 0 || !containerRef.current) return;
+
+    const currentFloor = floors.find(f => f._id === currentFloorId);
+    let elements = [];
+    let parsedLayout = {};
+    try {
+      parsedLayout = typeof currentFloor?.layoutData === 'string' ? JSON.parse(currentFloor.layoutData) : (currentFloor?.layoutData || {});
+      elements = parsedLayout.elements || [];
+    } catch (e) {
+      parsedLayout = {};
+      elements = [];
+    }
+    if (elements.length === 0) return;
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    elements.forEach(el => {
+      const x = parseFloat(el.x);
+      const y = parseFloat(el.y);
+      const w = parseFloat(el.w || 0);
+      const h = parseFloat(el.h || 0);
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x + w > maxX) maxX = x + w;
+      if (y + h > maxY) maxY = y + h;
+    });
+
+    if (minX === Infinity) return;
+
+    const mapWidth = parsedLayout.width || (maxX - minX);
+    const mapHeight = parsedLayout.height || (maxY - minY);
+
+    const updateCamera = () => {
+      if (!containerRef.current) return;
+      const containerWidth = containerRef.current.clientWidth;
+      const containerHeight = containerRef.current.clientHeight;
+      if (containerWidth < 50 || containerHeight < 50) return; // Wait for layout
+
+      const padding = 20;
+      const safeWidth = Math.max(10, containerWidth - padding * 2);
+      const safeHeight = Math.max(10, containerHeight - padding * 2);
+      const scaleX = safeWidth / Math.max(1, mapWidth);
+      const scaleY = safeHeight / Math.max(1, mapHeight);
+      const targetZoom = Math.max(0.1, Math.min(scaleX, scaleY, 2));
+
+      setCamera(prev => {
+        // Only update if changed to avoid infinite loop
+        if (prev.zoom === targetZoom && prev.panX === 0 && prev.panY === 0) return prev;
+        return {
+          rotX: 0,
+          rotZ: 0,
+          panX: 0,
+          panY: 0,
+          zoom: targetZoom
+        };
+      });
+    };
+
+    updateCamera();
+    
+    // Auto update when container resizes
+    const observer = new ResizeObserver(() => {
+      updateCamera();
+    });
+    observer.observe(containerRef.current);
+
+    return () => observer.disconnect();
+  }, [currentFloorId, floors, is2DMode, staticFit]);
+
   // --- MOUSE CONTROLS ---
   const handleMouseDown = (e) => {
-    if (is2DMode) return; // Completely disable dragging in 2D mode
+    if (staticFit) return;
     setIsDragging(true);
     let action = 'orbit';
-    if (e.button === 2 || e.button === 1 || e.shiftKey) {
+    if (e.button === 2 || e.button === 1 || e.shiftKey || is2DMode) {
       action = 'pan';
     }
     setDragStart({ x: e.clientX, y: e.clientY, action, startCamera: { ...camera } });
@@ -152,10 +234,10 @@ export default function ParkingMapViewer({ floors, currentFloorId, onFloorSelect
         const bgColors = { purple: 'rgba(168,85,247,0.1)', emerald: 'rgba(16,185,129,0.1)', blue: 'rgba(59,130,246,0.1)', amber: 'rgba(245,158,11,0.1)' };
 
         return (
-          <div key={el.id} style={{ ...style, transform: `translateZ(2px) rotateZ(${el.rot || 0}deg)`, borderColor: borderColors[themeColor] || '#a855f7', backgroundColor: bgColors[themeColor] || 'rgba(168,85,247,0.1)' }} className="p-4 border-[2px] border-solid shadow-md rounded-xl flex flex-col pointer-events-none">
+          <div key={el.id} style={{ ...style, transform: `translateZ(2px) rotateZ(${el.rot || 0}deg)`, borderColor: borderColors[themeColor] || '#a855f7', backgroundColor: bgColors[themeColor] || 'rgba(168,85,247,0.1)' }} className="border-[2px] border-solid shadow-md rounded-xl pointer-events-none">
             {el.name && el.name.trim() !== '' && (
-              <div className="flex items-center justify-between mb-3 border-b-2 pb-2" style={{ borderColor: borderColors[themeColor] || '#a855f7' }}>
-                <div className="flex items-center gap-2" style={{ color: borderColors[themeColor] || '#a855f7' }}><h3 className="font-bold tracking-widest text-xs uppercase">{el.name}</h3></div>
+              <div className="absolute -top-4 left-4 px-3 py-1 bg-white border-[2px] border-solid rounded-full shadow-md flex items-center justify-center" style={{ borderColor: borderColors[themeColor] || '#a855f7', transform: 'translateZ(10px)' }}>
+                <span className="font-black tracking-widest text-[10px] uppercase leading-none" style={{ color: borderColors[themeColor] || '#a855f7' }}>{el.name}</span>
               </div>
             )}
           </div>
@@ -168,7 +250,7 @@ export default function ParkingMapViewer({ floors, currentFloorId, onFloorSelect
         const sessionKey = `${floorId}-${slotName}`;
         const occupiedSession = sessionMap[sessionKey];
         const isOccupied = !!occupiedSession;
-        const isSelected = selectedSlotId === slotName;
+        const isSelected = Array.isArray(selectedSlotId) ? selectedSlotId.includes(slotName) : selectedSlotId === slotName;
         const dbSlot = dbSlotMap[`${floorId}-${slotName}`];
         const isMaintenance = dbSlot?.status === 'maintenance';
 
@@ -297,15 +379,22 @@ export default function ParkingMapViewer({ floors, currentFloorId, onFloorSelect
     });
   };
 
+  const bgColor = isLight ? 'bg-[#f8fafc]' : 'bg-[#0b0e16]';
+  const gridColor = isLight ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.02)';
+  const panelBg = isLight ? 'bg-white/80 border-gray-200 shadow-sm' : 'bg-[#181c23]/80 border-white/10 shadow-lg';
+  const selectBg = isLight ? 'bg-white border-gray-200 text-gray-800 focus:border-gold focus:ring-1 focus:ring-gold' : 'bg-black/40 border-white/20 text-white';
+  const textColor = isLight ? 'text-gray-700' : 'text-white';
+  const headingColor = isLight ? 'text-gold' : 'text-cyan-400';
+
   return (
-    <div className="flex-1 w-full h-full relative overflow-hidden bg-[#0b0e16]"
-      style={{ backgroundImage: `linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px)`, backgroundSize: '30px 30px' }}>
+    <div className={`flex-1 w-full h-full relative overflow-hidden ${bgColor}`}
+      style={{ backgroundImage: `linear-gradient(${gridColor} 1px, transparent 1px), linear-gradient(90deg, ${gridColor} 1px, transparent 1px)`, backgroundSize: '30px 30px' }}>
 
       {/* Floor Selector */}
       {!hideUI && floors && floors.length > 0 && (
-        <div className="absolute top-4 left-4 z-50 flex items-center gap-4 bg-[#181c23]/80 backdrop-blur border border-white/10 p-2 rounded-xl shadow-lg">
+        <div className={`absolute top-4 left-4 z-[40] flex items-center gap-4 backdrop-blur border p-2 rounded-xl ${panelBg}`}>
           <select
-            className="bg-black/40 border border-white/20 rounded p-2 text-white text-sm outline-none font-bold min-w-[120px]"
+            className={`rounded-lg p-2.5 text-sm outline-none font-bold min-w-[120px] transition ${selectBg}`}
             value={currentFloorId || ""}
             onChange={(e) => onFloorSelect && onFloorSelect(e.target.value === "" ? null : e.target.value)}
           >
@@ -319,17 +408,17 @@ export default function ParkingMapViewer({ floors, currentFloorId, onFloorSelect
 
       {/* Legend */}
       {!hideUI && (
-        <div className="absolute bottom-4 left-4 z-50 flex flex-col gap-2 bg-[#181c23]/80 backdrop-blur border border-white/10 p-4 rounded-xl shadow-lg text-xs text-white">
-          <h4 className="font-bold mb-2 text-cyan-400">Status Legend</h4>
-          <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-white border-2 border-slate-400"></div> Available</div>
-          <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-red-100 border-2 border-red-500"></div> Occupied</div>
-          <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-cyan-100 border-2 border-cyan-500"></div> Selected</div>
-          <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-red-200 border-2 border-red-500" style={{ backgroundImage: 'repeating-linear-gradient(45deg, rgba(239, 68, 68, 0.2), rgba(239, 68, 68, 0.2) 4px, rgba(127, 29, 29, 0.3) 4px, rgba(127, 29, 29, 0.3) 8px)' }}></div> Maintenance</div>
+        <div className={`absolute bottom-4 left-4 z-[40] flex flex-col gap-2 backdrop-blur border p-4 rounded-xl text-xs ${panelBg} ${textColor}`}>
+          <h4 className={`font-black mb-2 uppercase tracking-wider text-[10px] ${headingColor}`}>Status Legend</h4>
+          <div className="flex items-center gap-2 font-semibold"><div className="w-4 h-4 rounded-md bg-white border-2 border-slate-400"></div> Available</div>
+          <div className="flex items-center gap-2 font-semibold"><div className="w-4 h-4 rounded-md bg-red-100 border-2 border-red-500"></div> Occupied</div>
+          <div className="flex items-center gap-2 font-semibold"><div className="w-4 h-4 rounded-md bg-cyan-100 border-2 border-cyan-500"></div> Selected</div>
+          <div className="flex items-center gap-2 font-semibold"><div className="w-4 h-4 rounded-md bg-red-200 border-2 border-red-500" style={{ backgroundImage: 'repeating-linear-gradient(45deg, rgba(239, 68, 68, 0.2), rgba(239, 68, 68, 0.2) 4px, rgba(127, 29, 29, 0.3) 4px, rgba(127, 29, 29, 0.3) 8px)' }}></div> Maintenance</div>
         </div>
       )}
 
       {!hideUI && !is2DMode && (
-        <div className="absolute top-4 right-4 z-50 text-white/40 text-[10px] text-right pointer-events-none">
+        <div className="absolute top-4 right-4 z-[40] text-white/40 text-[10px] text-right pointer-events-none">
           <p><strong>Left Click + Drag</strong>: Orbit</p>
           <p><strong>Right Click + Drag</strong>: Pan</p>
         </div>
@@ -376,15 +465,15 @@ export default function ParkingMapViewer({ floors, currentFloorId, onFloorSelect
                   pointerEvents = 'none';
                 } else {
                   if (isAbove) {
-                    targetZ = 800; // Tầng trên: bay về phía camera (Zoom in) & mờ đi
+                    targetZ = 800; // Upper floor: moves toward the camera (zoom in) and fades out
                     targetOpacity = 0;
                     pointerEvents = 'none';
                   } else if (isBelow) {
-                    targetZ = -800; // Tầng dưới: bay ra xa camera (Zoom out) & mờ đi
+                    targetZ = -800; // Lower floor: moves away from the camera (zoom out) and fades out
                     targetOpacity = 0;
                     pointerEvents = 'none';
                   } else {
-                    targetZ = 0; // Tầng hiện tại: ở giữa
+                    targetZ = 0; // Current floor: centered
                   }
                 }
               } else {
@@ -426,10 +515,12 @@ export default function ParkingMapViewer({ floors, currentFloorId, onFloorSelect
                     }
                   }}
                 >
-                  <div className="absolute -top-12 left-10 text-cyan-400/80 font-black text-3xl tracking-widest uppercase drop-shadow-xl transition-all duration-1000"
-                    style={{ transform: 'translateZ(20px)', opacity: isCurrent || isOverview ? 1 : 0.5 }}>
-                    {floor.name}
-                  </div>
+                  {!is2DMode && (
+                    <div className="absolute -top-12 left-10 text-cyan-400/80 font-black text-3xl tracking-widest uppercase drop-shadow-xl transition-all duration-1000"
+                      style={{ transform: 'translateZ(20px)', opacity: isCurrent || isOverview ? 1 : 0.5 }}>
+                      {floor.name}
+                    </div>
+                  )}
                   <div className="absolute inset-0 rounded-[2rem] pointer-events-none opacity-20"
                     style={{ backgroundImage: `linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)`, backgroundSize: '40px 40px' }} />
                   {renderDynamicElements(floor.layoutData?.elements, floor._id)}

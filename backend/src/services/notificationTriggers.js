@@ -48,7 +48,7 @@ async function isRuleEnabled(eventKey) {
   }
 }
 
-// â”€â”€â”€ Helper: check enabled + throttle for a rule â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Helper: check enabled + throttle for a rule
 async function shouldTriggerRule(eventKey, userId = null, eventType = null) {
   try {
     const rule = await NotificationRule.findOne({ eventKey });
