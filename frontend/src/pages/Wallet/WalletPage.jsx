@@ -25,6 +25,7 @@ import {
   getTransactionsHistory,
   getWalletInfo,
 } from "../../services/walletService";
+import { clearAuthSession } from "../../services/authStorage";
 
 const DEFAULT_TRANSACTION_LIMIT = 6;
 const ALL_TRANSACTION_LIMIT = 50;
@@ -121,9 +122,7 @@ export default function WalletPage() {
         ]);
 
         if (walletRes.status === 401 || transactionsRes.status === 401) {
-          localStorage.removeItem("accessToken");
-          localStorage.removeItem("refreshToken");
-          sessionStorage.removeItem("valo_user");
+          clearAuthSession();
           window.location.href = "/login";
           return;
         }
@@ -140,7 +139,11 @@ export default function WalletPage() {
 
         const walletData = walletRes.data?.data || {};
         setWallet(walletData);
-        setTransactions(transactionsRes.data?.data || []);
+        setTransactions(
+          Array.isArray(transactionsRes.data?.data)
+            ? transactionsRes.data.data
+            : [],
+        );
         window.dispatchEvent(
           new CustomEvent("valo_balance_change", {
             detail: walletData.balance || 0,
@@ -192,7 +195,9 @@ export default function WalletPage() {
     const intervalId = setInterval(async () => {
       try {
         const statusRes = await getTopUpStatus(pollingOrderCode);
-        const txStatus = statusRes.data?.data?.status;
+        if (!statusRes.ok) return;
+
+        const txStatus = String(statusRes.data?.data?.status || "").toUpperCase();
 
         if (["COMPLETED", "SUCCESS", "PAID"].includes(txStatus)) {
           clearInterval(intervalId);
@@ -202,7 +207,7 @@ export default function WalletPage() {
           fetchWalletData();
         }
 
-        if (["CANCELLED", "FAILED"].includes(txStatus)) {
+        if (["CANCELLED", "CANCELED", "FAILED"].includes(txStatus)) {
           clearInterval(intervalId);
           setPollingOrderCode(null);
           setVerifyingPayment(false);
@@ -656,8 +661,7 @@ function TopUpModal({ wallet, onClose, onStartPolling }) {
     try {
       const res = await createTopUpUrl(numericAmount);
       if (res.status === 401) {
-        localStorage.removeItem("accessToken");
-        localStorage.removeItem("refreshToken");
+        clearAuthSession();
         window.location.href = "/login";
         return;
       }
@@ -671,7 +675,7 @@ function TopUpModal({ wallet, onClose, onStartPolling }) {
       alert(res.data?.message || "Unable to create top-up session");
     } catch (err) {
       console.error(err);
-      alert("Network error");
+      alert("Cannot connect to the server. Please check that the backend is running.");
     } finally {
       setLoading(false);
     }

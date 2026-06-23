@@ -24,21 +24,21 @@ useGLTF.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/'
 function CarModel({ modelUrl, carColor }) {
   const { scene } = useGLTF(modelUrl);
   const bounds = useBounds();
-  // Ref để gọi bounds.refresh().fit() đúng 1 lần sau khi model load,
-  // không đưa bounds vào dependency array (bounds thay đổi reference mỗi render).
+  // Ref to call bounds.refresh().fit() once after the model loads,
+  // do not put bounds in the dependency array because bounds changes reference every render.
   const boundsRef = useRef(bounds);
   boundsRef.current = bounds;
 
-  // ── Cleanup khi model thay đổi hoặc unmount ──────────────────────────────────
+  // ── Cleanup when the model changes or unmounts ──────────────────────────────────
   useEffect(() => {
     return () => {
       useGLTF.clear(modelUrl);
     };
   }, [modelUrl]);
 
-  // ── Effect 1: Scale + ground — chỉ chạy khi scene (model) thay đổi ─────────
-  // KHÔNG đưa bounds vào dependency: bounds tạo reference mới mỗi render,
-  // nếu đưa vào thì effect chạy lại liên tục → xe giật lên giật xuống.
+  // ── Effect 1: Scale + ground — only runs when the scene/model changes ─────────
+  // DO NOT put bounds in dependencies: bounds creates a new reference every render,
+  // if added, the effect runs continuously and the vehicle jitters.
   useEffect(() => {
     scene.scale.set(1, 1, 1);
     scene.position.set(0, 0, 0);
@@ -50,19 +50,19 @@ function CarModel({ modelUrl, carColor }) {
       scene.scale.setScalar(MODEL_TARGET_SIZE / maxDim);
     }
 
-    // Ground: đáy xe về Y = 0
+    // Ground:  Ground vehicle bottom to Y = 0
     const boxAfterScale = new THREE.Box3().setFromObject(scene);
     scene.position.y = -boxAfterScale.min.y;
 
-    // Đọc bounds qua ref → không cần bounds trong dependency array
+    // Read bounds through the ref so bounds is not needed in the dependency array
     boundsRef.current.refresh().fit();
 
-    // Dịch model xuống dưới trong world space (sau khi camera đã fit xong)
-    // → xe hiện ở phần dưới canvas thay vì giữa màn hình.
+    // Move the model downward in world space after the camera has fit
+    // → the vehicle appears in the lower part of the canvas instead of the center.
     scene.position.y -= 0.6;
-  }, [scene]); // ← chỉ scene, không có bounds
+  }, [scene]); // ← scene only, no bounds
 
-  // ── Effect 2: Tint màu — chỉ chạy khi carColor thay đổi ──────────────────
+  // ── Effect 2: Color tint - only runs when carColor changes ──────────────────
   useEffect(() => {
     const allMaterials = new Set();
     scene.traverse((child) => {
@@ -110,7 +110,7 @@ function LoadingFallback() {
           userSelect: 'none',
         }}
       >
-        Đang tải mô hình 3D…
+        Loading 3D model...
       </p>
     </Html>
   );

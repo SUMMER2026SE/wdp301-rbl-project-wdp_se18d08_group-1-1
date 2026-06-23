@@ -3,6 +3,8 @@
  * All service files should import from here.
  */
 
+import { clearAuthSession, notifyAuthChange } from "./authStorage";
+
 export const API_BASE =
   import.meta.env.VITE_API_BASE_URL ?? "http://localhost:5001/api";
 
@@ -38,15 +40,12 @@ async function refreshToken() {
       const data = await response.json();
       if (data.data && data.data.accessToken) {
         localStorage.setItem("accessToken", data.data.accessToken);
-        window.dispatchEvent(new Event("valo_auth_change"));
+        notifyAuthChange();
         return data.data.accessToken;
       }
       throw new Error("No access token in response");
     } catch (error) {
-      // Clear tokens and redirect to login
-      localStorage.removeItem("accessToken");
-      localStorage.removeItem("refreshToken");
-      sessionStorage.removeItem("valo_user");
+      clearAuthSession();
       window.location.href = "/login";
       throw error;
     } finally {
@@ -71,12 +70,34 @@ async function refreshToken() {
 export async function apiFetch(endpoint, options = {}, _isRetry = false) {
   const { headers = {}, ...rest } = options;
 
-  const res = await fetch(`${API_BASE}${endpoint}`, {
-    headers: { "Content-Type": "application/json", ...headers },
-    ...rest,
-  });
+  let res;
+  try {
+    res = await fetch(`${API_BASE}${endpoint}`, {
+      headers: { "Content-Type": "application/json", ...headers },
+      ...rest,
+    });
+  } catch (error) {
+    return {
+      ok: false,
+      status: 0,
+      data: {
+        success: false,
+        message:
+          "Cannot connect to the server. Please check that the backend is running.",
+      },
+      error,
+    };
+  }
 
-  const data = await res.json();
+  let data;
+  try {
+    data = await res.json();
+  } catch {
+    data = {
+      success: res.ok,
+      message: res.ok ? "OK" : `Request failed with status ${res.status}`,
+    };
+  }
 
   // If we get a 401 and we haven't already retried, try to refresh the token
   if (res.status === 401 && !_isRetry && endpoint !== "/auth/refresh-token") {

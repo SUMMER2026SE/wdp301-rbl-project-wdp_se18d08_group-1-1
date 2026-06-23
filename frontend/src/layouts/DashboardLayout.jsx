@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { apiFetch } from "../services/api";
+import { logoutUser } from "../services/authService";
+import { clearAuthSession, notifyAuthChange } from "../services/authStorage";
 import logoImg from "../assets/images/logo.png";
 import { useNotifications } from "../hooks/useNotifications";
 import { formatDistanceToNow } from "date-fns";
@@ -27,6 +29,7 @@ import {
   FileWarning,
   ClipboardList,
   BookOpen,
+  CalendarCheck,
   SlidersHorizontal,
   // Common
   Bell,
@@ -60,7 +63,7 @@ const NAV_CONFIG = {
     },
     { label: "Services", icon: <Wrench size={18} />, to: "/admin/services" },
     {
-      label: "Quản lý xe & 3D",
+      label: "Vehicles & 3D",
       icon: <Car size={18} />,
       to: "/admin/vehicle-models",
     },
@@ -137,6 +140,11 @@ const NAV_CONFIG = {
     { label: "Home", icon: <Home size={18} />, to: "/" },
     { label: "Profile", icon: <User size={18} />, to: "/profile" },
     { label: "My Vehicles", icon: <Car size={18} />, to: "/customer/vehicles" },
+    {
+      label: "My Bookings",
+      icon: <CalendarCheck size={18} />,
+      to: "/customer/booking",
+    },
     { label: "History", icon: <History size={18} />, to: "/customer/history" },
     { label: "Wallet", icon: <Wallet size={18} />, to: "/customer/wallet" },
     {
@@ -222,11 +230,12 @@ export default function DashboardLayout() {
       window.removeEventListener("valo_auth_change", handleAuthChange);
   }, []);
 
-  // Fetch profile if avatar is missing
+  // Fetch profile if avatar or membership metadata is missing
   useEffect(() => {
     const fetchProfileAvatar = async () => {
       if (!user || Object.keys(user).length === 0) return;
-      if (user.avatar || user.profile?.avatar || user.avatarUrl) return; // already has it
+      const needsProfile = !user.profile || (user.membership?.isVip && !user.membership?.packageType);
+      if (!needsProfile) return;
 
       const token = localStorage.getItem("accessToken");
       if (!token) return;
@@ -237,18 +246,18 @@ export default function DashboardLayout() {
         });
         if (ok && data?.success) {
           const freshAvatar = data.data.profile?.avatar || "";
-          if (freshAvatar) {
-            const updatedUser = {
-              ...user,
-              ...data.data,
-              avatar: freshAvatar,
-            };
-            sessionStorage.setItem("valo_user", JSON.stringify(updatedUser));
-            setUser(updatedUser);
-            window.dispatchEvent(new Event("valo_auth_change"));
-          }
+          const updatedUser = {
+            ...user,
+            ...data.data,
+            avatar: freshAvatar || user.avatar || user.profile?.avatar || user.avatarUrl || "",
+          };
+          sessionStorage.setItem("valo_user", JSON.stringify(updatedUser));
+          setUser(updatedUser);
+          notifyAuthChange();
         }
-      } catch (e) {}
+      } catch {
+        // Profile enrichment is best-effort; keep the cached user if it fails.
+      }
     };
 
     fetchProfileAvatar();
@@ -264,16 +273,18 @@ export default function DashboardLayout() {
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
-  const handleLogout = () => {
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("refreshToken");
-    sessionStorage.removeItem("valo_user");
-    window.dispatchEvent(new Event("valo_auth_change"));
+  const handleLogout = async () => {
+    try {
+      await logoutUser();
+    } catch {
+      // Still clear local auth state if the server logout request fails.
+    }
+    clearAuthSession();
     navigate("/login");
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-[#0D0D0D] flex font-sans transition-colors duration-300">
+    <div className="h-screen overflow-hidden bg-gray-100 dark:bg-[#0D0D0D] flex font-sans transition-colors duration-300">
       {/* ══════════ SIDEBAR ══════════ */}
       <aside
         className={`

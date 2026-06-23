@@ -24,7 +24,7 @@ export default function OAuthCallback() {
   return (
     <div className="min-h-screen bg-charcoal flex items-center justify-center">
       <p className="text-white text-sm font-medium animate-pulse">
-        Đang xử lý đăng nhập Google…
+        Processing Google login...
       </p>
     </div>
   );

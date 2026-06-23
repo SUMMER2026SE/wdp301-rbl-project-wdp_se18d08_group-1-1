@@ -2,6 +2,11 @@ const mongoose = require("mongoose");
 
 const parkingFloorSchema = new mongoose.Schema(
   {
+    parkingLotID: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ParkingLot",
+      // required: true, // We will keep it optional for backwards compatibility during dev, but typically should be true
+    },
     floorNumber: {
       type: Number,
       required: true,

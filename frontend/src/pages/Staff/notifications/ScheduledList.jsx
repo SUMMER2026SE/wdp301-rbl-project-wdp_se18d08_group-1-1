@@ -16,13 +16,13 @@ export default function ScheduledList({ scheduled, onCancel }) {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="text-sm text-yellow-400 uppercase tracking-[0.2em] font-semibold">
-            Lịch trình
+            Schedule
           </p>
           <h2 className="mt-2 text-2xl font-semibold text-white">
-            Danh sách thông báo đã lên lịch
+            Scheduled notification list
           </h2>
           <p className="mt-2 text-sm text-gray-400 max-w-2xl">
-            Xem các thông báo chưa gửi và quản lý thời gian xuất bản cho từng chiến dịch.
+            View unsent notifications and manage publish times for each campaign.
           </p>
         </div>
       </div>
@@ -31,8 +31,8 @@ export default function ScheduledList({ scheduled, onCancel }) {
         {scheduled.length === 0 ? (
           <div className="rounded-3xl border border-dashed border-white/10 bg-white/5 p-10 text-center text-gray-400">
             <Clock3 className="mx-auto mb-3 text-yellow-300" size={34} />
-            <p className="text-lg font-semibold text-white">Không có thông báo đã lên lịch</p>
-            <p className="mt-2 text-sm text-gray-500">Tạo lịch gửi mới trong tab Soạn để quản lý thông báo theo thời gian.</p>
+            <p className="text-lg font-semibold text-white">No scheduled notifications</p>
+            <p className="mt-2 text-sm text-gray-500">Create a new schedule in the Compose tab to manage timed notifications.</p>
           </div>
         ) : (
           scheduled.map((item) => (
@@ -49,10 +49,10 @@ export default function ScheduledList({ scheduled, onCancel }) {
                     </span>
                     <span className="rounded-full bg-gray-900/80 px-3 py-1 text-xs text-gray-400">
                       {item.target?.type === "all"
-                        ? "Toàn hệ thống"
+                        ? "System-wide"
                         : item.target?.type === "multi"
-                        ? "Nhiều khách hàng"
-                        : "Một khách hàng"}
+                        ? "Multiple customers"
+                        : "One customer"}
                     </span>
                   </div>
                   <h3 className="text-xl font-semibold text-white">{item.title}</h3>
@@ -65,14 +65,14 @@ export default function ScheduledList({ scheduled, onCancel }) {
                     className="inline-flex items-center gap-2 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-200 hover:bg-red-500/15"
                   >
                     <Trash2 size={16} />
-                    Hủy
+                    Cancel
                   </button>
                   <button
                     type="button"
                     className="inline-flex items-center gap-2 rounded-2xl bg-sky-500/15 px-4 py-3 text-sm font-semibold text-sky-200 hover:bg-sky-500/20"
                   >
                     <Play size={16} />
-                    Xem trước
+                    Preview
                   </button>
                 </div>
               </div>

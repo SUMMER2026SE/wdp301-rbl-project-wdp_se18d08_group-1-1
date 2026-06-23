@@ -12,11 +12,19 @@ const WalletTransaction = require('../models/WalletTransaction');
  * @param {string} userId - User's ObjectId
  * @returns {Object} Wallet document
  */
-const getOrCreateWallet = async (userId) => {
-  let wallet = await Wallet.findOne({ userId });
+const getOrCreateWallet = async (userId, options = {}) => {
+  const { session } = options;
+  let query = Wallet.findOne({ userId });
+  if (session) query = query.session(session);
+  let wallet = await query;
 
   if (!wallet) {
-    wallet = await Wallet.create({ userId });
+    if (session) {
+      const created = await Wallet.create([{ userId }], { session });
+      wallet = created[0];
+    } else {
+      wallet = await Wallet.create({ userId });
+    }
   }
 
   return wallet;
@@ -99,7 +107,7 @@ const getBalance = async (userId) => {
  * Credit wallet (add money) - Used for TOP_UP and REFUND
  * Uses MongoDB transactions for atomicity
  * @param {string} userId - User's ObjectId
- * @param {number} amount - Amount to add (VNĐ)
+ * @param {number} amount - Amount to add (VND)
  * @param {string} type - 'TOP_UP' or 'REFUND'
  * @param {string} description - Transaction description
  * @param {Object} [options] - Additional options
@@ -115,7 +123,7 @@ const creditWallet = async (userId, amount, type, description, options = {}) => 
   session.startTransaction();
 
   try {
-    const wallet = await getOrCreateWallet(userId);
+    const wallet = await getOrCreateWallet(userId, { session });
 
     // Check wallet status
     if (wallet.status === 'frozen') {
@@ -175,7 +183,7 @@ const creditWallet = async (userId, amount, type, description, options = {}) => 
  * Debit wallet (subtract money) - Used for PAYMENT
  * Uses MongoDB transactions for atomicity
  * @param {string} userId - User's ObjectId
- * @param {number} amount - Amount to subtract (VNĐ)
+ * @param {number} amount - Amount to subtract (VND)
  * @param {string} description - Transaction description
  * @param {Object} [options] - Additional options
  * @param {string} [options.refSource] - Reference source (e.g., 'parking', 'booking')
@@ -187,7 +195,7 @@ const debitWallet = async (userId, amount, description, options = {}) => {
   session.startTransaction();
 
   try {
-    const wallet = await getOrCreateWallet(userId);
+    const wallet = await getOrCreateWallet(userId, { session });
 
     // Check wallet status
     if (wallet.status === 'frozen') {

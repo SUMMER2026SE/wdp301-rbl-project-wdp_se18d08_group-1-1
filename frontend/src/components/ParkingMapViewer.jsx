@@ -1,22 +1,187 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo, useCallback, useEffect } from 'react';
 import { Maximize, Car, Zap, Accessibility, Bike, Info, TreePine, ArrowRight, Navigation, Layers, MonitorSmartphone } from 'lucide-react';
 
-export default function ParkingMapViewer({ floors, currentFloorId, onFloorSelect, activeSessions = [], onSelectSlot, selectedSlotId, is2DMode = false, hideUI = false }) {
+const SlotElement = React.memo(({ el, floorId, style, isOccupied, isSelected, isMaintenance, session, onSelectSlot, is2DMode }) => {
+  const slotName = el.name || el.id;
+  const hasName = !!el.name && el.name.trim() !== '';
+  const slotZ = isSelected ? 15 : 5;
+  const slotTransition = 'all 0.2s ease-in-out';
+
+  let baseBgColor = '#ffffff';
+  let baseBorderColor = '#94a3b8';
+  let textColor = '#64748b';
+  let Icon = Car;
+
+  if (el.type === 'slot-ev') { baseBgColor = '#ecfdf5'; baseBorderColor = '#10b981'; textColor = '#10b981'; Icon = Zap; }
+  if (el.type === 'slot-handicap') { baseBgColor = '#eff6ff'; baseBorderColor = '#3b82f6'; textColor = '#3b82f6'; Icon = Accessibility; }
+  if (el.type === 'slot-moto') { baseBgColor = '#fffbeb'; baseBorderColor = '#f59e0b'; textColor = '#f59e0b'; Icon = Bike; }
+
+  let finalBgColor = baseBgColor;
+  let finalBorderColor = baseBorderColor;
+
+  const maintenanceStyle = isMaintenance ? {
+    backgroundImage: 'repeating-linear-gradient(45deg, rgba(239, 68, 68, 0.2), rgba(239, 68, 68, 0.2) 10px, rgba(127, 29, 29, 0.3) 10px, rgba(127, 29, 29, 0.3) 20px)'
+  } : {};
+
+  if (isMaintenance) {
+    finalBgColor = '#fee2e2'; // red-100
+    finalBorderColor = '#ef4444'; // red-500
+    textColor = '#b91c1c'; // red-700
+  } else if (isOccupied) {
+    finalBgColor = '#fee2e2'; // red-100
+    finalBorderColor = '#ef4444'; // red-500
+    textColor = '#ef4444';
+  } else if (isSelected) {
+    finalBgColor = '#cffafe'; // cyan-100
+    finalBorderColor = '#06b6d4'; // cyan-500
+    textColor = '#06b6d4';
+  }
+
+  const slotStatusLabel = isMaintenance
+    ? `${slotName}: Maintenance`
+    : isOccupied
+      ? `${slotName}: Occupied${session?.licensePlate ? ` - ${session.licensePlate}` : ''}`
+      : hasName
+        ? `${slotName}: Available`
+        : 'Unavailable slot';
+
+  return (
+    <div
+      title={slotStatusLabel}
+      aria-label={slotStatusLabel}
+      style={{
+        ...style,
+        ...maintenanceStyle,
+        transform: `translateZ(${slotZ}px) rotateZ(${el.rot || 0}deg)`,
+        borderColor: finalBorderColor,
+        backgroundColor: finalBgColor,
+        transition: slotTransition,
+        cursor: (isOccupied || isMaintenance || !el.name || el.name.trim() === '') ? 'not-allowed' : 'pointer',
+        opacity: (!el.name || el.name.trim() === '') ? 0.3 : 1
+      }}
+      className={`border-[2px] border-solid rounded-lg shadow-sm flex flex-col items-center justify-center ${isSelected ? 'ring-4 ring-cyan-500/50 shadow-cyan-500/50' : ''}`}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (!el.name || el.name.trim() === '') return;
+        if (!isOccupied && !isMaintenance && onSelectSlot) {
+          onSelectSlot({ id: slotName, type: el.type }, floorId);
+        }
+      }}>
+      <span className="text-[10px] font-bold mb-1" style={{ color: textColor, transform: 'translateZ(2px)' }}>{hasName ? el.name : ''}</span>
+      <Icon size={20} style={{ color: textColor, transform: 'translateZ(5px)' }} />
+    </div>
+  );
+});
+
+export default function ParkingMapViewer({ floors, currentFloorId, onFloorSelect, activeSessions = [], dbSlots = [], onSelectSlot, selectedSlotId, is2DMode = false, hideUI = false, theme = 'dark', initialZoom, staticFit = false }) {
+  const isLight = theme === 'light';
+
   const [camera, setCamera] = useState(
     is2DMode
-      ? { rotX: 0, rotZ: 0, panX: 0, panY: 0, zoom: 0.55 }
-      : { rotX: 60, rotZ: -30, panX: 0, panY: 0, zoom: 0.7 }
+      ? { rotX: 0, rotZ: 0, panX: 0, panY: 0, zoom: initialZoom || 0.65 }
+      : { rotX: 60, rotZ: -30, panX: 0, panY: 0, zoom: initialZoom || 0.7 }
   );
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState(null);
   const containerRef = useRef(null);
 
+  // O(1) Lookup Map for Active Sessions
+  const sessionMap = useMemo(() => {
+    return activeSessions.reduce((acc, curr) => {
+      acc[`${curr.floorId}-${curr.parkingSlot}`] = curr;
+      return acc;
+    }, {});
+  }, [activeSessions]);
+
+  const dbSlotMap = useMemo(() => {
+    return dbSlots.reduce((acc, curr) => {
+      acc[`${curr.floorID}-${curr.slotNumber}`] = curr;
+      return acc;
+    }, {});
+  }, [dbSlots]);
+
+  const handleSelectSlot = useCallback((slot, floorId) => {
+    if (onSelectSlot) {
+      onSelectSlot(slot, floorId);
+    }
+  }, [onSelectSlot]);
+
+  // Auto-fit bounds
+  useEffect(() => {
+    if (!staticFit || !is2DMode || !floors || floors.length === 0 || !containerRef.current) return;
+
+    const currentFloor = floors.find(f => f._id === currentFloorId);
+    let elements = [];
+    let parsedLayout = {};
+    try {
+      parsedLayout = typeof currentFloor?.layoutData === 'string' ? JSON.parse(currentFloor.layoutData) : (currentFloor?.layoutData || {});
+      elements = parsedLayout.elements || [];
+    } catch (e) {
+      parsedLayout = {};
+      elements = [];
+    }
+    if (elements.length === 0) return;
+
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    elements.forEach(el => {
+      const x = parseFloat(el.x);
+      const y = parseFloat(el.y);
+      const w = parseFloat(el.w || 0);
+      const h = parseFloat(el.h || 0);
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x + w > maxX) maxX = x + w;
+      if (y + h > maxY) maxY = y + h;
+    });
+
+    if (minX === Infinity) return;
+
+    const mapWidth = parsedLayout.width || (maxX - minX);
+    const mapHeight = parsedLayout.height || (maxY - minY);
+
+    const updateCamera = () => {
+      if (!containerRef.current) return;
+      const containerWidth = containerRef.current.clientWidth;
+      const containerHeight = containerRef.current.clientHeight;
+      if (containerWidth < 50 || containerHeight < 50) return; // Wait for layout
+
+      const padding = 20;
+      const safeWidth = Math.max(10, containerWidth - padding * 2);
+      const safeHeight = Math.max(10, containerHeight - padding * 2);
+      const scaleX = safeWidth / Math.max(1, mapWidth);
+      const scaleY = safeHeight / Math.max(1, mapHeight);
+      const targetZoom = Math.max(0.1, Math.min(scaleX, scaleY, 2));
+
+      setCamera(prev => {
+        // Only update if changed to avoid infinite loop
+        if (prev.zoom === targetZoom && prev.panX === 0 && prev.panY === 0) return prev;
+        return {
+          rotX: 0,
+          rotZ: 0,
+          panX: 0,
+          panY: 0,
+          zoom: targetZoom
+        };
+      });
+    };
+
+    updateCamera();
+    
+    // Auto update when container resizes
+    const observer = new ResizeObserver(() => {
+      updateCamera();
+    });
+    observer.observe(containerRef.current);
+
+    return () => observer.disconnect();
+  }, [currentFloorId, floors, is2DMode, staticFit]);
+
   // --- MOUSE CONTROLS ---
   const handleMouseDown = (e) => {
-    if (is2DMode) return; // Completely disable dragging in 2D mode
+    if (staticFit) return;
     setIsDragging(true);
     let action = 'orbit';
-    if (e.button === 2 || e.button === 1 || e.shiftKey) {
+    if (e.button === 2 || e.button === 1 || e.shiftKey || is2DMode) {
       action = 'pan';
     }
     setDragStart({ x: e.clientX, y: e.clientY, action, startCamera: { ...camera } });
@@ -69,69 +234,39 @@ export default function ParkingMapViewer({ floors, currentFloorId, onFloorSelect
         const bgColors = { purple: 'rgba(168,85,247,0.1)', emerald: 'rgba(16,185,129,0.1)', blue: 'rgba(59,130,246,0.1)', amber: 'rgba(245,158,11,0.1)' };
 
         return (
-          <div key={el.id} style={{ ...style, transform: `translateZ(2px) rotateZ(${el.rot || 0}deg)`, borderColor: borderColors[themeColor] || '#a855f7', backgroundColor: bgColors[themeColor] || 'rgba(168,85,247,0.1)' }} className="p-4 border-[2px] border-solid shadow-md rounded-xl flex flex-col pointer-events-none">
-            <div className="flex items-center justify-between mb-3 border-b-2 pb-2" style={{ borderColor: borderColors[themeColor] || '#a855f7' }}>
-              <div className="flex items-center gap-2" style={{ color: borderColors[themeColor] || '#a855f7' }}><h3 className="font-bold tracking-widest text-xs uppercase">{el.name}</h3></div>
-            </div>
+          <div key={el.id} style={{ ...style, transform: `translateZ(2px) rotateZ(${el.rot || 0}deg)`, borderColor: borderColors[themeColor] || '#a855f7', backgroundColor: bgColors[themeColor] || 'rgba(168,85,247,0.1)' }} className="border-[2px] border-solid shadow-md rounded-xl pointer-events-none">
+            {el.name && el.name.trim() !== '' && (
+              <div className="absolute -top-4 left-4 px-3 py-1 bg-white border-[2px] border-solid rounded-full shadow-md flex items-center justify-center" style={{ borderColor: borderColors[themeColor] || '#a855f7', transform: 'translateZ(10px)' }}>
+                <span className="font-black tracking-widest text-[10px] uppercase leading-none" style={{ color: borderColors[themeColor] || '#a855f7' }}>{el.name}</span>
+              </div>
+            )}
           </div>
         );
       }
 
       // SLOT LOGIC
-      const isSlot = el.type && el.type.startsWith('slot');
-      if (isSlot) {
-        // Check if occupied
+      if (el.type && el.type.startsWith('slot')) {
         const slotName = el.name || el.id;
-        const occupiedSession = activeSessions.find(s => s.floorId === floorId && s.parkingSlot === slotName);
+        const sessionKey = `${floorId}-${slotName}`;
+        const occupiedSession = sessionMap[sessionKey];
         const isOccupied = !!occupiedSession;
-        const isSelected = selectedSlotId === slotName;
-
-        const slotZ = isSelected ? 15 : 5;
-        const slotTransition = 'all 0.2s ease-in-out';
-
-        // Default styling
-        let baseBgColor = '#ffffff';
-        let baseBorderColor = '#94a3b8';
-        let textColor = '#64748b';
-        let Icon = Car;
-
-        if (el.type === 'slot-ev') { baseBgColor = '#ecfdf5'; baseBorderColor = '#10b981'; textColor = '#10b981'; Icon = Zap; }
-        if (el.type === 'slot-handicap') { baseBgColor = '#eff6ff'; baseBorderColor = '#3b82f6'; textColor = '#3b82f6'; Icon = Accessibility; }
-        if (el.type === 'slot-moto') { baseBgColor = '#fffbeb'; baseBorderColor = '#f59e0b'; textColor = '#f59e0b'; Icon = Bike; }
-
-        let finalBgColor = baseBgColor;
-        let finalBorderColor = baseBorderColor;
-
-        if (isOccupied) {
-          finalBgColor = '#fee2e2'; // red-100
-          finalBorderColor = '#ef4444'; // red-500
-          textColor = '#ef4444';
-        } else if (isSelected) {
-          finalBgColor = '#cffafe'; // cyan-100
-          finalBorderColor = '#06b6d4'; // cyan-500
-          textColor = '#06b6d4';
-        }
+        const isSelected = Array.isArray(selectedSlotId) ? selectedSlotId.includes(slotName) : selectedSlotId === slotName;
+        const dbSlot = dbSlotMap[`${floorId}-${slotName}`];
+        const isMaintenance = dbSlot?.status === 'maintenance';
 
         return (
-          <div key={el.id}
-            style={{
-              ...style,
-              transform: `translateZ(${slotZ}px) rotateZ(${el.rot || 0}deg)`,
-              borderColor: finalBorderColor,
-              backgroundColor: finalBgColor,
-              transition: slotTransition,
-              cursor: isOccupied ? 'not-allowed' : 'pointer'
-            }}
-            className={`border-[2px] border-solid rounded-lg shadow-sm flex flex-col items-center justify-center ${isSelected ? 'ring-4 ring-cyan-500/50 shadow-cyan-500/50' : ''}`}
-            onClick={(e) => {
-              e.stopPropagation();
-              if (!isOccupied && onSelectSlot) {
-                onSelectSlot({ id: slotName, type: el.type }, floorId);
-              }
-            }}>
-            <span className="text-[10px] font-bold mb-1" style={{ color: textColor, transform: 'translateZ(2px)' }}>{slotName}</span>
-            <Icon size={20} style={{ color: textColor, transform: 'translateZ(5px)' }} />
-          </div>
+          <SlotElement
+            key={el.id}
+            el={el}
+            floorId={floorId}
+            style={style}
+            isOccupied={isOccupied}
+            isSelected={isSelected}
+            isMaintenance={isMaintenance}
+            session={occupiedSession}
+            onSelectSlot={handleSelectSlot}
+            is2DMode={is2DMode}
+          />
         );
       }
 
@@ -244,15 +379,22 @@ export default function ParkingMapViewer({ floors, currentFloorId, onFloorSelect
     });
   };
 
+  const bgColor = isLight ? 'bg-[#f8fafc]' : 'bg-[#0b0e16]';
+  const gridColor = isLight ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.02)';
+  const panelBg = isLight ? 'bg-white/80 border-gray-200 shadow-sm' : 'bg-[#181c23]/80 border-white/10 shadow-lg';
+  const selectBg = isLight ? 'bg-white border-gray-200 text-gray-800 focus:border-gold focus:ring-1 focus:ring-gold' : 'bg-black/40 border-white/20 text-white';
+  const textColor = isLight ? 'text-gray-700' : 'text-white';
+  const headingColor = isLight ? 'text-gold' : 'text-cyan-400';
+
   return (
-    <div className="flex-1 w-full h-full relative overflow-hidden bg-[#0b0e16]"
-      style={{ backgroundImage: `linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px)`, backgroundSize: '30px 30px' }}>
+    <div className={`flex-1 w-full h-full relative overflow-hidden ${bgColor}`}
+      style={{ backgroundImage: `linear-gradient(${gridColor} 1px, transparent 1px), linear-gradient(90deg, ${gridColor} 1px, transparent 1px)`, backgroundSize: '30px 30px' }}>
 
       {/* Floor Selector */}
       {!hideUI && floors && floors.length > 0 && (
-        <div className="absolute top-4 left-4 z-50 flex items-center gap-4 bg-[#181c23]/80 backdrop-blur border border-white/10 p-2 rounded-xl shadow-lg">
+        <div className={`absolute top-4 left-4 z-[40] flex items-center gap-4 backdrop-blur border p-2 rounded-xl ${panelBg}`}>
           <select
-            className="bg-black/40 border border-white/20 rounded p-2 text-white text-sm outline-none font-bold min-w-[120px]"
+            className={`rounded-lg p-2.5 text-sm outline-none font-bold min-w-[120px] transition ${selectBg}`}
             value={currentFloorId || ""}
             onChange={(e) => onFloorSelect && onFloorSelect(e.target.value === "" ? null : e.target.value)}
           >
@@ -266,16 +408,17 @@ export default function ParkingMapViewer({ floors, currentFloorId, onFloorSelect
 
       {/* Legend */}
       {!hideUI && (
-        <div className="absolute bottom-4 left-4 z-50 flex flex-col gap-2 bg-[#181c23]/80 backdrop-blur border border-white/10 p-4 rounded-xl shadow-lg text-xs text-white">
-          <h4 className="font-bold mb-2 text-cyan-400">Status Legend</h4>
-          <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-white border-2 border-slate-400"></div> Available</div>
-          <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-red-100 border-2 border-red-500"></div> Occupied</div>
-          <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-cyan-100 border-2 border-cyan-500"></div> Selected</div>
+        <div className={`absolute bottom-4 left-4 z-[40] flex flex-col gap-2 backdrop-blur border p-4 rounded-xl text-xs ${panelBg} ${textColor}`}>
+          <h4 className={`font-black mb-2 uppercase tracking-wider text-[10px] ${headingColor}`}>Status Legend</h4>
+          <div className="flex items-center gap-2 font-semibold"><div className="w-4 h-4 rounded-md bg-white border-2 border-slate-400"></div> Available</div>
+          <div className="flex items-center gap-2 font-semibold"><div className="w-4 h-4 rounded-md bg-red-100 border-2 border-red-500"></div> Occupied</div>
+          <div className="flex items-center gap-2 font-semibold"><div className="w-4 h-4 rounded-md bg-cyan-100 border-2 border-cyan-500"></div> Selected</div>
+          <div className="flex items-center gap-2 font-semibold"><div className="w-4 h-4 rounded-md bg-red-200 border-2 border-red-500" style={{ backgroundImage: 'repeating-linear-gradient(45deg, rgba(239, 68, 68, 0.2), rgba(239, 68, 68, 0.2) 4px, rgba(127, 29, 29, 0.3) 4px, rgba(127, 29, 29, 0.3) 8px)' }}></div> Maintenance</div>
         </div>
       )}
 
       {!hideUI && !is2DMode && (
-        <div className="absolute top-4 right-4 z-50 text-white/40 text-[10px] text-right pointer-events-none">
+        <div className="absolute top-4 right-4 z-[40] text-white/40 text-[10px] text-right pointer-events-none">
           <p><strong>Left Click + Drag</strong>: Orbit</p>
           <p><strong>Right Click + Drag</strong>: Pan</p>
         </div>
@@ -315,13 +458,37 @@ export default function ParkingMapViewer({ floors, currentFloorId, onFloorSelect
               let targetOpacity = 1;
               let pointerEvents = 'auto';
 
-              if (isOverview) {
-                const centerIndex = (floors.length - 1) / 2;
-                targetZ = (idx - centerIndex) * 300;
+              if (is2DMode) {
+                if (isOverview) {
+                  targetZ = -800;
+                  targetOpacity = 0;
+                  pointerEvents = 'none';
+                } else {
+                  if (isAbove) {
+                    targetZ = 800; // Upper floor: moves toward the camera (zoom in) and fades out
+                    targetOpacity = 0;
+                    pointerEvents = 'none';
+                  } else if (isBelow) {
+                    targetZ = -800; // Lower floor: moves away from the camera (zoom out) and fades out
+                    targetOpacity = 0;
+                    pointerEvents = 'none';
+                  } else {
+                    targetZ = 0; // Current floor: centered
+                  }
+                }
               } else {
-                targetZ = (idx - currentFloorIndex) * 300;
-                if (isAbove) { targetZ += 1200; targetOpacity = 0; pointerEvents = 'none'; }
-                else if (isBelow) { targetOpacity = 0.2; }
+                if (isOverview) {
+                  const centerIndex = (floors.length - 1) / 2;
+                  targetZ = (idx - centerIndex) * 200;
+                } else {
+                  targetZ = (idx - currentFloorIndex) * 150;
+                  if (isAbove) {
+                    targetZ += 500;
+                    targetOpacity = 0;
+                    pointerEvents = 'none';
+                  }
+                  else if (isBelow) { targetOpacity = 0.2; }
+                }
               }
 
               return (
@@ -348,10 +515,12 @@ export default function ParkingMapViewer({ floors, currentFloorId, onFloorSelect
                     }
                   }}
                 >
-                  <div className="absolute -top-12 left-10 text-cyan-400/80 font-black text-3xl tracking-widest uppercase drop-shadow-xl transition-all duration-1000"
-                    style={{ transform: 'translateZ(20px)', opacity: isCurrent || isOverview ? 1 : 0.5 }}>
-                    {floor.name}
-                  </div>
+                  {!is2DMode && (
+                    <div className="absolute -top-12 left-10 text-cyan-400/80 font-black text-3xl tracking-widest uppercase drop-shadow-xl transition-all duration-1000"
+                      style={{ transform: 'translateZ(20px)', opacity: isCurrent || isOverview ? 1 : 0.5 }}>
+                      {floor.name}
+                    </div>
+                  )}
                   <div className="absolute inset-0 rounded-[2rem] pointer-events-none opacity-20"
                     style={{ backgroundImage: `linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)`, backgroundSize: '40px 40px' }} />
                   {renderDynamicElements(floor.layoutData?.elements, floor._id)}

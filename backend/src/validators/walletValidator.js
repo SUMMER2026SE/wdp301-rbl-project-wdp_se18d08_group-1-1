@@ -8,7 +8,7 @@ const topUpValidator = [
     .notEmpty()
     .withMessage('Amount is required')
     .isInt({ min: 10000, max: 10000000 })
-    .withMessage('Amount must be between 10,000 and 10,000,000 VNĐ'),
+    .withMessage('Amount must be between 10,000 and 10,000,000 VND'),
 ];
 
 /**

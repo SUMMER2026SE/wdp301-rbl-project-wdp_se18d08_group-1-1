@@ -5,10 +5,11 @@ const AVAILABLE_CHANNELS = ["Email"];
 
 function eventIcon(group = "") {
   const normalized = group.toLowerCase();
-  if (normalized.includes("account") || normalized.includes("tài khoản")) return <ShieldCheck size={16} />;
-  if (normalized.includes("wallet") || normalized.includes("ví")) return <CheckCircle2 size={16} />;
-  if (normalized.includes("parking") || normalized.includes("đỗ xe")) return <Zap size={16} />;
-  if (normalized.includes("system") || normalized.includes("hệ thống")) return <Mail size={16} />;
+  if (normalized.includes("account")) return <ShieldCheck size={16} />;
+  if (normalized.includes("wallet")) return <CheckCircle2 size={16} />;
+  if (normalized.includes("parking")) return <Zap size={16} />;
+  if (normalized.includes("booking")) return <Bell size={16} />;
+  if (normalized.includes("system")) return <Mail size={16} />;
   return <Bell size={16} />;
 }
 
@@ -30,7 +31,7 @@ export default function AutoRulesTable({ rules = [], loading = false, accent = "
 
   const grouped = useMemo(() => {
     return rules.reduce((acc, rule) => {
-      const group = rule.group || "Khác";
+      const group = rule.group || "Other";
       acc[group] = acc[group] || [];
       acc[group].push(rule);
       return acc;
@@ -50,13 +51,13 @@ export default function AutoRulesTable({ rules = [], loading = false, accent = "
     return (
       <div className="flex items-center gap-2 rounded-xl border border-white/5 bg-[#151515] p-6 text-sm text-gray-400">
         <Loader2 className="animate-spin" size={16} />
-        Đang tải luật tự động...
+        Loading automation rules...
       </div>
     );
   }
 
   if (!rules.length) {
-    return <div className="rounded-xl border border-white/5 bg-[#151515] p-10 text-center text-sm text-gray-500">Chưa có luật tự động.</div>;
+    return <div className="rounded-xl border border-white/5 bg-[#151515] p-10 text-center text-sm text-gray-500">No automation rules yet.</div>;
   }
 
   return (
@@ -69,7 +70,7 @@ export default function AutoRulesTable({ rules = [], loading = false, accent = "
             </span>
             <div>
               <h2 className="text-base font-semibold text-white">{groupName}</h2>
-              <p className="text-xs text-gray-500">{groupRules.length} luật đang được cấu hình</p>
+              <p className="text-xs text-gray-500">{groupRules.length} configured rules</p>
             </div>
           </div>
 
@@ -93,7 +94,7 @@ export default function AutoRulesTable({ rules = [], loading = false, accent = "
                       <span className="rounded-full border border-white/10 px-2 py-0.5 text-[10px] uppercase text-gray-500">{rule.priority || "INFO"}</span>
                       <span className="rounded-full border border-white/10 px-2 py-0.5 text-[10px] text-gray-500">{rule.eventKey}</span>
                     </div>
-                    <p className="mt-2 line-clamp-2 text-sm text-gray-400">{rule.description || "Không có mô tả."}</p>
+                    <p className="mt-2 line-clamp-2 text-sm text-gray-400">{rule.description || "No description."}</p>
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                       <span className={`${rule.enabled ? `${theme.border} ${theme.bg} ${theme.text}` : "border-white/10 text-gray-500"} rounded-full border px-3 py-1 text-xs font-semibold`}>
                         In-app
@@ -118,7 +119,7 @@ export default function AutoRulesTable({ rules = [], loading = false, accent = "
                   <div className="flex flex-wrap items-center gap-2 xl:justify-end">
                     <span className="inline-flex h-10 items-center gap-2 rounded-lg border border-white/10 px-3 text-xs text-gray-400">
                       <Timer size={14} />
-                      {rule.throttleMinutes || 0} phút
+                      {rule.throttleMinutes || 0} min
                     </span>
                     <button type="button" onClick={() => onTest(rule.eventKey)} className={`inline-flex h-10 items-center gap-2 rounded-lg px-3 text-sm font-semibold ${theme.button}`}>
                       <Zap size={15} />

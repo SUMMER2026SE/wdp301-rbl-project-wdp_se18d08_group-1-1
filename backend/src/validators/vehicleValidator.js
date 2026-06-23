@@ -1,14 +1,15 @@
 const { body } = require('express-validator');
+const { normalizeLicensePlate } = require('../utils/licensePlateUtils');
 
 const VEHICLE_TYPES = ['car', 'electric_car'];
 
 exports.addVehicleValidator = [
   body('licensePlate')
-    .trim()
+    .customSanitizer(normalizeLicensePlate)
     .notEmpty()
     .withMessage('License plate is required')
-    .matches(/^[A-Za-z0-9\-]{4,12}$/)
-    .withMessage('License plate must be 4-12 alphanumeric characters'),  
+    .matches(/^[A-Z0-9]{4,12}$/)
+    .withMessage('License plate must be 4-12 alphanumeric characters'),
 
   body('vehicleType')
     .notEmpty()
@@ -56,9 +57,9 @@ exports.addVehicleValidator = [
 exports.updateVehicleValidator = [
   body('licensePlate')
     .optional()
-    .trim()
-    .matches(/^[A-Za-z0-9\-]{4,12}$/)
-    .withMessage('License plate must be 4-12 alphanumeric characters'),  
+    .customSanitizer(normalizeLicensePlate)
+    .matches(/^[A-Z0-9]{4,12}$/)
+    .withMessage('License plate must be 4-12 alphanumeric characters'),
 
   body('vehicleType')
     .optional()
