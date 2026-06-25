@@ -4,7 +4,15 @@ import { PRIORITY, DEFAULT_TEMPLATES, AUTO_RULES } from "./types";
 
 const DEDUP_WINDOW_MS = 5000;
 const SCHEDULE_INTERVAL_MS = 10000;
+const VALID_CHANNELS = ["In-app", "Email"];
 const recentPayloadHashes = new Map();
+
+const normalizeChannels = (channels) => {
+  const safeChannels = Array.isArray(channels)
+    ? channels.filter((channel) => VALID_CHANNELS.includes(channel))
+    : [];
+  return [...new Set(["In-app", ...safeChannels])];
+};
 
 const createHash = (payload) => {
   const targetKey = payload.target?.type || "system";
@@ -41,7 +49,7 @@ const store = persist(
       message: payload.message,
       priority: payload.priority || PRIORITY.INFO,
       target: payload.target || { type: "system" },
-      channels: payload.channels || ["In-app"],
+      channels: normalizeChannels(payload.channels),
       eventKey: payload.eventKey || null,
       createdAt: new Date().toISOString(),
       read: false,
@@ -75,7 +83,7 @@ const store = persist(
       message: draft.message,
       priority: draft.priority || PRIORITY.INFO,
       target: draft.target || { type: "all" },
-      channels: draft.channels || ["In-app"],
+      channels: normalizeChannels(draft.channels),
       sendAt: draft.sendAt,
       createdAt: new Date().toISOString(),
     };
@@ -106,7 +114,7 @@ const store = persist(
         message: item.message,
         priority: item.priority,
         target: item.target,
-        channels: item.channels,
+        channels: normalizeChannels(item.channels),
         eventKey: item.eventKey || "scheduled",
         createdAt: new Date().toISOString(),
         read: false,
@@ -158,10 +166,10 @@ const store = persist(
       title: `[${rule.group}] ${rule.name}`,
       message:
         payload.message ||
-        `Automation event ${rule.name}  was triggered and sent through channels ${rule.channels.join(", ")}.`,
+        `Automation event ${rule.name} was triggered and sent through channels ${normalizeChannels(rule.channels).join(", ")}.`,
       priority: PRIORITY.INFO,
       target: { type: "system" },
-      channels: rule.channels,
+      channels: normalizeChannels(rule.channels),
       eventKey,
     });
     return true;
@@ -196,12 +204,17 @@ const store = persist(
   updateAutoRule: (eventKey, patch) =>
     set((state) => ({
       autoRules: state.autoRules.map((item) =>
-        item.eventKey === eventKey ? { ...item, ...patch } : item,
+        item.eventKey === eventKey ? { ...item, ...patch, channels: normalizeChannels(patch.channels || item.channels) } : item,
       ),
     })),
   }),
   {
     name: "valo_notifications_store",
+    version: 2,
+    migrate: (persistedState) => ({
+      ...persistedState,
+      autoRules: AUTO_RULES,
+    }),
     getStorage: () => localStorage,
     partialize: (state) => ({
       notifications: state.notifications,

@@ -40,6 +40,7 @@ async function isRuleEnabled(eventKey) {
     const rule = await NotificationRule.findOne({ eventKey });
     // If no rule exists in DB, default to enabled (backwards compatible)
     if (!rule) return true;
+    if (rule.deletedAt) return false;
     return rule.enabled;
   } catch (err) {
     // On DB error, default to enabled so we don't silently drop notifications
@@ -53,7 +54,7 @@ async function shouldTriggerRule(eventKey, userId = null, eventType = null) {
   try {
     const rule = await NotificationRule.findOne({ eventKey });
     if (!rule) return true;
-    if (!rule.enabled) return false;
+    if (rule.deletedAt || !rule.enabled) return false;
 
     const throttleMinutes = Number(rule.throttleMinutes) || 0;
     if (throttleMinutes <= 0) return true;
@@ -85,7 +86,7 @@ async function shouldTriggerRule(eventKey, userId = null, eventType = null) {
 async function updateRuleLastTriggered(eventKey) {
   try {
     await NotificationRule.findOneAndUpdate(
-      { eventKey },
+      { eventKey, deletedAt: null },
       { lastTriggeredAt: new Date() }
     );
   } catch (err) {

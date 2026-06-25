@@ -47,7 +47,7 @@ const DEFAULT_RULES = [
     description: 'When an account is locked by an admin.',
     priority: 'ERROR',
     enabled: true,
-    channels: ['In-app', 'Email', 'SMS'],
+    channels: ['In-app', 'Email'],
     throttleMinutes: 10,
   },
   {
@@ -119,7 +119,7 @@ const DEFAULT_RULES = [
     description: 'When wallet balance is below 30,000 VND.',
     priority: 'WARNING',
     enabled: true,
-    channels: ['In-app', 'SMS'],
+    channels: ['In-app', 'Email'],
     throttleMinutes: 60,
   },
 
@@ -151,7 +151,7 @@ const DEFAULT_RULES = [
     description: 'Warn when a parking session has 30 minutes left.',
     priority: 'INFO',
     enabled: true,
-    channels: ['In-app', 'Push'],
+    channels: ['In-app'],
     throttleMinutes: 10,
   },
   {
@@ -161,7 +161,7 @@ const DEFAULT_RULES = [
     description: 'Warn when a parking session has 15 minutes left.',
     priority: 'WARNING',
     enabled: true,
-    channels: ['In-app', 'Push'],
+    channels: ['In-app'],
     throttleMinutes: 10,
   },
   {
@@ -171,7 +171,7 @@ const DEFAULT_RULES = [
     description: 'Urgent warning when a parking session has 5 minutes left.',
     priority: 'WARNING',
     enabled: true,
-    channels: ['In-app', 'Push'],
+    channels: ['In-app'],
     throttleMinutes: 5,
   },
   {
@@ -181,7 +181,7 @@ const DEFAULT_RULES = [
     description: 'The parking session has expired.',
     priority: 'ERROR',
     enabled: true,
-    channels: ['In-app', 'Email', 'Push', 'SMS'],
+    channels: ['In-app', 'Email'],
     throttleMinutes: 10,
   },
 
@@ -247,7 +247,21 @@ async function seedRules() {
     for (const rule of DEFAULT_RULES) {
       await NotificationRule.findOneAndUpdate(
         { eventKey: rule.eventKey },
-        { $setOnInsert: rule },
+        {
+          $set: {
+            group: rule.group,
+            name: rule.name,
+            description: rule.description,
+            priority: rule.priority,
+            channels: rule.channels,
+            throttleMinutes: rule.throttleMinutes,
+          },
+          $setOnInsert: {
+            enabled: rule.enabled,
+            lastTriggeredAt: null,
+            deletedAt: null,
+          },
+        },
         { upsert: true, new: true }
       );
     }

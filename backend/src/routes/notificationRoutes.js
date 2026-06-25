@@ -13,7 +13,9 @@ const {
   deleteAdminHistoryNotification,
   revokeNotification,
   getAutoRules,
+  createAutoRule,
   updateAutoRule,
+  deleteAutoRule,
   testAutoRule,
 } = require('../controllers/notificationController');
 const { protect, authorize } = require('../middlewares/authMiddleware');
@@ -42,7 +44,9 @@ router.put('/:id/revoke', authorize('admin', 'staff'), revokeNotification);
 
 // ── Auto Rules routes (admin/staff) ──
 router.get('/admin/rules', authorize('admin', 'staff'), getAutoRules);
+router.post('/admin/rules', authorize('admin', 'staff'), createAutoRule);
 router.put('/admin/rules/:eventKey', authorize('admin', 'staff'), updateAutoRule);
+router.delete('/admin/rules/:eventKey', authorize('admin', 'staff'), deleteAutoRule);
 router.post('/admin/rules/:eventKey/test', authorize('admin', 'staff'), testAutoRule);
 
 module.exports = router;

@@ -59,7 +59,7 @@ const getActionUrl = (eventKey) => {
 };
 
 const getRuleWithEmailChannel = async (eventKey) => {
-  const rule = await NotificationRule.findOne({ eventKey }).lean();
+  const rule = await NotificationRule.findOne({ eventKey, deletedAt: null, enabled: true }).lean();
   if (!rule) return null;
   if (!Array.isArray(rule.channels) || !rule.channels.includes('Email')) return null;
   return rule;
@@ -123,7 +123,7 @@ const renderEmailHtml = ({ title, content, priority, eventKey, templateData }) =
         </div>
       </div>
       <div style="background-color: #000000; padding: 20px; text-align: center;">
-        <p style="color: #666; font-size: 12px; margin: 0;">© 2026 Valo Parking. All rights reserved.</p>
+        <p style="color: #666; font-size: 12px; margin: 0;">&copy; 2026 Valo Parking. All rights reserved.</p>
         <p style="color: #444; font-size: 11px; margin: 5px 0 0 0;">Need help? Reply to this email or contact VALO Parking support.</p>
       </div>
     </div>

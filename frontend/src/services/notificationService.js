@@ -109,12 +109,27 @@ export const getAutoRules = () =>
     headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` },
   });
 
+/** POST /api/notifications/admin/rules */
+export const createAutoRule = (data) =>
+  apiFetch('/notifications/admin/rules', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` },
+    body: JSON.stringify(data),
+  });
+
 /** PUT /api/notifications/admin/rules/:eventKey */
 export const updateAutoRule = (eventKey, data) =>
   apiFetch(`/notifications/admin/rules/${eventKey}`, {
     method: 'PUT',
     headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` },
     body: JSON.stringify(data),
+  });
+
+/** DELETE /api/notifications/admin/rules/:eventKey */
+export const deleteAutoRule = (eventKey) =>
+  apiFetch(`/notifications/admin/rules/${eventKey}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` },
   });
 
 /** POST /api/notifications/admin/rules/:eventKey/test */

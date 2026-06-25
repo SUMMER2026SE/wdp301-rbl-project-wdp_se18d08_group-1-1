@@ -4,6 +4,57 @@ const notificationEmailService = require('../services/notificationEmailService')
 const { emitNotification, broadcastNotification } = require('../sockets/notificationSocket');
 const NotificationRule = require('../models/NotificationRule');
 
+const VALID_PRIORITIES = ['INFO', 'SUCCESS', 'WARNING', 'ERROR', 'SYSTEM'];
+const VALID_CHANNELS = ['In-app', 'Email'];
+
+const normalizeRuleChannels = (channels) => {
+  const safeChannels = Array.isArray(channels)
+    ? channels.filter((channel) => VALID_CHANNELS.includes(channel))
+    : [];
+
+  return [...new Set(['In-app', ...safeChannels])];
+};
+
+const serializeRule = (rule) => {
+  const plainRule = typeof rule?.toObject === 'function' ? rule.toObject() : rule;
+  return {
+    ...plainRule,
+    channels: normalizeRuleChannels(plainRule.channels),
+  };
+};
+
+const buildRulePayload = (body, { partial = false } = {}) => {
+  const payload = {};
+
+  if (!partial || body.eventKey !== undefined) {
+    payload.eventKey = String(body.eventKey || '').trim();
+  }
+  if (!partial || body.group !== undefined) {
+    payload.group = String(body.group || '').trim();
+  }
+  if (!partial || body.name !== undefined) {
+    payload.name = String(body.name || '').trim();
+  }
+  if (!partial || body.description !== undefined) {
+    payload.description = String(body.description || '').trim();
+  }
+  if (!partial || body.priority !== undefined) {
+    payload.priority = VALID_PRIORITIES.includes(body.priority) ? body.priority : 'INFO';
+  }
+  if (!partial || body.enabled !== undefined) {
+    payload.enabled = body.enabled === undefined ? true : Boolean(body.enabled);
+  }
+  if (!partial || body.channels !== undefined) {
+    payload.channels = normalizeRuleChannels(body.channels);
+  }
+  if (!partial || body.throttleMinutes !== undefined) {
+    const minutes = Number(body.throttleMinutes);
+    payload.throttleMinutes = Number.isFinite(minutes) ? Math.max(1, Math.round(minutes)) : 10;
+  }
+
+  return payload;
+};
+
 /**
  * @desc    Create and send a notification (Admin/Staff)
  * @route   POST /api/notifications
@@ -349,11 +400,53 @@ const revokeNotification = async (req, res, next) => {
  */
 const getAutoRules = async (req, res, next) => {
   try {
-    const rules = await NotificationRule.find().sort({ group: 1, eventKey: 1 }).lean();
+    const rules = await NotificationRule.find({ deletedAt: null }).sort({ group: 1, eventKey: 1 }).lean();
 
     res.status(200).json({
       success: true,
-      data: rules,
+      data: rules.map(serializeRule),
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Create an auto notification rule
+ * @route   POST /api/notifications/admin/rules
+ * @access  Private (admin, staff)
+ */
+const createAutoRule = async (req, res, next) => {
+  try {
+    const payload = buildRulePayload(req.body);
+
+    if (!payload.eventKey || !payload.group || !payload.name) {
+      return res.status(400).json({
+        success: false,
+        message: 'Event key, group, and name are required',
+      });
+    }
+
+    const exists = await NotificationRule.findOne({ eventKey: payload.eventKey });
+    if (exists && !exists.deletedAt) {
+      return res.status(409).json({
+        success: false,
+        message: `Auto rule '${payload.eventKey}' already exists`,
+      });
+    }
+
+    const rule = exists
+      ? await NotificationRule.findOneAndUpdate(
+          { eventKey: payload.eventKey },
+          { ...payload, deletedAt: null, lastTriggeredAt: null },
+          { new: true }
+        )
+      : await NotificationRule.create(payload);
+
+    res.status(201).json({
+      success: true,
+      message: 'Auto rule created',
+      data: serializeRule(rule),
     });
   } catch (error) {
     next(error);
@@ -368,15 +461,11 @@ const getAutoRules = async (req, res, next) => {
 const updateAutoRule = async (req, res, next) => {
   try {
     const { eventKey } = req.params;
-    const { enabled, channels, throttleMinutes } = req.body;
-
-    const updateData = {};
-    if (enabled !== undefined) updateData.enabled = enabled;
-    if (channels !== undefined) updateData.channels = channels;
-    if (throttleMinutes !== undefined) updateData.throttleMinutes = throttleMinutes;
+    const updateData = buildRulePayload(req.body, { partial: true });
+    delete updateData.eventKey;
 
     const rule = await NotificationRule.findOneAndUpdate(
-      { eventKey },
+      { eventKey, deletedAt: null },
       updateData,
       { new: true }
     );
@@ -391,7 +480,37 @@ const updateAutoRule = async (req, res, next) => {
     res.status(200).json({
       success: true,
       message: 'Auto rule updated',
-      data: rule,
+      data: serializeRule(rule),
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Delete an auto notification rule
+ * @route   DELETE /api/notifications/admin/rules/:eventKey
+ * @access  Private (admin, staff)
+ */
+const deleteAutoRule = async (req, res, next) => {
+  try {
+    const { eventKey } = req.params;
+    const rule = await NotificationRule.findOneAndUpdate(
+      { eventKey, deletedAt: null },
+      { deletedAt: new Date(), enabled: false },
+      { new: true }
+    );
+
+    if (!rule) {
+      return res.status(404).json({
+        success: false,
+        message: `Auto rule '${eventKey}' not found`,
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Auto rule deleted',
     });
   } catch (error) {
     next(error);
@@ -406,7 +525,7 @@ const updateAutoRule = async (req, res, next) => {
 const testAutoRule = async (req, res, next) => {
   try {
     const { eventKey } = req.params;
-    const rule = await NotificationRule.findOne({ eventKey });
+    const rule = await NotificationRule.findOne({ eventKey, deletedAt: null }).lean();
 
     if (!rule) {
       return res.status(404).json({
@@ -421,7 +540,7 @@ const testAutoRule = async (req, res, next) => {
       userId,
       {
         title: `[TEST] ${rule.name}`,
-        content: `Test trigger cho rule "${rule.name}" (${rule.eventKey}). Channels: ${rule.channels.join(', ')}.`,
+        content: `Test trigger for rule "${rule.name}" (${rule.eventKey}). Channels: ${normalizeRuleChannels(rule.channels).join(', ')}.`,
         type: 'SYSTEM',
         priority: rule.priority,
         metadata: { eventType: rule.eventKey, isTest: true },
@@ -434,7 +553,7 @@ const testAutoRule = async (req, res, next) => {
       await emitNotification(io, userId, notification);
     }
 
-    const emailResult = await notificationEmailService.sendRuleTestEmail(userId, rule, {
+    const emailResult = await notificationEmailService.sendRuleTestEmail(userId, serializeRule(rule), {
       templateKey: req.body?.templateKey,
       amount: '100.000',
       balance: '500.000',
@@ -448,7 +567,7 @@ const testAutoRule = async (req, res, next) => {
 
     // Update lastTriggeredAt
     await NotificationRule.findOneAndUpdate(
-      { eventKey },
+      { eventKey, deletedAt: null },
       { lastTriggeredAt: new Date() }
     );
 
@@ -480,6 +599,8 @@ module.exports = {
   deleteAdminHistoryNotification,
   revokeNotification,
   getAutoRules,
+  createAutoRule,
   updateAutoRule,
+  deleteAutoRule,
   testAutoRule,
 };

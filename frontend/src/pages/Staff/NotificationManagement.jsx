@@ -20,8 +20,10 @@ import {
 import { useSocket } from "../../contexts/SocketProvider";
 import { searchUsers } from "../../services/userService";
 import {
+  createAutoRule,
   createNotification,
   deleteAdminHistoryNotification,
+  deleteAutoRule,
   getAdminHistory,
   getAutoRules,
   markAdminHistoryAsRead,
@@ -197,8 +199,51 @@ export default function NotificationManagement() {
   const updateRule = async (eventKey, patch) => {
     const res = await updateAutoRule(eventKey, patch);
     if (!res.ok) return flash(res.data?.message || "Rule update failed.", true);
+    const updatedRule = res.data?.data;
+    setAutoRules((current) =>
+      current.map((rule) =>
+        rule.eventKey === eventKey
+          ? {
+              ...rule,
+              ...(updatedRule || patch),
+            }
+          : rule
+      )
+    );
+    flash("Notification rule updated.");
+  };
+
+  const createRule = async (payload) => {
+    const res = await createAutoRule(payload);
+    if (!res.ok) {
+      flash(res.data?.message || "Rule creation failed.", true);
+      return false;
+    }
+    await fetchRules();
+    flash("Notification rule created.");
+    return true;
+  };
+
+  const saveRule = async (eventKey, payload) => {
+    const res = await updateAutoRule(eventKey, payload);
+    if (!res.ok) {
+      flash(res.data?.message || "Rule update failed.", true);
+      return false;
+    }
     await fetchRules();
     flash("Notification rule updated.");
+    return true;
+  };
+
+  const deleteRule = async (eventKey) => {
+    const res = await deleteAutoRule(eventKey);
+    if (!res.ok) {
+      flash(res.data?.message || "Rule deletion failed.", true);
+      return false;
+    }
+    await fetchRules();
+    flash("Notification rule deleted.");
+    return true;
   };
 
   const testRule = async (eventKey) => {
@@ -310,6 +355,9 @@ export default function NotificationManagement() {
               loading={rulesLoading}
               accent={accent}
               onUpdate={updateRule}
+              onCreate={createRule}
+              onSave={saveRule}
+              onDelete={deleteRule}
               onTest={testRule}
             />
           )}
