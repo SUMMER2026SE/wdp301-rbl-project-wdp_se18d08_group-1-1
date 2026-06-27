@@ -8,6 +8,7 @@ const {
   getTransactions,
 } = require('../controllers/walletController');
 const { protect, authorize } = require('../middlewares/authMiddleware');
+const { requirePolicyAcceptance } = require('../middlewares/policyAcceptanceMiddleware');
 const { topUpValidator, transactionQueryValidator } = require('../validators/walletValidator');
 
 // Public route - payOS webhook (must be before auth middleware)
@@ -18,7 +19,7 @@ router.use(protect);
 router.use(authorize('customer'));
 
 router.get('/', getWallet);
-router.post('/top-up', topUpValidator, createTopUp);
+router.post('/top-up', requirePolicyAcceptance({ action: 'wallet:top-up' }), topUpValidator, createTopUp);
 router.get('/top-up/:orderCode/status', getTopUpStatus);
 router.get('/transactions', transactionQueryValidator, getTransactions);
 

@@ -16,6 +16,8 @@ import {
   Wallet,
 } from 'lucide-react';
 import ParkingMapViewer from '../../components/ParkingMapViewer';
+import PolicyAcceptancePrompt from '../../components/policies/PolicyAcceptancePrompt';
+import { extractMissingPolicies, isPolicyAcceptanceRequired } from '../../utils/policyErrors';
 import { getServices } from '../../services/extraServiceApi';
 import { getMyVehicles } from '../../services/vehicleService';
 import { getWalletInfo } from '../../services/walletService';
@@ -199,6 +201,10 @@ export default function CreateBookingPage() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [bookingInfo, setBookingInfo] = useState(null);
   const [successRedirectCountdown, setSuccessRedirectCountdown] = useState(4);
+  const [policyPrompt, setPolicyPrompt] = useState({
+    open: false,
+    missingPolicies: [],
+  });
 
   // Map state
   const [floors, setFloors] = useState([]);
@@ -516,6 +522,14 @@ export default function CreateBookingPage() {
       const res = await createBooking(payload);
 
       if (!res.ok) {
+        if (isPolicyAcceptanceRequired(res.data)) {
+          setPolicyPrompt({
+            open: true,
+            missingPolicies: extractMissingPolicies(res.data),
+          });
+          return;
+        }
+
         const errorMessage = res.data?.message || '';
         if (errorMessage.toLowerCase().includes('insufficient wallet balance')) {
           const shortfall = Math.max(grandTotal - (wallet?.balance || 0), 0);
@@ -986,6 +1000,13 @@ export default function CreateBookingPage() {
           </div>
         </div>
       )}
+
+      <PolicyAcceptancePrompt
+        open={policyPrompt.open}
+        missingPolicies={policyPrompt.missingPolicies}
+        onClose={() => setPolicyPrompt({ open: false, missingPolicies: [] })}
+        onAccepted={() => setPolicyPrompt({ open: false, missingPolicies: [] })}
+      />
     </div>
   );
 }

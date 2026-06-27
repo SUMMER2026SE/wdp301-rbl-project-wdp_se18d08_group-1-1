@@ -36,6 +36,9 @@ router.get("/users/search", authorize("admin", "staff"), searchUsers);
 // The rest require admin role
 router.use(authorize("admin"));
 
+// Policies
+router.use("/policies", require("./adminPolicyRoutes"));
+
 // Vehicle 3D models
 router.get("/vehicles/models", listVehicleModels);
 router.post(

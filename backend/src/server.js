@@ -19,6 +19,7 @@ const profileRoutes = require('./routes/profileRoutes');
 const serviceRoutes = require('./routes/serviceRoutes');
 const ticketPackageRoutes = require('./routes/ticketPackageRoutes');
 const subscriptionRoutes = require('./routes/subscriptionRoutes');
+const policyRoutes = require('./routes/policyRoutes');
 
 // Initialize express app
 const app = express();
@@ -55,6 +56,7 @@ app.use("/api/wallet", require("./routes/walletRoutes"));
 app.use("/api/ai", require("./routes/aiRoutes"));
 app.use("/api/vehicles", require("./routes/vehicleRoutes"));
 app.use("/api/admin", require("./routes/adminRoutes"));
+app.use("/api/policies", policyRoutes);
 app.use('/api', serviceRoutes);
 app.use('/api/ticket-packages', ticketPackageRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);

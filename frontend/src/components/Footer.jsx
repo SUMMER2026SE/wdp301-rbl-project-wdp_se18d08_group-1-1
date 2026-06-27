@@ -1,4 +1,4 @@
-import React from 'react';
+import { Link } from 'react-router-dom';
 import Logo from '../assets/images/logo.png';
 
 export default function Footer() {
@@ -22,9 +22,9 @@ export default function Footer() {
         <div>
           <h4 className="font-bold text-charcoal mb-4">Legal</h4>
           <ul className="space-y-3 text-gray-500 text-sm">
-            <li><a href="#" className="hover:text-gold transition">Terms of Use</a></li>
-            <li><a href="#" className="hover:text-gold transition">Privacy Policy</a></li>
-            <li><a href="#" className="hover:text-gold transition">Refund Policy</a></li>
+            <li><Link to="/policies" className="hover:text-gold transition">Terms of Use</Link></li>
+            <li><Link to="/policies" className="hover:text-gold transition">Privacy Policy</Link></li>
+            <li><Link to="/policies" className="hover:text-gold transition">Refund Policy</Link></li>
           </ul>
         </div>
       </div>
