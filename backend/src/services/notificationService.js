@@ -77,6 +77,32 @@ const NOTIFICATION_TEMPLATES = {
     priority: 'ERROR',
   },
 
+  // VIOLATION
+  VIOLATION_CREATED: {
+    title: 'New parking violation',
+    content: 'A violation "{title}" was recorded. Fine amount: {amount} VND. Please pay within 72 hours.',
+    type: 'VIOLATION',
+    priority: 'WARNING',
+  },
+  VIOLATION_PAYMENT_REMINDER: {
+    title: 'Violation payment reminder',
+    content: 'Violation fine {violationId} is still unpaid. Please pay soon.',
+    type: 'VIOLATION',
+    priority: 'WARNING',
+  },
+  VIOLATION_PAID: {
+    title: 'Violation fine paid',
+    content: 'Your violation fine {violationId} was paid successfully. Amount: {amount} VND.',
+    type: 'VIOLATION',
+    priority: 'SUCCESS',
+  },
+  VIOLATION_CANCELLED: {
+    title: 'Violation cancelled',
+    content: 'Violation {violationId} has been cancelled.',
+    type: 'VIOLATION',
+    priority: 'INFO',
+  },
+
   // BOOKING
   BOOKING_SUCCESS: {
     title: 'Booking successful',

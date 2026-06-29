@@ -342,6 +342,101 @@ async function notifyPaymentFailed(app, userId, amount) {
   }
 }
 
+async function notifyViolationCreated(app, userId, violationData = {}) {
+  try {
+    if (!(await shouldTriggerRule('violation.created', userId, 'VIOLATION_CREATED'))) return;
+
+    const fmtAmount = Number(violationData.amount || 0).toLocaleString('vi-VN');
+    const violationId = violationData.violationId || Date.now();
+    const templateData = {
+      title: violationData.title || 'Parking violation',
+      amount: fmtAmount,
+      violationId,
+    };
+    const notification = await notificationService.createAutoNotification(
+      'VIOLATION_CREATED',
+      `violation_${violationId}_created`,
+      userId,
+      'VIOLATION_CREATED',
+      templateData
+    );
+    if (notification) {
+      const io = getIO(app);
+      if (io) await emitNotification(io, userId, notification);
+      queueNotificationEmail(userId, 'violation.created', templateData);
+      await updateRuleLastTriggered('violation.created');
+    }
+  } catch (err) {
+    console.error('[NotifTrigger] notifyViolationCreated error:', err.message);
+  }
+}
+
+async function notifyViolationPaymentReminder(app, userId, violationId) {
+  try {
+    if (!(await shouldTriggerRule('violation.payment_reminder', userId, 'VIOLATION_PAYMENT_REMINDER'))) return;
+
+    const notification = await notificationService.createAutoNotification(
+      'VIOLATION_PAYMENT_REMINDER',
+      `violation_${violationId}_reminder_${Math.floor(Date.now() / 86400000)}`,
+      userId,
+      'VIOLATION_PAYMENT_REMINDER',
+      { violationId }
+    );
+    if (notification) {
+      const io = getIO(app);
+      if (io) await emitNotification(io, userId, notification);
+      await updateRuleLastTriggered('violation.payment_reminder');
+    }
+  } catch (err) {
+    console.error('[NotifTrigger] notifyViolationPaymentReminder error:', err.message);
+  }
+}
+
+async function notifyViolationPaid(app, userId, violationId, amount) {
+  try {
+    if (!(await shouldTriggerRule('violation.paid', userId, 'VIOLATION_PAID'))) return;
+
+    const fmtAmount = Number(amount || 0).toLocaleString('vi-VN');
+    const templateData = { violationId, amount: fmtAmount };
+    const notification = await notificationService.createAutoNotification(
+      'VIOLATION_PAID',
+      `violation_${violationId}_paid`,
+      userId,
+      'VIOLATION_PAID',
+      templateData
+    );
+    if (notification) {
+      const io = getIO(app);
+      if (io) await emitNotification(io, userId, notification);
+      queueNotificationEmail(userId, 'violation.paid', templateData);
+      await updateRuleLastTriggered('violation.paid');
+    }
+  } catch (err) {
+    console.error('[NotifTrigger] notifyViolationPaid error:', err.message);
+  }
+}
+
+async function notifyViolationCancelled(app, userId, violationId) {
+  try {
+    if (!(await shouldTriggerRule('violation.cancelled', userId, 'VIOLATION_CANCELLED'))) return;
+
+    const notification = await notificationService.createAutoNotification(
+      'VIOLATION_CANCELLED',
+      `violation_${violationId}_cancelled`,
+      userId,
+      'VIOLATION_CANCELLED',
+      { violationId }
+    );
+    if (notification) {
+      const io = getIO(app);
+      if (io) await emitNotification(io, userId, notification);
+      await updateRuleLastTriggered('violation.cancelled');
+    }
+  } catch (err) {
+    console.error('[NotifTrigger] notifyViolationCancelled error:', err.message);
+  }
+}
+
 // ─── BOOKING ────────────────────────────────────────────────────────────────────
 
 async function notifyBookingSuccess(app, userId, bookingDetails = {}) {
@@ -617,6 +712,11 @@ module.exports = {
   // Payment
   notifyPaymentSuccess,
   notifyPaymentFailed,
+  // Violation
+  notifyViolationCreated,
+  notifyViolationPaymentReminder,
+  notifyViolationPaid,
+  notifyViolationCancelled,
   // Booking
   notifyBookingSuccess,
   notifyBookingCancelled,
