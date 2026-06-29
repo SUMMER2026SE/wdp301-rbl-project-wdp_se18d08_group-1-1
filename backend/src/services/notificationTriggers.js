@@ -588,6 +588,74 @@ async function notifyTransferCompleted(app, transfer) {
 
 // ─── PARKING ────────────────────────────────────────────────────────────────────
 
+async function sendContractNotification(app, contract, eventKey, templateKey, suffix, templateData = {}) {
+  const userId = contract.userId?._id || contract.userId;
+  if (!userId) return;
+
+  if (!(await shouldTriggerRule(eventKey, userId, templateKey))) return;
+
+  const notification = await notificationService.createAutoNotification(
+    templateKey,
+    `contract_${contract._id}_${suffix}`,
+    userId,
+    templateKey,
+    {
+      contractCode: contract.contractCode,
+      slotCode: contract.slotCode,
+      ...templateData,
+    }
+  );
+
+  if (notification) {
+    const io = getIO(app);
+    if (io) await emitNotification(io, userId, notification);
+    await updateRuleLastTriggered(eventKey);
+  }
+}
+
+async function notifyContractActivated(app, contract) {
+  try {
+    await sendContractNotification(
+      app,
+      contract,
+      'contract.activated',
+      'CONTRACT_ACTIVATED',
+      'activated'
+    );
+  } catch (err) {
+    console.error('[NotifTrigger] notifyContractActivated error:', err.message);
+  }
+}
+
+async function notifyContractCancelled(app, contract) {
+  try {
+    await sendContractNotification(
+      app,
+      contract,
+      'contract.cancelled',
+      'CONTRACT_CANCELLED',
+      'cancelled',
+      { reason: contract.cancellationReason || '' }
+    );
+  } catch (err) {
+    console.error('[NotifTrigger] notifyContractCancelled error:', err.message);
+  }
+}
+
+async function notifyContractExpired(app, contract) {
+  try {
+    await sendContractNotification(
+      app,
+      contract,
+      'contract.expired',
+      'CONTRACT_EXPIRED',
+      'expired'
+    );
+  } catch (err) {
+    console.error('[NotifTrigger] notifyContractExpired error:', err.message);
+  }
+}
+
 async function notifyVehicleEntry(app, userId, plate, slot) {
   try {
     if (!(await shouldTriggerRule('parking.entry', userId, 'VEHICLE_ENTRY'))) return;
@@ -817,6 +885,9 @@ module.exports = {
   notifyTransferApproved,
   notifyTransferRejected,
   notifyTransferCompleted,
+  notifyContractActivated,
+  notifyContractCancelled,
+  notifyContractExpired,
   // Parking
   notifyVehicleEntry,
   notifyVehicleExit,

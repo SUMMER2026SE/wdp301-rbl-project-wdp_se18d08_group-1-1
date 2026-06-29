@@ -152,6 +152,24 @@ const NOTIFICATION_TEMPLATES = {
     type: 'BOOKING',
     priority: 'SUCCESS',
   },
+  CONTRACT_ACTIVATED: {
+    title: 'Contract activated',
+    content: 'Contract {contractCode} is now active for slot {slotCode}.',
+    type: 'BOOKING',
+    priority: 'SUCCESS',
+  },
+  CONTRACT_CANCELLED: {
+    title: 'Contract cancelled',
+    content: 'Contract {contractCode} has been cancelled. Reason: {reason}',
+    type: 'BOOKING',
+    priority: 'WARNING',
+  },
+  CONTRACT_EXPIRED: {
+    title: 'Contract expired',
+    content: 'Contract {contractCode} has expired.',
+    type: 'BOOKING',
+    priority: 'INFO',
+  },
 
   // PARKING
   VEHICLE_ENTRY: {

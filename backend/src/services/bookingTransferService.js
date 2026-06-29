@@ -3,6 +3,7 @@ const BookingTransfer = require('../models/BookingTransfer');
 const Booking = require('../models/Booking');
 const Contract = require('../models/Contract');
 const User = require('../models/User');
+const contractService = require('./contractService');
 
 const error = (message, statusCode = 400, extra = {}) => Object.assign(new Error(message), { statusCode, ...extra });
 
@@ -21,7 +22,7 @@ const getPagination = (filters = {}) => {
 };
 
 async function validateBookingTransfer(bookingId, fromUserId, toUserId) {
-  const booking = await Booking.findById(bookingId);
+  const booking = await Booking.findById(bookingId).populate('ticketPackageId');
   if (!booking) {
     throw error('Booking not found', 404);
   }
@@ -30,7 +31,7 @@ async function validateBookingTransfer(bookingId, fromUserId, toUserId) {
     throw error('You are not the owner of this booking', 403);
   }
 
-  if (!booking.ticketPackageId) {
+  if (!booking.ticketPackageId || !['monthly', 'yearly'].includes(booking.ticketPackageId.type)) {
     throw error('Only long-term bookings can be transferred', 400);
   }
 
@@ -91,19 +92,12 @@ async function createTransferRequest(data) {
   });
 
   if (!originalContract) {
-    const createdOriginalContract = await Contract.create({
-      userId: fromUserId,
-      bookingId,
-      type: 'ORIGINAL',
-      status: 'ACTIVE',
-      startDate: booking.startTime,
-      endDate: booking.endTime,
-      metadata: {
-        createdFromTransferRequestId: transferRequest._id,
-      },
-    });
+    const createdOriginalContract = await contractService.generateContract(bookingId);
+    if (createdOriginalContract && createdOriginalContract.status === 'DRAFT' && booking.paymentStatus === 'paid') {
+      await contractService.activateContract(createdOriginalContract._id);
+    }
 
-    transferRequest.originalContractId = createdOriginalContract._id;
+    transferRequest.originalContractId = createdOriginalContract?._id || null;
     await transferRequest.save();
   }
 
@@ -131,7 +125,7 @@ async function approveAndCompleteTransfer(transferId, adminId) {
       throw error('Transfer request is not pending', 400);
     }
 
-    const booking = await Booking.findById(transfer.bookingId).session(session);
+    const booking = await Booking.findById(transfer.bookingId).populate('ticketPackageId').session(session);
     if (!booking) {
       throw error('Booking not found', 404);
     }
@@ -140,47 +134,26 @@ async function approveAndCompleteTransfer(transferId, adminId) {
       throw error('Booking owner has changed and can no longer be transferred', 400);
     }
 
-    if (!booking.ticketPackageId || !['active', 'confirmed'].includes(booking.status) || new Date() > booking.endTime) {
+    if (
+      !booking.ticketPackageId ||
+      !['monthly', 'yearly'].includes(booking.ticketPackageId.type) ||
+      !['active', 'confirmed'].includes(booking.status) ||
+      new Date() > booking.endTime
+    ) {
       throw error('Booking is no longer eligible for transfer', 400);
     }
 
-    const oldUserId = booking.userId;
     booking.userId = transfer.toUserId;
     await booking.save({ session });
 
-    if (transfer.originalContractId) {
-      await Contract.findByIdAndUpdate(
-        transfer.originalContractId,
-        {
-          status: 'TRANSFERRED',
-          transferredAt: new Date(),
-        },
-        { session }
-      );
-    }
+    const transferContract = await contractService.createTransferContract({
+      transfer,
+      booking,
+      originalContractId: transfer.originalContractId,
+      session,
+    });
 
-    const transferContract = await Contract.create(
-      [
-        {
-          userId: transfer.toUserId,
-          bookingId: transfer.bookingId,
-          type: 'TRANSFER',
-          status: 'ACTIVE',
-          startDate: new Date(),
-          endDate: booking.endTime,
-          transferredFrom: oldUserId,
-          transferredAt: new Date(),
-          metadata: {
-            transferRequestId: transfer._id,
-            originalOwnerId: oldUserId,
-            originalContractId: transfer.originalContractId || null,
-          },
-        },
-      ],
-      { session }
-    );
-
-    transfer.transferContractId = transferContract[0]._id;
+    transfer.transferContractId = transferContract._id;
     transfer.status = 'COMPLETED';
     transfer.completedAt = new Date();
     await transfer.save({ session });
