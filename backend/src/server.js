@@ -66,6 +66,7 @@ app.use("/api/notifications", require("./routes/notificationRoutes"));
 app.use("/api/bookings", require("./routes/bookingRoutes"));
 app.use("/api/violations", require("./routes/violationRoutes"));
 app.use("/api/revenue", require("./routes/revenueRoutes"));
+app.use("/api", require("./routes/bookingTransferRoutes"));
 
 // 404 handler
 app.use((req, res) => {

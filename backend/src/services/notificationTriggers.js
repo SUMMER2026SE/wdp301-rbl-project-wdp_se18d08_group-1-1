@@ -493,6 +493,99 @@ async function notifyBookingCancelled(app, userId, bookingDetails = {}) {
   }
 }
 
+async function sendTransferNotification(app, userIds, eventType, templateKey, transfer, templateData = {}) {
+  const ids = userIds.filter(Boolean).map(String);
+  const io = getIO(app);
+
+  await Promise.all(ids.map(async (userId) => {
+    const notification = await notificationService.createAutoNotification(
+      eventType,
+      `transfer_${transfer._id}_${templateKey}_${userId}`,
+      userId,
+      templateKey,
+      {
+        transferId: transfer._id,
+        ...templateData,
+      }
+    );
+    if (notification && io) {
+      await emitNotification(io, userId, notification);
+    }
+  }));
+}
+
+async function notifyTransferRequestCreated(app, transfer) {
+  try {
+    const fromUserId = transfer.fromUserId?._id || transfer.fromUserId;
+    const toUserId = transfer.toUserId?._id || transfer.toUserId;
+    if (!(await shouldTriggerRule('booking_transfer.created', fromUserId, 'TRANSFER_REQUEST_CREATED'))) return;
+    await sendTransferNotification(
+      app,
+      [fromUserId, toUserId],
+      'TRANSFER_REQUEST_CREATED',
+      'TRANSFER_REQUEST_CREATED',
+      transfer
+    );
+    await updateRuleLastTriggered('booking_transfer.created');
+  } catch (err) {
+    console.error('[NotifTrigger] notifyTransferRequestCreated error:', err.message);
+  }
+}
+
+async function notifyTransferApproved(app, transfer) {
+  try {
+    const fromUserId = transfer.fromUserId?._id || transfer.fromUserId;
+    const toUserId = transfer.toUserId?._id || transfer.toUserId;
+    if (!(await shouldTriggerRule('booking_transfer.approved', fromUserId, 'TRANSFER_APPROVED'))) return;
+    await sendTransferNotification(
+      app,
+      [fromUserId, toUserId],
+      'TRANSFER_APPROVED',
+      'TRANSFER_APPROVED',
+      transfer
+    );
+    await updateRuleLastTriggered('booking_transfer.approved');
+  } catch (err) {
+    console.error('[NotifTrigger] notifyTransferApproved error:', err.message);
+  }
+}
+
+async function notifyTransferRejected(app, transfer) {
+  try {
+    const fromUserId = transfer.fromUserId?._id || transfer.fromUserId;
+    if (!(await shouldTriggerRule('booking_transfer.rejected', fromUserId, 'TRANSFER_REJECTED'))) return;
+    await sendTransferNotification(
+      app,
+      [fromUserId],
+      'TRANSFER_REJECTED',
+      'TRANSFER_REJECTED',
+      transfer,
+      { reason: transfer.rejectionReason || 'N/A' }
+    );
+    await updateRuleLastTriggered('booking_transfer.rejected');
+  } catch (err) {
+    console.error('[NotifTrigger] notifyTransferRejected error:', err.message);
+  }
+}
+
+async function notifyTransferCompleted(app, transfer) {
+  try {
+    const fromUserId = transfer.fromUserId?._id || transfer.fromUserId;
+    const toUserId = transfer.toUserId?._id || transfer.toUserId;
+    if (!(await shouldTriggerRule('booking_transfer.completed', fromUserId, 'TRANSFER_COMPLETED'))) return;
+    await sendTransferNotification(
+      app,
+      [fromUserId, toUserId],
+      'TRANSFER_COMPLETED',
+      'TRANSFER_COMPLETED',
+      transfer
+    );
+    await updateRuleLastTriggered('booking_transfer.completed');
+  } catch (err) {
+    console.error('[NotifTrigger] notifyTransferCompleted error:', err.message);
+  }
+}
+
 // ─── PARKING ────────────────────────────────────────────────────────────────────
 
 async function notifyVehicleEntry(app, userId, plate, slot) {
@@ -720,6 +813,10 @@ module.exports = {
   // Booking
   notifyBookingSuccess,
   notifyBookingCancelled,
+  notifyTransferRequestCreated,
+  notifyTransferApproved,
+  notifyTransferRejected,
+  notifyTransferCompleted,
   // Parking
   notifyVehicleEntry,
   notifyVehicleExit,

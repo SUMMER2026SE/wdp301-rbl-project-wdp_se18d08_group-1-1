@@ -128,6 +128,30 @@ const NOTIFICATION_TEMPLATES = {
     type: 'BOOKING',
     priority: 'ERROR',
   },
+  TRANSFER_REQUEST_CREATED: {
+    title: 'Booking transfer request created',
+    content: 'Booking transfer request {transferId} has been created.',
+    type: 'BOOKING',
+    priority: 'INFO',
+  },
+  TRANSFER_APPROVED: {
+    title: 'Booking transfer approved',
+    content: 'Booking transfer request {transferId} has been approved.',
+    type: 'BOOKING',
+    priority: 'SUCCESS',
+  },
+  TRANSFER_REJECTED: {
+    title: 'Booking transfer rejected',
+    content: 'Booking transfer request {transferId} was rejected. Reason: {reason}',
+    type: 'BOOKING',
+    priority: 'WARNING',
+  },
+  TRANSFER_COMPLETED: {
+    title: 'Booking transfer completed',
+    content: 'Booking transfer request {transferId} has been completed.',
+    type: 'BOOKING',
+    priority: 'SUCCESS',
+  },
 
   // PARKING
   VEHICLE_ENTRY: {
