@@ -180,6 +180,7 @@ export default function CreateBookingPage() {
   const [vehicles, setVehicles] = useState([]);
   const [vehicleId, setVehicleId] = useState('');
   const [manualPlate, setManualPlate] = useState('');
+  const [profile, setProfile] = useState(null);
   const [services, setServices] = useState([]);
   const [selectedServices, setSelectedServices] = useState([]);
   const [wallet, setWallet] = useState(null);
@@ -308,18 +309,48 @@ export default function CreateBookingPage() {
   const grandTotal = parkingTotal + serviceTotal;
 
   const selectedSlot = slots.find((slot) => `${slot.floorId}:${slot.slotCode}` === selectedSlotKey);
+  const selectedVehicle = vehicles.find((vehicle) => vehicle._id === vehicleId);
+  const activeMembershipType = useMemo(() => {
+    const membership = profile?.membership;
+    if (!membership?.isVip || !membership?.expireAt) return null;
+    const expireAt = new Date(membership.expireAt);
+    if (Number.isNaN(expireAt.getTime()) || expireAt <= new Date()) return null;
+    return ['monthly', 'yearly'].includes(membership.packageType) ? membership.packageType : null;
+  }, [profile?.membership]);
+  const selectedDbSlot = selectedSlot
+    ? dbSlots.find((slot) => slot.slotNumber === selectedSlot.slotCode)
+    : null;
+  const selectedSlotReservedFor = selectedDbSlot?.reservedFor?._id || selectedDbSlot?.reservedFor || null;
+  const selectedSlotIsOwnVipSlot = Boolean(
+    activeMembershipType &&
+    selectedVehicle &&
+    selectedSlot &&
+    selectedSlotReservedFor &&
+    String(selectedSlotReservedFor) === String(profile?.id)
+  );
+  const selectedRegisteredVehicleBlockedByVip = Boolean(
+    activeMembershipType &&
+    selectedVehicle &&
+    selectedSlot &&
+    selectedDbSlot &&
+    !selectedSlotIsOwnVipSlot
+  );
 
   const loadData = () => {
     Promise.all([
       getWalletInfo().then(res => res.ok ? res.data?.data : null).catch(() => null),
       getMyVehicles().then(res => res.ok ? res.data?.data : []).catch(() => []),
+      apiFetch('/profile', {
+        headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` },
+      }).then(res => res.ok ? res.data?.data : null).catch(() => null),
       getServices().then(res => res.ok ? res.data?.data : []).catch(() => []),
       fetch(`${import.meta.env.VITE_API_BASE_URL}/parking-floors`).then(res => res.json().catch(() => ({}))),
       fetch(`${import.meta.env.VITE_API_BASE_URL}/ticket-packages/active`, {
         headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
       }).then(r => r.json().catch(() => ({})))
-    ]).then(([walletData, vehiclesData, servicesData, floorsData, packagesData]) => {
+    ]).then(([walletData, vehiclesData, profileData, servicesData, floorsData, packagesData]) => {
       if (walletData) setWallet(walletData);
+      if (profileData) setProfile(profileData);
       if (vehiclesData) {
         setVehicles(vehiclesData);
         if (vehiclesData.length > 0) setVehicleId(vehiclesData[0]._id);
@@ -505,6 +536,11 @@ export default function CreateBookingPage() {
 
       if (!vehicleId && !manualPlate.trim()) {
         setError('Please select a vehicle or enter a license plate.');
+        return;
+      }
+
+      if (selectedRegisteredVehicleBlockedByVip) {
+        setError('This registered vehicle is already covered by your active VIP membership. Please use your assigned VIP slot instead of booking another slot.');
         return;
       }
 
@@ -732,6 +768,18 @@ export default function CreateBookingPage() {
                     placeholder="License plate"
                     className="mt-2 w-full rounded-xl bg-gray-50 border border-gray-200 px-3 py-2.5 text-sm font-semibold text-gray-800 outline-none focus:border-gold focus:ring-1 focus:ring-gold transition"
                   />
+                )}
+
+                {activeMembershipType && selectedVehicle && selectedSlot && (
+                  <div className={`mt-3 rounded-xl border px-3 py-2.5 text-xs font-semibold ${
+                    selectedSlotIsOwnVipSlot
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                      : 'border-amber-200 bg-amber-50 text-amber-700'
+                  }`}>
+                    {selectedSlotIsOwnVipSlot
+                      ? 'This is your assigned VIP slot, so this registered vehicle can use it while your membership is active.'
+                      : 'This registered vehicle is covered by an active VIP membership. Please use your assigned VIP slot instead of booking another slot.'}
+                  </div>
                 )}
               </div>
 

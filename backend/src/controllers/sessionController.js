@@ -10,10 +10,13 @@ const { resolveKioskPricingPackage } = require('../utils/kioskPricing');
 const Booking = require('../models/Booking');
 const Subscription = require('../models/Subscription');
 const Slot = require('../models/Slot');
+const Vehicle = require('../models/Vehicle');
 const { emitToUser } = require('../sockets/notificationSocket');
 
 const BOOKING_EARLY_CHECKIN_MINUTES = 30;
 const BOOKING_LATE_GRACE_MINUTES = 15;
+
+const sameObjectId = (a, b) => String(a || '') === String(b || '');
 
 const findEligiblePreBooking = async (normalizedPlate) => {
   const now = new Date();
@@ -309,6 +312,11 @@ exports.createKioskSession = async (req, res, next) => {
       });
     }
 
+    const registeredVehicle = await Vehicle.findOne({
+      licensePlate: normalizedPlate,
+      status: 'approved',
+    }).select('owner licensePlate').lean();
+
     let entryImage_url = null;
 
     // If an image was captured, upload to Cloudinary
@@ -397,18 +405,60 @@ exports.createKioskSession = async (req, res, next) => {
       }
     }
 
-    if (!userId) {
-      const registeredVehicle = await require('../models/Vehicle').findOne({
-        licensePlate: normalizedPlate,
-        status: 'approved',
-      });
-      if (registeredVehicle) {
-        userId = registeredVehicle.owner;
-        const user = await User.findById(userId);
-        if (user) {
-          userEmail = user.email;
-        }
+    if (!preBooking?.userId && registeredVehicle) {
+      userId = registeredVehicle.owner;
+      const registeredOwner = await User.findById(userId);
+      if (registeredOwner) {
+        userEmail = registeredOwner.email;
       }
+    }
+
+    const isRegisteredPlateForResolvedUser = Boolean(
+      registeredVehicle?.owner && userId && sameObjectId(registeredVehicle.owner, userId)
+    );
+    const membershipAccess = !preBooking && isRegisteredPlateForResolvedUser
+      ? await resolveActiveSubscriptionAccess(userId)
+      : null;
+    let resolvedParkingSlot = preBooking?.slotCode || parkingSlot || null;
+    let resolvedFloorId = preBooking?.floorId || floorId || null;
+    let resolvedDurationHours = preBooking?.paidHours || (durationHours ? Number(durationHours) : 1);
+
+    if (!preBooking && membershipAccess?.isSubscriptionActive) {
+      if (!membershipAccess.assignedSlot || !membershipAccess.assignedFloorId) {
+        return res.status(409).json({
+          success: false,
+          message: 'Your active VIP membership does not have an assigned slot. Please contact staff for support.',
+        });
+      }
+
+      const activeAssignedSlotSession = await Session.findOne({
+        floorId: membershipAccess.assignedFloorId,
+        parkingSlot: membershipAccess.assignedSlot,
+        status: 'active',
+      }).lean();
+
+      if (activeAssignedSlotSession) {
+        return res.status(409).json({
+          success: false,
+          message: 'Your assigned VIP slot is currently occupied. Please contact staff for support.',
+        });
+      }
+
+      const assignedSlotDoc = await Slot.findOne({
+        floorID: membershipAccess.assignedFloorId,
+        slotNumber: membershipAccess.assignedSlot,
+      }).select('status').lean();
+
+      if (assignedSlotDoc?.status === 'maintenance') {
+        return res.status(409).json({
+          success: false,
+          message: 'Your assigned VIP slot is currently under maintenance. Please contact staff for support.',
+        });
+      }
+
+      resolvedParkingSlot = membershipAccess.assignedSlot;
+      resolvedFloorId = membershipAccess.assignedFloorId;
+      resolvedDurationHours = 24;
     }
 
     const pricing = preBooking
@@ -428,9 +478,9 @@ exports.createKioskSession = async (req, res, next) => {
       userId,
       phone: phone || null,
       vehicleType: vehicleType || 'car',
-      parkingSlot: preBooking?.slotCode || parkingSlot || null,
-      floorId: preBooking?.floorId || floorId || null,
-      expectedDurationHours: preBooking?.paidHours || (durationHours ? Number(durationHours) : 1),
+      parkingSlot: resolvedParkingSlot,
+      floorId: resolvedFloorId,
+      expectedDurationHours: resolvedDurationHours,
       ticketPackageId: pricing.package?._id || null,
       entryImage_url,
       checkInTime: new Date(),
@@ -479,7 +529,7 @@ exports.createKioskSession = async (req, res, next) => {
     // Fire-and-forget: send vehicle entry notification
     if (userId) {
       notifTriggers.notifyVehicleEntry(
-        req.app, userId, normalizedPlate, parkingSlot || 'N/A'
+        req.app, userId, normalizedPlate, resolvedParkingSlot || 'N/A'
       ).catch(err => console.error('Failed to send entry notification:', err));
     }
 
