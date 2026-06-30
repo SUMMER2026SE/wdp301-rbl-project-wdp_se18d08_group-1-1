@@ -1,45 +1,19 @@
 const express = require('express');
-const {
-  getAvailableSlots,
-  quoteBooking,
-  quoteBulkBooking,
-  createBookingHold,
-  createBulkBookingHolds,
-  releaseBookingHold,
-  releaseBulkBookingHolds,
-  createBooking,
-  createBulkBooking,
-  getBookingOrder,
-  getMyBookings,
-  checkInBooking,
-  checkOutBooking,
-  cancelBooking,
-  updateBookingLicensePlate,
-  extendBooking,
-} = require('../controllers/bookingController');
+const router = express.Router();
+const bookingController = require('../controllers/bookingController');
 const { protect, authorize } = require('../middlewares/authMiddleware');
 
-const router = express.Router();
+// Route public dành cho webhook PayOS thanh toán đặt chỗ
+router.post('/webhook', bookingController.handleBookingWebhook);
 
+// Các route yêu cầu khách hàng đã đăng nhập
 router.use(protect);
 router.use(authorize('customer', 'admin'));
 
-router.get('/available-slots', getAvailableSlots);
-router.get('/my', getMyBookings);
-router.post('/quote', quoteBooking);
-router.post('/holds', createBookingHold);
-router.delete('/holds/:id', releaseBookingHold);
-router.post('/bulk/quote', quoteBulkBooking);
-router.post('/bulk/holds', createBulkBookingHolds);
-router.delete('/bulk/holds', releaseBulkBookingHolds);
-router.post('/bulk', createBulkBooking);
-router.get('/orders/:id', getBookingOrder);
-router.post('/', createBooking);
-router.post('/:id/cancel', cancelBooking);
-router.patch('/:id/license-plate', updateBookingLicensePlate);
-router.post('/:id/extend', extendBooking);
-router.post('/:id/check-in', checkInBooking);
-router.post('/:id/check-out', checkOutBooking);
-router.post('/:id/complete', checkOutBooking);
+router.post('/', bookingController.createBooking);
+router.get('/my-history', bookingController.getMyBookings);
+router.get('/status/:orderCode', bookingController.checkVietQRStatus);
+router.post('/:id/cancel', bookingController.cancelBooking);
+router.put('/:id/time', bookingController.modifyBookingTime);
 
 module.exports = router;
