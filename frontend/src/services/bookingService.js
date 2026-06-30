@@ -20,6 +20,60 @@ export const createBooking = (payload) =>
     body: JSON.stringify(payload),
   });
 
+export const quoteBooking = (payload) =>
+  apiFetch('/bookings/quote', {
+    method: 'POST',
+    headers: authHeader(),
+    body: JSON.stringify(payload),
+  });
+
+export const createBookingHold = (payload) =>
+  apiFetch('/bookings/holds', {
+    method: 'POST',
+    headers: authHeader(),
+    body: JSON.stringify(payload),
+  });
+
+export const releaseBookingHold = (holdId) =>
+  apiFetch(`/bookings/holds/${holdId}`, {
+    method: 'DELETE',
+    headers: authHeader(),
+  });
+
+export const quoteBulkBooking = (payload) =>
+  apiFetch('/bookings/bulk/quote', {
+    method: 'POST',
+    headers: authHeader(),
+    body: JSON.stringify(payload),
+  });
+
+export const createBulkBookingHolds = (payload) =>
+  apiFetch('/bookings/bulk/holds', {
+    method: 'POST',
+    headers: authHeader(),
+    body: JSON.stringify(payload),
+  });
+
+export const releaseBulkBookingHolds = (holdIds) =>
+  apiFetch('/bookings/bulk/holds', {
+    method: 'DELETE',
+    headers: authHeader(),
+    body: JSON.stringify({ holdIds }),
+  });
+
+export const createBulkBooking = (payload) =>
+  apiFetch('/bookings/bulk', {
+    method: 'POST',
+    headers: authHeader(),
+    body: JSON.stringify(payload),
+  });
+
+export const getBookingOrder = (orderId) =>
+  apiFetch(`/bookings/orders/${orderId}`, {
+    method: 'GET',
+    headers: authHeader(),
+  });
+
 export const getMyBookings = () =>
   apiFetch('/bookings/my', {
     method: 'GET',
@@ -36,4 +90,24 @@ export const checkOutBooking = (bookingId) =>
   apiFetch(`/bookings/${bookingId}/check-out`, {
     method: 'POST',
     headers: authHeader(),
+  });
+
+export const cancelBooking = (bookingId) =>
+  apiFetch(`/bookings/${bookingId}/cancel`, {
+    method: 'POST',
+    headers: authHeader(),
+  });
+
+export const updateBookingLicensePlate = (bookingId, payload) =>
+  apiFetch(`/bookings/${bookingId}/license-plate`, {
+    method: 'PATCH',
+    headers: authHeader(),
+    body: JSON.stringify(payload),
+  });
+
+export const extendBooking = (bookingId, payload) =>
+  apiFetch(`/bookings/${bookingId}/extend`, {
+    method: 'POST',
+    headers: authHeader(),
+    body: JSON.stringify(payload),
   });

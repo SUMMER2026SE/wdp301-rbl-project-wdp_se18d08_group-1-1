@@ -3,11 +3,20 @@ import {
   AlertCircle,
   CalendarClock,
   CheckCircle2,
+  Clock,
+  Edit3,
   Loader2,
+  RotateCcw,
+  TimerReset,
+  Trash2,
   Wifi,
 } from 'lucide-react';
 import {
+  cancelBooking,
+  checkOutBooking,
+  extendBooking,
   getMyBookings,
+  updateBookingLicensePlate,
 } from '../../services/bookingService';
 import { useSocket } from '../../contexts/SocketProvider';
 
@@ -22,9 +31,34 @@ const formatDateTime = (value) =>
 const statusClass = (status) => {
   if (status === 'confirmed') return 'bg-blue-500/10 text-blue-300 border-blue-500/30';
   if (status === 'active') return 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30';
+  if (status === 'paused') return 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30';
   if (status === 'completed') return 'bg-white/10 text-white/70 border-white/10';
   if (status === 'cancelled') return 'bg-rose-500/10 text-rose-300 border-rose-500/30';
   return 'bg-amber-500/10 text-amber-300 border-amber-500/30';
+};
+
+const addMinutesLocalInput = (dateValue, minutes) => {
+  const date = new Date(dateValue);
+  date.setMinutes(date.getMinutes() + minutes);
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
+
+const getBookingTiming = (booking) => {
+  const now = new Date();
+  const start = new Date(booking.startTime);
+  const end = new Date(booking.endTime);
+  const minutesToStart = Math.ceil((start.getTime() - now.getTime()) / 60000);
+  const minutesToEnd = Math.ceil((end.getTime() - now.getTime()) / 60000);
+
+  return {
+    canEditBeforeCheckIn: booking.status === 'confirmed' && now < start,
+    canExtend: ['confirmed', 'active'].includes(booking.status),
+    canComplete: booking.status === 'active',
+    isNearExpiry: booking.status === 'active' && minutesToEnd > 0 && minutesToEnd <= 30,
+    minutesToStart,
+    minutesToEnd,
+  };
 };
 
 export default function BookingPage() {
@@ -33,6 +67,10 @@ export default function BookingPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [actionLoading, setActionLoading] = useState('');
+  const [dialog, setDialog] = useState(null);
+  const [plateInput, setPlateInput] = useState('');
+  const [extendEndTime, setExtendEndTime] = useState('');
   const lastEventRef = useRef(null);
 
   const loadData = async (silent = false) => {
@@ -89,6 +127,97 @@ export default function BookingPage() {
     const timer = setTimeout(() => setSuccess(''), 2500);
     return () => clearTimeout(timer);
   }, [success]);
+
+  const runBookingAction = async (actionKey, action) => {
+    setActionLoading(actionKey);
+    setError('');
+    setSuccess('');
+
+    try {
+      const res = await action();
+      if (!res.ok) {
+        setError(res.data?.message || 'Booking action failed.');
+        return null;
+      }
+
+      await loadData(true);
+      return res;
+    } catch {
+      setError('Network error while updating booking.');
+      return null;
+    } finally {
+      setActionLoading('');
+    }
+  };
+
+  const openPlateDialog = (booking) => {
+    setDialog({ type: 'plate', booking });
+    setPlateInput(booking.licensePlate || '');
+    setError('');
+  };
+
+  const openExtendDialog = (booking, minutes = 60) => {
+    setDialog({ type: 'extend', booking });
+    setExtendEndTime(addMinutesLocalInput(booking.endTime, minutes));
+    setError('');
+  };
+
+  const submitPlateChange = async () => {
+    if (!dialog?.booking || !plateInput.trim()) {
+      setError('License plate is required.');
+      return;
+    }
+
+    const res = await runBookingAction(`plate-${dialog.booking._id}`, () =>
+      updateBookingLicensePlate(dialog.booking._id, { licensePlate: plateInput.trim() })
+    );
+
+    if (res) {
+      setDialog(null);
+      setSuccess('License plate updated.');
+    }
+  };
+
+  const submitExtension = async () => {
+    if (!dialog?.booking || !extendEndTime) {
+      setError('New end time is required.');
+      return;
+    }
+
+    const res = await runBookingAction(`extend-${dialog.booking._id}`, () =>
+      extendBooking(dialog.booking._id, { endTime: new Date(extendEndTime).toISOString() })
+    );
+
+    if (res) {
+      setDialog(null);
+      const extra = res.data?.data?.extraAmount || 0;
+      setSuccess(extra > 0 ? `Booking extended. Wallet charged ${formatMoney(extra)}.` : 'Booking extended.');
+    }
+  };
+
+  const handleCancel = async (booking) => {
+    const confirmed = window.confirm(`Cancel this booking and refund ${formatMoney(booking.finalAmount || 0)} to your wallet?`);
+    if (!confirmed) return;
+
+    const res = await runBookingAction(`cancel-${booking._id}`, () => cancelBooking(booking._id));
+    if (res) {
+      setSuccess(`Booking cancelled. Refunded ${formatMoney(res.data?.data?.refundAmount || 0)}.`);
+    }
+  };
+
+  const handleComplete = async (booking) => {
+    const confirmed = window.confirm('Complete this parking session now? The system will calculate any refund or extra fee.');
+    if (!confirmed) return;
+
+    const res = await runBookingAction(`complete-${booking._id}`, () => checkOutBooking(booking._id));
+    if (res) {
+      const refund = res.data?.data?.refundAmount || 0;
+      const extra = res.data?.data?.extraAmount || 0;
+      if (refund > 0) setSuccess(`Booking completed. Refunded ${formatMoney(refund)}.`);
+      else if (extra > 0) setSuccess(`Booking completed. Extra fee charged ${formatMoney(extra)}.`);
+      else setSuccess('Booking completed.');
+    }
+  };
 
 
 
@@ -155,48 +284,207 @@ export default function BookingPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {bookings.map((booking) => (
-              <div key={booking._id} className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 flex flex-col lg:flex-row lg:items-center gap-4 justify-between transition hover:border-white/20">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <span className="text-xl font-black text-white">{booking.slotCode}</span>
-                    <span className={`px-2.5 py-1 rounded-full border text-xs font-bold uppercase ${statusClass(booking.status)}`}>
-                      {booking.status}
-                    </span>
-                    <span className="text-sm text-white/45">{booking.floorId?.name || 'Floor'}</span>
+            {bookings.map((booking) => {
+              const timing = getBookingTiming(booking);
+              const isBusy = actionLoading.endsWith(booking._id);
+
+              return (
+                <div key={booking._id} className={`rounded-2xl border bg-white/[0.03] p-5 flex flex-col lg:flex-row lg:items-center gap-4 justify-between transition hover:border-white/20 ${
+                  timing.isNearExpiry ? 'border-amber-400/40' : 'border-white/10'
+                }`}>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span className="text-xl font-black text-white">{booking.slotCode}</span>
+                      <span className={`px-2.5 py-1 rounded-full border text-xs font-bold uppercase ${statusClass(booking.status)}`}>
+                        {booking.status}
+                      </span>
+                      <span className="text-sm text-white/45">{booking.floorId?.name || 'Floor'}</span>
+                      {timing.isNearExpiry && (
+                        <span className="px-2.5 py-1 rounded-full border border-amber-400/30 bg-amber-400/10 text-xs font-bold uppercase text-amber-200">
+                          {timing.minutesToEnd} min left
+                        </span>
+                      )}
+                      {booking.status === 'confirmed' && timing.minutesToStart <= 15 && timing.minutesToStart >= -15 && (
+                        <span className="px-2.5 py-1 rounded-full border border-cyan-400/30 bg-cyan-400/10 text-xs font-bold uppercase text-cyan-200">
+                          Arrival window
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-y-2 gap-x-6 text-sm text-white/60">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] font-bold tracking-widest uppercase text-white/30 mb-0.5">License Plate</span>
+                        <span className="font-semibold text-white/80">{booking.licensePlate}</span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-[10px] font-bold tracking-widest uppercase text-white/30 mb-0.5">Time</span>
+                        <span className="font-semibold text-white/80">{formatDateTime(booking.startTime)} - {formatDateTime(booking.endTime)}</span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-[10px] font-bold tracking-widest uppercase text-white/30 mb-0.5">Paid</span>
+                        <span className="font-bold text-yellow-400/90">{formatMoney(booking.finalAmount)}</span>
+                      </div>
+                    </div>
+                    {booking.services?.length > 0 && (
+                      <div className="mt-3 text-xs text-yellow-400/70 font-medium">
+                        + Services: {booking.services.map((service) => service.serviceName).join(', ')}
+                      </div>
+                    )}
+                    {booking.refundAmount > 0 && (
+                      <div className="mt-1 text-xs text-emerald-400/80 font-medium">
+                        Refunded: {formatMoney(booking.refundAmount)}
+                      </div>
+                    )}
+                    {booking.status === 'expired' && (
+                      <div className="mt-2 text-xs text-amber-300/80 font-medium">
+                        This booking expired after the 15-minute late arrival grace period.
+                      </div>
+                    )}
                   </div>
-                  <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-y-2 gap-x-6 text-sm text-white/60">
-                    <div className="flex flex-col">
-                      <span className="text-[10px] font-bold tracking-widest uppercase text-white/30 mb-0.5">License Plate</span>
-                      <span className="font-semibold text-white/80">{booking.licensePlate}</span>
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="text-[10px] font-bold tracking-widest uppercase text-white/30 mb-0.5">Time</span>
-                      <span className="font-semibold text-white/80">{formatDateTime(booking.startTime)} - {formatDateTime(booking.endTime)}</span>
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="text-[10px] font-bold tracking-widest uppercase text-white/30 mb-0.5">Paid</span>
-                      <span className="font-bold text-yellow-400/90">{formatMoney(booking.finalAmount)}</span>
-                    </div>
+
+                  <div className="flex flex-wrap lg:justify-end gap-2 shrink-0">
+                    {timing.canExtend && (
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => openExtendDialog(booking, timing.isNearExpiry ? 30 : 60)}
+                        className="rounded-xl border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs font-bold text-amber-200 hover:bg-amber-400/20 transition flex items-center gap-2 disabled:opacity-50"
+                      >
+                        <TimerReset size={14} />
+                        Extend
+                      </button>
+                    )}
+                    {timing.canEditBeforeCheckIn && (
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => openPlateDialog(booking)}
+                        className="rounded-xl border border-white/10 px-3 py-2 text-xs font-bold text-white/70 hover:text-white hover:bg-white/5 transition flex items-center gap-2 disabled:opacity-50"
+                      >
+                        <Edit3 size={14} />
+                        Change plate
+                      </button>
+                    )}
+                    {timing.canEditBeforeCheckIn && (
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => handleCancel(booking)}
+                        className="rounded-xl border border-rose-400/30 bg-rose-400/10 px-3 py-2 text-xs font-bold text-rose-200 hover:bg-rose-400/20 transition flex items-center gap-2 disabled:opacity-50"
+                      >
+                        <Trash2 size={14} />
+                        Cancel
+                      </button>
+                    )}
+                    {timing.canComplete && (
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => handleComplete(booking)}
+                        className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-xs font-bold text-emerald-200 hover:bg-emerald-400/20 transition flex items-center gap-2 disabled:opacity-50"
+                      >
+                        <CheckCircle2 size={14} />
+                        Complete
+                      </button>
+                    )}
+                    {!timing.canExtend && !timing.canEditBeforeCheckIn && !timing.canComplete && (
+                      <button
+                        type="button"
+                        onClick={() => { window.location.href = '/booking'; }}
+                        className="rounded-xl border border-white/10 px-3 py-2 text-xs font-bold text-white/60 hover:text-white hover:bg-white/5 transition flex items-center gap-2"
+                      >
+                        <RotateCcw size={14} />
+                        Book again
+                      </button>
+                    )}
+                    {isBusy && <Loader2 size={16} className="animate-spin text-white/40 mt-2" />}
                   </div>
-                  {booking.services?.length > 0 && (
-                    <div className="mt-3 text-xs text-yellow-400/70 font-medium">
-                      + Services: {booking.services.map((service) => service.serviceName).join(', ')}
-                    </div>
-                  )}
-                  {booking.refundAmount > 0 && (
-                    <div className="mt-1 text-xs text-emerald-400/80 font-medium">
-                      Refunded: {formatMoney(booking.refundAmount)}
-                    </div>
-                  )}
                 </div>
-
-
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
+
+      {dialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-3xl border border-white/10 bg-[#121212] p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4 mb-5">
+              <div>
+                <h3 className="text-xl font-black text-white">
+                  {dialog.type === 'plate' ? 'Change License Plate' : 'Extend Parking'}
+                </h3>
+                <p className="text-sm text-white/45 mt-1">
+                  Slot {dialog.booking.slotCode} - {dialog.booking.floorId?.name || 'Floor'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDialog(null)}
+                className="rounded-xl border border-white/10 px-3 py-2 text-xs font-bold text-white/50 hover:text-white hover:bg-white/5 transition"
+              >
+                Close
+              </button>
+            </div>
+
+            {dialog.type === 'plate' ? (
+              <label className="block">
+                <span className="text-[11px] font-bold uppercase tracking-widest text-white/35">New license plate</span>
+                <input
+                  value={plateInput}
+                  onChange={(event) => setPlateInput(event.target.value)}
+                  className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white outline-none focus:border-yellow-400"
+                  placeholder="Example: 51G12345"
+                />
+              </label>
+            ) : (
+              <div className="space-y-4">
+                <label className="block">
+                  <span className="text-[11px] font-bold uppercase tracking-widest text-white/35">New end time</span>
+                  <input
+                    type="datetime-local"
+                    value={extendEndTime}
+                    min={addMinutesLocalInput(dialog.booking.endTime, 30)}
+                    onChange={(event) => setExtendEndTime(event.target.value)}
+                    className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white outline-none focus:border-yellow-400"
+                  />
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[30, 60, 120].map((minutes) => (
+                    <button
+                      key={minutes}
+                      type="button"
+                      onClick={() => setExtendEndTime(addMinutesLocalInput(dialog.booking.endTime, minutes))}
+                      className="rounded-xl border border-white/10 px-3 py-2 text-xs font-bold text-white/60 hover:text-white hover:bg-white/5 transition flex items-center justify-center gap-1"
+                    >
+                      <Clock size={13} />
+                      +{minutes >= 60 ? `${minutes / 60}h` : `${minutes}m`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setDialog(null)}
+                className="flex-1 rounded-2xl border border-white/10 px-4 py-3 text-sm font-bold text-white/60 hover:text-white hover:bg-white/5 transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={Boolean(actionLoading)}
+                onClick={dialog.type === 'plate' ? submitPlateChange : submitExtension}
+                className="flex-1 rounded-2xl bg-yellow-400 px-4 py-3 text-sm font-black text-black hover:bg-yellow-300 transition disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {actionLoading ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

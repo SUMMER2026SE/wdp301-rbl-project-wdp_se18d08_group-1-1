@@ -35,7 +35,7 @@ const bookingSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['confirmed', 'active', 'completed', 'cancelled', 'expired'],
+      enum: ['confirmed', 'active', 'paused', 'completed', 'cancelled', 'expired'],
       default: 'confirmed',
     },
     paidHours: {
@@ -68,6 +68,21 @@ const bookingSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    orderId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'BookingOrder',
+      default: null,
+    },
+    orderItemIndex: {
+      type: Number,
+      default: null,
+      min: 0,
+    },
+    clientItemId: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     paymentMethod: {
       type: String,
       enum: ['wallet'],
@@ -83,10 +98,28 @@ const bookingSchema = new mongoose.Schema(
       ref: 'Session',
       default: null,
     },
+    holdId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'BookingHold',
+      default: null,
+    },
     ticketPackageId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'TicketPackage',
       default: null,
+    },
+    pricingDetails: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+    pausedAt: {
+      type: Date,
+      default: null,
+    },
+    remainingMinutes: {
+      type: Number,
+      default: null,
+      min: 0,
     },
   },
   { timestamps: true }
@@ -105,5 +138,7 @@ bookingSchema.pre('validate', function validateBookingTime(next) {
 bookingSchema.index({ floorId: 1, slotCode: 1, startTime: 1, endTime: 1, status: 1 });
 bookingSchema.index({ licensePlate: 1, status: 1, startTime: 1, endTime: 1 });
 bookingSchema.index({ userId: 1, createdAt: -1 });
+bookingSchema.index({ orderId: 1, orderItemIndex: 1 });
+bookingSchema.index({ userId: 1, orderId: 1 });
 
 module.exports = mongoose.model('Booking', bookingSchema);
