@@ -28,13 +28,13 @@ export default function LiveFeed({ notifications, onMarkRead, onMarkAllRead }) {
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="text-sm text-yellow-400 uppercase tracking-[0.2em] font-semibold">
-            Phát sóng trực tiếp
+            Live broadcast
           </p>
           <h2 className="mt-2 text-2xl font-semibold text-white">
-            Dòng thông báo thời gian thực
+            Real-time notification feed
           </h2>
           <p className="mt-2 text-sm text-gray-400 max-w-2xl">
-            Lọc theo mức độ ưu tiên, xem trạng thái đã đọc và đánh dấu tất cả là đã đọc.
+            Filter by priority, view read status, and mark all as read.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -44,11 +44,11 @@ export default function LiveFeed({ notifications, onMarkRead, onMarkAllRead }) {
             className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500/15 px-4 py-3 text-sm font-semibold text-emerald-200 ring-1 ring-emerald-500/20 hover:bg-emerald-500/20"
           >
             <CheckCircle2 size={16} />
-            Đánh dấu tất cả là đã đọc
+            Mark all as read
           </button>
           <div className="inline-flex items-center gap-2 rounded-2xl bg-gray-900/80 px-4 py-3 text-sm text-gray-300 ring-1 ring-white/10">
             <Bell size={16} />
-            <span>{filteredNotifications.length} thông báo</span>
+            <span>{filteredNotifications.length} notifications</span>
           </div>
         </div>
       </div>
@@ -67,7 +67,7 @@ export default function LiveFeed({ notifications, onMarkRead, onMarkAllRead }) {
                   : "bg-white/5 text-gray-400 hover:bg-white/5"
               }`}
             >
-              {option === "ALL" ? "Tất cả" : meta.label}
+              {option === "ALL" ? "All" : meta.label}
             </button>
           );
         })}
@@ -77,8 +77,8 @@ export default function LiveFeed({ notifications, onMarkRead, onMarkAllRead }) {
         {filteredNotifications.length === 0 ? (
           <div className="rounded-3xl border border-dashed border-white/10 bg-white/5 p-10 text-center text-gray-400">
             <Inbox className="mx-auto mb-3 text-yellow-300" size={34} />
-            <p className="text-lg font-semibold text-white">Chưa có thông báo phù hợp</p>
-            <p className="mt-2 text-sm text-gray-500">Kiểm tra lại bộ lọc hoặc tạo thông báo mới từ tab Soạn.</p>
+            <p className="text-lg font-semibold text-white">No matching notifications</p>
+            <p className="mt-2 text-sm text-gray-500">Check the filters or create a new notification from the Compose tab.</p>
           </div>
         ) : (
           filteredNotifications.map((item) => {
@@ -97,7 +97,7 @@ export default function LiveFeed({ notifications, onMarkRead, onMarkAllRead }) {
                       </span>
                       {!item.read && (
                         <span className="rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-semibold text-emerald-200">
-                          Chưa đọc
+                          Unread
                         </span>
                       )}
                     </div>
@@ -110,10 +110,10 @@ export default function LiveFeed({ notifications, onMarkRead, onMarkAllRead }) {
                     </span>
                     <span className="rounded-full bg-gray-900/80 px-3 py-1 text-xs text-gray-400">
                       {item.target?.type === "all"
-                        ? "Toàn hệ thống"
+                        ? "System-wide"
                         : item.target?.type === "multi"
-                        ? "Nhiều khách hàng"
-                        : "Một khách hàng"}
+                        ? "Multiple customers"
+                        : "One customer"}
                     </span>
                     <button
                       type="button"
@@ -121,7 +121,7 @@ export default function LiveFeed({ notifications, onMarkRead, onMarkAllRead }) {
                       className="inline-flex items-center justify-center rounded-2xl bg-sky-500/15 px-3 py-2 text-sm font-semibold text-sky-200 hover:bg-sky-500/20"
                     >
                       <Sparkles size={14} />
-                      Đánh dấu đã đọc
+                      Mark as read
                     </button>
                   </div>
                 </div>

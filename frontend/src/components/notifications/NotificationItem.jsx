@@ -3,7 +3,6 @@ import {
   Camera, Info, CheckCircle2, AlertTriangle, XCircle, Trash2, Eye
 } from 'lucide-react';
 
-// ─── Type → icon/color mapping ──────────────────────────────────────────────────
 const TYPE_CONFIG = {
   SYSTEM:    { icon: Shield,        color: 'text-blue-400',    bg: 'bg-blue-500/10',   border: 'border-blue-500/20' },
   PARKING:   { icon: Car,           color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
@@ -22,29 +21,18 @@ const PRIORITY_CONFIG = {
   ERROR:   { icon: XCircle,        color: 'text-red-400' },
 };
 
-// ─── Time ago helper ────────────────────────────────────────────────────────────
 function timeAgo(dateStr) {
   const now = new Date();
   const date = new Date(dateStr);
   const seconds = Math.floor((now - date) / 1000);
 
-  if (seconds < 60) return 'Vừa xong';
-  if (seconds < 3600) return `${Math.floor(seconds / 60)} phút trước`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)} giờ trước`;
-  if (seconds < 604800) return `${Math.floor(seconds / 86400)} ngày trước`;
-  return date.toLocaleDateString('vi-VN');
+  if (seconds < 60) return 'Just now';
+  if (seconds < 3600) return `${Math.floor(seconds / 60)} minutes ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)} hours ago`;
+  if (seconds < 604800) return `${Math.floor(seconds / 86400)} days ago`;
+  return date.toLocaleDateString('en-US');
 }
 
-/**
- * NotificationItem — a single notification card.
- *
- * Props:
- * - notification: object { title, content, type, priority, isRead, createdAt, notificationId/_id }
- * - onRead: (id) => void
- * - onDelete: (id) => void
- * - compact: boolean — true for dropdown, false for full page
- * - onClick: () => void
- */
 export default function NotificationItem({ notification, onRead, onDelete, compact = false, onClick }) {
   const n = notification;
   const id = n.notificationId || n._id;
@@ -74,12 +62,10 @@ export default function NotificationItem({ notification, onRead, onDelete, compa
             : 'bg-yellow-500/[0.03] hover:bg-yellow-500/[0.06]'}
         `}
       >
-        {/* Type icon */}
         <div className={`w-8 h-8 rounded-lg ${typeConf.bg} ${typeConf.border} border flex items-center justify-center shrink-0 mt-0.5`}>
           <TypeIcon size={14} className={typeConf.color} />
         </div>
 
-        {/* Content */}
         <div className="flex-1 min-w-0">
           <div className="flex items-start gap-2">
             <p className={`text-xs font-semibold truncate ${n.isRead ? 'text-gray-400' : 'text-gray-200'}`}>
@@ -96,7 +82,6 @@ export default function NotificationItem({ notification, onRead, onDelete, compa
     );
   }
 
-  // ── Full size (for NotificationCenter) ──
   return (
     <div
       onClick={handleClick}
@@ -108,17 +93,14 @@ export default function NotificationItem({ notification, onRead, onDelete, compa
           : 'bg-yellow-500/[0.03] border-yellow-500/10 hover:border-yellow-500/20'}
       `}
     >
-      {/* Unread dot */}
       {!n.isRead && (
         <span className="absolute top-4 right-4 w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
       )}
 
-      {/* Type icon */}
       <div className={`w-10 h-10 rounded-xl ${typeConf.bg} ${typeConf.border} border flex items-center justify-center shrink-0`}>
         <TypeIcon size={18} className={typeConf.color} />
       </div>
 
-      {/* Content */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-1">
           <p className={`text-sm font-bold ${n.isRead ? 'text-gray-400' : 'text-gray-100'}`}>
@@ -140,13 +122,12 @@ export default function NotificationItem({ notification, onRead, onDelete, compa
         </div>
       </div>
 
-      {/* Actions */}
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 shrink-0">
         {!n.isRead && onRead && (
           <button
             onClick={(e) => { e.stopPropagation(); onRead(id); }}
             className="w-7 h-7 rounded-lg bg-white/5 hover:bg-emerald-500/20 flex items-center justify-center text-gray-500 hover:text-emerald-400 transition-all"
-            title="Đánh dấu đã đọc"
+            title="Mark as read"
           >
             <Eye size={13} />
           </button>
@@ -155,7 +136,7 @@ export default function NotificationItem({ notification, onRead, onDelete, compa
           <button
             onClick={handleDelete}
             className="w-7 h-7 rounded-lg bg-white/5 hover:bg-red-500/20 flex items-center justify-center text-gray-500 hover:text-red-400 transition-all"
-            title="Xóa"
+            title="Delete"
           >
             <Trash2 size={13} />
           </button>

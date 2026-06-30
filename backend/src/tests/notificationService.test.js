@@ -175,7 +175,7 @@ async function runTests() {
       amount: '500,000',
       balance: '1,200,000',
     });
-    assert(filled.title.includes('Nạp tiền thành công'), 'Template title filled');
+    assert(filled.title.includes('Top-up successful'), 'Template title filled');
     assert(filled.content.includes('500,000'), 'Amount placeholder filled');
     assert(filled.content.includes('1,200,000'), 'Balance placeholder filled');
 

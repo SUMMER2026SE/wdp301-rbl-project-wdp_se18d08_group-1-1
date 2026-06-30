@@ -41,6 +41,12 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true, // true = active, false = inactive
     },
+    membership: {
+      isVip: { type: Boolean, default: false },
+      expireAt: { type: Date, default: null },
+      packageId: { type: mongoose.Schema.Types.ObjectId, ref: 'TicketPackage', default: null },
+      freeServiceCount: { type: Number, default: 0 },
+    },
   },
   {
     timestamps: true,

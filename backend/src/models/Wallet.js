@@ -11,7 +11,7 @@ const walletSchema = new mongoose.Schema(
     balance: {
       type: Number,
       default: 0,
-      min: [0, 'Balance cannot be negative'],
+      min: [-100000, 'Balance cannot be less than -100,000 VND'],
     },
     totalTopUp: {
       type: Number,

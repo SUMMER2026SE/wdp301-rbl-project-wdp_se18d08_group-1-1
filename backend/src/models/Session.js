@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { normalizeLicensePlate } = require('../utils/licensePlateUtils');
 
 const sessionSchema = new mongoose.Schema(
   {
@@ -15,6 +16,16 @@ const sessionSchema = new mongoose.Schema(
     phone: {
       type: String,
       trim: true,
+      default: null,
+    },
+    source: {
+      type: String,
+      enum: ['kiosk', 'app_booking', 'booking', 'walk_in'],
+      default: 'kiosk',
+    },
+    bookingId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Booking',
       default: null,
     },
     vehicleType: {
@@ -61,8 +72,48 @@ const sessionSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    hourlyRate: {
+      type: Number,
+      default: 0,
+    },
+    prepaidAmount: {
+      type: Number,
+      default: 0,
+    },
+    refundAmount: {
+      type: Number,
+      default: 0,
+    },
+    exitRequestedAt: {
+      type: Date,
+      default: null,
+    },
+    paymentMethod: {
+      type: String,
+      enum: ['wallet', 'cash', 'payos', 'none'],
+      default: 'none',
+    },
+    paymentStatus: {
+      type: String,
+      enum: ['pending', 'paid', 'refunded', 'failed'],
+      default: 'pending',
+    },
+    ticketPackageId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'TicketPackage',
+      default: null,
+    },
   },
   { timestamps: true }
 );
+
+sessionSchema.pre('validate', function normalizePlate(next) {
+  if (this.licensePlate) {
+    this.licensePlate = normalizeLicensePlate(this.licensePlate);
+  }
+  next();
+});
+
+sessionSchema.index({ licensePlate: 1, status: 1, checkInTime: 1 });
 
 module.exports = mongoose.model('Session', sessionSchema);

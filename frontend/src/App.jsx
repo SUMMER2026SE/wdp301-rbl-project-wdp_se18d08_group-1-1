@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { SocketProvider } from "./contexts/SocketProvider";
 
 // Layouts
@@ -12,6 +12,8 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import GuestHome from "./pages/Guest/GuestHome";
 import LoginPage from "./pages/Guest/LoginPage";
 import ParkingMap from "./pages/Guest/ParkingMap";
+import ServiceList from "./pages/Guest/ServiceList";
+import ServiceDetail from "./pages/Guest/ServiceDetail";
 import OAuthCallback from "./pages/OAuthCallback";
 
 // Pages - Kiosk
@@ -23,6 +25,8 @@ import AdminDashboard from "./pages/Admin/Dashboard";
 import VehicleManagement from "./pages/Admin/VehicleManagement";
 import AdminProfile from "./pages/Admin/AdminProfile";
 import ParkingLots from "./pages/Admin/ParkingLots";
+import AdminServiceManager from "./pages/Admin/AdminServiceManager";
+import TicketPackages from "./pages/Admin/TicketPackages";
 import AccountManagement from "./pages/Admin/AccountManagement";
 
 // Pages – Staff
@@ -31,16 +35,25 @@ import StaffProfile from "./pages/Staff/StaffProfile";
 import StaffSessionManagement from "./pages/Staff/SessionManagement";
 import StaffAccountManagement from "./pages/Staff/AccountManagement";
 import NotificationManagement from "./pages/Staff/NotificationManagement";
+import LiveGridMonitor from "./pages/Staff/LiveGridMonitor";
 
 // Pages – Customer
 import CustomerProfile from "./pages/Customer/CustomerProfile";
+import Membership from "./pages/Customer/Membership";
 import MyVehicles from "./pages/Customer/MyVehicles";
 import WalletPage from "./pages/Wallet/WalletPage";
 import ParkingHistory from "./pages/Customer/ParkingHistory";
 import CustomerNotifications from "./pages/Customer/CustomerNotifications";
+import BookingPage from "./pages/Customer/BookingPage";
+import CreateBookingPage from "./pages/Customer/CreateBookingPage";
 
 // Misc
 import UnauthorizedPage from "./pages/UnauthorizedPage";
+
+function RedirectOldWalletRoutes() {
+  const location = useLocation();
+  return <Navigate to={`/customer/wallet${location.search}`} replace />;
+}
 
 export default function App() {
   return (
@@ -57,20 +70,39 @@ export default function App() {
           />
           <Route path="/kiost/*" element={<Navigate to="/kiosk" replace />} />
 
-          {/* ── Public: Navbar + Footer ── */}
-          <Route element={<MainLayout />}>
-            <Route path="/" element={<GuestHome />} />
-            <Route path="/parking-map" element={<ParkingMap />} />
-            {/* /pricing, /about... thêm vào đây */}
-          </Route>
+        {/* ── Public: Navbar + Footer ── */}
+        <Route element={<MainLayout />}>
+          <Route path="/" element={<GuestHome />} />
+          <Route path="/parking-map" element={<ParkingMap />} />
+          <Route path="/services" element={<ServiceList />} />
+          <Route path="/services/:id" element={<ServiceDetail />} />
+          
+          {/* Protected routes that use MainLayout (Light theme with top navbar) */}
+          <Route
+            path="/booking"
+            element={
+              <ProtectedRoute allowedRoles={["customer"]}>
+                <CreateBookingPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/membership"
+            element={
+              <ProtectedRoute allowedRoles={["customer"]}>
+                <Membership />
+              </ProtectedRoute>
+            }
+          />
+        </Route>
 
-          {/* ── Standalone auth page ── */}
+        {/* ── Standalone auth page ── */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/oauth/callback" element={<OAuthCallback />} />
 
           {/* ══════════════════════════════════════════
             ADMIN section — DashboardLayout chung
-            Chỉ role "admin" được vào
+            Only the "admin" role can access this route
         ══════════════════════════════════════════ */}
           <Route
             element={
@@ -85,13 +117,15 @@ export default function App() {
               path="/admin/vehicle-models"
               element={<VehicleManagement />}
             />
+            <Route path="/admin/services" element={<AdminServiceManager />} />
             <Route path="/admin/parking-lots" element={<ParkingLots />} />
+            <Route path="/admin/tickets" element={<TicketPackages />} />
             <Route path="/admin/profile" element={<AdminProfile />} />
           </Route>
 
           {/* ══════════════════════════════════════════
             STAFF section — DashboardLayout chung
-            Chỉ role "staff" được vào
+            Only the "staff" role can access this route
         ══════════════════════════════════════════ */}
           <Route
             element={
@@ -114,6 +148,7 @@ export default function App() {
               path="/staff/notifications"
               element={<NotificationManagement />}
             />
+            <Route path="/staff/live-grid" element={<LiveGridMonitor />} />
           </Route>
 
           {/* ── Customer section ── */}
@@ -128,6 +163,8 @@ export default function App() {
             <Route path="/customer/vehicles" element={<MyVehicles />} />
             <Route path="/customer/wallet" element={<WalletPage />} />
             <Route path="/customer/history" element={<ParkingHistory />} />
+            <Route path="/customer/booking" element={<BookingPage />} />
+            <Route path="/wallet/*" element={<RedirectOldWalletRoutes />} />
             <Route
               path="/customer/notifications"
               element={<CustomerNotifications />}

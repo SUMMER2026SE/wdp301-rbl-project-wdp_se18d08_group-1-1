@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { apiFetch } from "../services/api";
+import { logoutUser } from "../services/authService";
+import { clearAuthSession, notifyAuthChange } from "../services/authStorage";
 import logoImg from "../assets/images/logo.png";
 import { useNotifications } from "../hooks/useNotifications";
 import { formatDistanceToNow } from "date-fns";
-import { vi } from "date-fns/locale";
+import { enUS } from "date-fns/locale";
 import {
   LayoutDashboard,
   Users,
@@ -27,6 +29,7 @@ import {
   FileWarning,
   ClipboardList,
   BookOpen,
+  CalendarCheck,
   SlidersHorizontal,
   // Common
   Bell,
@@ -60,7 +63,7 @@ const NAV_CONFIG = {
     },
     { label: "Services", icon: <Wrench size={18} />, to: "/admin/services" },
     {
-      label: "Quản lý xe & 3D",
+      label: "Vehicles & 3D",
       icon: <Car size={18} />,
       to: "/admin/vehicle-models",
     },
@@ -113,7 +116,7 @@ const NAV_CONFIG = {
       to: "/staff/violations",
     },
     {
-      label: "Quản lý thông báo",
+      label: "Notification Management",
       icon: <Bell size={18} />,
       to: "/staff/notifications",
     },
@@ -132,6 +135,11 @@ const NAV_CONFIG = {
     { label: "Home", icon: <Home size={18} />, to: "/" },
     { label: "Profile", icon: <User size={18} />, to: "/profile" },
     { label: "My Vehicles", icon: <Car size={18} />, to: "/customer/vehicles" },
+    {
+      label: "My Bookings",
+      icon: <CalendarCheck size={18} />,
+      to: "/customer/booking",
+    },
     { label: "History", icon: <History size={18} />, to: "/customer/history" },
     { label: "Wallet", icon: <Wallet size={18} />, to: "/customer/wallet" },
     {
@@ -217,11 +225,12 @@ export default function DashboardLayout() {
       window.removeEventListener("valo_auth_change", handleAuthChange);
   }, []);
 
-  // Fetch profile if avatar is missing
+  // Fetch profile if avatar or membership metadata is missing
   useEffect(() => {
     const fetchProfileAvatar = async () => {
       if (!user || Object.keys(user).length === 0) return;
-      if (user.avatar || user.profile?.avatar || user.avatarUrl) return; // already has it
+      const needsProfile = !user.profile || (user.membership?.isVip && !user.membership?.packageType);
+      if (!needsProfile) return;
 
       const token = localStorage.getItem("accessToken");
       if (!token) return;
@@ -232,18 +241,18 @@ export default function DashboardLayout() {
         });
         if (ok && data?.success) {
           const freshAvatar = data.data.profile?.avatar || "";
-          if (freshAvatar) {
-            const updatedUser = {
-              ...user,
-              ...data.data,
-              avatar: freshAvatar,
-            };
-            sessionStorage.setItem("valo_user", JSON.stringify(updatedUser));
-            setUser(updatedUser);
-            window.dispatchEvent(new Event("valo_auth_change"));
-          }
+          const updatedUser = {
+            ...user,
+            ...data.data,
+            avatar: freshAvatar || user.avatar || user.profile?.avatar || user.avatarUrl || "",
+          };
+          sessionStorage.setItem("valo_user", JSON.stringify(updatedUser));
+          setUser(updatedUser);
+          notifyAuthChange();
         }
-      } catch (e) {}
+      } catch {
+        // Profile enrichment is best-effort; keep the cached user if it fails.
+      }
     };
 
     fetchProfileAvatar();
@@ -259,16 +268,18 @@ export default function DashboardLayout() {
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
-  const handleLogout = () => {
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("refreshToken");
-    sessionStorage.removeItem("valo_user");
-    window.dispatchEvent(new Event("valo_auth_change"));
+  const handleLogout = async () => {
+    try {
+      await logoutUser();
+    } catch {
+      // Still clear local auth state if the server logout request fails.
+    }
+    clearAuthSession();
     navigate("/login");
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 dark:bg-[#0D0D0D] flex font-sans transition-colors duration-300">
+    <div className="h-screen overflow-hidden bg-gray-100 dark:bg-[#0D0D0D] flex font-sans transition-colors duration-300">
       {/* ══════════ SIDEBAR ══════════ */}
       <aside
         className={`
@@ -377,7 +388,7 @@ export default function DashboardLayout() {
             <button
               onClick={handleLogout}
               className="w-9 h-9 rounded-xl bg-gray-100 dark:bg-white/5 hover:bg-red-500/10 flex items-center justify-center text-gray-500 dark:text-gray-400 hover:text-red-400 transition-colors"
-              title="Đăng xuất"
+              title="Logout"
             >
               <LogOut size={17} />
             </button>
@@ -399,21 +410,21 @@ export default function DashboardLayout() {
                 <div className="absolute right-0 top-[calc(100%+8px)] w-80 bg-white dark:bg-[#1A1A1A] border border-gray-200 dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden z-50 flex flex-col max-h-[400px]">
                   <div className="px-4 py-3 border-b border-gray-100 dark:border-white/5 flex justify-between items-center bg-gray-50 dark:bg-[#111]">
                     <p className="text-gray-900 dark:text-white font-bold text-sm">
-                      Thông báo
+                      Notifications
                     </p>
                     {unreadCount > 0 && (
                       <button
                         onClick={markAllAsRead}
                         className="text-xs text-emerald-500 hover:text-emerald-400 font-medium"
                       >
-                        Đánh dấu đã đọc
+                        Mark all as read
                       </button>
                     )}
                   </div>
                   <div className="overflow-y-auto flex-1">
                     {notifications.length === 0 ? (
                       <div className="p-6 text-center text-gray-500 text-sm">
-                        Không có thông báo nào
+                        No notifications
                       </div>
                     ) : (
                       notifications.map((n) => (
@@ -440,9 +451,9 @@ export default function DashboardLayout() {
                               {n.createdAt
                                 ? formatDistanceToNow(new Date(n.createdAt), {
                                     addSuffix: true,
-                                    locale: vi,
+                                    locale: enUS,
                                   })
-                                : "Vừa xong"}
+                                : "Just now"}
                             </p>
                           </div>
                         </div>
@@ -455,12 +466,12 @@ export default function DashboardLayout() {
                         navigate(
                           role === "staff" || role === "admin"
                             ? `/${role}/notifications`
-                            : "/profile",
+                            : "/customer/notifications",
                         )
                       }
                       className="w-full text-center text-xs text-gray-500 hover:text-gray-900 dark:hover:text-white py-1"
                     >
-                      Xem tất cả
+                      View all
                     </button>
                   </div>
                 </div>
