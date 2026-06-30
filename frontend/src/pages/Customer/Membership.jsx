@@ -9,7 +9,7 @@ import ParkingMapViewer from '../../components/ParkingMapViewer';
 import { QRCodeSVG } from 'qrcode.react';
 
 export default function Membership() {
-  const [packages, setPackages] = useState({ monthly: null, yearly: null });
+  const [packages, setPackages] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -29,8 +29,16 @@ export default function Membership() {
   const [walletBalance, setWalletBalance] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState('payos');
 
-  const isMonthlyVIP = user?.membership?.isVip && user.membership.packageId === packages.monthly?._id;
-  const isYearlyVIP = user?.membership?.isVip && user.membership.packageId === packages.yearly?._id;
+  const subscriptionPackages = packages
+    .filter(pkg => ['monthly', 'yearly'].includes(pkg.type))
+    .sort((a, b) => {
+      const typeOrder = { monthly: 0, yearly: 1 };
+      return (typeOrder[a.type] ?? 2) - (typeOrder[b.type] ?? 2) || (a.price || 0) - (b.price || 0);
+    });
+
+  const activePackage = subscriptionPackages.find(pkg => user?.membership?.packageId === pkg._id);
+  const activePackageType = activePackage?.type || user?.membership?.packageType;
+  const isVipActive = Boolean(user?.membership?.isVip);
 
   const syncCurrentUserProfile = async () => {
     const token = localStorage.getItem('accessToken');
@@ -116,10 +124,7 @@ export default function Membership() {
         
         if (pkgRes.ok && pkgRes.data?.data) {
           const pkgs = pkgRes.data.data;
-          setPackages({
-            monthly: pkgs.find(p => p.type === 'monthly'),
-            yearly: pkgs.find(p => p.type === 'yearly')
-          });
+          setPackages(pkgs);
         }
         if (vRes.ok) {
           setVehicles(vRes.data?.data || []);
@@ -146,9 +151,85 @@ export default function Membership() {
   }, []);
 
   const handleBuyPackage = (pkg) => {
+    if (!pkg) return;
     setSelectedPackage(pkg);
     setSelectedSlots([]);
     setShowSlotModal(true);
+  };
+
+  const cardShellClass = "group relative z-10 flex min-h-[430px] w-full flex-col overflow-hidden rounded-3xl bg-white p-5 shadow-[0_14px_34px_rgba(15,23,42,0.08)] transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_22px_46px_rgba(15,23,42,0.14)] md:p-6";
+
+  const totalCards = subscriptionPackages.length + 1;
+  const getDesktopGridBalanceClass = (cardIndex) => {
+    const lastRowCount = totalCards % 3;
+    const lastRowStartIndex = totalCards - lastRowCount;
+
+    if (lastRowCount === 1 && cardIndex === lastRowStartIndex) return 'lg:col-start-2';
+    if (lastRowCount === 2 && cardIndex === lastRowStartIndex + 1) return 'lg:col-start-3';
+    return '';
+  };
+
+  const getPackagePresentation = (pkg, index) => {
+    const isYearly = pkg.type === 'yearly';
+    const isMonthly = pkg.type === 'monthly';
+    const isPopular = isMonthly && index === subscriptionPackages.findIndex(item => item.type === 'monthly');
+
+    if (isYearly) {
+      return {
+        Icon: Sparkles,
+        title: pkg.name || 'Yearly VIP',
+        subtitle: 'for 1 year',
+        badge: 'Yearly',
+        border: 'border border-purple-100/80 hover:border-purple-200',
+        glow: 'from-purple-500/20 via-fuchsia-400/10 to-transparent',
+        softWash: 'from-purple-50/90 via-white to-fuchsia-50/70',
+        iconBox: 'bg-purple-50 text-purple-600 ring-purple-100',
+        priceBox: 'bg-gradient-to-br from-purple-50 to-white border-purple-100',
+        priceText: 'text-purple-600',
+        checkText: 'text-purple-500',
+        button: 'bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-fuchsia-600 shadow-lg shadow-purple-500/20',
+        popular: false,
+        features: [
+          'All Monthly VIP benefits',
+          'Includes 12 free washes / maintenance services',
+          'Priority support',
+        ],
+      };
+    }
+
+    return {
+      Icon: Crown,
+      title: pkg.name || 'Monthly VIP',
+      subtitle: 'per month',
+      badge: 'Monthly',
+      border: isPopular ? 'border-2 border-gold/80 hover:border-gold' : 'border border-gold/25 hover:border-gold/50',
+      glow: 'from-gold/25 via-yellow-300/10 to-transparent',
+      softWash: 'from-yellow-50/80 via-white to-amber-50/70',
+      iconBox: 'bg-gold/10 text-gold ring-gold/20',
+      priceBox: 'bg-gradient-to-br from-gold/10 to-white border-gold/20',
+      priceText: 'text-gold',
+      checkText: 'text-gold',
+      button: 'bg-gradient-to-r from-yellow-500 to-gold hover:from-amber-500 hover:to-yellow-400 shadow-lg shadow-gold/20',
+      popular: isPopular,
+      features: [
+        'All Member benefits',
+        'Own a fixed parking slot under your name',
+        'Free 24/7 automatic check-in',
+        'No need to book before arrival',
+      ],
+    };
+  };
+
+  const getPackageButton = (pkg) => {
+    if (isVipActive && activePackage?._id === pkg._id) {
+      return { disabled: true, label: 'In use' };
+    }
+
+    if (isVipActive && activePackageType === 'yearly' && pkg.type === 'monthly') {
+      return { disabled: true, label: 'Included in the Yearly plan' };
+    }
+
+    return { disabled: false, label: 'Upgrade now' };
   };
 
   const handleSelectSlot = (floorId, slotData) => {
@@ -219,147 +300,141 @@ export default function Membership() {
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       {/* Header Banner */}
-      <div className="bg-[#181C23] text-white pt-24 pb-32 px-6 rounded-b-[40px] text-center relative overflow-hidden">
+      <div className="bg-[#181C23] text-white pt-28 pb-20 px-6 rounded-b-[32px] text-center relative overflow-hidden">
         <div className="absolute inset-0 opacity-10 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-gold via-[#181C23] to-[#181C23]"></div>
         <div className="relative z-10 max-w-4xl mx-auto">
-          <div className="flex justify-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400">
-              <span className="font-bold">★</span>
+          <div className="flex justify-center gap-2 mb-3">
+            <div className="w-7 h-7 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400">
+              <span className="font-bold text-xs">★</span>
             </div>
-            <div className="w-10 h-10 rounded-full bg-gold/20 flex items-center justify-center text-gold">
-              <Crown size={20} />
+            <div className="w-7 h-7 rounded-full bg-gold/20 flex items-center justify-center text-gold">
+              <Crown size={14} />
             </div>
-            <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400">
-              <Sparkles size={20} />
+            <div className="w-7 h-7 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400">
+              <Sparkles size={14} />
             </div>
           </div>
-          <h1 className="text-4xl md:text-5xl font-black mb-4 tracking-tight">Unlock <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-gold">Premium</span></h1>
-          <p className="text-gray-400 text-lg">Choose the right plan and upgrade your experience</p>
+          <h1 className="text-3xl md:text-4xl font-black mb-2 tracking-tight">Unlock <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-gold">Premium</span></h1>
+          <p className="text-gray-400 text-sm md:text-base">Choose the right plan and upgrade your experience</p>
         </div>
       </div>
 
       {/* Cards */}
-      <div className="max-w-6xl mx-auto px-6 -mt-20">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="mx-auto -mt-10 max-w-6xl px-4 sm:px-6">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 xl:gap-6">
           
           {/* Member Card */}
-          <div className="bg-white rounded-3xl p-8 shadow-xl border border-gray-100 flex flex-col relative z-10 transition hover:-translate-y-2">
-            <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center text-gray-500 mx-auto mb-4">
-              <span className="font-black text-xl">M</span>
+          <div className={`${cardShellClass} ${getDesktopGridBalanceClass(0)} border border-gray-100 hover:border-gray-200`}>
+            <div className="absolute inset-0 bg-gradient-to-br from-gray-50/90 via-white to-slate-50/80"></div>
+            <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-gray-200/60 blur-3xl motion-safe:animate-pulse"></div>
+            <div className="absolute -bottom-14 -left-14 h-32 w-32 rounded-full bg-slate-100/80 blur-3xl opacity-70 motion-safe:animate-pulse"></div>
+            <div className="relative mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-[20px] bg-gray-100 text-gray-500 ring-8 ring-gray-50 transition duration-300 group-hover:rotate-3 group-hover:scale-105">
+              <span className="font-black text-lg">M</span>
             </div>
-            <h3 className="text-center font-black text-gray-900 tracking-widest text-sm mb-6">MEMBER</h3>
-            <div className="text-center py-4 rounded-2xl bg-gray-50 border border-gray-100 mb-8">
-              <div className="text-2xl font-black text-gray-900">Default</div>
+            <h3 className="relative text-center font-black text-gray-900 tracking-widest text-xs mb-4">MEMBER</h3>
+            <div className="relative text-center py-3.5 rounded-2xl bg-white/80 border border-gray-100 mb-5 shadow-inner backdrop-blur">
+              <div className="text-xl font-black text-gray-900">Default</div>
             </div>
-            <ul className="space-y-4 mb-8 flex-1">
-              <li className="flex gap-3 text-gray-600 text-sm">
-                <Check size={18} className="text-gray-400 shrink-0" />
+            <ul className="relative space-y-3 mb-5 flex-1">
+              <li className="flex gap-2.5 text-gray-600 text-xs">
+                <Check size={15} className="text-gray-400 shrink-0" />
                 <span>Book parking by hour or day</span>
               </li>
-              <li className="flex gap-3 text-gray-600 text-sm">
-                <Check size={18} className="text-gray-400 shrink-0" />
+              <li className="flex gap-2.5 text-gray-600 text-xs">
+                <Check size={15} className="text-gray-400 shrink-0" />
                 <span>Use add-on services (paid)</span>
               </li>
-              <li className="flex gap-3 text-gray-400 text-sm">
-                <div className="w-4 h-4 rounded-full border border-gray-300 shrink-0 mt-0.5"></div>
+              <li className="flex gap-2.5 text-gray-400 text-xs">
+                <div className="w-3.5 h-3.5 rounded-full border border-gray-300 shrink-0 mt-0.5"></div>
                 <span>Dedicated fixed parking slot</span>
               </li>
-              <li className="flex gap-3 text-gray-400 text-sm">
-                <div className="w-4 h-4 rounded-full border border-gray-300 shrink-0 mt-0.5"></div>
+              <li className="flex gap-2.5 text-gray-400 text-xs">
+                <div className="w-3.5 h-3.5 rounded-full border border-gray-300 shrink-0 mt-0.5"></div>
                 <span>Free check-in / No reservation required</span>
               </li>
             </ul>
-            <button disabled className="w-full py-4 rounded-xl font-bold text-gray-500 bg-gray-100">
+            <button disabled className="relative w-full py-3 rounded-2xl font-bold text-gray-500 bg-gray-100 text-sm">
               In use
             </button>
           </div>
 
-          {/* Monthly Card */}
-          <div className="bg-white rounded-3xl p-8 shadow-xl border-2 border-gold flex flex-col relative z-20 scale-105 transition hover:-translate-y-2">
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-gold text-white text-[10px] font-black tracking-widest py-1.5 px-4 rounded-full uppercase">
-              Popular
-            </div>
-            <div className="w-12 h-12 rounded-xl bg-gold/10 flex items-center justify-center text-gold mx-auto mb-4">
-              <Crown size={24} />
-            </div>
-            <h3 className="text-center font-black text-gray-900 tracking-widest text-sm mb-6">MONTHLY VIP</h3>
-            <div className="text-center py-4 rounded-2xl bg-gold/5 border border-gold/20 mb-8">
-              <div className="text-2xl font-black text-gold">
-                {packages.monthly?.price ? packages.monthly.price.toLocaleString('vi-VN') : '---'} VND
-              </div>
-              <div className="text-sm font-medium text-gray-500 mt-1">per month</div>
-            </div>
-            <ul className="space-y-4 mb-8 flex-1">
-              <li className="flex gap-3 text-gray-600 text-sm">
-                <Check size={18} className="text-gold shrink-0" />
-                <span>All Member benefits</span>
-              </li>
-              <li className="flex gap-3 text-gray-600 text-sm">
-                <Check size={18} className="text-gold shrink-0" />
-                <span>Own a fixed parking slot under your name</span>
-              </li>
-              <li className="flex gap-3 text-gray-600 text-sm">
-                <Check size={18} className="text-gold shrink-0" />
-                <span>Free 24/7 automatic check-in</span>
-              </li>
-              <li className="flex gap-3 text-gray-600 text-sm">
-                <Check size={18} className="text-gold shrink-0" />
-                <span>No need to book before arrival</span>
-              </li>
-            </ul>
-            {isMonthlyVIP || isYearlyVIP ? (
-              <button disabled className="w-full py-4 rounded-xl font-bold text-gray-500 bg-gray-100">
-                {isYearlyVIP ? "Included in the Yearly plan" : "In use"}
-              </button>
-            ) : (
-              <button 
-                onClick={() => handleBuyPackage(packages.monthly)}
-                className="w-full py-4 rounded-xl font-bold text-white bg-gradient-to-r from-yellow-500 to-gold hover:opacity-90 transition shadow-lg shadow-gold/20"
-              >
-                Upgrade now
-              </button>
-            )}
-          </div>
+          {subscriptionPackages.map((pkg, index) => {
+            const presentation = getPackagePresentation(pkg, index);
+            const buttonState = getPackageButton(pkg);
+            const Icon = presentation.Icon;
 
-          {/* Yearly Card */}
-          <div className="bg-white rounded-3xl p-8 shadow-xl border border-purple-100 flex flex-col relative z-10 transition hover:-translate-y-2">
-            <div className="w-12 h-12 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600 mx-auto mb-4">
-              <Sparkles size={24} />
-            </div>
-            <h3 className="text-center font-black text-gray-900 tracking-widest text-sm mb-6">YEARLY NOVA</h3>
-            <div className="text-center py-4 rounded-2xl bg-purple-50/50 border border-purple-100 mb-8">
-              <div className="text-2xl font-black text-purple-600">
-                {packages.yearly?.price ? packages.yearly.price.toLocaleString('vi-VN') : '---'} VND
-              </div>
-              <div className="text-sm font-medium text-gray-500 mt-1">for 1 year</div>
-            </div>
-            <ul className="space-y-4 mb-8 flex-1">
-              <li className="flex gap-3 text-gray-600 text-sm">
-                <Check size={18} className="text-purple-500 shrink-0" />
-                <span>All Monthly VIP benefits</span>
-              </li>
-              <li className="flex gap-3 text-gray-600 text-sm font-bold text-purple-600">
-                <Check size={18} className="text-purple-500 shrink-0" />
-                <span>Includes 12 free washes / maintenance services</span>
-              </li>
-              <li className="flex gap-3 text-gray-600 text-sm">
-                <Check size={18} className="text-purple-500 shrink-0" />
-                <span>Priority support</span>
-              </li>
-            </ul>
-            {isYearlyVIP ? (
-              <button disabled className="w-full py-4 rounded-xl font-bold text-gray-500 bg-gray-100">
-                In use
-              </button>
-            ) : (
-              <button 
-                onClick={() => handleBuyPackage(packages.yearly)}
-                className="w-full py-4 rounded-xl font-bold text-white bg-gradient-to-r from-purple-500 to-purple-600 hover:opacity-90 transition shadow-lg shadow-purple-500/20"
+            return (
+              <div
+                key={pkg._id}
+                className={`${cardShellClass} ${getDesktopGridBalanceClass(index + 1)} ${
+                  presentation.border
+                } ${presentation.popular ? 'z-20' : 'z-10'}`}
               >
-                Upgrade now
-              </button>
-            )}
-          </div>
+                {presentation.popular && (
+                  <div className="absolute top-3 right-3 z-20 bg-gold text-white text-[9px] font-black tracking-widest py-1 px-3 rounded-full uppercase shadow-lg shadow-gold/20">
+                    Popular
+                  </div>
+                )}
+                <div className={`absolute inset-0 bg-gradient-to-br ${presentation.softWash}`}></div>
+                <div className={`absolute -right-12 -top-12 h-32 w-32 rounded-full bg-gradient-to-br ${presentation.glow} blur-3xl motion-safe:animate-pulse`}></div>
+                <div className={`absolute -bottom-14 -left-14 h-32 w-32 rounded-full bg-gradient-to-tr ${presentation.glow} blur-3xl opacity-70 motion-safe:animate-pulse`}></div>
+                <div className={`relative w-12 h-12 rounded-[20px] flex items-center justify-center mx-auto mb-3 ring-8 transition duration-300 group-hover:rotate-3 group-hover:scale-105 ${presentation.iconBox}`}>
+                  <Icon size={20} />
+                </div>
+                <div className="relative text-center mb-4">
+                  <span className={`inline-flex px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${presentation.iconBox}`}>
+                    {presentation.badge}
+                  </span>
+                  <h3 className="font-black text-gray-900 tracking-widest text-xs mt-2.5 uppercase">{presentation.title}</h3>
+                </div>
+                <div className={`relative text-center py-4 rounded-2xl border mb-5 shadow-inner ${presentation.priceBox}`}>
+                  <div className={`text-xl font-black ${presentation.priceText}`}>
+                    {(pkg.price || 0).toLocaleString('vi-VN')} VND
+                  </div>
+                  <div className="text-xs font-medium text-gray-500 mt-1">{presentation.subtitle}</div>
+                </div>
+                <ul className="relative space-y-3 mb-5 flex-1">
+                  {presentation.features.map((feature, featureIndex) => (
+                    <li
+                      key={feature}
+                      className={`flex gap-2.5 text-xs ${
+                        pkg.type === 'yearly' && featureIndex === 1 ? 'text-purple-600 font-bold' : 'text-gray-600'
+                      }`}
+                    >
+                      <Check size={15} className={`${presentation.checkText} shrink-0`} />
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                  {pkg.description && (
+                    <li className="flex gap-2.5 text-gray-500 text-xs">
+                      <Check size={15} className={`${presentation.checkText} shrink-0`} />
+                      <span>{pkg.description}</span>
+                    </li>
+                  )}
+                </ul>
+                {buttonState.disabled ? (
+                  <button disabled className="relative w-full py-3 rounded-2xl font-bold text-gray-500 bg-gray-100 text-sm">
+                    {buttonState.label}
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleBuyPackage(pkg)}
+                    className={`relative w-full py-3 rounded-2xl font-bold text-white text-sm transition duration-300 hover:-translate-y-0.5 active:translate-y-0 ${presentation.button}`}
+                  >
+                    {buttonState.label}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+
+          {!loading && subscriptionPackages.length === 0 && (
+            <div className={`${cardShellClass} min-h-[300px] justify-center border border-gray-100 text-center text-gray-500`}>
+              <Crown size={32} className="mx-auto mb-3 text-gray-300" />
+              <h3 className="font-black text-gray-900 mb-2">No VIP packages available</h3>
+              <p className="text-sm">Please check back after admin activates a monthly or yearly package.</p>
+            </div>
+          )}
 
         </div>
       </div>
