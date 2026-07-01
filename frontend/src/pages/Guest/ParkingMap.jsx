@@ -5,52 +5,8 @@ import {
   Filter, X
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-
-/* ─── Mock Data ──────────────────────────────────────────────────────────── */
-const generateMockData = () => {
-  const data = [];
-
-  // Zone A - Standard (12 slots)
-  for (let i = 1; i <= 12; i++) {
-    const statuses = ['available', 'available', 'occupied', 'occupied', 'available', 'maintenance'];
-    const randStatus = statuses[Math.floor(Math.random() * statuses.length)];
-    data.push({
-      id: `A-${i.toString().padStart(2, '0')}`,
-      zone: 'A',
-      type: 'standard',
-      status: randStatus,
-      price: '10,000₫/h',
-    });
-  }
-
-  // Zone B - VIP (8 slots)
-  for (let i = 1; i <= 8; i++) {
-    const statuses = ['available', 'occupied', 'reserved', 'available'];
-    const randStatus = statuses[Math.floor(Math.random() * statuses.length)];
-    data.push({
-      id: `B-${i.toString().padStart(2, '0')}`,
-      zone: 'B',
-      type: 'vip',
-      status: randStatus,
-      price: '30,000₫/h',
-    });
-  }
-
-  // Zone C - EV (6 slots)
-  for (let i = 1; i <= 6; i++) {
-    const statuses = ['available', 'occupied', 'available'];
-    const randStatus = statuses[Math.floor(Math.random() * statuses.length)];
-    data.push({
-      id: `C-${i.toString().padStart(2, '0')}`,
-      zone: 'C',
-      type: 'ev',
-      status: randStatus,
-      price: '20,000₫/h + EV',
-    });
-  }
-
-  return data;
-};
+import { getLiveMapData } from '../../services/parkingFloorService';
+import { createBookingHold } from '../../services/bookingService';
 
 export default function ParkingMap() {
   const navigate = useNavigate();
@@ -66,17 +22,27 @@ export default function ParkingMap() {
   const [showGuestModal, setShowGuestModal] = useState(false);
   const [selectedGuestSlot, setSelectedGuestSlot] = useState(null);
 
+  const fetchLiveMapData = async () => {
+    try {
+      const res = await getLiveMapData();
+      if (res.ok && res.data && res.data.data) {
+        setSlots(res.data.data);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   useEffect(() => {
     // Check login state
     const raw = sessionStorage.getItem('valo_user') || localStorage.getItem('valo_user');
     if (raw) setUser(JSON.parse(raw));
 
-    // Mock initial data
-    setSlots(generateMockData());
+    fetchLiveMapData();
 
     // Auto-refresh data to simulate live
     const interval = setInterval(() => {
-      setSlots(generateMockData());
+      fetchLiveMapData();
     }, 30000); // 30s
     return () => clearInterval(interval);
   }, []);
@@ -123,13 +89,23 @@ export default function ParkingMap() {
     return map[status] || status;
   };
 
-  const handleSlotClick = (slot) => {
+  const handleSlotClick = async (slot) => {
     if (slot.status !== 'available') return;
-    if (!user) {
-      setSelectedGuestSlot(slot);
-      setShowGuestModal(true);
-    } else {
-      navigate('/booking', { state: { selectedSlot: slot.id } });
+    
+    try {
+      const res = await createBookingHold({ floorId: slot.floorId, slotCode: slot.id });
+      if (res.ok) {
+        if (!user) {
+          setSelectedGuestSlot(slot);
+          setShowGuestModal(true);
+        } else {
+          navigate('/booking', { state: { selectedSlot: slot.id } });
+        }
+      } else {
+        alert(res.data?.message || 'Không thể giữ chỗ lúc này.');
+      }
+    } catch (error) {
+      console.error('Hold error:', error);
     }
   };
 

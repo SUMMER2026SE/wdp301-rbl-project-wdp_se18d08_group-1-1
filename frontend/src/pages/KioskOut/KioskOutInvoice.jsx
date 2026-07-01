@@ -6,7 +6,9 @@ import { API_BASE } from '../../services/api';
 export default function KioskOutInvoice({ sessionData, exitImage, onCheckoutSuccess, onBack }) {
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const handleCheckout = useCallback(async (paymentMethod) => {
+  const [isEarlyExitModalOpen, setIsEarlyExitModalOpen] = useState(false);
+
+  const handleCheckout = useCallback(async (paymentMethod, keepPaused = false) => {
     setIsProcessing(true);
     try {
       const res = await fetch(`${API_BASE}/sessions/kiosk-checkout`, {
@@ -15,7 +17,8 @@ export default function KioskOutInvoice({ sessionData, exitImage, onCheckoutSucc
         body: JSON.stringify({
           sessionId: sessionData?.session?._id,
           exitImageBase64: exitImage,
-          paymentMethod
+          paymentMethod,
+          keepPaused
         })
       });
       const data = await res.json();
@@ -32,9 +35,12 @@ export default function KioskOutInvoice({ sessionData, exitImage, onCheckoutSucc
   }, [exitImage, onCheckoutSuccess, sessionData]);
 
   useEffect(() => {
-    // If AutoPay is allowed, auto-trigger checkout
-    if (sessionData && sessionData.canAutoPay) {
-      const timerId = setTimeout(() => handleCheckout('wallet'), 0);
+    if (sessionData && sessionData.isEarlyExit) {
+      setIsEarlyExitModalOpen(true);
+    }
+    // If AutoPay is allowed AND it's not an early exit, auto-trigger checkout
+    if (sessionData && sessionData.canAutoPay && !sessionData.isEarlyExit) {
+      const timerId = setTimeout(() => handleCheckout('wallet', false), 0);
       return () => clearTimeout(timerId);
     }
   }, [handleCheckout, sessionData]);
@@ -47,10 +53,10 @@ export default function KioskOutInvoice({ sessionData, exitImage, onCheckoutSucc
     );
   }
 
-  const { session, durationHours, expectedHours, totalPrice, walletBalance, canAutoPay } = sessionData;
+  const { session, durationHours, expectedHours, totalPrice, walletBalance, canAutoPay, isEarlyExit, remainingHours, bookingEnd, isSubscriptionExpired } = sessionData;
 
-  // If AutoPay, show a loading screen while it processes
-  if (canAutoPay) {
+  // If AutoPay AND NOT early exit, show a loading screen while it processes
+  if (canAutoPay && !isEarlyExit) {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center bg-black">
         <div className="w-20 h-20 border-4 border-yellow-400 border-t-transparent rounded-full animate-spin mb-8" />
@@ -129,12 +135,22 @@ export default function KioskOutInvoice({ sessionData, exitImage, onCheckoutSucc
                 <span className={`font-bold ${durationHours > expectedHours ? 'text-red-400' : 'text-white'}`}>{durationHours} hrs</span>
               </div>
               
-              {durationHours > expectedHours && (
+              {durationHours > expectedHours && !isEarlyExit && (
                 <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 mt-2 flex items-start gap-3">
                   <AlertTriangle className="text-red-400 shrink-0 mt-0.5" size={16} />
                   <div>
                     <p className="text-red-400 font-semibold text-xs">OVERTIME PENALTY</p>
                     <p className="text-gray-300 text-xs mt-1">You exceeded your booked time by {durationHours - expectedHours} hours. A 30% penalty rate is applied to the extra hours.</p>
+                  </div>
+                </div>
+              )}
+
+              {isSubscriptionExpired && (
+                <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-3 mt-2 flex items-start gap-3">
+                  <AlertTriangle className="text-orange-400 shrink-0 mt-0.5" size={16} />
+                  <div>
+                    <p className="text-orange-400 font-semibold text-xs">SUBSCRIPTION EXPIRED</p>
+                    <p className="text-gray-300 text-xs mt-1">Gói thuê bao của bạn đã hết hạn. Phiên đỗ xe này được tính phí như vé lượt thông thường.</p>
                   </div>
                 </div>
               )}
@@ -188,6 +204,59 @@ export default function KioskOutInvoice({ sessionData, exitImage, onCheckoutSucc
           </button>
         </div>
       </div>
+      {/* Early Exit Modal */}
+      {isEarlyExitModalOpen && isEarlyExit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+          <div className="bg-[#1A1A1A] border border-white/10 p-8 rounded-3xl max-w-[550px] w-[90%] flex flex-col items-center text-center shadow-2xl">
+            <div className="w-16 h-16 bg-yellow-500/20 text-yellow-400 flex items-center justify-center rounded-full mb-6">
+              <Clock size={32} />
+            </div>
+            
+            <h2 className="text-3xl font-black text-white mb-2 uppercase tracking-wide">Bạn rời bãi sớm!</h2>
+            <p className="text-gray-400 mb-6 text-lg">
+              Bạn vẫn còn <strong className="text-yellow-400">{remainingHours} giờ</strong> sử dụng trong Booking.<br />
+              Thời gian sử dụng còn hiệu lực đến: <br />
+              <strong className="text-white">{new Date(bookingEnd).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} - {new Date(bookingEnd).toLocaleDateString('vi-VN')}</strong>
+            </p>
+
+            <div className="flex flex-col gap-4 w-full">
+              <button 
+                onClick={() => {
+                  setIsEarlyExitModalOpen(false);
+                  if (canAutoPay) handleCheckout('wallet', true);
+                }}
+                disabled={isProcessing}
+                className={`w-full py-4 px-6 rounded-xl font-bold text-lg text-black transition-colors ${canAutoPay ? 'bg-yellow-500 hover:bg-yellow-400' : 'bg-gray-700 text-gray-300 cursor-not-allowed'}`}
+                title={!canAutoPay ? "Vui lòng quét QR để thanh toán phí trước khi chọn hành động" : ""}
+              >
+                {canAutoPay ? 'TẠM DỪNG (TÔI SẼ QUAY LẠI LẤY Ô ĐỖ)' : 'Vui lòng Thanh toán QR bên dưới'}
+              </button>
+              
+              <button 
+                onClick={() => {
+                  setIsEarlyExitModalOpen(false);
+                  if (canAutoPay) handleCheckout('wallet', false);
+                }}
+                disabled={isProcessing}
+                className={`w-full py-4 px-6 rounded-xl font-bold text-lg text-white border-2 transition-colors ${canAutoPay ? 'border-white/20 hover:bg-white/10' : 'border-gray-700 text-gray-500 cursor-not-allowed'}`}
+              >
+                {canAutoPay ? 'KẾT THÚC HẲN (TRẢ LẠI Ô ĐỖ)' : 'Vui lòng Thanh toán QR bên dưới'}
+              </button>
+            </div>
+            {!canAutoPay && (
+              <p className="mt-6 text-sm text-gray-400">
+                Hãy đóng hộp thoại này, thanh toán qua QR, sau đó hệ thống sẽ xử lý Kết thúc sớm tự động.
+              </p>
+            )}
+            
+            {!canAutoPay && (
+              <button onClick={() => setIsEarlyExitModalOpen(false)} className="mt-6 text-gray-400 underline hover:text-white">
+                Đóng
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

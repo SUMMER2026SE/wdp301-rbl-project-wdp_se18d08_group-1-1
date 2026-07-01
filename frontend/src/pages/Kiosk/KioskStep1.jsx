@@ -1,10 +1,74 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Delete } from 'lucide-react';
 import { API_BASE } from '../../services/api';
 
 export default function KioskStep1({ formData, updateFormData, onNext }) {
   const [activeField, setActiveField] = useState('plate'); // Default to plate
   const [isVerifying, setIsVerifying] = useState(false);
+
+  // Auto-verify logic
+  useEffect(() => {
+    const plate = formData.licensePlate || '';
+    // Trigger auto-verify if plate length is >= 8 and we are actively typing it
+    if (plate.length >= 8 && activeField === 'plate') {
+      const timerId = setTimeout(async () => {
+        try {
+          const cleanPlate = plate.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+          const response = await fetch(`${API_BASE}/sessions/verify-plate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ licensePlate: cleanPlate })
+          });
+          const data = await response.json();
+          if (data.success && data.data) {
+            const verifyData = data.data;
+
+            if (verifyData.isActive) {
+              alert('Phương tiện này đang có lịch sử đỗ xe hoạt động trong bãi!');
+              return;
+            }
+
+            // 1. Auto-fill phone if available and currently empty
+            if (verifyData.phone && !formData.phone) {
+              updateFormData({ phone: verifyData.phone });
+            }
+
+            // 2. Auto-next for Bookings or Subscriptions
+            if (verifyData.hasPreBooking || verifyData.isMonthly) {
+              updateFormData({
+                step3Mode: verifyData.requiresSlotReallocation ? 'policy' : 'fastpass',
+                isMonthly: verifyData.isMonthly,
+                membershipType: verifyData.membershipType || null,
+                hasPreBooking: verifyData.hasPreBooking,
+                selectedSlot: verifyData.assignedSlot,
+                floorId: verifyData.assignedFloorId || null,
+                bookingId: verifyData.bookingId || null,
+                bookingFloorName: verifyData.assignedFloorName || null,
+                durationHours: verifyData.bookingDurationHours || formData.durationHours || 1,
+                licensePlate: plate,
+                phone: verifyData.phone || formData.phone || '',
+                ticketPackageId: verifyData.bookingTicketPackageId || formData.ticketPackageId || null,
+                bookingMode: verifyData.bookingMode || formData.bookingMode || 'hourly',
+              });
+
+              if (verifyData.requiresSlotReallocation) {
+                alert('Booking của bạn đã quá hạn và ô đỗ cũ đã được sử dụng. Vui lòng chọn một ô đỗ trống khác trên bản đồ (Không mất thêm phí).');
+                onNext('2'); 
+              } else {
+                onNext('3'); 
+              }
+            } else if (verifyData.phone) {
+              // Just switch focus to phone so they can review/edit it
+              setActiveField('phone');
+            }
+          }
+        } catch (e) {
+          console.error("Auto verify failed", e);
+        }
+      }, 800); // 0.8s debounce to allow user to finish typing
+      return () => clearTimeout(timerId);
+    }
+  }, [formData.licensePlate, activeField]);
 
   const formatVietnamesePlate = (plate) => {
     if (!plate) return null;
@@ -149,12 +213,13 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
     setIsVerifying(true);
     try {
       const plate = (formData.licensePlate || '').trim();
+      const cleanPlate = plate.replace(/[^A-Z0-9]/gi, '').toUpperCase();
       const phone = (formData.phone || '').trim();
       const hasValidPhone = /^0[35789]\d{8}$/.test(phone);
       const response = await fetch(`${API_BASE}/sessions/verify-plate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ licensePlate: plate })
+        body: JSON.stringify({ licensePlate: cleanPlate })
       });
       const data = await response.json();
       const verifyData = data.data || {};
@@ -166,7 +231,7 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
       }
       else if (data.success && (verifyData.isMonthly || verifyData.hasPreBooking)) {
         updateFormData({
-          step3Mode: 'fastpass',
+          step3Mode: verifyData.requiresSlotReallocation ? 'policy' : 'fastpass',
           isMonthly: verifyData.isMonthly,
           membershipType: verifyData.membershipType || null,
           hasPreBooking: verifyData.hasPreBooking,
@@ -181,7 +246,13 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
           bookingMode: verifyData.bookingMode || formData.bookingMode || 'hourly',
         });
         setIsVerifying(false);
-        onNext('3');
+
+        if (verifyData.requiresSlotReallocation) {
+          alert('Booking của bạn đã quá hạn và ô đỗ cũ đã được sử dụng. Vui lòng chọn một ô đỗ trống khác trên bản đồ (Không mất thêm phí).');
+          onNext('2'); // Chuyển sang chọn Map
+        } else {
+          onNext('3'); // Fast-pass
+        }
       }
       else if (data.success && (verifyData.isVIP || verifyData.isRegisteredVehicle)) {
         updateFormData({

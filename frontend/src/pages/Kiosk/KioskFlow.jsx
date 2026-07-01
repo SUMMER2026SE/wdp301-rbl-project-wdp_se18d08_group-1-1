@@ -53,11 +53,12 @@ export default function KioskFlow() {
   const handleConfirm = async () => {
     setIsSubmitting(true);
     try {
+      const cleanPlate = formData.licensePlate ? formData.licensePlate.replace(/[^A-Z0-9]/gi, '').toUpperCase() : '';
       const response = await fetch(`${API_BASE}/sessions/kiosk-entry`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          licensePlate: formData.licensePlate,
+          licensePlate: cleanPlate,
           phone: formData.phone,
           parkingSlot: formData.selectedSlot,
           floorId: formData.floorId,

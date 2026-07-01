@@ -33,7 +33,7 @@ exports.verifyPlate = async (req, res, next) => {
 
     // 2. Kiểm tra xe đăng ký chính chủ
     const registeredVehicle = await Vehicle.findOne({
-      licensePlate: normalizedPlate,
+      licensePlate: licensePlate,
       status: 'approved'
     });
 
@@ -41,18 +41,32 @@ exports.verifyPlate = async (req, res, next) => {
     let isRegisteredVehicle = false;
     let phone = null;
     let userId = null;
+    let isMonthly = false;
+    let subscription = null;
 
     if (registeredVehicle) {
-      isVIP = true;
+      isRegisteredVehicle = true;
       userId = registeredVehicle.owner;
       const userDetail = await UserDetail.findOne({ userId });
       if (userDetail) {
         phone = userDetail.phone;
       }
 
-      registeredUser = await User.findById(registeredVehicle.owner);
+      const registeredUser = await User.findById(userId);
       if (registeredUser && registeredUser.membership && registeredUser.membership.isVip && new Date(registeredUser.membership.expireAt) > new Date()) {
         isVIP = true;
+      }
+
+      // Check Subscription (gói tháng/năm)
+      const activeSubscription = await mongoose.model('Subscription').findOne({
+        user: userId,
+        status: 'active',
+        expireAt: { $gt: new Date() }
+      }).populate('slots.floorId');
+
+      if (activeSubscription) {
+        isMonthly = true;
+        subscription = activeSubscription;
       }
     }
 
@@ -64,46 +78,80 @@ exports.verifyPlate = async (req, res, next) => {
 
     // 3. Kiểm tra xe có Booking đang hợp lệ (PAID / PAUSED)
     const now = new Date();
-    // Grace period bắt đầu check-in sớm: Giờ đặt - 15 phút đến giờ kết thúc đặt
-    const booking = await Booking.findOne({
+    
+    // Tìm Booking của hôm nay (được đến sớm tối đa 30 phút, đến muộn tối đa 15 phút nếu chưa check-in)
+    const earlyCheckinLimit = new Date(now.getTime() + 30 * 60 * 1000);
+    const lateCheckinLimit = new Date(now.getTime() - 15 * 60 * 1000);
+    const cancelCheckinLimit = new Date(now.getTime() - 30 * 60 * 1000); // Tối đa 30 phút trễ để vớt vát
+    
+    let booking = await Booking.findOne({
       licensePlate,
-      status: { $in: ['PAID', 'PAUSED'] },
-      scheduledStart: { $lte: new Date(now.getTime() + 15 * 60 * 1000) },
+      $or: [
+        { 
+          status: 'PAID', 
+          scheduledStart: { $lte: earlyCheckinLimit, $gte: lateCheckinLimit } 
+        },
+        { 
+          status: 'PAUSED', 
+          scheduledStart: { $lte: earlyCheckinLimit } 
+        },
+        {
+          status: 'EXPIRED',
+          scheduledStart: { $gte: cancelCheckinLimit }
+        }
+      ],
       scheduledEnd: { $gte: now }
-    }).sort({ scheduledStart: 1 });
+    }).sort({ scheduledStart: 1 }).populate('floorId');
 
     const hasPreBooking = !!booking;
+    let requiresSlotReallocation = false;
+
+    // Ngoại lệ 2: Nếu Booking đang là EXPIRED, kiểm tra ô đỗ cũ đã bị xe khác chiếm chưa
+    if (booking && booking.status === 'EXPIRED') {
+      const isSlotOccupied = await Session.findOne({
+        floorId: booking.floorId._id,
+        parkingSlot: booking.parkingSlot,
+        status: 'active'
+      });
+      if (isSlotOccupied) {
+        requiresSlotReallocation = true;
+      }
+    }
+
+    // 4. Kiểm tra bãi đầy (Dành cho Walk-in - TC7)
+    let isFull = false;
+    if (!hasPreBooking && !isMonthly) {
+      const floors = await ParkingFloor.find();
+      let totalSlots = 0;
+      for (const f of floors) {
+        if (f.layoutData && f.layoutData.elements) {
+          const slots = f.layoutData.elements.filter(el => ['slot', 'slot-ev', 'slot-handicap', 'slot-moto'].includes(el.type));
+          totalSlots += slots.length;
+        }
+      }
+      const activeSessionsCount = await Session.countDocuments({ status: 'active' });
+      if (activeSessionsCount >= totalSlots) {
+        isFull = true;
+      }
+    }
 
     res.status(200).json({
       success: true,
       data: {
         isActive: false,
-        isMonthly: false, // Subs được xử lý riêng
+        isFull,
+        isMonthly,
         hasPreBooking,
         booking: booking || null,
+        subscription: subscription || null,
         isVIP,
         isRegisteredVehicle,
-        membershipType: membershipAccess.membershipType,
-        phone: phone,
+        phone,
         isKnownGuest: !!phone || isVIP || isRegisteredVehicle,
-        bookingId: preBooking?._id || null,
-        assignedSlot: preBooking?.slotCode || membershipAccess.assignedSlot || null,
-        assignedFloorId: preBooking?.floorId?._id || membershipAccess.assignedFloorId || null,
-        assignedFloorName: preBooking?.floorId?.name || membershipAccess.assignedFloorName || null,
-        bookingStartTime: preBooking?.startTime || null,
-        bookingEndTime: preBooking?.endTime || null,
-        bookingDurationHours:
-          preBooking?.paidHours || (membershipAccess.isSubscriptionActive ? 24 : null),
-        bookingTicketPackageId:
-          preBooking?.ticketPackageId?._id || membershipAccess.ticketPackageId || null,
-        bookingMode:
-          preBooking?.ticketPackageId?.type === 'daily'
-            ? 'daily'
-            : membershipAccess.isSubscriptionActive
-              ? 'daily'
-              : 'hourly',
-        pricingPackage: pricing.package,
-        pricingSource: pricing.source,
+        assignedSlot: booking?.parkingSlot || subscription?.slots?.[0]?.slotCode || null,
+        assignedFloorId: booking?.floorId?._id || subscription?.slots?.[0]?.floorId?._id || null,
+        assignedFloorName: booking?.floorId?.name || subscription?.slots?.[0]?.floorId?.name || null,
+        requiresSlotReallocation,
       }
     });
 
@@ -121,7 +169,7 @@ exports.createKioskSession = async (req, res, next) => {
   try {
     const { licensePlate, phone, vehicleType, parkingSlot, floorId, durationHours, entryImageBase64, entryCamera, entryGate } = req.body;
 
-    if (!normalizedPlate) {
+    if (!licensePlate) {
       return res.status(400).json({ success: false, message: 'License plate is required' });
     }
 
@@ -135,12 +183,28 @@ exports.createKioskSession = async (req, res, next) => {
     }
 
     const now = new Date();
+    const earlyCheckinLimit = new Date(now.getTime() + 30 * 60 * 1000);
 
-    // 1. Kiểm tra Booking hợp lệ của biển số
+    // 1. Kiểm tra Booking hợp lệ của biển số (đến sớm tối đa 30 phút, đến muộn tối đa 15 phút)
+    const lateCheckinLimit = new Date(now.getTime() - 15 * 60 * 1000);
+    const cancelCheckinLimit = new Date(now.getTime() - 30 * 60 * 1000);
+
     const activeBooking = await Booking.findOne({
       licensePlate,
-      status: { $in: ['PAID', 'PAUSED'] },
-      scheduledStart: { $lte: new Date(now.getTime() + 15 * 60 * 1000) },
+      $or: [
+        { 
+          status: 'PAID', 
+          scheduledStart: { $lte: earlyCheckinLimit, $gte: lateCheckinLimit } 
+        },
+        { 
+          status: 'PAUSED', 
+          scheduledStart: { $lte: earlyCheckinLimit } 
+        },
+        {
+          status: 'EXPIRED',
+          scheduledStart: { $gte: cancelCheckinLimit }
+        }
+      ],
       scheduledEnd: { $gte: now }
     }).sort({ scheduledStart: 1 });
 
@@ -196,6 +260,22 @@ exports.createKioskSession = async (req, res, next) => {
       if (detail) finalPhone = detail.phone;
     }
 
+    // Kiểm tra Subscription (Gói tháng/năm)
+    let activeSubscription = null;
+    if (userId) {
+      const mongoose = require('mongoose');
+      activeSubscription = await mongoose.model('Subscription').findOne({
+        user: userId,
+        status: 'active',
+        expireAt: { $gt: now }
+      });
+    }
+
+    // Bắt buộc nhập số điện thoại với Khách Vãng Lai (Không User, không Booking, không Sub)
+    if (!userId && !activeBooking && !activeSubscription && !finalPhone) {
+      return res.status(400).json({ success: false, message: 'Vui lòng nhập số điện thoại để Check-in' });
+    }
+
     // Xử lý các luồng Check-in
     let sessionType = 'WALK_IN';
     let bookingId = null;
@@ -223,18 +303,38 @@ exports.createKioskSession = async (req, res, next) => {
 
       bookingId = activeBooking._id;
       sessionType = 'BOOKING';
+      
+      // Xử lý đổi ô đỗ nếu Booking bị EXPIRED và khách phải chọn ô mới
+      if (activeBooking.status === 'EXPIRED' && parkingSlot && parkingSlot !== activeBooking.parkingSlot) {
+        activeBooking.slotChangesHistory.push({
+          oldSlot: activeBooking.parkingSlot,
+          newSlot: parkingSlot,
+          reason: 'Khách đến trễ, ô đỗ cũ đã bị xe khác sử dụng. Chọn lại ô mới tại Kiosk.',
+          changedBy: userId || null
+        });
+        activeBooking.parkingSlot = parkingSlot;
+        activeBooking.floorId = floorId;
+      }
+
       finalSlot = activeBooking.parkingSlot;
       finalFloorId = activeBooking.floorId;
       finalExpectedDuration = activeBooking.durationHours;
 
-      // Cập nhật trạng thái Booking
+      // Cập nhật trạng thái Booking (phục hồi nếu EXPIRED)
       activeBooking.status = 'ACTIVE';
       await activeBooking.save();
+    } else if (activeSubscription) {
+      sessionType = 'SUBSCRIPTION';
+      if (activeSubscription.slots && activeSubscription.slots.length > 0) {
+        finalSlot = activeSubscription.slots[0].slotCode;
+        finalFloorId = activeSubscription.slots[0].floorId;
+      }
+      finalExpectedDuration = 24; // Mặc định cho thuê bao
     }
 
     // Tạo phiên đỗ xe Session
     const newSession = await Session.create({
-      licensePlate: normalizedPlate,
+      licensePlate,
       userId,
       bookingId,
       type: sessionType,
@@ -319,23 +419,64 @@ exports.kioskExitScan = async (req, res, next) => {
     let isEarlyExit = false;
     let remainingHours = 0;
     let bookingEnd = null;
+    let amountToPay = pricing.finalTotal;
+    let refundAmount = 0;
 
     if (session.userId) {
       const wallet = await walletService.getOrCreateWallet(session.userId);
       walletBalance = wallet.balance;
     }
 
-    // Kiểm tra Booking trả sớm
+    // Kiểm tra Booking trả sớm / trễ / Subscription
     if (session.type === 'BOOKING' && session.bookingId) {
       const booking = await Booking.findById(session.bookingId);
-      if (booking && booking.scheduledEnd > now) {
-        isEarlyExit = true;
-        bookingEnd = booking.scheduledEnd;
-        remainingHours = Math.ceil((booking.scheduledEnd - now) / (1000 * 60 * 60));
+      if (booking) {
+        // Tìm tổng chi phí của các session đã đỗ trước đó thuộc booking này (nếu có PAUSE)
+        const prevSessions = await Session.find({ bookingId: booking._id, _id: { $ne: session._id }, status: 'completed' });
+        let previousSpent = 0;
+        for (const s of prevSessions) {
+          previousSpent += s.totalPrice || 0;
+        }
+
+        const totalIncurred = previousSpent + pricing.finalTotal;
+
+        if (totalIncurred > booking.prepaidAmount) {
+          amountToPay = totalIncurred - booking.prepaidAmount;
+          refundAmount = 0;
+        } else {
+          amountToPay = 0;
+          refundAmount = booking.prepaidAmount - totalIncurred;
+        }
+
+        if (booking.scheduledEnd > now) {
+          isEarlyExit = true;
+          bookingEnd = booking.scheduledEnd;
+          remainingHours = Math.ceil((booking.scheduledEnd - now) / (1000 * 60 * 60));
+        }
+      }
+    } else if (session.type === 'SUBSCRIPTION') {
+      let isSubActive = false;
+      if (session.userId) {
+        const mongoose = require('mongoose');
+        const sub = await mongoose.model('Subscription').findOne({
+          user: session.userId,
+          status: 'active',
+          expireAt: { $gt: now }
+        });
+        if (sub) isSubActive = true;
+      }
+
+      if (isSubActive) {
+        amountToPay = 0;
+        refundAmount = 0;
+      } else {
+        // Gói đã hết hạn => Tính phí theo lượt (tính toàn bộ thời gian đỗ)
+        amountToPay = pricing.finalTotal;
+        refundAmount = 0;
       }
     }
 
-    const canAutoPay = walletBalance >= pricing.finalTotal;
+    const canAutoPay = walletBalance >= amountToPay;
 
     res.status(200).json({
       success: true,
@@ -344,12 +485,15 @@ exports.kioskExitScan = async (req, res, next) => {
         checkOutTime: now,
         durationHours: pricing.durationHours,
         totalPrice: pricing.finalTotal,
+        amountToPay,
+        refundAmount,
         pricingBreakdown: pricing,
         walletBalance,
         canAutoPay,
         isEarlyExit,
         remainingHours,
         bookingEnd,
+        isSubscriptionExpired: session.type === 'SUBSCRIPTION' && amountToPay > 0
       }
     });
 
@@ -388,86 +532,122 @@ exports.kioskCheckout = async (req, res, next) => {
       }
     }
 
-    // 1. Kiểm tra tài khoản & trừ tiền Wallet
-    if (paymentMethod === 'wallet') {
-      if (!session.userId) {
-        return res.status(400).json({ success: false, message: 'Khách vãng lai không có ví Wallet' });
-      }
+    let amountToPay = pricing.finalTotal;
+    let refundAmount = 0;
+    let booking = null;
 
-      const wallet = await walletService.getOrCreateWallet(session.userId);
-      if (wallet.balance < pricing.finalTotal) {
-        return res.status(400).json({ success: false, message: 'Số dư ví không đủ để thanh toán' });
-      }
-
-      await walletService.debitWallet(
-        session.userId,
-        pricing.finalTotal,
-        `Thanh toán Check-out Kiosk - Biển số ${session.licensePlate}`,
-        { refSource: 'parking', refSourceId: session._id }
-      );
-      session.paymentStatus = 'paid';
-    } else if (paymentMethod === 'vietqr') {
-      // Thanh toán qua VietQR tại Kiosk
-      // Tạo PayOS Payment Link cho Kiosk checkout
-      const orderCode = Number(
-        `${Date.now().toString().slice(-8)}${Math.floor(Math.random() * 100).toString().padStart(2, '0')}`
-      );
-
-      const paymentData = {
-        orderCode,
-        amount: pricing.finalTotal,
-        description: `VALO Checkout`,
-        returnUrl: process.env.CLIENT_URL || 'http://localhost:5173/kiosk/checkout-success',
-        cancelUrl: process.env.CLIENT_URL || 'http://localhost:5173/kiosk/checkout-cancel',
-        items: [
-          {
-            name: `Thanh toán gửi xe biển số ${session.licensePlate}`,
-            quantity: 1,
-            price: pricing.finalTotal,
-          },
-        ],
-      };
-
-      const paymentLink = await payos.paymentRequests.create(paymentData);
-
-      // Kiosk sẽ hiển thị QR này để khách quét và thanh toán ngay
-      return res.status(200).json({
-        success: true,
-        message: 'Vui lòng thanh toán qua VietQR để mở cổng',
-        requiresPayment: true,
-        data: {
-          orderCode,
-          checkoutUrl: paymentLink.checkoutUrl,
-          qrCode: paymentLink.qrCode,
+    if (session.type === 'BOOKING' && session.bookingId) {
+      booking = await Booking.findById(session.bookingId);
+      if (booking) {
+        const prevSessions = await Session.find({ bookingId: booking._id, _id: { $ne: session._id }, status: 'completed' });
+        let previousSpent = 0;
+        for (const s of prevSessions) {
+          previousSpent += s.totalPrice || 0;
         }
-      });
+
+        const totalIncurred = previousSpent + pricing.finalTotal;
+        if (totalIncurred > booking.prepaidAmount) {
+          amountToPay = totalIncurred - booking.prepaidAmount;
+          refundAmount = 0;
+        } else {
+          amountToPay = 0;
+          refundAmount = booking.prepaidAmount - totalIncurred;
+        }
+      }
+    } else if (session.type === 'SUBSCRIPTION') {
+      let isSubActive = false;
+      if (session.userId) {
+        const mongoose = require('mongoose');
+        const sub = await mongoose.model('Subscription').findOne({
+          user: session.userId,
+          status: 'active',
+          expireAt: { $gt: now }
+        });
+        if (sub) isSubActive = true;
+      }
+
+      if (isSubActive) {
+        amountToPay = 0;
+      } else {
+        // Gói đã hết hạn => Tính phí theo lượt
+        amountToPay = pricing.finalTotal;
+      }
+    }
+
+    // 1. Kiểm tra tài khoản & trừ tiền
+    if (amountToPay > 0) {
+      if (paymentMethod === 'wallet') {
+        if (!session.userId) {
+          return res.status(400).json({ success: false, message: 'Khách vãng lai không có ví Wallet' });
+        }
+
+        const wallet = await walletService.getOrCreateWallet(session.userId);
+        if (wallet.balance < amountToPay) {
+          return res.status(400).json({ success: false, message: 'Số dư ví không đủ để thanh toán phí phát sinh' });
+        }
+
+        await walletService.debitWallet(
+          session.userId,
+          amountToPay,
+          `Thanh toán Check-out phát sinh - Biển số ${session.licensePlate}`,
+          { refSource: 'parking', refSourceId: session._id }
+        );
+        session.paymentStatus = 'paid';
+      } else if (paymentMethod === 'vietqr') {
+        // Thanh toán qua VietQR tại Kiosk
+        // Tạo PayOS Payment Link cho Kiosk checkout
+        const orderCode = Number(
+          `${Date.now().toString().slice(-8)}${Math.floor(Math.random() * 100).toString().padStart(2, '0')}`
+        );
+
+        const paymentData = {
+          orderCode,
+          amount: amountToPay,
+          description: `VALO Checkout`,
+          returnUrl: process.env.CLIENT_URL || 'http://localhost:5173/kiosk/checkout-success',
+          cancelUrl: process.env.CLIENT_URL || 'http://localhost:5173/kiosk/checkout-cancel',
+          items: [
+            {
+              name: `Thanh toán gửi xe biển số ${session.licensePlate}`,
+              quantity: 1,
+              price: amountToPay,
+            },
+          ],
+        };
+
+        const paymentLink = await payos.paymentRequests.create(paymentData);
+
+        // Kiosk sẽ hiển thị QR này để khách quét và thanh toán ngay
+        return res.status(200).json({
+          success: true,
+          message: 'Vui lòng thanh toán qua VietQR để mở cổng',
+          requiresPayment: true,
+          data: {
+            orderCode,
+            checkoutUrl: paymentLink.checkoutUrl,
+            qrCode: paymentLink.qrCode,
+          }
+        });
+      } else if (paymentMethod === 'qr' || paymentMethod === 'cash') {
+        // Mock payment từ Frontend Kiosk hoặc thanh toán tiền mặt qua nhân viên
+        session.paymentStatus = 'paid';
+      }
     } else {
-      // Mặc định hoặc miễn phí (ví dụ subscription)
       session.paymentStatus = 'paid';
     }
 
     // 2. Xử lý trả sớm Booking
-    if (session.type === 'BOOKING' && session.bookingId) {
-      const booking = await Booking.findById(session.bookingId);
-      if (booking) {
+    if (booking) {
         if (keepPaused === true) {
           // Tạm dừng: Giữ ô đỗ, đổi trạng thái Booking sang PAUSED
           booking.status = 'PAUSED';
           await booking.save();
           console.log(`Booking ${booking._id} set to PAUSED. Slot ${booking.parkingSlot} is retained.`);
         } else {
-          // Kết thúc sớm hoàn toàn: Giải phóng ô đỗ, tính tiền thực tế tất cả session và hoàn tiền dư
+          // Kết thúc sớm hoàn toàn: Giải phóng ô đỗ và hoàn tiền dư
           booking.status = 'COMPLETED';
           await booking.save();
 
-          // Tính tổng tiền các Session đã Checkout thuộc booking này
-          const prevSessions = await Session.find({ bookingId: booking._id, _id: { $ne: session._id } });
-          let totalSpent = pricing.finalTotal;
-          for (const s of prevSessions) {
-            totalSpent += s.totalPrice;
-          }
-
-          const refundAmount = booking.prepaidAmount - totalSpent;
           if (refundAmount > 0 && booking.userId) {
             await walletService.creditWallet(
               booking.userId,
@@ -479,7 +659,6 @@ exports.kioskCheckout = async (req, res, next) => {
           }
         }
       }
-    }
 
     // 3. Hoàn tất Session đỗ xe
     session.status = 'completed';

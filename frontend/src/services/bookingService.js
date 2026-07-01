@@ -28,7 +28,7 @@ export const quoteBooking = (payload) =>
   });
 
 export const createBookingHold = (payload) =>
-  apiFetch('/bookings/holds', {
+  apiFetch('/bookings/hold', {
     method: 'POST',
     headers: authHeader(),
     body: JSON.stringify(payload),

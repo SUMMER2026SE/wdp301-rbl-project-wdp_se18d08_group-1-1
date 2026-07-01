@@ -31,7 +31,7 @@ async function checkBookings(app) {
       console.log(`[ParkingScheduler] Đã tự động hủy ${pendingCancelResult.modifiedCount} đặt chỗ chờ thanh toán VietQR.`);
     }
 
-    // 2. Tự động chuyển Booking PAID sang EXPIRED nếu trễ quá 15 phút
+    // 2. Tự động chuyển Booking PAID sang EXPIRED nếu trễ quá 15 phút (Chỉ đổi trạng thái, chưa hoàn tiền)
     const gracePeriodLimit = new Date(now.getTime() - 15 * 60 * 1000);
     const expiredBookings = await Booking.find({
       status: 'PAID',
@@ -41,15 +41,36 @@ async function checkBookings(app) {
     for (const booking of expiredBookings) {
       booking.status = 'EXPIRED';
       await booking.save();
-      console.log(`[ParkingScheduler] Đặt chỗ ${booking._id} của xe ${booking.licensePlate} đã hết hạn check-in.`);
+      console.log(`[ParkingScheduler] Đặt chỗ ${booking._id} của xe ${booking.licensePlate} đã hết hạn check-in (15 phút).`);
 
-      // Gửi thông báo hết hạn đặt chỗ
+      // Gửi thông báo hết hạn đặt chỗ nhưng báo vẫn còn 15 phút vớt vát
       if (booking.userId) {
         notifTriggers.notifyBookingCancelled(app, booking.userId, {
           bookingId: booking._id.toString(),
           slotInfo: booking.parkingSlot,
-          reason: 'Quá 15 phút từ giờ bắt đầu mà không check-in'
+          reason: 'Quá 15 phút. Bạn có thêm 15 phút để đến bãi và chọn lại ô đỗ, sau đó Booking sẽ bị hủy hoàn toàn.'
         }).catch(err => console.error('Failed to send expired booking notification:', err));
+      }
+    }
+
+    // 2.5. Tự động chuyển Booking EXPIRED sang CANCELLED nếu trễ quá 30 phút (Hủy hoàn toàn & Hoàn tiền)
+    const cancelPeriodLimit = new Date(now.getTime() - 30 * 60 * 1000);
+    const noShowBookings = await Booking.find({
+      status: 'EXPIRED',
+      scheduledStart: { $lt: cancelPeriodLimit }
+    });
+
+    for (const booking of noShowBookings) {
+      booking.status = 'CANCELLED';
+      await booking.save();
+      console.log(`[ParkingScheduler] Đặt chỗ ${booking._id} của xe ${booking.licensePlate} bị hủy hoàn toàn do trễ quá 30 phút.`);
+
+      if (booking.userId) {
+        notifTriggers.notifyBookingCancelled(app, booking.userId, {
+          bookingId: booking._id.toString(),
+          slotInfo: booking.parkingSlot,
+          reason: 'Quá 30 phút từ giờ bắt đầu. Booking đã bị hủy và hoàn tiền.'
+        }).catch(err => console.error('Failed to send cancelled no-show notification:', err));
 
         // Hoàn phí đã thanh toán trước về ví
         if (booking.prepaidAmount > 0) {
@@ -58,11 +79,11 @@ async function checkBookings(app) {
               booking.userId,
               booking.prepaidAmount,
               'REFUND',
-              `Hoàn tiền Đặt chỗ hết hạn - Biển số ${booking.licensePlate}`,
+              `Hoàn tiền do Không đến Kiosk (No-show) - Biển số ${booking.licensePlate}`,
               { refSource: 'booking', refSourceId: booking._id }
             );
           } catch (refundErr) {
-            console.error(`[ParkingScheduler] Lỗi hoàn tiền đặt chỗ hết hạn ${booking._id}:`, refundErr.message);
+            console.error(`[ParkingScheduler] Lỗi hoàn tiền no-show ${booking._id}:`, refundErr.message);
           }
         }
       }
@@ -170,36 +191,6 @@ async function checkActiveSessions(app) {
   }
 }
 
-async function expireNoShowBookings(app) {
-  try {
-    const expiryCutoff = new Date(Date.now() - NO_SHOW_GRACE_MS);
-    const overdueBookings = await Booking.find({
-      status: 'confirmed',
-      startTime: { $lt: expiryCutoff },
-    });
-
-    if (overdueBookings.length === 0) return;
-
-    const io = app?.get('io');
-    await Promise.all(overdueBookings.map(async (booking) => {
-      booking.status = 'expired';
-      await booking.save();
-
-      if (io && booking.userId) {
-        emitToUser(io, booking.userId, 'booking:changed', {
-          bookingId: String(booking._id),
-          status: booking.status,
-          slotCode: booking.slotCode,
-          floorId: booking.floorId ? String(booking.floorId) : null,
-          action: 'expired_no_show',
-          reason: 'Late arrival over 15 minutes',
-        });
-      }
-    }));
-  } catch (err) {
-    console.error('[ParkingScheduler] Error expiring no-show bookings:', err.message);
-  }
-}
 
 /**
  * Start the parking session scheduler
