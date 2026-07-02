@@ -77,6 +77,32 @@ const NOTIFICATION_TEMPLATES = {
     priority: 'ERROR',
   },
 
+  // VIOLATION
+  VIOLATION_CREATED: {
+    title: 'New parking violation',
+    content: 'A violation "{title}" was recorded. Fine amount: {amount} VND. Please pay within 72 hours.',
+    type: 'VIOLATION',
+    priority: 'WARNING',
+  },
+  VIOLATION_PAYMENT_REMINDER: {
+    title: 'Violation payment reminder',
+    content: 'Violation fine {violationId} is still unpaid. Please pay soon.',
+    type: 'VIOLATION',
+    priority: 'WARNING',
+  },
+  VIOLATION_PAID: {
+    title: 'Violation fine paid',
+    content: 'Your violation fine {violationId} was paid successfully. Amount: {amount} VND.',
+    type: 'VIOLATION',
+    priority: 'SUCCESS',
+  },
+  VIOLATION_CANCELLED: {
+    title: 'Violation cancelled',
+    content: 'Violation {violationId} has been cancelled.',
+    type: 'VIOLATION',
+    priority: 'INFO',
+  },
+
   // BOOKING
   BOOKING_SUCCESS: {
     title: 'Booking successful',
@@ -101,6 +127,48 @@ const NOTIFICATION_TEMPLATES = {
     content: 'You missed the check-in time for your booking at {slotInfo}. The booking may be cancelled.',
     type: 'BOOKING',
     priority: 'ERROR',
+  },
+  TRANSFER_REQUEST_CREATED: {
+    title: 'Booking transfer request created',
+    content: 'Booking transfer request {transferId} has been created.',
+    type: 'BOOKING',
+    priority: 'INFO',
+  },
+  TRANSFER_APPROVED: {
+    title: 'Booking transfer approved',
+    content: 'Booking transfer request {transferId} has been approved.',
+    type: 'BOOKING',
+    priority: 'SUCCESS',
+  },
+  TRANSFER_REJECTED: {
+    title: 'Booking transfer rejected',
+    content: 'Booking transfer request {transferId} was rejected. Reason: {reason}',
+    type: 'BOOKING',
+    priority: 'WARNING',
+  },
+  TRANSFER_COMPLETED: {
+    title: 'Booking transfer completed',
+    content: 'Booking transfer request {transferId} has been completed.',
+    type: 'BOOKING',
+    priority: 'SUCCESS',
+  },
+  CONTRACT_ACTIVATED: {
+    title: 'Contract activated',
+    content: 'Contract {contractCode} is now active for slot {slotCode}.',
+    type: 'BOOKING',
+    priority: 'SUCCESS',
+  },
+  CONTRACT_CANCELLED: {
+    title: 'Contract cancelled',
+    content: 'Contract {contractCode} has been cancelled. Reason: {reason}',
+    type: 'BOOKING',
+    priority: 'WARNING',
+  },
+  CONTRACT_EXPIRED: {
+    title: 'Contract expired',
+    content: 'Contract {contractCode} has expired.',
+    type: 'BOOKING',
+    priority: 'INFO',
   },
 
   // PARKING
