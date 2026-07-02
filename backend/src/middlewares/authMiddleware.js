@@ -77,9 +77,12 @@ const protect = async (req, res, next) => {
 const authorize = (...roles) => {
   return (req, res, next) => {
     if (!roles.includes(req.user.role)) {
+      console.warn(
+        `[Auth] Forbidden access attempt: user=${req.user._id} role=${req.user.role} method=${req.method} path=${req.originalUrl}`
+      );
       return res.status(403).json({
         success: false,
-        message: `Role '${req.user.role}' is not authorized to access this resource.`,
+        message: 'Forbidden: You do not have permission to perform this action',
       });
     }
     next();

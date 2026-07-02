@@ -3,12 +3,15 @@ const Booking = require('../models/Booking');
 const notifTriggers = require('./notificationTriggers');
 const pricingEngine = require('./pricingEngine');
 const walletService = require('./walletService');
+const contractService = require('./contractService');
 
 const CHECK_INTERVAL_MS = 60 * 1000; // 1 minute
+const CONTRACT_EXPIRATION_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const LOW_BALANCE_THRESHOLD = 30000; // 30,000 VND
 const NO_SHOW_GRACE_MS = 15 * 60 * 1000;
 
 let schedulerInterval = null;
+let contractSchedulerInterval = null;
 
 /**
  * Kiểm tra các phiên đặt chỗ (Booking) ngầm để hủy, hết hạn hoặc hoàn tất sớm
@@ -191,13 +194,23 @@ async function checkActiveSessions(app) {
   }
 }
 
+async function checkExpiredContracts(app) {
+  try {
+    const expiredCount = await contractService.expireContracts(app);
+    if (expiredCount > 0) {
+      console.log(`[ParkingScheduler] Expired ${expiredCount} contracts.`);
+    }
+  } catch (err) {
+    console.error('[ParkingScheduler] Error expiring contracts:', err.message);
+  }
+}
 
 /**
  * Start the parking session scheduler
  * @param {Express.Application} app - Express app instance (for io access)
  */
 function startScheduler(app) {
-  if (schedulerInterval) {
+  if (schedulerInterval || contractSchedulerInterval) {
     console.log('[ParkingScheduler] Scheduler already running, skipping start.');
     return;
   }
@@ -211,6 +224,9 @@ function startScheduler(app) {
   checkBookings(app).catch((err) =>
     console.error('[ParkingScheduler] Initial checkBookings error:', err.message)
   );
+  checkExpiredContracts(app).catch((err) =>
+    console.error('[ParkingScheduler] Initial contract expiration error:', err.message)
+  );
 
   // Then run every interval
   schedulerInterval = setInterval(() => {
@@ -221,6 +237,12 @@ function startScheduler(app) {
       console.error('[ParkingScheduler] Interval checkBookings error:', err.message)
     );
   }, CHECK_INTERVAL_MS);
+
+  contractSchedulerInterval = setInterval(() => {
+    checkExpiredContracts(app).catch((err) =>
+      console.error('[ParkingScheduler] Contract expiration interval error:', err.message)
+    );
+  }, CONTRACT_EXPIRATION_INTERVAL_MS);
 }
 
 /**
@@ -230,8 +252,12 @@ function stopScheduler() {
   if (schedulerInterval) {
     clearInterval(schedulerInterval);
     schedulerInterval = null;
-    console.log('[ParkingScheduler] Scheduler stopped.');
   }
+  if (contractSchedulerInterval) {
+    clearInterval(contractSchedulerInterval);
+    contractSchedulerInterval = null;
+  }
+  console.log('[ParkingScheduler] Scheduler stopped.');
 }
 
 module.exports = {
@@ -239,5 +265,6 @@ module.exports = {
   stopScheduler,
   checkActiveSessions,
   checkBookings,
+  checkExpiredContracts,
   LOW_BALANCE_THRESHOLD,
 };

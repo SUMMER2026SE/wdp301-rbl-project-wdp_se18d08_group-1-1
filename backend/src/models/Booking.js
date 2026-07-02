@@ -74,7 +74,13 @@ const bookingSchema = new mongoose.Schema(
         changedAt: { type: Date, default: Date.now },
         changedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
       }
-    ]
+    ],
+    contractId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Contract',
+      default: null,
+      index: true,
+    },
   },
   { timestamps: true }
 );

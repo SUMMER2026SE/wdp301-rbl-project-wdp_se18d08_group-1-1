@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const bookingController = require('../controllers/bookingController');
 const { protect, authorize, softProtect } = require('../middlewares/authMiddleware');
+const { requirePolicyAcceptance } = require('../middlewares/policyAcceptanceMiddleware');
 
 // Route public dành cho webhook PayOS thanh toán đặt chỗ
 router.post('/webhook', bookingController.handleBookingWebhook);
@@ -16,11 +17,15 @@ router.post('/hold', softProtect, bookingController.createBookingHold);
 router.use(protect);
 router.use(authorize('customer', 'admin'));
 
-router.post('/', bookingController.createBooking);
+router.get('/available-slots', bookingController.getAvailableSlots);
+router.get('/my', bookingController.getMyBookings);
 router.get('/my-history', bookingController.getMyBookings);
+router.post('/', requirePolicyAcceptance({ action: 'booking:create' }), bookingController.createBooking);
 router.get('/status/:orderCode', bookingController.checkVietQRStatus);
 router.post('/:id/cancel', bookingController.cancelBooking);
 router.put('/:id/time', bookingController.modifyBookingTime);
 router.put('/:id/vehicle', bookingController.updateBookingVehicle);
+router.post('/:id/check-in', bookingController.checkInBooking);
+router.post('/:id/check-out', bookingController.checkOutBooking);
 
 module.exports = router;

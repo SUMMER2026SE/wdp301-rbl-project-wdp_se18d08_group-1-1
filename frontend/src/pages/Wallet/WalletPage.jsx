@@ -26,6 +26,8 @@ import {
   getWalletInfo,
 } from "../../services/walletService";
 import { clearAuthSession } from "../../services/authStorage";
+import PolicyAcceptancePrompt from "../../components/policies/PolicyAcceptancePrompt";
+import { extractMissingPolicies, isPolicyAcceptanceRequired } from "../../utils/policyErrors";
 
 const DEFAULT_TRANSACTION_LIMIT = 6;
 const ALL_TRANSACTION_LIMIT = 50;
@@ -98,6 +100,10 @@ export default function WalletPage() {
   const [pollingOrderCode, setPollingOrderCode] = useState(null);
   const [verifyingPayment, setVerifyingPayment] = useState(false);
   const [toast, setToast] = useState(null);
+  const [policyPrompt, setPolicyPrompt] = useState({
+    open: false,
+    missingPolicies: [],
+  });
 
   const showToast = useCallback((message, type = "success") => {
     setToast({ message, type });
@@ -357,10 +363,21 @@ export default function WalletPage() {
           wallet={wallet}
           onClose={() => setModal(null)}
           onStartPolling={setPollingOrderCode}
+          onPolicyRequired={(missingPolicies) => {
+            setModal(null);
+            setPolicyPrompt({ open: true, missingPolicies });
+          }}
         />
       )}
 
       {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
+
+      <PolicyAcceptancePrompt
+        open={policyPrompt.open}
+        missingPolicies={policyPrompt.missingPolicies}
+        onClose={() => setPolicyPrompt({ open: false, missingPolicies: [] })}
+        onAccepted={() => setPolicyPrompt({ open: false, missingPolicies: [] })}
+      />
     </div>
   );
 }
@@ -646,7 +663,7 @@ function VerificationOverlay() {
   );
 }
 
-function TopUpModal({ wallet, onClose, onStartPolling }) {
+function TopUpModal({ wallet, onClose, onStartPolling, onPolicyRequired }) {
   const [amount, setAmount] = useState(String(MIN_TOP_UP));
   const [loading, setLoading] = useState(false);
   const numericAmount = Number(amount || 0);
@@ -669,6 +686,11 @@ function TopUpModal({ wallet, onClose, onStartPolling }) {
       if (res.ok && res.data?.data?.checkoutUrl) {
         onStartPolling(res.data.data.orderCode);
         window.location.href = res.data.data.checkoutUrl;
+        return;
+      }
+
+      if (isPolicyAcceptanceRequired(res.data)) {
+        onPolicyRequired?.(extractMissingPolicies(res.data));
         return;
       }
 

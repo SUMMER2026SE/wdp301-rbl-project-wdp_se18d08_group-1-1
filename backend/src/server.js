@@ -19,6 +19,7 @@ const profileRoutes = require('./routes/profileRoutes');
 const serviceRoutes = require('./routes/serviceRoutes');
 const ticketPackageRoutes = require('./routes/ticketPackageRoutes');
 const subscriptionRoutes = require('./routes/subscriptionRoutes');
+const policyRoutes = require('./routes/policyRoutes');
 
 // Initialize express app
 const app = express();
@@ -55,6 +56,7 @@ app.use("/api/wallet", require("./routes/walletRoutes"));
 app.use("/api/ai", require("./routes/aiRoutes"));
 app.use("/api/vehicles", require("./routes/vehicleRoutes"));
 app.use("/api/admin", require("./routes/adminRoutes"));
+app.use("/api/policies", policyRoutes);
 app.use('/api', serviceRoutes);
 app.use('/api/ticket-packages', ticketPackageRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
@@ -65,6 +67,10 @@ app.use("/api/maintenance", require("./routes/maintenanceRoutes"));
 app.use("/api/notifications", require("./routes/notificationRoutes"));
 app.use("/api/bookings", require("./routes/bookingRoutes"));
 app.use("/api/qr", require("./routes/qrRoutes"));
+app.use("/api/violations", require("./routes/violationRoutes"));
+app.use("/api/revenue", require("./routes/revenueRoutes"));
+app.use("/api", require("./routes/bookingTransferRoutes"));
+app.use("/api", require("./routes/contractRoutes"));
 
 // 404 handler
 app.use((req, res) => {
