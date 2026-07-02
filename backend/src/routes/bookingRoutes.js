@@ -7,6 +7,7 @@ const {
   checkOutBooking,
 } = require('../controllers/bookingController');
 const { protect, authorize } = require('../middlewares/authMiddleware');
+const { requirePolicyAcceptance } = require('../middlewares/policyAcceptanceMiddleware');
 
 const router = express.Router();
 
@@ -15,7 +16,7 @@ router.use(authorize('customer', 'admin'));
 
 router.get('/available-slots', getAvailableSlots);
 router.get('/my', getMyBookings);
-router.post('/', createBooking);
+router.post('/', requirePolicyAcceptance({ action: 'booking:create' }), createBooking);
 router.post('/:id/check-in', checkInBooking);
 router.post('/:id/check-out', checkOutBooking);
 
