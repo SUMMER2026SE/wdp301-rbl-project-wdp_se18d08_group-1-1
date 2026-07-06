@@ -14,6 +14,8 @@ import LoginPage from "./pages/Guest/LoginPage";
 import ParkingMap from "./pages/Guest/ParkingMap";
 import ServiceList from "./pages/Guest/ServiceList";
 import ServiceDetail from "./pages/Guest/ServiceDetail";
+import PolicyList from "./pages/Guest/PolicyList";
+import PolicyDetail from "./pages/Guest/PolicyDetail";
 import OAuthCallback from "./pages/OAuthCallback";
 
 // Pages - Kiosk
@@ -29,6 +31,7 @@ import AdminServiceManager from "./pages/Admin/AdminServiceManager";
 import TicketPackages from "./pages/Admin/TicketPackages";
 import AccountManagement from "./pages/Admin/AccountManagement";
 import AdminNotificationManagement from "./pages/Admin/NotificationManagement";
+import PolicyManagement from "./pages/Admin/PolicyManagement";
 
 // Pages – Staff
 import StaffDashboard from "./pages/Staff/Dashboard";
@@ -77,6 +80,9 @@ export default function App() {
           <Route path="/parking-map" element={<ParkingMap />} />
           <Route path="/services" element={<ServiceList />} />
           <Route path="/services/:id" element={<ServiceDetail />} />
+          <Route path="/policies" element={<PolicyList />} />
+          <Route path="/policies/:slug" element={<PolicyDetail />} />
+          <Route path="/policy" element={<Navigate to="/policies" replace />} />
 
           {/* Protected routes that use MainLayout (Light theme with top navbar) */}
           <Route
@@ -119,6 +125,7 @@ export default function App() {
               element={<VehicleManagement />}
             />
             <Route path="/admin/services" element={<AdminServiceManager />} />
+            <Route path="/admin/policies" element={<PolicyManagement />} />
             <Route path="/admin/parking-lots" element={<ParkingLots />} />
             <Route path="/admin/notifications" element={<AdminNotificationManagement />} />
             <Route path="/admin/tickets" element={<TicketPackages />} />

@@ -8,6 +8,7 @@ const Slot = require('../models/Slot');
 const TicketPackage = require('../models/TicketPackage');
 const User = require('../models/User');
 const walletService = require('../services/walletService');
+const contractService = require('../services/contractService');
 const { normalizeLicensePlate } = require('../utils/licensePlateUtils');
 const { emitToUser } = require('../sockets/notificationSocket');
 
@@ -393,10 +394,22 @@ exports.createBooking = async (req, res, next) => {
 
     let prepaidAmount = 0;
     
-    // Fetch default hourly package
-    const hourlyPackage = await TicketPackage.findOne({ type: 'hourly', isActive: true });
+    const [hourlyPackage, requestedPackage] = await Promise.all([
+      TicketPackage.findOne({ type: 'hourly', isActive: true }),
+      ticketPackageId ? TicketPackage.findOne({ _id: ticketPackageId, isActive: true }) : null,
+    ]);
+
+    if (ticketPackageId && !requestedPackage) {
+      return res.status(400).json({
+        success: false,
+        message: 'Selected ticket package is invalid or inactive',
+      });
+    }
+
+    const billingPackage = requestedPackage || hourlyPackage;
     const hourlyRate = hourlyPackage ? hourlyPackage.price : 10000;
-    prepaidAmount = paidHours * hourlyRate;
+    const isLongTermPackage = ['monthly', 'yearly'].includes(billingPackage?.type);
+    prepaidAmount = isLongTermPackage ? Number(billingPackage.price || 0) : paidHours * hourlyRate;
 
     // Check if selected slot is reserved for this user (VIP)
     // We need to fetch the slot from DB to check reservedFor
@@ -440,7 +453,7 @@ exports.createBooking = async (req, res, next) => {
       prepaidAmount,
       serviceAmount: serviceTotal,
       finalAmount: totalAmount,
-      ticketPackageId: hourlyPackage ? hourlyPackage._id : null,
+      ticketPackageId: billingPackage ? billingPackage._id : null,
       paymentMethod: 'wallet',
       paymentStatus: 'failed',
     });
@@ -461,6 +474,18 @@ exports.createBooking = async (req, res, next) => {
 
     booking.paymentStatus = 'paid';
     await booking.save();
+
+    try {
+      const contract = await contractService.generateContract(booking._id);
+      if (contract) {
+        booking.contractId = contract._id;
+        if (contract.status === 'DRAFT') {
+          await contractService.activateContract(contract._id, req.app);
+        }
+      }
+    } catch (contractError) {
+      console.error(`[Contract] Auto-generation failed for booking ${booking._id}:`, contractError.message);
+    }
 
     if (services.length > 0) {
       await BookingService.insertMany(

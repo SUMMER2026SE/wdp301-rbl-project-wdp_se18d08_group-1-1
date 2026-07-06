@@ -11,8 +11,18 @@ const errorHandler = (err, req, res, next) => {
   // Mongoose validation error
   if (err.name === 'ValidationError') {
     statusCode = 400;
-    const messages = Object.values(err.errors).map((val) => val.message);
-    message = messages.join('. ');
+    message = 'Validation error';
+    const errors = Object.entries(err.errors).map(([field, val]) => ({
+      field,
+      message: val.message,
+    }));
+
+    return res.status(statusCode).json({
+      success: false,
+      message,
+      errors,
+      ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
+    });
   }
 
   // Mongoose duplicate key error
@@ -25,7 +35,18 @@ const errorHandler = (err, req, res, next) => {
   // Mongoose bad ObjectId (CastError)
   if (err.name === 'CastError') {
     statusCode = 400;
-    message = `Invalid ${err.path}: ${err.value}`;
+    message = 'Validation error';
+    return res.status(statusCode).json({
+      success: false,
+      message,
+      errors: [
+        {
+          field: err.path,
+          message: `Invalid ${err.path}: ${err.value}`,
+        },
+      ],
+      ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
+    });
   }
 
   // JWT errors

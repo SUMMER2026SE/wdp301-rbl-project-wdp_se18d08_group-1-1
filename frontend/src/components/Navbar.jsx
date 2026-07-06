@@ -36,7 +36,7 @@ const guestLinks = [
   { to: "/", label: "Home", icon: Sparkles },
   { to: "/services", label: "Services", icon: Settings },
   { to: "/parking-map", label: "Parking Map", icon: Map },
-  { to: "/policy", label: "Policy", icon: FileText },
+  { to: "/policies", label: "Policy", icon: FileText },
 ];
 
 const customerLinks = [
@@ -576,7 +576,7 @@ export default function Navbar() {
                               id: "policy",
                               icon: FileText,
                               label: "Policy",
-                              to: "/policy",
+                              to: "/policies",
                             },
                           ].map((item) => (
                             <Link

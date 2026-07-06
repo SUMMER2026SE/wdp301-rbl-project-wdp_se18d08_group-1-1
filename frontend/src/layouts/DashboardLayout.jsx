@@ -27,6 +27,7 @@ import {
   Car,
   Gauge,
   FileWarning,
+  ScrollText,
   ClipboardList,
   BookOpen,
   CalendarCheck,
@@ -62,6 +63,7 @@ const NAV_CONFIG = {
       to: "/admin/tickets",
     },
     { label: "Services", icon: <Wrench size={18} />, to: "/admin/services" },
+    { label: "Policies", icon: <ScrollText size={18} />, to: "/admin/policies" },
     {
       label: "Vehicles & 3D",
       icon: <Car size={18} />,

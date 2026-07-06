@@ -353,6 +353,101 @@ async function notifyPaymentFailed(app, userId, amount) {
   }
 }
 
+async function notifyViolationCreated(app, userId, violationData = {}) {
+  try {
+    if (!(await shouldTriggerRule('violation.created', userId, 'VIOLATION_CREATED'))) return;
+
+    const fmtAmount = Number(violationData.amount || 0).toLocaleString('vi-VN');
+    const violationId = violationData.violationId || Date.now();
+    const templateData = {
+      title: violationData.title || 'Parking violation',
+      amount: fmtAmount,
+      violationId,
+    };
+    const notification = await notificationService.createAutoNotification(
+      'VIOLATION_CREATED',
+      `violation_${violationId}_created`,
+      userId,
+      'VIOLATION_CREATED',
+      templateData
+    );
+    if (notification) {
+      const io = getIO(app);
+      if (io) await emitNotification(io, userId, notification);
+      queueNotificationEmail(userId, 'violation.created', templateData);
+      await updateRuleLastTriggered('violation.created');
+    }
+  } catch (err) {
+    console.error('[NotifTrigger] notifyViolationCreated error:', err.message);
+  }
+}
+
+async function notifyViolationPaymentReminder(app, userId, violationId) {
+  try {
+    if (!(await shouldTriggerRule('violation.payment_reminder', userId, 'VIOLATION_PAYMENT_REMINDER'))) return;
+
+    const notification = await notificationService.createAutoNotification(
+      'VIOLATION_PAYMENT_REMINDER',
+      `violation_${violationId}_reminder_${Math.floor(Date.now() / 86400000)}`,
+      userId,
+      'VIOLATION_PAYMENT_REMINDER',
+      { violationId }
+    );
+    if (notification) {
+      const io = getIO(app);
+      if (io) await emitNotification(io, userId, notification);
+      await updateRuleLastTriggered('violation.payment_reminder');
+    }
+  } catch (err) {
+    console.error('[NotifTrigger] notifyViolationPaymentReminder error:', err.message);
+  }
+}
+
+async function notifyViolationPaid(app, userId, violationId, amount) {
+  try {
+    if (!(await shouldTriggerRule('violation.paid', userId, 'VIOLATION_PAID'))) return;
+
+    const fmtAmount = Number(amount || 0).toLocaleString('vi-VN');
+    const templateData = { violationId, amount: fmtAmount };
+    const notification = await notificationService.createAutoNotification(
+      'VIOLATION_PAID',
+      `violation_${violationId}_paid`,
+      userId,
+      'VIOLATION_PAID',
+      templateData
+    );
+    if (notification) {
+      const io = getIO(app);
+      if (io) await emitNotification(io, userId, notification);
+      queueNotificationEmail(userId, 'violation.paid', templateData);
+      await updateRuleLastTriggered('violation.paid');
+    }
+  } catch (err) {
+    console.error('[NotifTrigger] notifyViolationPaid error:', err.message);
+  }
+}
+
+async function notifyViolationCancelled(app, userId, violationId) {
+  try {
+    if (!(await shouldTriggerRule('violation.cancelled', userId, 'VIOLATION_CANCELLED'))) return;
+
+    const notification = await notificationService.createAutoNotification(
+      'VIOLATION_CANCELLED',
+      `violation_${violationId}_cancelled`,
+      userId,
+      'VIOLATION_CANCELLED',
+      { violationId }
+    );
+    if (notification) {
+      const io = getIO(app);
+      if (io) await emitNotification(io, userId, notification);
+      await updateRuleLastTriggered('violation.cancelled');
+    }
+  } catch (err) {
+    console.error('[NotifTrigger] notifyViolationCancelled error:', err.message);
+  }
+}
+
 // ─── BOOKING ────────────────────────────────────────────────────────────────────
 
 async function notifyBookingSuccess(app, userId, bookingDetails = {}) {
@@ -409,7 +504,168 @@ async function notifyBookingCancelled(app, userId, bookingDetails = {}) {
   }
 }
 
+async function sendTransferNotification(app, userIds, eventType, templateKey, transfer, templateData = {}) {
+  const ids = userIds.filter(Boolean).map(String);
+  const io = getIO(app);
+
+  await Promise.all(ids.map(async (userId) => {
+    const notification = await notificationService.createAutoNotification(
+      eventType,
+      `transfer_${transfer._id}_${templateKey}_${userId}`,
+      userId,
+      templateKey,
+      {
+        transferId: transfer._id,
+        ...templateData,
+      }
+    );
+    if (notification && io) {
+      await emitNotification(io, userId, notification);
+    }
+  }));
+}
+
+async function notifyTransferRequestCreated(app, transfer) {
+  try {
+    const fromUserId = transfer.fromUserId?._id || transfer.fromUserId;
+    const toUserId = transfer.toUserId?._id || transfer.toUserId;
+    if (!(await shouldTriggerRule('booking_transfer.created', fromUserId, 'TRANSFER_REQUEST_CREATED'))) return;
+    await sendTransferNotification(
+      app,
+      [fromUserId, toUserId],
+      'TRANSFER_REQUEST_CREATED',
+      'TRANSFER_REQUEST_CREATED',
+      transfer
+    );
+    await updateRuleLastTriggered('booking_transfer.created');
+  } catch (err) {
+    console.error('[NotifTrigger] notifyTransferRequestCreated error:', err.message);
+  }
+}
+
+async function notifyTransferApproved(app, transfer) {
+  try {
+    const fromUserId = transfer.fromUserId?._id || transfer.fromUserId;
+    const toUserId = transfer.toUserId?._id || transfer.toUserId;
+    if (!(await shouldTriggerRule('booking_transfer.approved', fromUserId, 'TRANSFER_APPROVED'))) return;
+    await sendTransferNotification(
+      app,
+      [fromUserId, toUserId],
+      'TRANSFER_APPROVED',
+      'TRANSFER_APPROVED',
+      transfer
+    );
+    await updateRuleLastTriggered('booking_transfer.approved');
+  } catch (err) {
+    console.error('[NotifTrigger] notifyTransferApproved error:', err.message);
+  }
+}
+
+async function notifyTransferRejected(app, transfer) {
+  try {
+    const fromUserId = transfer.fromUserId?._id || transfer.fromUserId;
+    if (!(await shouldTriggerRule('booking_transfer.rejected', fromUserId, 'TRANSFER_REJECTED'))) return;
+    await sendTransferNotification(
+      app,
+      [fromUserId],
+      'TRANSFER_REJECTED',
+      'TRANSFER_REJECTED',
+      transfer,
+      { reason: transfer.rejectionReason || 'N/A' }
+    );
+    await updateRuleLastTriggered('booking_transfer.rejected');
+  } catch (err) {
+    console.error('[NotifTrigger] notifyTransferRejected error:', err.message);
+  }
+}
+
+async function notifyTransferCompleted(app, transfer) {
+  try {
+    const fromUserId = transfer.fromUserId?._id || transfer.fromUserId;
+    const toUserId = transfer.toUserId?._id || transfer.toUserId;
+    if (!(await shouldTriggerRule('booking_transfer.completed', fromUserId, 'TRANSFER_COMPLETED'))) return;
+    await sendTransferNotification(
+      app,
+      [fromUserId, toUserId],
+      'TRANSFER_COMPLETED',
+      'TRANSFER_COMPLETED',
+      transfer
+    );
+    await updateRuleLastTriggered('booking_transfer.completed');
+  } catch (err) {
+    console.error('[NotifTrigger] notifyTransferCompleted error:', err.message);
+  }
+}
+
 // ─── PARKING ────────────────────────────────────────────────────────────────────
+
+async function sendContractNotification(app, contract, eventKey, templateKey, suffix, templateData = {}) {
+  const userId = contract.userId?._id || contract.userId;
+  if (!userId) return;
+
+  if (!(await shouldTriggerRule(eventKey, userId, templateKey))) return;
+
+  const notification = await notificationService.createAutoNotification(
+    templateKey,
+    `contract_${contract._id}_${suffix}`,
+    userId,
+    templateKey,
+    {
+      contractCode: contract.contractCode,
+      slotCode: contract.slotCode,
+      ...templateData,
+    }
+  );
+
+  if (notification) {
+    const io = getIO(app);
+    if (io) await emitNotification(io, userId, notification);
+    await updateRuleLastTriggered(eventKey);
+  }
+}
+
+async function notifyContractActivated(app, contract) {
+  try {
+    await sendContractNotification(
+      app,
+      contract,
+      'contract.activated',
+      'CONTRACT_ACTIVATED',
+      'activated'
+    );
+  } catch (err) {
+    console.error('[NotifTrigger] notifyContractActivated error:', err.message);
+  }
+}
+
+async function notifyContractCancelled(app, contract) {
+  try {
+    await sendContractNotification(
+      app,
+      contract,
+      'contract.cancelled',
+      'CONTRACT_CANCELLED',
+      'cancelled',
+      { reason: contract.cancellationReason || '' }
+    );
+  } catch (err) {
+    console.error('[NotifTrigger] notifyContractCancelled error:', err.message);
+  }
+}
+
+async function notifyContractExpired(app, contract) {
+  try {
+    await sendContractNotification(
+      app,
+      contract,
+      'contract.expired',
+      'CONTRACT_EXPIRED',
+      'expired'
+    );
+  } catch (err) {
+    console.error('[NotifTrigger] notifyContractExpired error:', err.message);
+  }
+}
 
 async function notifyVehicleEntry(app, userId, plate, slot) {
   try {
@@ -631,9 +887,21 @@ module.exports = {
   // Payment
   notifyPaymentSuccess,
   notifyPaymentFailed,
+  // Violation
+  notifyViolationCreated,
+  notifyViolationPaymentReminder,
+  notifyViolationPaid,
+  notifyViolationCancelled,
   // Booking
   notifyBookingSuccess,
   notifyBookingCancelled,
+  notifyTransferRequestCreated,
+  notifyTransferApproved,
+  notifyTransferRejected,
+  notifyTransferCompleted,
+  notifyContractActivated,
+  notifyContractCancelled,
+  notifyContractExpired,
   // Parking
   notifyVehicleEntry,
   notifyVehicleExit,
