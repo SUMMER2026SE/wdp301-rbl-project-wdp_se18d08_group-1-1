@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Bell,
   CheckCircle2,
@@ -16,6 +16,14 @@ import {
 
 const PRIORITIES = ["INFO", "SUCCESS", "WARNING", "ERROR", "SYSTEM"];
 const CHANNELS = ["In-app", "Email"];
+const TRIGGER_TYPES = [
+  { value: "manual", label: "Manual event" },
+  { value: "scheduled", label: "Scheduled data rule" },
+];
+const TRIGGER_SOURCES = [
+  { value: "none", label: "No data source" },
+  { value: "subscription.expiring", label: "Subscription expiring" },
+];
 
 const emptyRule = {
   eventKey: "",
@@ -26,6 +34,12 @@ const emptyRule = {
   enabled: true,
   channels: ["In-app", "Email"],
   throttleMinutes: 10,
+  triggerType: "scheduled",
+  triggerConfig: {
+    source: "subscription.expiring",
+    offsetMinutes: 4320,
+    lookbackMinutes: 15,
+  },
 };
 
 const RULE_COPY = {
@@ -258,6 +272,19 @@ export default function AutoRulesTable({
       description: rule.description.trim(),
       channels: normalizeChannels(rule.channels),
       throttleMinutes: Math.max(1, Number(rule.throttleMinutes) || 1),
+      triggerType: rule.triggerType === "scheduled" ? "scheduled" : "manual",
+      triggerConfig:
+        rule.triggerType === "scheduled"
+          ? {
+              source: rule.triggerConfig?.source || "none",
+              offsetMinutes: Math.max(1, Number(rule.triggerConfig?.offsetMinutes) || 4320),
+              lookbackMinutes: Math.max(1, Number(rule.triggerConfig?.lookbackMinutes) || 15),
+            }
+          : {
+              source: "none",
+              offsetMinutes: null,
+              lookbackMinutes: 15,
+            },
     };
 
     const ok = rule._id ? await onSave(rule.eventKey, payload) : await onCreate(payload);
@@ -382,6 +409,12 @@ export default function AutoRulesTable({
                         <Timer size={14} />
                         {rule.throttleMinutes || 0} min
                       </span>
+                      {rule.triggerType === "scheduled" && (
+                        <span className="inline-flex h-10 items-center gap-2 rounded-lg border border-sky-500/20 bg-sky-500/10 px-3 text-xs text-sky-300">
+                          <Timer size={14} />
+                          {rule.triggerConfig?.source || "scheduled"}
+                        </span>
+                      )}
                       <button
                         type="button"
                         onClick={() => setEditingRule({ ...rule, channels })}
@@ -443,7 +476,26 @@ function RuleModal({ rule, theme, onChange, onClose, onSave }) {
   const isEdit = Boolean(rule._id);
   const valid = slugifyEventKey(rule.eventKey) && rule.group.trim() && rule.name.trim();
 
+  useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, []);
+
   const update = (field, value) => onChange({ ...rule, [field]: value });
+  const updateTriggerConfig = (field, value) =>
+    onChange({
+      ...rule,
+      triggerConfig: {
+        source: "none",
+        offsetMinutes: 4320,
+        lookbackMinutes: 15,
+        ...(rule.triggerConfig || {}),
+        [field]: value,
+      },
+    });
   const toggleChannel = (channel) => {
     if (channel === "In-app") return;
     const channels = normalizeChannels(rule.channels);
@@ -462,11 +514,11 @@ function RuleModal({ rule, theme, onChange, onClose, onSave }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-4 py-6 backdrop-blur-sm">
-      <form onSubmit={submit} className="w-full max-w-2xl overflow-hidden rounded-2xl border border-white/10 bg-[#151515] shadow-2xl">
-        <div className="flex items-center justify-between border-b border-white/5 px-5 py-4">
+    <div className="hide-scrollbar fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/70 px-4 py-4 backdrop-blur-sm sm:items-center sm:py-6">
+      <form onSubmit={submit} className="flex max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#151515] shadow-2xl sm:max-h-[calc(100vh-3rem)]">
+        <div className="flex shrink-0 items-center justify-between border-b border-white/5 px-5 py-4">
           <div>
-            <h3 className="text-lg font-bold text-white">{isEdit ? "Edit Automation Rule" : "Add Automation Rule"}</h3>
+            <h3 className="text-base font-bold leading-tight text-white sm:text-lg">{isEdit ? "Edit Automation Rule" : "Add Automation Rule"}</h3>
             <p className="mt-1 text-sm text-gray-500">Use clear English copy so staff can scan rules quickly.</p>
           </div>
           <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-lg border border-white/10 text-gray-400 hover:bg-white/5">
@@ -474,7 +526,7 @@ function RuleModal({ rule, theme, onChange, onClose, onSave }) {
           </button>
         </div>
 
-        <div className="grid gap-4 px-5 py-5 sm:grid-cols-2">
+        <div className="hide-scrollbar grid min-h-0 flex-1 gap-4 overflow-y-auto px-5 py-5 sm:grid-cols-2">
           <Field label="Event key">
             <input
               value={rule.eventKey}
@@ -536,6 +588,53 @@ function RuleModal({ rule, theme, onChange, onClose, onSave }) {
               </span>
             </button>
           </Field>
+          <Field label="Trigger mode">
+            <select
+              value={rule.triggerType || "manual"}
+              onChange={(event) => update("triggerType", event.target.value)}
+              className="h-11 w-full rounded-lg border border-white/10 bg-[#0D0D0D] px-3 text-sm text-white outline-none"
+            >
+              {TRIGGER_TYPES.map((type) => (
+                <option key={type.value} value={type.value}>
+                  {type.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Data source">
+            <select
+              value={rule.triggerConfig?.source || "none"}
+              onChange={(event) => updateTriggerConfig("source", event.target.value)}
+              disabled={(rule.triggerType || "manual") !== "scheduled"}
+              className="h-11 w-full rounded-lg border border-white/10 bg-[#0D0D0D] px-3 text-sm text-white outline-none disabled:cursor-not-allowed disabled:text-gray-500"
+            >
+              {TRIGGER_SOURCES.map((source) => (
+                <option key={source.value} value={source.value}>
+                  {source.label}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Before trigger minutes">
+            <input
+              type="number"
+              min="1"
+              value={rule.triggerConfig?.offsetMinutes || 4320}
+              onChange={(event) => updateTriggerConfig("offsetMinutes", event.target.value)}
+              disabled={(rule.triggerType || "manual") !== "scheduled"}
+              className="h-11 w-full rounded-lg border border-white/10 bg-[#0D0D0D] px-3 text-sm text-white outline-none disabled:cursor-not-allowed disabled:text-gray-500"
+            />
+          </Field>
+          <Field label="Lookback minutes">
+            <input
+              type="number"
+              min="1"
+              value={rule.triggerConfig?.lookbackMinutes || 15}
+              onChange={(event) => updateTriggerConfig("lookbackMinutes", event.target.value)}
+              disabled={(rule.triggerType || "manual") !== "scheduled"}
+              className="h-11 w-full rounded-lg border border-white/10 bg-[#0D0D0D] px-3 text-sm text-white outline-none disabled:cursor-not-allowed disabled:text-gray-500"
+            />
+          </Field>
           <Field label="Description">
             <textarea
               value={rule.description}
@@ -567,7 +666,7 @@ function RuleModal({ rule, theme, onChange, onClose, onSave }) {
           </Field>
         </div>
 
-        <div className="flex flex-col-reverse gap-2 border-t border-white/5 px-5 py-4 sm:flex-row sm:justify-end">
+        <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-white/5 bg-[#151515] px-5 py-4 sm:flex-row sm:justify-end">
           <button type="button" onClick={onClose} className="h-10 rounded-lg border border-white/10 px-4 text-sm font-semibold text-gray-300 hover:bg-white/5">
             Cancel
           </button>
@@ -583,6 +682,15 @@ function RuleModal({ rule, theme, onChange, onClose, onSave }) {
 
 function ConfirmDeleteModal({ rule, theme, onClose, onConfirm }) {
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, []);
+
   const submit = async () => {
     setSaving(true);
     await onConfirm();

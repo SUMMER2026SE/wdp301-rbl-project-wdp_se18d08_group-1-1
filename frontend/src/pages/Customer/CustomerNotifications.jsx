@@ -10,6 +10,7 @@ const TYPE_FILTERS = [
   { value: 'PAYMENT', label: 'Payment' },
   { value: 'BOOKING', label: 'Booking' },
   { value: 'ACCOUNT', label: 'Account' },
+  { value: 'SUBSCRIPTION', label: 'Subscription' },
   { value: 'SYSTEM', label: 'System' },
 ];
 

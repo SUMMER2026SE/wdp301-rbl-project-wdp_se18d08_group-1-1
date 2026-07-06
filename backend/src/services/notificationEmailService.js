@@ -55,6 +55,7 @@ const getActionUrl = (eventKey) => {
   if (eventKey.startsWith('wallet.')) return `${clientUrl}/customer/wallet`;
   if (eventKey.startsWith('booking.')) return `${clientUrl}/customer/bookings`;
   if (eventKey.startsWith('parking.')) return `${clientUrl}/customer/history`;
+  if (eventKey.startsWith('subscription.')) return `${clientUrl}/customer/membership`;
   return clientUrl;
 };
 
@@ -218,6 +219,27 @@ const sendRuleTestEmail = async (userId, rule, templateData = {}) => {
   }
 };
 
+const sendCustomNotificationEmail = async (userId, rule, payload, templateData = {}) => {
+  try {
+    if (!userId || !rule?.eventKey || !mongoose.Types.ObjectId.isValid(userId)) return;
+    if (!Array.isArray(rule.channels) || !rule.channels.includes('Email')) return;
+
+    const user = await User.findById(userId)
+      .select('email isEmailVerified status username role')
+      .lean();
+
+    if (!user || !user.email || !user.isEmailVerified || user.status === false) return;
+
+    await sendRenderedEmail(user, rule.eventKey, {
+      title: payload.title || rule.name,
+      content: payload.content || rule.description || rule.name,
+      priority: payload.priority || rule.priority || 'INFO',
+    }, templateData);
+  } catch (err) {
+    console.error(`[EmailNotif] ${rule?.eventKey || 'custom'} error: ${err.message}`);
+  }
+};
+
 const sendBroadcastNotificationEmail = async (userIds, eventKey, templateData = {}) => {
   try {
     if (!Array.isArray(userIds) || userIds.length === 0 || !eventKey) return;
@@ -257,4 +279,5 @@ module.exports = {
   sendNotificationEmail,
   sendBroadcastNotificationEmail,
   sendRuleTestEmail,
+  sendCustomNotificationEmail,
 };

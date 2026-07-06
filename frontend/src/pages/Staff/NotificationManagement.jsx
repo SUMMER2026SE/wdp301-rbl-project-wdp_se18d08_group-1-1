@@ -40,7 +40,7 @@ const TABS = [
 ];
 
 const PRIORITIES = ["INFO", "SUCCESS", "WARNING", "ERROR", "SYSTEM"];
-const TYPES = ["SYSTEM", "PARKING", "BOOKING", "WALLET", "PAYMENT", "ACCOUNT", "PROMOTION", "CAMERA"];
+const TYPES = ["SYSTEM", "PARKING", "BOOKING", "WALLET", "PAYMENT", "ACCOUNT", "PROMOTION", "CAMERA", "SUBSCRIPTION"];
 
 const PRIORITY_META = {
   INFO: { label: "Info", dot: "bg-sky-400", chip: "border-sky-500/30 bg-sky-500/10 text-sky-300" },

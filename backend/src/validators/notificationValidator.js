@@ -16,7 +16,7 @@ const createNotificationValidator = [
     .withMessage('Content must not exceed 2000 characters'),
   body('type')
     .optional()
-    .isIn(['SYSTEM', 'PARKING', 'BOOKING', 'WALLET', 'PAYMENT', 'ACCOUNT', 'PROMOTION', 'CAMERA'])
+    .isIn(['SYSTEM', 'PARKING', 'BOOKING', 'WALLET', 'PAYMENT', 'ACCOUNT', 'PROMOTION', 'CAMERA', 'SUBSCRIPTION'])
     .withMessage('Invalid notification type'),
   body('priority')
     .optional()
@@ -47,7 +47,7 @@ const queryNotificationValidator = [
     .withMessage('Limit must be between 1 and 50'),
   query('type')
     .optional()
-    .isIn(['SYSTEM', 'PARKING', 'BOOKING', 'WALLET', 'PAYMENT', 'ACCOUNT', 'PROMOTION', 'CAMERA'])
+    .isIn(['SYSTEM', 'PARKING', 'BOOKING', 'WALLET', 'PAYMENT', 'ACCOUNT', 'PROMOTION', 'CAMERA', 'SUBSCRIPTION'])
     .withMessage('Invalid notification type'),
   query('isRead')
     .optional()

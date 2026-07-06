@@ -216,6 +216,22 @@ const DEFAULT_RULES = [
     channels: ['In-app', 'Email'],
     throttleMinutes: 10,
   },
+  {
+    eventKey: 'subscription.expiring_3d',
+    group: 'Subscription',
+    name: 'VIP package expires soon',
+    description: 'Your {packageName} package expires on {expireAt}. You have {daysLeft} day(s) left.',
+    priority: 'WARNING',
+    enabled: true,
+    channels: ['In-app', 'Email'],
+    throttleMinutes: 1440,
+    triggerType: 'scheduled',
+    triggerConfig: {
+      source: 'subscription.expiring',
+      offsetMinutes: 4320,
+      lookbackMinutes: 15,
+    },
+  },
 
   // ─── System ─────────────────────────────────────────
   {
@@ -255,6 +271,12 @@ async function seedRules() {
             priority: rule.priority,
             channels: rule.channels,
             throttleMinutes: rule.throttleMinutes,
+            triggerType: rule.triggerType || 'manual',
+            triggerConfig: rule.triggerConfig || {
+              source: 'none',
+              offsetMinutes: null,
+              lookbackMinutes: 15,
+            },
           },
           $setOnInsert: {
             enabled: rule.enabled,

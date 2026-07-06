@@ -1,15 +1,30 @@
-import { useState, useEffect, Fragment } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Menu, Transition } from '@headlessui/react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
-  Search, X, Mail, Phone, Calendar, Users, User, Shield, UserX,
-  ChevronDown, ChevronUp, Trash2, Send, Download, Edit3, Ban,
-  RotateCcw, AlertTriangle, Check, Clock, UserPlus,
-  CheckSquare, Square, RefreshCw, Layers, Eye, Lock
+  AlertTriangle,
+  Car,
+  Check,
+  ChevronDown,
+  Clock,
+  Edit3,
+  Eye,
+  History,
+  Lock,
+  RefreshCw,
+  Search,
+  Shield,
+  User,
+  UserCheck,
+  UserPlus,
+  Users,
+  UserX,
+  X,
 } from 'lucide-react';
 import { apiFetch } from '../../services/api';
 
-// --- Constants ---------------------------------------------------------------
+const PAGE_SIZE = 10;
+
 const ROLES = {
   customer: {
     label: 'Customer',
@@ -17,126 +32,57 @@ const ROLES = {
     bg: 'bg-[#ffd555]/15',
     border: 'border-[#ffd555]/40',
     text: 'text-[#ffd555]',
-    glow: 'rgba(255,213,85,0.4)',
     dot: 'bg-[#ffd555]',
-    permissions: ['View parking spots', 'Create reservations', 'Manage own bookings', 'Payment history'],
-  },
-  staff: {
-    label: 'Staff',
-    gradient: 'from-cyan-400 to-blue-500',
-    bg: 'bg-cyan-500/15',
-    border: 'border-cyan-400/40',
-    text: 'text-cyan-300',
-    glow: 'rgba(34,211,238,0.4)',
-    dot: 'bg-cyan-400',
-    permissions: ['All customer permissions', 'Manage parking lots', 'Handle support tickets', 'View reports'],
-  },
-  admin: {
-    label: 'Admin',
-    gradient: 'from-rose-400 to-red-500',
-    bg: 'bg-rose-500/15',
-    border: 'border-rose-400/40',
-    text: 'text-rose-300',
-    glow: 'rgba(244,63,94,0.4)',
-    dot: 'bg-rose-400',
-    permissions: ['Full system access', 'Manage all accounts', 'System configuration', 'View all analytics', 'Assign roles'],
   },
 };
 
-const PAGE_SIZE = 10;
-
-// --- Animated Counter ---------------------------------------------------------
-function AnimatedCounter({ target, duration = 1200 }) {
-  const [count, setCount] = useState(0);
-  useEffect(() => {
-    if (!target) return;
-    let frame;
-    const start = performance.now();
-    const animate = (now) => {
-      const elapsed = now - start;
-      const progress = Math.min(elapsed / duration, 1);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      setCount(Math.round(eased * target));
-      if (progress < 1) frame = requestAnimationFrame(animate);
-    };
-    frame = requestAnimationFrame(animate);
-    return () => cancelAnimationFrame(frame);
-  }, [target, duration]);
-  return <span>{count}</span>;
-}
-
-// --- Role Badge --------------------------------------------------
-function RoleBadge({ role }) {
+function RoleBadge({ role = 'customer' }) {
   const cfg = ROLES[role] || ROLES.customer;
   return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${cfg.bg} ${cfg.border} ${cfg.text} select-none`}>
-      <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${cfg.bg} ${cfg.border} ${cfg.text}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
       {cfg.label}
     </span>
   );
 }
 
-// --- Status Badge -------------------------------------------------------------
 function StatusBadge({ status }) {
-  if (status === true || status === 'active')
-    return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/15 border border-emerald-500/30 text-emerald-300">
-        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />Active
-      </span>
-    );
-  if (status === 'pending')
-    return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/15 border border-amber-400/30 text-amber-300">
-        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />Pending
-      </span>
-    );
+  const active = status === true || status === 'active';
   return (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-red-500/15 border border-red-500/30 text-red-300">
-      <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />Blocked
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${
+      active
+        ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300'
+        : 'border-rose-500/30 bg-rose-500/15 text-rose-300'
+    }`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${active ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+      {active ? 'Active' : 'Blocked'}
     </span>
   );
 }
 
-// --- Skeleton Row -------------------------------------------------------------
-function SkeletonRow() {
+function VerifyBadge({ verified }) {
   return (
-    <tr className="border-b border-white/5">
-      {[40, 180, 140, 90, 80, 80, 90, 60].map((w, i) => (
-        <td key={i} className="px-4 py-3">
-          <div className="h-4 rounded-lg bg-white/5 animate-skeleton" style={{ width: w }} />
-        </td>
-      ))}
-    </tr>
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${
+      verified
+        ? 'border-cyan-400/30 bg-cyan-400/10 text-cyan-300'
+        : 'border-amber-400/30 bg-amber-400/10 text-amber-300'
+    }`}>
+      {verified ? <UserCheck size={12} /> : <Clock size={12} />}
+      {verified ? 'Verified' : 'Unverified'}
+    </span>
   );
 }
 
-// --- Overview Card ------------------------------------------------------------
-function StatCard({ icon: Icon, label, value, gradient, glow, loading }) {
+function StatCard({ icon: Icon, label, value, gradient, loading }) {
   return (
-    <div
-      className="relative rounded-2xl p-5 overflow-hidden cursor-default group transition-all duration-300 hover:scale-[1.035]"
-      style={{
-        background: 'rgba(255,255,255,0.03)',
-        border: '1px solid rgba(255,255,255,0.08)',
-        boxShadow: '0 4px 24px rgba(0,0,0,0.3)',
-      }}
-      onMouseEnter={e => { e.currentTarget.style.boxShadow = `0 8px 40px ${glow}, 0 0 0 1px rgba(255,255,255,0.12)`; }}
-      onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 4px 24px rgba(0,0,0,0.3)'; }}
-    >
-      {/* sweep shimmer */}
-      <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
-        style={{ background: 'linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.04) 50%, transparent 60%)' }} />
-      {/* gradient blob */}
-      <div className={`absolute -top-6 -right-6 w-24 h-24 rounded-full bg-gradient-to-br ${gradient} opacity-10 group-hover:opacity-20 transition-opacity duration-300 blur-xl`} />
-
+    <div className="relative overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.035] p-5 shadow-[0_4px_24px_rgba(0,0,0,0.3)]">
+      <div className={`absolute -right-7 -top-7 h-24 w-24 rounded-full bg-gradient-to-br ${gradient} opacity-10 blur-xl`} />
       <div className="relative flex items-start justify-between">
         <div>
-          <p className="text-[11px] text-white/40 uppercase tracking-widest font-semibold mb-2">{label}</p>
-          <p className="text-3xl font-bold text-white">
-            {loading ? <span className="inline-block w-12 h-8 rounded bg-white/10 animate-skeleton" /> : <AnimatedCounter target={value} />}
-          </p>
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-widest text-white/40">{label}</p>
+          <p className="text-3xl font-bold text-white">{loading ? <span className="inline-block h-8 w-12 animate-pulse rounded bg-white/10" /> : value}</p>
         </div>
-        <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center shadow-lg`}>
+        <div className={`flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br ${gradient} shadow-lg`}>
           <Icon size={20} className="text-white" />
         </div>
       </div>
@@ -144,135 +90,198 @@ function StatCard({ icon: Icon, label, value, gradient, glow, loading }) {
   );
 }
 
-export default function AccountManagement() {
-  const authHeader = { Authorization: `Bearer ${localStorage.getItem('accessToken')}` };
+function SkeletonRow() {
+  return (
+    <tr className="border-b border-white/5">
+      {[180, 190, 100, 110, 90, 70].map((w, i) => (
+        <td key={i} className="px-4 py-4">
+          <div className="h-4 animate-pulse rounded-lg bg-white/5" style={{ width: w }} />
+        </td>
+      ))}
+    </tr>
+  );
+}
 
-  // -- State --
+function Section({ title, icon: Icon, children, action }) {
+  return (
+    <section className="rounded-2xl border border-white/[0.06] bg-[#171B20]/95 p-4 shadow-[0_12px_35px_rgba(0,0,0,0.22)]">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h4 className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[#ffd555]/85">
+          <Icon size={15} />
+          {title}
+        </h4>
+        {action}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function InfoGrid({ items }) {
+  return (
+    <div className="grid grid-cols-1 gap-2.5">
+      {items.map(({ label, value }) => (
+        <div key={label} className="rounded-xl border border-white/[0.05] bg-white/[0.025] px-3 py-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-white/35">{label}</p>
+          <p className="mt-1 break-words text-sm font-medium text-white/90">{value || 'N/A'}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function EmptyState({ children }) {
+  return (
+    <div className="rounded-xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-5 text-center text-sm text-white/40">
+      {children}
+    </div>
+  );
+}
+
+const escapeTerm = (value) => String(value || '').trim().toLowerCase();
+const normalizePlate = (value) => escapeTerm(value).replace(/[\s.-]/g, '');
+const fullName = (u) => `${u?.profile?.firstName || ''} ${u?.profile?.lastName || ''}`.trim() || u?.username || u?.email || '-';
+const initials = (u) => fullName(u).charAt(0).toUpperCase();
+const isActive = (u) => u?.status === true || u?.status === 'active';
+
+const formatDate = (value, withTime = false) => {
+  if (!value) return 'N/A';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'N/A';
+  return date.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    ...(withTime ? { hour: '2-digit', minute: '2-digit' } : {}),
+  });
+};
+
+export default function AccountManagement() {
+  const authHeader = useMemo(() => ({ Authorization: `Bearer ${localStorage.getItem('accessToken')}` }), []);
+
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterRole, setFilterRole] = useState('customer'); // Always customer for Staff
   const [filterStatus, setFilterStatus] = useState('all');
-  const [sortCol, setSortCol] = useState('createdAt');
-  const [sortDir, setSortDir] = useState('desc');
+  const [sortOrder, setSortOrder] = useState('newest');
   const [page, setPage] = useState(1);
   const [panelUser, setPanelUser] = useState(null);
-  const [panelTab, setPanelTab] = useState('overview'); // overview | roles | activity | audit
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({});
-  const [saveState, setSaveState] = useState('idle'); // idle | saving | success | error
+  const [saveState, setSaveState] = useState('idle');
   const [blockConfirm, setBlockConfirm] = useState(false);
-  const [sortOrder, setSortOrder] = useState('newest');
+  const [blockReason, setBlockReason] = useState('');
   const [toast, setToast] = useState(null);
 
-  const showToast = (msg, type = "success") => {
+  const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
-    setTimeout(() => setToast(null), 2500);
+    window.clearTimeout(showToast.timer);
+    showToast.timer = window.setTimeout(() => setToast(null), 2600);
   };
 
-  // ── Data ──
   const fetchUsers = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const res = await apiFetch('/staff/users', { headers: authHeader });
-      if (res.ok && res.data?.success) {
-        // Strict Data Filtering: ONLY fetch and display accounts where role === 'customer'
-        const customersOnly = res.data.data.filter(u => u.role === 'customer');
-        setUsers(customersOnly);
+      const endpoint = searchTerm.trim()
+        ? `/staff/customers/search?keyword=${encodeURIComponent(searchTerm.trim())}`
+        : '/staff/customers';
+      let res = await apiFetch(endpoint, { headers: authHeader });
+      if (!res.ok && endpoint !== '/staff/users') {
+        res = await apiFetch('/staff/users', { headers: authHeader });
       }
-    } catch (e) { console.error(e); }
-    finally { setLoading(false); }
-  };
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { fetchUsers(); }, []);
-
-  const handleBlockToggle = async (userId, currentStatus) => {
-    const userToBlock = users.find(u => u._id === userId);
-    // Action Restrictions: Staff cannot block higher or equal roles.
-    if (userToBlock && userToBlock.role !== 'customer') {
-      showToast('You do not have permission to block this account.', 'error');
-      return;
-    }
-
-    try {
-      const newStatus = !currentStatus;
-      const res = await apiFetch(`/staff/users/${userId}/status`, {
-        method: 'PUT', headers: authHeader, body: JSON.stringify({ status: newStatus })
-      });
       if (res.ok && res.data?.success) {
-        setUsers(prev => prev.map(u => u._id === userId ? { ...u, status: newStatus } : u));
-        if (panelUser?._id === userId) setPanelUser(p => ({ ...p, status: newStatus }));
-        showToast(newStatus ? 'Account unblocked successfully' : 'Account blocked successfully', 'success');
+        setUsers((res.data.data || []).filter((user) => user.role === 'customer'));
       } else {
-        showToast('Failed to update account status', 'error');
+        showToast(res.data?.message || 'Failed to load customers', 'error');
       }
-    } catch (e) {
-      console.error(e);
-      showToast('An error occurred', 'error');
+    } catch (error) {
+      console.error(error);
+      showToast('Cannot load customers', 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const openPanel = (u) => { 
-    // Action Restrictions: Staff cannot view details of higher or equal roles.
-    if (u.role !== 'customer') {
-      showToast('You do not have permission to view this account.', 'error');
-      return;
-    }
-    setPanelUser(u); setIsEditing(false); setPanelTab('overview'); setBlockConfirm(false); setSaveState('idle'); 
+  useEffect(() => {
+    const timer = window.setTimeout(fetchUsers, 0);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setPage(1);
+      fetchUsers();
+    }, 350);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm]);
+
+  const mergeUser = (updated) => {
+    if (!updated?._id) return;
+    setUsers((prev) => prev.map((user) => (user._id === updated._id ? { ...user, ...updated } : user)));
+    setPanelUser((prev) => (prev?._id === updated._id ? { ...prev, ...updated } : prev));
   };
-  const closePanel = () => { setPanelUser(null); setIsEditing(false); setBlockConfirm(false); };
 
-  const startEdit = (u) => {
-    // Prevent React SyntheticEvent from overwriting the user object
-    const isEvent = u && u.nativeEvent;
-    const passedUser = (u && !isEvent) ? u : null;
-    const userToEdit = passedUser || panelUser;
-    
-    // Action Restrictions: Staff cannot edit higher or equal roles.
-    if (userToEdit && userToEdit.role !== 'customer') {
-      showToast('You do not have permission to edit this account.', 'error');
+  const loadCustomerDetail = async (customer) => {
+    if (!customer || customer.role !== 'customer') {
+      showToast('Staff can only view customer accounts', 'error');
       return;
     }
-
-    if (passedUser) setPanelUser(passedUser);
-    
-    // Combine names or fallback to username
-    let fName = userToEdit?.profile?.firstName || '';
-    let lName = userToEdit?.profile?.lastName || '';
-    let fullName = `${fName} ${lName}`.trim();
-    
-    if (!fullName) {
-      fullName = userToEdit?.username || '';
+    setPanelUser(customer);
+    setIsEditing(false);
+    setBlockConfirm(false);
+    setSaveState('idle');
+    setDetailLoading(true);
+    try {
+      const res = await apiFetch(`/staff/customers/${customer._id}`, { headers: authHeader });
+      if (res.ok && res.data?.success) {
+        setPanelUser(res.data.data);
+        mergeUser(res.data.data);
+      }
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setDetailLoading(false);
     }
+  };
 
+  const closePanel = () => {
+    setPanelUser(null);
+    setIsEditing(false);
+    setBlockConfirm(false);
+    setBlockReason('');
+  };
+
+  const startEdit = (customer = panelUser) => {
+    const selected = customer?.nativeEvent ? panelUser : customer;
+    if (!selected || selected.role !== 'customer') {
+      showToast('Staff can only edit customer accounts', 'error');
+      return;
+    }
+    setPanelUser(selected);
     setEditForm({
-      fullName: fullName,
-      phone: userToEdit?.profile?.phone || '',
-      role: 'customer', // Force strictly customer in UI form state
+      fullName: fullName(selected),
+      email: selected.email || '',
+      phone: selected.profile?.phone || '',
+      status: isActive(selected) ? 'active' : 'blocked',
+      emailVerified: selected.isEmailVerified ?? selected.emailVerified ?? false,
+      licensePlate: selected.vehicle?.licensePlate || selected.vehicles?.[0]?.licensePlate || '',
+      address: selected.profile?.address || '',
+      role: 'customer',
     });
-    setIsEditing(true); setSaveState('idle');
+    setIsEditing(true);
+    setSaveState('idle');
+    setBlockConfirm(false);
   };
 
   const handleSave = async () => {
-    const fn = editForm.fullName?.trim() || '';
-
-    if (!fn) {
-      showToast('Full Name is required', 'error');
+    const name = editForm.fullName?.trim() || '';
+    if (!name) {
+      showToast('Full name is required', 'error');
       return;
     }
-    
-    if (fn.length > 50) {
-      showToast('Name cannot exceed 50 characters', 'error');
-      return;
-    }
-    
-    const nameRegex = /^[\p{L}\s]+$/u;
-    if (!nameRegex.test(fn)) {
-      showToast('Name cannot contain numbers or special characters', 'error');
-      return;
-    }
-
     if (editForm.phone) {
       const cleanPhone = editForm.phone.replace(/[\s-]/g, '');
       if (!/^(03|05|07|08|09)\d{8}$/.test(cleanPhone)) {
@@ -281,559 +290,459 @@ export default function AccountManagement() {
       }
     }
 
+    const [firstName, ...rest] = name.split(/\s+/);
+    const payload = {
+      firstName,
+      lastName: rest.join(' '),
+      phone: editForm.phone || '',
+      role: 'customer',
+      status: editForm.status === 'active',
+    };
+
+    if (editForm.licensePlate) payload.licensePlate = editForm.licensePlate;
+
     setSaveState('saving');
     try {
-      // Split the single full name into first and last right before API call
-      const parts = fn.split(' ');
-      const fName = parts[0];
-      const lName = parts.slice(1).join(' ') || '';
-
-      // API Payload Preparation: Strictly force role to 'customer' to prevent malicious privilege escalation
-      const payload = {
-        role: 'customer', 
-        phone: editForm.phone,
-        firstName: fName,
-        lastName: lName
-      };
-      
-      const res = await apiFetch(`/staff/users/${panelUser._id}`, {
+      const res = await apiFetch(`/staff/customers/${panelUser._id}`, {
         method: 'PUT',
-        headers: { ...authHeader, 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        headers: authHeader,
+        body: JSON.stringify(payload),
       });
       if (res.ok && res.data?.success) {
-        const upd = res.data.data;
-        setUsers(prev => prev.map(u => u._id === upd._id ? upd : u));
-        setPanelUser(upd); setIsEditing(false); setSaveState('success');
-        showToast('Account updated successfully', 'success');
-        setTimeout(() => setSaveState('idle'), 2000);
-        
-        // Global state sync in case edited themselves
-        const raw = sessionStorage.getItem('valo_user');
-        if (raw) {
-          const currentUser = JSON.parse(raw);
-          if (currentUser._id === upd._id || currentUser.id === upd._id) {
-            sessionStorage.setItem('valo_user', JSON.stringify({ ...currentUser, ...upd, name: `${upd.profile?.firstName || ''} ${upd.profile?.lastName || ''}`.trim() || upd.username }));
-            window.dispatchEvent(new Event('valo_auth_change'));
-          }
-        }
-      } else {
-        setSaveState('error');
-        showToast('Failed to update account', 'error');
-        setTimeout(() => setSaveState('idle'), 2500);
+        mergeUser(res.data.data);
+        setPanelUser(res.data.data);
+        setIsEditing(false);
+        setSaveState('success');
+        showToast('Customer updated successfully');
+        return;
       }
-    } catch {
       setSaveState('error');
-      showToast('An error occurred', 'error');
-      setTimeout(() => setSaveState('idle'), 2500);
+      showToast(res.data?.message || 'Failed to update customer', 'error');
+    } catch (error) {
+      console.error(error);
+      setSaveState('error');
+      showToast('An error occurred while saving', 'error');
     }
   };
 
-  // -- Derived Data --
-  const totalAccounts = users.length;
-  const newThisMonth = users.filter(u => {
-    const d = new Date(u.createdAt); const now = new Date();
-    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-  }).length;
-  const blockedCount = users.filter(u => !u.status).length;
-  const pendingCount = users.filter(u => u.emailVerified === false).length;
+  const updateStatus = async (customer, nextStatus, reason = '') => {
+    if (!customer || customer.role !== 'customer') return;
+    try {
+      const res = await apiFetch(`/staff/customers/${customer._id}/status`, {
+        method: 'PATCH',
+        headers: authHeader,
+        body: JSON.stringify({ status: nextStatus, reason }),
+      });
+      if (res.ok && res.data?.success) {
+        mergeUser(res.data.data);
+        setPanelUser(res.data.data);
+        setBlockConfirm(false);
+        setBlockReason('');
+        showToast(nextStatus ? 'Customer unblocked successfully' : 'Customer blocked successfully');
+      } else {
+        showToast(res.data?.message || 'Failed to update status', 'error');
+      }
+    } catch (error) {
+      console.error(error);
+      showToast('Cannot update customer status', 'error');
+    }
+  };
 
-  let filtered = users.filter(u => {
-    const term = searchTerm.toLowerCase();
-    const name = `${u.profile?.firstName || ''} ${u.profile?.lastName || ''}`.toLowerCase();
-    const matchSearch = !term || name.includes(term) || (u.email || '').toLowerCase().includes(term) || (u.profile?.phone || '').includes(term);
-    const matchRole = filterRole === 'all' || u.role === filterRole;
-    const matchStatus = filterStatus === 'all' || (filterStatus === 'active' && u.status === true) || (filterStatus === 'blocked' && u.status === false);
-    return matchSearch && matchRole && matchStatus;
-  });
+  const handleBlockConfirm = () => {
+    if (!blockReason.trim()) {
+      showToast('Please enter a block reason', 'error');
+      return;
+    }
+    updateStatus(panelUser, false, blockReason.trim());
+  };
 
-  filtered.sort((a, b) => {
-    let diff = new Date(b.createdAt) - new Date(a.createdAt);
-    return sortOrder === 'newest' ? diff : -diff;
-  });
+  const filtered = useMemo(() => {
+    const term = escapeTerm(searchTerm);
+    const plateTerm = normalizePlate(searchTerm);
+    return users
+      .filter((user) => {
+        const name = escapeTerm(fullName(user));
+        const plates = [user.vehicle, ...(user.vehicles || [])].map((vehicle) => normalizePlate(vehicle?.licensePlate)).join(' ');
+        const matchesSearch = !term
+          || name.includes(term)
+          || escapeTerm(user.email).includes(term)
+          || escapeTerm(user.username).includes(term)
+          || escapeTerm(user.profile?.phone).includes(term)
+          || plates.includes(plateTerm);
+        const matchesStatus = filterStatus === 'all'
+          || (filterStatus === 'active' && isActive(user))
+          || (filterStatus === 'blocked' && !isActive(user));
+        return matchesSearch && matchesStatus;
+      })
+      .sort((a, b) => {
+        const diff = new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+        return sortOrder === 'newest' ? diff : -diff;
+      });
+  }, [users, searchTerm, filterStatus, sortOrder]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageUsers = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-  const toggleSort = (col) => {
-    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    else { setSortCol(col); setSortDir('asc'); }
-  };
-
-  const formatDate = (d) => !d ? 'N/A' : new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  const displayName = (u) => `${u?.profile?.firstName || ''} ${u?.profile?.lastName || ''}`.trim() || u?.username || u?.email || '-';
-  const initials = (u) => displayName(u).charAt(0).toUpperCase();
-  const avatarGrad = (u) => (ROLES[u?.role] || ROLES.customer).gradient;
-
-  const SortIcon = ({ col }) => {
-    if (sortCol !== col) return <ChevronDown size={12} className="text-white/20" />;
-    return sortDir === 'asc' ? <ChevronUp size={12} className="text-[#ffd555]" /> : <ChevronDown size={12} className="text-[#ffd555]" />;
-  };
+  const pendingCount = users.filter((u) => !(u.isEmailVerified ?? u.emailVerified)).length;
+  const vehicle = panelUser?.vehicle || panelUser?.vehicles?.[0] || null;
 
   return (
-    <div className="flex h-[calc(100vh-70px)] bg-[#080808] text-white relative overflow-hidden">
+    <div className="staff-customer-management relative flex h-[calc(100vh-70px)] overflow-hidden bg-[#080808] text-white">
       <style>{`
-        @keyframes skeletonShimmer {
-          0% { background-position: -400px 0; }
-          100% { background-position: 400px 0; }
+        .staff-customer-management * {
+          scrollbar-width: thin;
+          scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
         }
-        .animate-skeleton {
-          background: linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 75%);
-          background-size: 800px 100%;
-          animation: skeletonShimmer 1.6s infinite linear;
+        .staff-customer-management *::-webkit-scrollbar {
+          width: 6px;
+          height: 6px;
         }
-        @keyframes tooltipIn {
-          from { opacity: 0; transform: translateX(-50%) translateY(4px) scale(0.95); }
-          to   { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+        .staff-customer-management *::-webkit-scrollbar-track,
+        .staff-customer-management *::-webkit-scrollbar-corner {
+          background: transparent;
         }
-        .animate-tooltip-in { animation: tooltipIn 0.18s ease forwards; }
-        @keyframes panelIn {
-          from { transform: translateX(100%); opacity: 0; }
-          to   { transform: translateX(0);    opacity: 1; }
+        .staff-customer-management *::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.16);
+          border-radius: 999px;
         }
-        .panel-slide-in { animation: panelIn 0.3s cubic-bezier(0.16,1,0.3,1) forwards; }
-        @keyframes bulkIn {
-          from { transform: translateX(-50%) translateY(20px); opacity: 0; }
-          to   { transform: translateX(-50%) translateY(0);    opacity: 1; }
-        }
-        .bulk-slide-in { animation: bulkIn 0.25s cubic-bezier(0.16,1,0.3,1) forwards; }
-        @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
-        .fade-in { animation: fadeIn 0.2s ease forwards; }
-        ::-webkit-scrollbar { width: 5px; height: 5px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 8px; }
-        ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.22); }
-        .row-hover { transition: background 0.18s, transform 0.18s, box-shadow 0.18s; }
-        .row-hover:hover { background: rgba(255,255,255,0.035); transform: translateY(-1px); box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
-        .btn-glow-gold:hover { box-shadow: 0 0 20px rgba(255,213,85,0.45); }
-        .btn-glow-red:hover  { box-shadow: 0 0 20px rgba(239,68,68,0.4); }
-        .btn-glow-green:hover{ box-shadow: 0 0 20px rgba(16,185,129,0.4); }
-        .header-sweep {
-          background: linear-gradient(135deg, #0d0d0d 0%, #111 40%, #161410 70%, #0d0d0d 100%);
-          position: relative; overflow: hidden;
-        }
-        .header-sweep::before {
-          content: '';
-          position: absolute; inset: 0;
-          background: linear-gradient(105deg, transparent 30%, rgba(255,213,85,0.04) 50%, transparent 70%);
-          animation: sweepAnim 4s ease-in-out infinite;
-        }
-        @keyframes sweepAnim {
-          0%   { transform: translateX(-100%); }
-          100% { transform: translateX(200%); }
+        .staff-customer-management *::-webkit-scrollbar-thumb:hover {
+          background: rgba(255, 213, 85, 0.35);
         }
       `}</style>
-
-      {/* ═══════════════ LEFT: MAIN PANEL ═══════════════ */}
-      <div className={`flex flex-col flex-1 min-w-0 overflow-hidden transition-all duration-300`}>
-
-        {/* -- Header -- */}
-        <div className="bg-[#080808] px-8 pt-7 pb-6 border-b border-white/[0.06] flex-shrink-0">
-          <div className="flex items-center justify-between">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="flex-shrink-0 border-b border-white/[0.06] bg-[#080808] px-8 pb-6 pt-7">
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-[#ffd555] tracking-tight">Customer Management</h1>
-              <p className="text-sm text-white/40 mt-0.5">Manage customer accounts and access permissions</p>
+              <h1 className="text-2xl font-bold tracking-tight text-[#ffd555]">Customer Management</h1>
+              <p className="mt-0.5 text-sm text-white/40">Manage VALO Parking customer profiles and operations</p>
             </div>
-            <button onClick={fetchUsers} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white/60 hover:text-white hover:bg-white/8 transition-all text-sm">
-              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
+            <button onClick={fetchUsers} className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/60 transition hover:bg-white/10 hover:text-white">
+              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+              Refresh
             </button>
           </div>
 
-          {/* -- Stat Cards -- */}
-          <div className="grid grid-cols-4 gap-4 mt-6">
-            <StatCard icon={Users}   label="Total Customers"  value={totalAccounts} gradient="from-cyan-400 to-blue-500"    glow="rgba(6,182,212,0.3)"    loading={loading} />
-            <StatCard icon={UserPlus} label="New This Month"  value={newThisMonth}  gradient="from-violet-400 to-purple-600" glow="rgba(167,139,250,0.3)"  loading={loading} />
-            <StatCard icon={UserX}   label="Blocked Customers" value={blockedCount}  gradient="from-rose-500 to-red-600"     glow="rgba(239,68,68,0.3)"    loading={loading} />
-            <StatCard icon={Clock}   label="Pending Verify"   value={pendingCount}  gradient="from-amber-400 to-orange-500" glow="rgba(251,191,36,0.3)"   loading={loading} />
+          <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <StatCard icon={Users} label="Total Customers" value={users.length} gradient="from-cyan-400 to-blue-500" loading={loading} />
+            <StatCard icon={UserPlus} label="New This Month" value={users.filter((u) => {
+              const date = new Date(u.createdAt);
+              const now = new Date();
+              return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+            }).length} gradient="from-emerald-400 to-teal-500" loading={loading} />
+            <StatCard icon={UserX} label="Blocked Customers" value={users.filter((u) => !isActive(u)).length} gradient="from-rose-500 to-red-600" loading={loading} />
+            <StatCard icon={Clock} label="Pending Verify" value={pendingCount} gradient="from-amber-400 to-orange-500" loading={loading} />
           </div>
         </div>
 
-        {/* -- Controls Bar -- */}
-        <div className="flex flex-wrap items-center gap-4 px-8 py-4 flex-shrink-0 bg-[#080808]">
-          <div className="relative flex-1 min-w-[240px] max-w-sm">
-            <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
+        <div className="flex flex-shrink-0 flex-wrap items-center gap-4 bg-[#080808] px-8 py-4">
+          <div className="relative min-w-[260px] flex-1 max-w-xl">
+            <Search size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-white/40" />
             <input
-              value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setPage(1); }}
-              placeholder="Search name, email, phone..."
-              className="w-full bg-[#111] border border-white/[0.08] rounded-full py-2.5 pl-10 pr-4 text-sm text-white placeholder-white/30 focus:outline-none focus:border-[#ffd555]/50 focus:ring-1 focus:ring-[#ffd555]/30 transition-all shadow-inner"
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Search email, phone, full name, username, license plate..."
+              className="w-full rounded-full border border-white/[0.08] bg-[#111] py-2.5 pl-10 pr-4 text-sm text-white shadow-inner transition placeholder:text-white/30 focus:border-[#ffd555]/50 focus:outline-none focus:ring-1 focus:ring-[#ffd555]/30"
             />
           </div>
 
-          <div className="flex items-center gap-3">
-            {/* Note: Role filter removed entirely as requested by user to prevent privilege escalation / confusion, since only Customer is valid. */}
-            
-            {/* Status Filter */}
-            <Menu as="div" className="relative inline-block text-left z-30">
-              <Menu.Button className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#111] border border-white/[0.08] text-sm text-white/70 hover:border-white/20 hover:text-white hover:bg-white/[0.02] transition-all shadow-sm">
-                <Eye size={14} className="text-white/40" />
-                <span className="font-medium">{filterStatus === 'all' ? 'All Status' : filterStatus === 'active' ? 'Active' : 'Blocked'}</span>
-                <ChevronDown size={14} className="text-white/40" />
-              </Menu.Button>
-              <Transition as={Fragment} enter="transition ease-out duration-200" enterFrom="opacity-0 translate-y-1" enterTo="opacity-100 translate-y-0" leave="transition ease-in duration-150" leaveFrom="opacity-100 translate-y-0" leaveTo="opacity-0 translate-y-1">
-                <Menu.Items className="absolute left-0 mt-2 w-40 origin-top-left rounded-xl bg-[#111] border border-white/10 shadow-2xl backdrop-blur-xl focus:outline-none overflow-hidden">
-                  <div className="p-1.5">
-                    {[['all','All Status'],['active','Active'],['blocked','Blocked']].map(([v,l]) => (
-                      <Menu.Item key={v}>
-                        {({ active }) => (
-                          <button onClick={() => { setFilterStatus(v); setPage(1); }}
-                            className={`${active ? 'bg-white/10 text-white' : 'text-white/70'} group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors`}>
-                            {filterStatus === v ? <Check size={14} className="text-[#ffd555]" /> : <div className="w-3.5" />}
-                            {l}
-                          </button>
-                        )}
-                      </Menu.Item>
-                    ))}
-                  </div>
-                </Menu.Items>
-              </Transition>
-            </Menu>
+          <Menu as="div" className="relative z-30 inline-block text-left">
+            <Menu.Button className="flex items-center gap-2 rounded-xl border border-white/[0.08] bg-[#111] px-4 py-2.5 text-sm text-white/70 transition hover:bg-white/[0.03] hover:text-white">
+              <Eye size={14} className="text-white/40" />
+              {filterStatus === 'all' ? 'All Status' : filterStatus === 'active' ? 'Active' : 'Blocked'}
+              <ChevronDown size={14} className="text-white/40" />
+            </Menu.Button>
+            <Transition as={Fragment} enter="transition ease-out duration-150" enterFrom="opacity-0 translate-y-1" enterTo="opacity-100 translate-y-0" leave="transition ease-in duration-100" leaveFrom="opacity-100" leaveTo="opacity-0">
+              <Menu.Items className="absolute left-0 mt-2 w-40 overflow-hidden rounded-xl border border-white/10 bg-[#111] p-1.5 shadow-2xl focus:outline-none">
+                {['all', 'active', 'blocked'].map((value) => (
+                  <Menu.Item key={value}>
+                    {({ active }) => (
+                      <button onClick={() => { setFilterStatus(value); setPage(1); }} className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm capitalize ${active ? 'bg-white/10 text-white' : 'text-white/70'}`}>
+                        {filterStatus === value ? <Check size={14} className="text-[#ffd555]" /> : <span className="w-3.5" />}
+                        {value === 'all' ? 'All Status' : value}
+                      </button>
+                    )}
+                  </Menu.Item>
+                ))}
+              </Menu.Items>
+            </Transition>
+          </Menu>
 
-            {/* Sort Filter */}
-            <Menu as="div" className="relative inline-block text-left z-30">
-              <Menu.Button className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#111] border border-white/[0.08] text-sm text-white/70 hover:border-white/20 hover:text-white hover:bg-white/[0.02] transition-all shadow-sm">
-                <Clock size={14} className="text-white/40" />
-                <span className="font-medium"> {sortOrder === 'newest' ? 'Newest' : 'Oldest'}</span>
-                <ChevronDown size={14} className="text-white/40" />
-              </Menu.Button>
-              <Transition as={Fragment} enter="transition ease-out duration-200" enterFrom="opacity-0 translate-y-1" enterTo="opacity-100 translate-y-0" leave="transition ease-in duration-150" leaveFrom="opacity-100 translate-y-0" leaveTo="opacity-0 translate-y-1">
-                <Menu.Items className="absolute left-0 mt-2 w-40 origin-top-left rounded-xl bg-[#111] border border-white/10 shadow-2xl backdrop-blur-xl focus:outline-none overflow-hidden">
-                  <div className="p-1.5">
-                    {[['newest','Newest First'],['oldest','Oldest First']].map(([v,l]) => (
-                      <Menu.Item key={v}>
-                        {({ active }) => (
-                          <button onClick={() => { setSortOrder(v); setPage(1); }}
-                            className={`${active ? 'bg-white/10 text-white' : 'text-white/70'} group flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors`}>
-                            {sortOrder === v ? <Check size={14} className="text-[#ffd555]" /> : <div className="w-3.5" />}
-                            {l}
-                          </button>
-                        )}
-                      </Menu.Item>
-                    ))}
-                  </div>
-                </Menu.Items>
-              </Transition>
-            </Menu>
-          </div>
+          <Menu as="div" className="relative z-30 inline-block text-left">
+            <Menu.Button className="flex items-center gap-2 rounded-xl border border-white/[0.08] bg-[#111] px-4 py-2.5 text-sm text-white/70 transition hover:bg-white/[0.03] hover:text-white">
+              <Clock size={14} className="text-white/40" />
+              {sortOrder === 'newest' ? 'Newest' : 'Oldest'}
+              <ChevronDown size={14} className="text-white/40" />
+            </Menu.Button>
+            <Transition as={Fragment} enter="transition ease-out duration-150" enterFrom="opacity-0 translate-y-1" enterTo="opacity-100 translate-y-0" leave="transition ease-in duration-100" leaveFrom="opacity-100" leaveTo="opacity-0">
+              <Menu.Items className="absolute left-0 mt-2 w-40 overflow-hidden rounded-xl border border-white/10 bg-[#111] p-1.5 shadow-2xl focus:outline-none">
+                {[['newest', 'Newest First'], ['oldest', 'Oldest First']].map(([value, label]) => (
+                  <Menu.Item key={value}>
+                    {({ active }) => (
+                      <button onClick={() => { setSortOrder(value); setPage(1); }} className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm ${active ? 'bg-white/10 text-white' : 'text-white/70'}`}>
+                        {sortOrder === value ? <Check size={14} className="text-[#ffd555]" /> : <span className="w-3.5" />}
+                        {label}
+                      </button>
+                    )}
+                  </Menu.Item>
+                ))}
+              </Menu.Items>
+            </Transition>
+          </Menu>
 
-          <div className="ml-auto text-sm font-medium text-white/40 tracking-wide">{filtered.length} of {users.length} accounts</div>
+          <div className="ml-auto text-sm font-medium tracking-wide text-white/40">{filtered.length} of {users.length} customers</div>
         </div>
 
-        {/* -- Table -- */}
-        <div className="flex-1 overflow-auto min-h-0">
-          <table className="w-full min-w-[800px] border-collapse">
+        <div className="min-h-0 flex-1 overflow-auto">
+          <table className="w-full min-w-[860px] border-collapse">
             <thead className="sticky top-0 z-20">
-              <tr className="bg-[#14120c] border-b border-[#ffd555]/20">
-                <th className="w-6"></th>
-                {['Account','Email','Phone','Role','Status','Joined Date'].map(label => (
-                  <th key={label} className="px-4 py-4 text-left">
+              <tr className="border-b border-[#ffd555]/20 bg-[#14120c]">
+                {['Account', 'Email', 'Phone', 'Vehicle', 'Status', 'Joined', 'Actions'].map((label) => (
+                  <th key={label} className={`px-4 py-4 ${label === 'Actions' ? 'text-center' : 'text-left'}`}>
                     <span className="text-[11px] font-bold uppercase tracking-widest text-[#ffd555]/70">{label}</span>
                   </th>
                 ))}
-                <th className="px-4 py-4 text-center text-[11px] font-bold uppercase tracking-widest text-[#ffd555]/70">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {loading && Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)}
+              {loading && Array.from({ length: 6 }).map((_, index) => <SkeletonRow key={index} />)}
               {!loading && pageUsers.length === 0 && (
-                <tr><td colSpan="8" className="py-20 text-center">
-                  <div className="flex flex-col items-center gap-3 text-white/30">
-                    <UserX size={36} />
-                    <span className="text-sm">No customers match your filters</span>
-                  </div>
-                </td></tr>
+                <tr>
+                  <td colSpan="7" className="py-20 text-center">
+                    <div className="flex flex-col items-center gap-3 text-white/30">
+                      <UserX size={36} />
+                      <span className="text-sm">No customers match your filters</span>
+                    </div>
+                  </td>
+                </tr>
               )}
-              {!loading && pageUsers.map(u => {
-                const isActive = panelUser?._id === u._id;
-                return (
-                  <tr key={u._id} className={`group border-b border-white/[0.04] cursor-pointer hover:bg-white/[0.02] hover:-translate-y-[1px] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-200 ease-out ${isActive ? 'bg-[#ffd555]/[0.04]' : 'even:bg-white/[0.01]'}`}
-                    onClick={() => openPanel(u)}>
-                    <td className="w-4"></td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <div className="relative flex-shrink-0">
-                          {u.profile?.avatar
-                            ? <img src={u.profile.avatar} alt="" className="w-9 h-9 rounded-full object-cover ring-2 ring-white/10" />
-                            : <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${avatarGrad(u)} flex items-center justify-center text-white text-sm font-bold shadow-lg`}>{initials(u)}</div>
-                          }
-                          <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-[#080808] ${u.status ? 'bg-emerald-400' : 'bg-gray-600'}`} />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-[13px] font-semibold text-white truncate">{displayName(u)}</p>
-                          <p className="text-[11px] text-white/40 truncate">{u.username || '-'}</p>
-                        </div>
+              {!loading && pageUsers.map((user) => (
+                <tr key={user._id} onClick={() => loadCustomerDetail(user)} className={`group cursor-pointer border-b border-white/[0.04] transition hover:-translate-y-[1px] hover:bg-white/[0.03] ${panelUser?._id === user._id ? 'bg-[#ffd555]/[0.045]' : 'even:bg-white/[0.01]'}`}>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="relative shrink-0">
+                        {user.profile?.avatar
+                          ? <img src={user.profile.avatar} alt="" className="h-10 w-10 rounded-full object-cover ring-2 ring-white/10" />
+                          : <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#ffd555] to-amber-500 text-sm font-bold text-black shadow-lg">{initials(user)}</div>
+                        }
+                        <span className={`absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[#080808] ${isActive(user) ? 'bg-emerald-400' : 'bg-rose-500'}`} />
                       </div>
-                    </td>
-                    <td className="px-4 py-3 text-[13px] text-white/55 max-w-[180px] truncate">{u.email}</td>
-                    <td className="px-4 py-3 text-[13px] text-white/55">{u.profile?.phone || '-'}</td>
-                    <td className="px-4 py-3"><RoleBadge role={u.role} /></td>
-                    <td className="px-4 py-3"><StatusBadge status={u.status} /></td>
-                    <td className="px-4 py-3 text-[12px] text-white/35">{formatDate(u.createdAt)}</td>
-                    <td className="px-4 py-4" onClick={e => e.stopPropagation()}>
-                      <div className="flex items-center justify-center">
-                        <button onClick={(e) => { e.stopPropagation(); startEdit(u); }}
-                          title="Edit account" className="w-8 h-8 rounded-xl border border-[#ffd555]/10 bg-[#ffd555]/[0.02] hover:bg-[#ffd555]/10 hover:border-[#ffd555]/30 hover:text-[#ffd555] text-[#ffd555]/70 flex items-center justify-center transition-all duration-200 hover:scale-105">
-                          <Edit3 size={14} />
-                        </button>
+                      <div className="min-w-0">
+                        <p className="truncate text-[13px] font-semibold text-white">{fullName(user)}</p>
+                        <p className="truncate text-[11px] text-white/40">@{user.username || '-'}</p>
                       </div>
-                    </td>
-                  </tr>
-                );
-              })}
+                    </div>
+                  </td>
+                  <td className="max-w-[200px] truncate px-4 py-3 text-[13px] text-white/55">{user.email || '-'}</td>
+                  <td className="px-4 py-3 text-[13px] text-white/55">{user.profile?.phone || '-'}</td>
+                  <td className="px-4 py-3 text-[13px] text-white/55">{user.vehicle?.licensePlate || user.vehicles?.[0]?.licensePlate || '-'}</td>
+                  <td className="px-4 py-3"><StatusBadge status={user.status} /></td>
+                  <td className="px-4 py-3 text-[12px] text-white/35">{formatDate(user.createdAt)}</td>
+                  <td className="px-4 py-3" onClick={(event) => event.stopPropagation()}>
+                    <div className="flex items-center justify-center gap-2">
+                      <button onClick={() => startEdit(user)} title="Edit customer" className="flex h-8 w-8 items-center justify-center rounded-xl border border-[#ffd555]/20 bg-[#ffd555]/[0.03] text-[#ffd555]/80 transition hover:bg-[#ffd555]/10 hover:text-[#ffd555]">
+                        <Edit3 size={14} />
+                      </button>
+                      <button onClick={() => loadCustomerDetail(user)} title="View detail" className="flex h-8 w-8 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/[0.03] text-cyan-300/80 transition hover:bg-cyan-400/10 hover:text-cyan-200">
+                        <Eye size={14} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
 
-        {/* -- Pagination -- */}
-        <div className="flex items-center justify-between px-8 py-4 border-t border-white/[0.05] bg-[#080808] flex-shrink-0">
-          <span className="text-xs text-white/30">Page {page} of {totalPages} · {filtered.length} results</span>
+        <div className="flex flex-shrink-0 items-center justify-between border-t border-white/[0.05] bg-[#080808] px-8 py-4">
+          <span className="text-xs text-white/30">Page {page} of {totalPages} - {filtered.length} results</span>
           <div className="flex items-center gap-1">
-            <button disabled={page === 1} onClick={() => setPage(p => p - 1)}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium text-white/40 hover:text-white hover:bg-white/6 disabled:opacity-25 disabled:cursor-not-allowed transition-all">&larr; Prev</button>
-            {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
-              const p = i + 1;
-              return (
-                <button key={p} onClick={() => setPage(p)}
-                  className={`w-8 h-8 rounded-lg text-xs font-semibold transition-all ${p === page ? 'bg-[#ffd555] text-black shadow-[0_0_12px_rgba(255,213,85,0.4)]' : 'text-white/40 hover:text-white hover:bg-white/6'}`}>
-                  {p}
-                </button>
-              );
-            })}
-            <button disabled={page === totalPages} onClick={() => setPage(p => p + 1)}
-              className="px-3 py-1.5 rounded-lg text-xs font-medium text-white/40 hover:text-white hover:bg-white/6 disabled:opacity-25 disabled:cursor-not-allowed transition-all">Next &rarr;</button>
+            <button disabled={page === 1} onClick={() => setPage((p) => p - 1)} className="rounded-lg px-3 py-1.5 text-xs font-medium text-white/40 transition hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-25">Prev</button>
+            {Array.from({ length: Math.min(totalPages, 7) }, (_, index) => index + 1).map((p) => (
+              <button key={p} onClick={() => setPage(p)} className={`h-8 w-8 rounded-lg text-xs font-semibold transition ${p === page ? 'bg-[#ffd555] text-black shadow-[0_0_12px_rgba(255,213,85,0.4)]' : 'text-white/40 hover:bg-white/5 hover:text-white'}`}>{p}</button>
+            ))}
+            <button disabled={page === totalPages} onClick={() => setPage((p) => p + 1)} className="rounded-lg px-3 py-1.5 text-xs font-medium text-white/40 transition hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-25">Next</button>
           </div>
         </div>
       </div>
 
-
-      {/* ════════════════════ RIGHT: DETAIL PANEL ════════════════════ */}
       <AnimatePresence>
         {panelUser && (
           <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={closePanel}
-              className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
-            />
-            <motion.div
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed inset-y-0 right-0 z-50 w-[440px] flex flex-col bg-[#1B2027] border-l border-white/[0.05] shadow-2xl"
-            >
-              {/* Panel Header */}
-              <div className="flex items-center justify-between px-6 py-5 border-b border-white/[0.05] flex-shrink-0">
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-                  {isEditing ? 'Edit Customer' : 'Customer Detail'}
-                </h3>
-                <button onClick={closePanel} className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 text-white/50 hover:text-white flex items-center justify-center transition-all">
-                  <X size={15} />
+            <motion.aside initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 26, stiffness: 220 }} className="absolute inset-y-0 right-0 z-30 flex w-full flex-col border-l border-white/[0.07] bg-[#1B2027] shadow-2xl sm:w-[460px]">
+              <div className="flex flex-shrink-0 items-center justify-between border-b border-white/[0.06] px-5 py-4">
+                <div>
+                  <h3 className="text-sm font-bold uppercase tracking-wider text-white">{isEditing ? 'Edit Customer' : 'Customer Detail'}</h3>
+                  <p className="mt-1 text-xs text-white/35">VALO Parking profile</p>
+                </div>
+                <button onClick={closePanel} className="flex h-9 w-9 items-center justify-center rounded-full bg-white/5 text-white/50 transition hover:bg-white/10 hover:text-white">
+                  <X size={16} />
                 </button>
               </div>
 
-              {/* Panel Body */}
-              <div className="flex-1 overflow-y-auto">
-                <div className="p-5 space-y-5">
-                  {/* Avatar & Header Info */}
-                  <div className="flex flex-col items-center text-center">
-                    <div className="relative mb-3 group cursor-pointer">
-                      <div className={`absolute inset-0 rounded-full bg-gradient-to-br ${avatarGrad(panelUser)} opacity-20 blur-xl scale-125 group-hover:opacity-40 transition-opacity duration-300`} />
-                      {panelUser.profile?.avatar
-                        ? <img src={panelUser.profile.avatar} alt="" className="relative w-20 h-20 rounded-full object-cover ring-4 ring-[#1B2027] shadow-xl" />
-                        : <div className={`relative w-20 h-20 rounded-full bg-gradient-to-br ${avatarGrad(panelUser)} flex items-center justify-center text-white text-3xl font-bold shadow-xl ring-4 ring-[#1B2027]`}>{initials(panelUser)}</div>
-                      }
-                      <span className={`absolute bottom-1 right-1 w-4 h-4 rounded-full border-[3px] border-[#1B2027] ${panelUser.status ? 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.5)]' : 'bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.5)]'}`} />
-                    </div>
-                    <h2 className="text-xl font-bold text-white mb-0.5">{displayName(panelUser)}</h2>
-                    <p className="text-sm text-white/40 mb-3">@{panelUser.username || (panelUser.email || '').split('@')[0]}</p>
-                    <div className="flex items-center gap-2">
-                      <RoleBadge role={panelUser.role} />
-                      <StatusBadge status={panelUser.status} />
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <div className="space-y-4 p-4">
+                  <div className="rounded-2xl border border-white/[0.06] bg-gradient-to-br from-white/[0.055] to-white/[0.02] p-4">
+                    <div className="flex items-center gap-4">
+                      <div className="relative shrink-0">
+                        {panelUser.profile?.avatar
+                          ? <img src={panelUser.profile.avatar} alt="" className="h-20 w-20 rounded-full object-cover ring-4 ring-[#1B2027]" />
+                          : <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-[#ffd555] to-amber-500 text-3xl font-bold text-black ring-4 ring-[#1B2027]">{initials(panelUser)}</div>
+                        }
+                        <span className={`absolute bottom-1 right-1 h-4 w-4 rounded-full border-[3px] border-[#1B2027] ${isActive(panelUser) ? 'bg-emerald-400' : 'bg-rose-500'}`} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h2 className="truncate text-xl font-bold text-white">{fullName(panelUser)}</h2>
+                        <p className="mt-1 truncate text-sm text-white/45">@{panelUser.username || '-'}</p>
+                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                          <RoleBadge role="customer" />
+                          <StatusBadge status={panelUser.status} />
+                          <VerifyBadge verified={panelUser.isEmailVerified ?? panelUser.emailVerified} />
+                        </div>
+                      </div>
+                      {detailLoading && <RefreshCw size={18} className="animate-spin text-[#ffd555]" />}
                     </div>
                   </div>
 
                   {!isEditing ? (
-                    <div className="space-y-4">
-                      <div className="bg-[#171B20] rounded-2xl p-4 border border-white/[0.03] space-y-3">
-                        <h4 className="text-xs font-bold uppercase tracking-widest text-[#ffd555]/80 mb-1">Basic Info</h4>
-                        {[
-                          { icon: Mail, label: 'Email Address', val: panelUser.email },
-                          { icon: Phone, label: 'Phone Number', val: panelUser.profile?.phone || 'Not provided' },
-                          { icon: Calendar, label: 'Join Date', val: formatDate(panelUser.createdAt) },
-                        ].map(({ icon: Ic, label, val }) => (
-                          <div key={label} className="flex items-center gap-3 group">
-                            <div className="w-8 h-8 rounded-lg bg-white/[0.03] flex items-center justify-center text-white/40 group-hover:bg-[#ffd555]/10 group-hover:text-[#ffd555] transition-colors">
-                              <Ic size={14} />
-                            </div>
-                            <div>
-                              <p className="text-[10px] text-white/40 uppercase tracking-wider">{label}</p>
-                              <p className="text-sm text-white/90">{val}</p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                    <>
+                      <Section title="Profile" icon={User}>
+                        <InfoGrid items={[
+                          { label: 'Full name', value: fullName(panelUser) },
+                          { label: 'Username', value: panelUser.username },
+                          { label: 'Email', value: panelUser.email },
+                          { label: 'Phone', value: panelUser.profile?.phone || 'Not provided' },
+                          { label: 'Role', value: 'Customer' },
+                          { label: 'Status', value: isActive(panelUser) ? 'Active' : 'Blocked' },
+                          { label: 'Email verified', value: (panelUser.isEmailVerified ?? panelUser.emailVerified) ? 'Yes' : 'No' },
+                          { label: 'Join date', value: formatDate(panelUser.createdAt, true) },
+                          { label: 'Last login', value: formatDate(panelUser.lastLoginAt || panelUser.lastLogin, true) },
+                          { label: 'Last updated', value: formatDate(panelUser.updatedAt, true) },
+                        ]} />
+                      </Section>
 
-                      <div className="bg-[#171B20] rounded-2xl p-4 border border-white/[0.03]">
-                        <h4 className="text-xs font-bold uppercase tracking-widest text-[#ffd555]/80 mb-3">Account Activity</h4>
-                        <div className="relative pl-3 border-l border-white/10 space-y-4">
+                      <Section title="Vehicle Information" icon={Car}>
+                        {vehicle ? (
+                          <InfoGrid items={[
+                            { label: 'License plate', value: vehicle.licensePlate },
+                            { label: 'Vehicle type', value: vehicle.vehicleType },
+                            { label: 'Brand', value: [vehicle.brand, vehicle.model].filter(Boolean).join(' ') },
+                            { label: 'Color', value: vehicle.color },
+                          ]} />
+                        ) : <EmptyState>No vehicle registered</EmptyState>}
+                      </Section>
+
+                      <Section title="Recent Activity" icon={History}>
+                        <div className="relative space-y-4 border-l border-white/10 pl-4">
                           {[
-                            { icon: UserPlus, label: 'Account Created', date: panelUser.createdAt, color: 'text-emerald-400', bg: 'bg-emerald-400/10' },
-                            { icon: Edit3, label: 'Last Updated', date: panelUser.updatedAt, color: 'text-[#ffd555]', bg: 'bg-[#ffd555]/10' },
-                          ].map(({ icon: Ic, label, date, color, bg }, i) => (
-                            <div key={i} className="relative">
-                              <div className={`absolute -left-[21px] w-6 h-6 rounded-full border-[3px] border-[#1B2027] flex items-center justify-center ${bg}`}>
-                                <div className={`w-1.5 h-1.5 rounded-full ${color.replace('text-', 'bg-')}`} />
-                              </div>
-                              <div className="pl-3">
-                                <p className="text-sm font-medium text-white">{label}</p>
-                                <p className="text-xs text-white/40 mt-0.5">{formatDate(date)}</p>
-                              </div>
+                            ['Account created', panelUser.activity?.accountCreated || panelUser.createdAt],
+                            ['Profile updated', panelUser.activity?.profileUpdated || panelUser.updatedAt],
+                          ].map(([label, date]) => (
+                            <div key={label} className="relative">
+                              <span className="absolute -left-[21px] top-1.5 h-3 w-3 rounded-full border-2 border-[#171B20] bg-[#ffd555]" />
+                              <p className="text-sm font-medium text-white">{label}</p>
+                              <p className="text-xs text-white/40">{formatDate(date, true)}</p>
                             </div>
                           ))}
                         </div>
-                      </div>
-                    </div>
+                      </Section>
+                    </>
                   ) : (
-                    <div className="space-y-4">
-                      <div className="space-y-3">
-                        <h4 className="text-xs font-bold uppercase tracking-widest text-[#ffd555]/80 mb-1">Edit Basic Info</h4>
-                        <div className="grid grid-cols-1 gap-3">
-                          <div>
-                            <label className="block text-[10px] font-medium text-white/50 mb-1">Full Name</label>
-                            <div className="relative group">
-                              <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 group-focus-within:text-[#ffd555] transition-colors" />
-                              <input type="text" value={editForm.fullName || ''} onChange={e => setEditForm(f => ({ ...f, fullName: e.target.value }))} placeholder="e.g. John Doe"
-                                className="w-full bg-[#171B20] border border-white/[0.05] rounded-xl pl-9 pr-3 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-[#ffd555]/50 focus:ring-1 focus:ring-[#ffd555]/30 focus:shadow-[0_0_15px_rgba(255,213,85,0.15)] transition-all" />
-                            </div>
+                    <Section title="Edit Customer" icon={Edit3}>
+                      <div className="grid grid-cols-1 gap-4">
+                        <label className="block">
+                          <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-white/45">Full name</span>
+                          <input value={editForm.fullName || ''} onChange={(event) => setEditForm((form) => ({ ...form, fullName: event.target.value }))} className="w-full rounded-xl border border-white/[0.07] bg-[#11161c] px-3 py-2.5 text-sm text-white outline-none transition focus:border-[#ffd555]/50" />
+                        </label>
+                        <label className="block">
+                          <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-white/45">Email</span>
+                          <input value={editForm.email || ''} readOnly className="w-full cursor-not-allowed rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 py-2.5 text-sm text-white/45 outline-none" />
+                        </label>
+                        <label className="block">
+                          <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-white/45">Phone</span>
+                          <input value={editForm.phone || ''} onChange={(event) => setEditForm((form) => ({ ...form, phone: event.target.value }))} className="w-full rounded-xl border border-white/[0.07] bg-[#11161c] px-3 py-2.5 text-sm text-white outline-none transition focus:border-[#ffd555]/50" />
+                        </label>
+                        <label className="block">
+                          <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-white/45">Status</span>
+                          <select value={editForm.status || 'active'} onChange={(event) => setEditForm((form) => ({ ...form, status: event.target.value }))} className="w-full rounded-xl border border-white/[0.07] bg-[#11161c] px-3 py-2.5 text-sm text-white outline-none transition focus:border-[#ffd555]/50">
+                            <option value="active">Active</option>
+                            <option value="blocked">Blocked</option>
+                          </select>
+                        </label>
+                        <label className="block">
+                          <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-white/45">Email verified</span>
+                          <input value={editForm.emailVerified ? 'Yes' : 'No'} readOnly className="w-full cursor-not-allowed rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 py-2.5 text-sm text-white/45 outline-none" />
+                        </label>
+                        {vehicle && (
+                          <label className="block">
+                            <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-white/45">License plate</span>
+                            <input value={editForm.licensePlate || ''} onChange={(event) => setEditForm((form) => ({ ...form, licensePlate: event.target.value.toUpperCase() }))} className="w-full rounded-xl border border-white/[0.07] bg-[#11161c] px-3 py-2.5 text-sm text-white outline-none transition focus:border-[#ffd555]/50" />
+                          </label>
+                        )}
+                        {panelUser.profile?.address && (
+                          <label className="block">
+                            <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-white/45">Address</span>
+                            <input value={editForm.address || ''} readOnly className="w-full cursor-not-allowed rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 py-2.5 text-sm text-white/45 outline-none" />
+                          </label>
+                        )}
+                        <label className="block">
+                          <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-white/45">Role</span>
+                          <div className="flex items-center justify-between rounded-xl border border-white/[0.07] bg-white/[0.025] px-3 py-2.5 text-sm text-white/55">
+                            <span className="flex items-center gap-2"><Shield size={14} className="text-[#ffd555]/70" />Customer</span>
+                            <Lock size={14} className="text-white/25" />
                           </div>
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-medium text-white/50 mb-1">Phone Number</label>
-                          <div className="relative group">
-                            <Phone size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 group-focus-within:text-[#ffd555] transition-colors" />
-                            <input type="text" value={editForm.phone || ''} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} placeholder="e.g. 0901234567"
-                              className="w-full bg-[#171B20] border border-white/[0.05] rounded-xl pl-9 pr-3 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-[#ffd555]/50 focus:ring-1 focus:ring-[#ffd555]/30 focus:shadow-[0_0_15px_rgba(255,213,85,0.15)] transition-all" />
-                          </div>
-                        </div>
+                        </label>
                       </div>
-
-                      <div className="space-y-3 pt-3 border-t border-white/[0.05]">
-                        <h4 className="text-xs font-bold uppercase tracking-widest text-[#ffd555]/80 mb-1">Role & Access</h4>
-                        <div>
-                          <label className="block text-[10px] font-medium text-white/50 mb-1">User Role</label>
-                          {/* Frontend Validation: Role dropdown completely removed. Replaced with a hardcoded, uneditable disabled display to prevent privilege escalation. */}
-                          <div className="w-full bg-[#171B20]/50 border border-white/[0.05] rounded-xl px-3 py-2.5 flex items-center justify-between text-sm text-white/60 cursor-not-allowed">
-                            <div className="flex items-center gap-2">
-                              <Shield size={14} className="text-[#ffd555]/60" />
-                              <span className="capitalize">customer</span>
-                            </div>
-                            <Lock size={14} className="text-white/20" />
-                          </div>
-                          <p className="text-[10px] text-white/30 mt-1.5 ml-1">Staff can only assign and manage the 'Customer' role.</p>
-                        </div>
-                      </div>
-                    </div>
+                    </Section>
                   )}
                 </div>
               </div>
 
-              {/* Panel Footer */}
-              <div className="p-4 border-t border-white/[0.05] bg-[#171B20]/50 backdrop-blur-md flex-shrink-0">
-                {saveState === 'success' && (
-                  <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-center gap-2 text-emerald-400 text-sm font-medium mb-3 bg-emerald-400/10 py-1.5 rounded-lg">
-                    <Check size={16} /> Changes saved successfully!
-                  </motion.div>
-                )}
-                {saveState === 'error' && (
-                  <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-center gap-2 text-rose-400 text-sm font-medium mb-3 bg-rose-500/10 py-1.5 rounded-lg">
-                    <AlertTriangle size={16} /> Failed to save changes.
-                  </motion.div>
-                )}
+              <div className="flex-shrink-0 border-t border-white/[0.06] bg-[#171B20]/80 p-4 backdrop-blur-md">
+                {saveState === 'success' && <p className="mb-3 rounded-lg bg-emerald-400/10 py-1.5 text-center text-sm font-medium text-emerald-300">Changes saved successfully</p>}
+                {saveState === 'error' && <p className="mb-3 rounded-lg bg-rose-500/10 py-1.5 text-center text-sm font-medium text-rose-300">Failed to save changes</p>}
 
-                {!blockConfirm ? (
-                  <div className="flex gap-3">
-                    {isEditing ? (
-                      <>
-                        <button onClick={() => { setIsEditing(false); setSaveState('idle'); }}
-                          className="flex-1 py-2.5 rounded-xl border border-white/10 text-white/70 text-sm font-medium hover:bg-white/5 hover:text-white transition-all active:scale-95">
-                          Cancel
-                        </button>
-                        <button onClick={handleSave} disabled={saveState === 'saving'}
-                          className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-[#ffd555] to-[#f59e0b] text-black text-sm font-bold shadow-[0_0_20px_rgba(255,213,85,0.2)] hover:shadow-[0_0_25px_rgba(255,213,85,0.4)] transition-all active:scale-95 disabled:opacity-60 flex items-center justify-center gap-2 relative overflow-hidden group">
-                          {saveState === 'saving' ? (
-                            <><RefreshCw size={16} className="animate-spin" /> Saving...</>
-                          ) : (
-                            <>
-                              <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out" />
-                              <span className="relative z-10 flex items-center gap-2">Save Changes <Check size={16} className="opacity-0 group-hover:opacity-100 transition-opacity" /></span>
-                            </>
-                          )}
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button onClick={startEdit}
-                          className="flex-1 py-2.5 rounded-xl border border-[#ffd555]/30 text-[#ffd555] text-sm font-medium hover:bg-[#ffd555]/10 hover:shadow-[0_0_15px_rgba(255,213,85,0.15)] transition-all active:scale-95">
-                          Edit Customer
-                        </button>
-                        {panelUser.status ? (
-                          <button onClick={() => setBlockConfirm(true)}
-                            className="flex-1 py-2.5 rounded-xl border border-rose-500/30 text-rose-400 text-sm font-medium hover:bg-rose-500/10 hover:shadow-[0_0_15px_rgba(244,63,94,0.2)] transition-all active:scale-95">
-                            Block Customer
-                          </button>
-                        ) : (
-                          <button onClick={() => handleBlockToggle(panelUser._id, panelUser.status)}
-                            className="flex-1 py-2.5 rounded-xl border border-emerald-500/30 text-emerald-400 text-sm font-medium hover:bg-emerald-500/10 hover:shadow-[0_0_15px_rgba(52,211,153,0.2)] transition-all active:scale-95">
-                            Unblock Customer
-                          </button>
-                        )}
-                      </>
-                    )}
-                  </div>
-                ) : (
-                  <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="space-y-4">
-                    <div className="flex items-start gap-3 p-3 bg-rose-500/10 rounded-xl border border-rose-500/20">
-                      <AlertTriangle size={18} className="text-rose-400 mt-0.5 flex-shrink-0" />
-                      <p className="text-xs text-rose-200/80 leading-relaxed">
-                        Are you sure you want to block <strong className="text-white">{displayName(panelUser)}</strong>? They will lose access to their account.
-                      </p>
+                {blockConfirm ? (
+                  <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} className="space-y-3">
+                    <div className="rounded-xl border border-rose-500/25 bg-rose-500/10 p-3">
+                      <div className="flex items-start gap-3">
+                        <AlertTriangle size={18} className="mt-0.5 shrink-0 text-rose-300" />
+                        <p className="text-xs leading-relaxed text-rose-100/80">Blocking <strong className="text-white">{fullName(panelUser)}</strong> will prevent account access. Please enter a clear reason before confirming.</p>
+                      </div>
+                      <textarea value={blockReason} onChange={(event) => setBlockReason(event.target.value)} placeholder="Reason for blocking this customer..." className="mt-3 min-h-[76px] w-full resize-none rounded-xl border border-rose-400/20 bg-black/20 px-3 py-2 text-sm text-white outline-none placeholder:text-white/25 focus:border-rose-300/50" />
                     </div>
                     <div className="flex gap-3">
-                      <button onClick={() => setBlockConfirm(false)} className="flex-1 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/70 text-sm font-medium transition-all">Cancel</button>
-                      <button onClick={() => { handleBlockToggle(panelUser._id, panelUser.status); setBlockConfirm(false); }} className="flex-1 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-sm font-semibold shadow-[0_0_15px_rgba(244,63,94,0.3)] transition-all">Confirm Block</button>
+                      <button onClick={() => { setBlockConfirm(false); setBlockReason(''); }} className="flex-1 rounded-xl border border-white/10 py-2.5 text-sm font-medium text-white/70 transition hover:bg-white/5 hover:text-white">Cancel</button>
+                      <button onClick={handleBlockConfirm} className="flex-1 rounded-xl bg-rose-500 py-2.5 text-sm font-semibold text-white shadow-[0_0_18px_rgba(244,63,94,0.28)] transition hover:bg-rose-600">Confirm Block</button>
                     </div>
                   </motion.div>
+                ) : isEditing ? (
+                  <div className="flex gap-3">
+                    <button onClick={() => { setIsEditing(false); setSaveState('idle'); }} className="flex-1 rounded-xl border border-white/10 py-2.5 text-sm font-medium text-white/70 transition hover:bg-white/5 hover:text-white">Cancel</button>
+                    <button onClick={handleSave} disabled={saveState === 'saving'} className="flex-1 rounded-xl bg-gradient-to-r from-[#ffd555] to-amber-500 py-2.5 text-sm font-bold text-black shadow-[0_0_20px_rgba(255,213,85,0.24)] transition hover:shadow-[0_0_26px_rgba(255,213,85,0.38)] disabled:opacity-60">
+                      {saveState === 'saving' ? 'Saving...' : 'Save Changes'}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex gap-3">
+                    <button onClick={() => startEdit(panelUser)} className="flex-1 rounded-xl border border-[#ffd555]/30 py-2.5 text-sm font-medium text-[#ffd555] transition hover:bg-[#ffd555]/10">Edit Customer</button>
+                    {isActive(panelUser)
+                      ? <button onClick={() => setBlockConfirm(true)} className="flex-1 rounded-xl border border-rose-500/30 py-2.5 text-sm font-medium text-rose-300 transition hover:bg-rose-500/10">Block Customer</button>
+                      : <button onClick={() => updateStatus(panelUser, true)} className="flex-1 rounded-xl border border-emerald-500/30 py-2.5 text-sm font-medium text-emerald-300 transition hover:bg-emerald-500/10">Unblock Customer</button>
+                    }
+                  </div>
                 )}
               </div>
-            </motion.div>
+            </motion.aside>
           </>
         )}
       </AnimatePresence>
 
-      {/* ════════════════════ TOAST ════════════════════ */}
       {toast && (
-        <div
-          className={`
-            fixed bottom-6 left-1/2 -translate-x-1/2 z-[200]
-            flex items-center gap-2.5 px-5 py-2.5 rounded-full
-            text-sm font-semibold shadow-2xl backdrop-blur-md border
-            transition-all duration-300
-            ${
-              toast.type === "saving"
-                ? "bg-yellow-500/15 text-yellow-300 border-yellow-500/30"
-                : toast.type === "success"
-                  ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
-                  : "bg-red-500/15 text-red-300 border-red-500/30"
-            }
-          `}
-        >
-          {toast.type === "saving" && (
-            <div className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin shrink-0" />
-          )}
-          {toast.type === "success" && <Check size={16} className="shrink-0" />}
-          {toast.type === "error" && <AlertTriangle size={16} className="shrink-0" />}
+        <div className={`fixed bottom-6 left-1/2 z-[200] flex -translate-x-1/2 items-center gap-2.5 rounded-full border px-5 py-2.5 text-sm font-semibold shadow-2xl backdrop-blur-md ${
+          toast.type === 'success'
+            ? 'border-emerald-500/30 bg-emerald-500/15 text-emerald-300'
+            : 'border-red-500/30 bg-red-500/15 text-red-300'
+        }`}>
+          {toast.type === 'success' ? <Check size={16} /> : <AlertTriangle size={16} />}
           {toast.msg}
         </div>
       )}

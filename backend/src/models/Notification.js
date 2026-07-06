@@ -16,7 +16,7 @@ const notificationSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['SYSTEM', 'PARKING', 'BOOKING', 'WALLET', 'PAYMENT', 'ACCOUNT', 'PROMOTION', 'CAMERA'],
+      enum: ['SYSTEM', 'PARKING', 'BOOKING', 'WALLET', 'PAYMENT', 'ACCOUNT', 'PROMOTION', 'CAMERA', 'SUBSCRIPTION'],
       default: 'SYSTEM',
       index: true,
     },

@@ -12,6 +12,7 @@ const TYPE_CONFIG = {
   ACCOUNT:   { icon: Shield,        color: 'text-indigo-400',  bg: 'bg-indigo-500/10',  border: 'border-indigo-500/20' },
   PROMOTION: { icon: Megaphone,     color: 'text-pink-400',    bg: 'bg-pink-500/10',    border: 'border-pink-500/20' },
   CAMERA:    { icon: Camera,        color: 'text-orange-400',  bg: 'bg-orange-500/10',  border: 'border-orange-500/20' },
+  SUBSCRIPTION: { icon: CreditCard, color: 'text-yellow-400',  bg: 'bg-yellow-500/10',  border: 'border-yellow-500/20' },
 };
 
 const PRIORITY_CONFIG = {

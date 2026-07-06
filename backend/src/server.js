@@ -8,6 +8,7 @@ const connectDB = require('./config/db');
 const errorHandler = require('./middlewares/errorHandler');
 const { setupNotificationSocket } = require('./sockets/notificationSocket');
 const { startScheduler } = require('./services/parkingScheduler');
+const { startAutomationRuleScheduler } = require('./services/automationRuleEngine');
 const { seedRules } = require('./seeds/notificationRuleSeeder');
 
 // Load env variables
@@ -108,6 +109,9 @@ const startServer = async () => {
 
       // Start parking session scheduler
       startScheduler(app);
+
+      // Start DB-backed automation rule scheduler
+      startAutomationRuleScheduler(app);
 
       // Seed default notification rules (upsert, won't overwrite existing)
       seedRules().catch(err => {

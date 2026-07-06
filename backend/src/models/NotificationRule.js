@@ -41,6 +41,28 @@ const notificationRuleSchema = new mongoose.Schema(
       default: 10,
       min: 1,
     },
+    triggerType: {
+      type: String,
+      enum: ['manual', 'scheduled'],
+      default: 'manual',
+    },
+    triggerConfig: {
+      source: {
+        type: String,
+        default: 'none',
+        trim: true,
+      },
+      offsetMinutes: {
+        type: Number,
+        default: null,
+        min: 1,
+      },
+      lookbackMinutes: {
+        type: Number,
+        default: 15,
+        min: 1,
+      },
+    },
     lastTriggeredAt: {
       type: Date,
       default: null,

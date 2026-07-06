@@ -6,6 +6,7 @@ const NotificationRule = require('../models/NotificationRule');
 
 const VALID_PRIORITIES = ['INFO', 'SUCCESS', 'WARNING', 'ERROR', 'SYSTEM'];
 const VALID_CHANNELS = ['In-app', 'Email'];
+const VALID_TRIGGER_TYPES = ['manual', 'scheduled'];
 
 const normalizeRuleChannels = (channels) => {
   const safeChannels = Array.isArray(channels)
@@ -50,6 +51,20 @@ const buildRulePayload = (body, { partial = false } = {}) => {
   if (!partial || body.throttleMinutes !== undefined) {
     const minutes = Number(body.throttleMinutes);
     payload.throttleMinutes = Number.isFinite(minutes) ? Math.max(1, Math.round(minutes)) : 10;
+  }
+  if (!partial || body.triggerType !== undefined) {
+    payload.triggerType = VALID_TRIGGER_TYPES.includes(body.triggerType) ? body.triggerType : 'manual';
+  }
+  if (!partial || body.triggerConfig !== undefined) {
+    const source = String(body.triggerConfig?.source || '').trim();
+    const offsetMinutes = Number(body.triggerConfig?.offsetMinutes);
+    const lookbackMinutes = Number(body.triggerConfig?.lookbackMinutes);
+
+    payload.triggerConfig = {
+      source: source || 'none',
+      offsetMinutes: Number.isFinite(offsetMinutes) && offsetMinutes > 0 ? Math.round(offsetMinutes) : null,
+      lookbackMinutes: Number.isFinite(lookbackMinutes) && lookbackMinutes > 0 ? Math.round(lookbackMinutes) : 15,
+    };
   }
 
   return payload;
