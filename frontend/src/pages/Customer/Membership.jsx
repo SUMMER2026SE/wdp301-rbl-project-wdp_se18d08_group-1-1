@@ -6,6 +6,8 @@ import { getMyVehicles } from '../../services/vehicleService';
 import { apiFetch } from '../../services/api';
 import { notifyAuthChange } from '../../services/authStorage';
 import ParkingMapViewer from '../../components/ParkingMapViewer';
+import PolicyAcceptancePrompt from '../../components/policies/PolicyAcceptancePrompt';
+import { extractMissingPolicies, isPolicyAcceptanceRequired } from '../../utils/policyErrors';
 import { QRCodeSVG } from 'qrcode.react';
 
 export default function Membership() {
@@ -28,6 +30,10 @@ export default function Membership() {
   const [success, setSuccess] = useState(false);
   const [walletBalance, setWalletBalance] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState('payos');
+  const [policyPrompt, setPolicyPrompt] = useState({
+    open: false,
+    missingPolicies: [],
+  });
 
   const subscriptionPackages = packages
     .filter(pkg => ['monthly', 'yearly'].includes(pkg.type))
@@ -267,6 +273,11 @@ export default function Membership() {
         if (res.ok && res.data?.success) {
           await syncCurrentUserProfile();
           setSuccess(true);
+        } else if (isPolicyAcceptanceRequired(res.data)) {
+          setPolicyPrompt({
+            open: true,
+            missingPolicies: extractMissingPolicies(res.data),
+          });
         } else {
           alert(res.data?.message || "Error while paying with Valo Wallet");
         }
@@ -276,6 +287,12 @@ export default function Membership() {
         if (res.ok && res.data?.data?.checkoutUrl) {
           // Redirect directly to the PayOS page
           window.location.href = res.data.data.checkoutUrl;
+        } else if (isPolicyAcceptanceRequired(res.data)) {
+          setPolicyPrompt({
+            open: true,
+            missingPolicies: extractMissingPolicies(res.data),
+          });
+          setVerifying(false);
         } else {
           alert(res.data?.message || "Error creating PayOS transaction");
           setVerifying(false);
@@ -595,6 +612,13 @@ export default function Membership() {
           </div>
         </div>
       )}
+
+      <PolicyAcceptancePrompt
+        open={policyPrompt.open}
+        missingPolicies={policyPrompt.missingPolicies}
+        onClose={() => setPolicyPrompt({ open: false, missingPolicies: [] })}
+        onAccepted={() => setPolicyPrompt({ open: false, missingPolicies: [] })}
+      />
     </div>
   );
 }

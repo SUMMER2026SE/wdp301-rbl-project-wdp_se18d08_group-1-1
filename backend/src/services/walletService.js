@@ -35,8 +35,8 @@ const getOrCreateWallet = async (userId, options = {}) => {
  * @param {string} userId - User's ObjectId
  * @returns {Object} { balance, totalTopUp, totalSpent, totalRefunded, totalTransactions, totalParkingPayments }
  */
-const getBalance = async (userId, options = {}) => {
-  const wallet = await getOrCreateWallet(userId, options);
+const getBalance = async (userId) => {
+  const wallet = await getOrCreateWallet(userId);
   const monthStart = new Date();
   monthStart.setDate(1);
   monthStart.setHours(0, 0, 0, 0);
@@ -145,9 +145,9 @@ const creditWallet = async (userId, amount, type, description, options = {}) => 
           balanceAfter,
           status: 'COMPLETED',
           description,
-          payosOrderCode: options.payosOrderCode || undefined,
-          payosPaymentLinkId: options.payosPaymentLinkId || undefined,
-          payosReference: options.payosReference || undefined,
+          payosOrderCode: options.payosOrderCode || null,
+          payosPaymentLinkId: options.payosPaymentLinkId || null,
+          payosReference: options.payosReference || null,
           refSource: options.refSource || null,
           refSourceId: options.refSourceId || null,
         },
@@ -191,13 +191,9 @@ const creditWallet = async (userId, amount, type, description, options = {}) => 
  * @returns {Object} { transaction, wallet }
  */
 const debitWallet = async (userId, amount, description, options = {}) => {
-  const externalSession = options.session || null;
+  const externalSession = options.session;
   const session = externalSession || await mongoose.startSession();
-  const ownsSession = !externalSession;
-
-  if (ownsSession) {
-    session.startTransaction();
-  }
+  if (!externalSession) session.startTransaction();
 
   try {
     const wallet = await getOrCreateWallet(userId, { session });
@@ -245,23 +241,17 @@ const debitWallet = async (userId, amount, description, options = {}) => {
       { session }
     );
 
-    if (ownsSession) {
-      await session.commitTransaction();
-    }
+    if (!externalSession) await session.commitTransaction();
 
     return {
       transaction: transaction[0],
       newBalance: balanceAfter,
     };
   } catch (error) {
-    if (ownsSession) {
-      await session.abortTransaction();
-    }
+    if (!externalSession) await session.abortTransaction();
     throw error;
   } finally {
-    if (ownsSession) {
-      session.endSession();
-    }
+    if (!externalSession) session.endSession();
   }
 };
 
