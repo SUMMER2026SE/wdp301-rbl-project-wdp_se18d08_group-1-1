@@ -1,6 +1,21 @@
-# Mobile app
+# VALO Parking Mobile App
 
-Expo + React Native mobile app for testing the backend API connection.
+Expo + React Native mobile foundation for the VALO PARKING ecosystem.
+
+## What is included
+
+- TypeScript strict mode and path aliases
+- Environment configuration for API and Socket.IO URLs
+- Secure token storage with Expo SecureStore
+- Axios API client with auth headers, refresh-token retry, and normalized errors
+- Auth, profile, vehicle, wallet, notification, policy, subscription, booking, and session API service modules
+- Auth context, socket context, lifecycle handling, and reusable hooks
+- React Navigation auth stack, bottom tabs, nested stacks, deep link config, and navigation persistence
+- Core design tokens and reusable UI components
+- Login, register, password recovery, profile, vehicle, and wallet starter screens
+- Customer booking core: browse slots, select vehicle/services, wallet balance gate, create bookings
+- Booking history with filters, booking details, QR confirmation, QR scanner fallback, and visual parking map
+- Property-based tests for booking time, price, refund, wallet, QR, and vehicle-conflict rules
 
 ## Run
 
@@ -14,10 +29,13 @@ Then open the app with Expo Go, an emulator, or a simulator.
 
 ## API URL
 
-The API base URL is read from `.env`:
+The API and Socket.IO URLs are read from `.env`:
 
 ```env
 EXPO_PUBLIC_API_URL=http://localhost:5000/api
+EXPO_PUBLIC_SOCKET_URL=http://localhost:5000
+EXPO_PUBLIC_ENV=development
+EXPO_PUBLIC_GOOGLE_CLIENT_ID=
 ```
 
 Use the right host for your runtime:
@@ -32,11 +50,21 @@ After changing `.env`, restart Expo. If the old value is still cached, run:
 npx expo start -c
 ```
 
-## Test backend connection
+## Scripts
 
-1. Start the backend server.
-2. Confirm the backend exposes `GET /api/health`.
-3. Start the mobile app.
-4. Press **Test API** on the first screen.
+```bash
+npm run typecheck
+npm run lint
+npm test
+```
 
-The app calls `src/api/auth.api.ts`, which uses `src/api/axiosClient.ts`. The screen does not hardcode the API URL.
+The legacy `src/api/*` API test files are still present, but the app entry now uses the production foundation under `src/services`, `src/contexts`, `src/navigation`, and `src/screens`.
+
+## Customer Booking Flow
+
+The Bookings tab starts at booking creation and links to My Bookings. It uses:
+
+- `src/contexts/BookingContext.tsx` for booking state and real-time updates
+- `src/services/BookingService.ts`, `ParkingFloorService.ts`, and `ServiceService.ts`
+- `src/screens/booking/*` for browse, confirmation, details, scanner, and map screens
+- `react-native-qrcode-svg` for QR display and `expo-barcode-scanner` for camera scanning
