@@ -1,0 +1,17 @@
+export enum CustomerErrorType {
+  NETWORK_ERROR = 'NETWORK_ERROR',
+  AUTHENTICATION_ERROR = 'AUTHENTICATION_ERROR',
+  VALIDATION_ERROR = 'VALIDATION_ERROR',
+  CONFLICT_ERROR = 'CONFLICT_ERROR',
+  INSUFFICIENT_BALANCE = 'INSUFFICIENT_BALANCE',
+  PERMISSION_DENIED = 'PERMISSION_DENIED',
+  SERVER_ERROR = 'SERVER_ERROR',
+  UNKNOWN_ERROR = 'UNKNOWN_ERROR',
+}
+
+export interface CustomerAppError {
+  type: CustomerErrorType;
+  message: string;
+  statusCode?: number;
+  details?: unknown;
+}
