@@ -5,7 +5,7 @@ import { Screen } from '@/components/layout/Screen';
 import { useToast } from '@/hooks/useToast';
 import { profileService } from '@/services/api/profile';
 import { colors } from '@/theme';
-import { isValidPassword } from '@/utils/validation';
+import { calculatePasswordStrength } from '@/utils/profileValidation';
 
 export const ChangePasswordScreen = () => {
   const toast = useToast();
@@ -16,8 +16,13 @@ export const ChangePasswordScreen = () => {
   const [error, setError] = useState('');
 
   const handleSubmit = async () => {
-    if (!isValidPassword(newPassword)) {
-      setError('New password must be at least 8 characters.');
+    if (newPassword.length < 6) {
+      setError('New password must be at least 6 characters.');
+      return;
+    }
+
+    if (newPassword === currentPassword) {
+      setError('New password must be different from the current password.');
       return;
     }
 
@@ -46,6 +51,7 @@ export const ChangePasswordScreen = () => {
       <AppText variant="h1">Change Password</AppText>
       <Input label="Current password" onChangeText={setCurrentPassword} secureTextEntry value={currentPassword} />
       <Input label="New password" onChangeText={setNewPassword} secureTextEntry value={newPassword} />
+      <AppText color={colors.light.text.secondary}>Strength: {calculatePasswordStrength(newPassword)}</AppText>
       <Input label="Confirm password" onChangeText={setConfirmPassword} secureTextEntry value={confirmPassword} />
       {error ? <AppText color={colors.error.main}>{error}</AppText> : null}
       <Button loading={loading} title="Update Password" onPress={handleSubmit} />

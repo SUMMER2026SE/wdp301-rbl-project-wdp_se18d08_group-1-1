@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, StyleSheet, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, View } from 'react-native';
 
 import { AppText, Button, Card, LoadingSpinner } from '@/components/common';
 import { Screen } from '@/components/layout/Screen';
 import { vehiclesService } from '@/services/api/vehicles';
-import { spacing } from '@/theme';
+import { borderRadius, colors, spacing } from '@/theme';
 import type { Vehicle } from '@/types/models';
 
 type VehicleNavigation = {
@@ -42,16 +42,22 @@ export const VehicleListScreen = ({ navigation }: { navigation: VehicleNavigatio
           data={vehicles}
           keyExtractor={(item, index) => item.id || item._id || String(index)}
           renderItem={({ item }) => (
-            <Card style={styles.item}>
-              <AppText variant="h3">{item.licensePlate}</AppText>
-              <AppText>{`${item.brand} ${item.model} - ${item.color}`}</AppText>
-              <AppText variant="caption">{item.isDefault ? 'Default vehicle' : item.vehicleType}</AppText>
-              <Button
-                title="Edit"
-                variant="outline"
-                onPress={() => navigation.navigate('EditVehicle', { vehicleId: item.id || item._id || '' })}
-              />
-            </Card>
+            <Pressable onPress={() => navigation.navigate('EditVehicle', { vehicleId: item.id || item._id || '' })}>
+              <Card style={styles.item}>
+                <View style={styles.row}>
+                  <AppText variant="h3">{item.licensePlate}</AppText>
+                  {item.isDefault ? <AppText style={styles.defaultBadge}>Default</AppText> : null}
+                </View>
+                <AppText>{`${item.brand} ${item.model} - ${item.color}`}</AppText>
+                <View style={styles.row}>
+                  <AppText color={getStatusColor(item.status)} variant="caption">
+                    {item.status || 'pending'}
+                  </AppText>
+                  <View style={[styles.swatch, { backgroundColor: item.hexColor || '#ffffff' }]} />
+                </View>
+                <AppText variant="caption">{item.modelUrl ? '3D model available' : item.vehicleType}</AppText>
+              </Card>
+            </Pressable>
           )}
         />
       )}
@@ -69,4 +75,29 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     marginBottom: spacing.md,
   },
+  row: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  defaultBadge: {
+    backgroundColor: colors.success.light,
+    borderRadius: borderRadius.sm,
+    color: colors.success.dark,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  swatch: {
+    borderColor: colors.light.border,
+    borderRadius: 10,
+    borderWidth: 1,
+    height: 20,
+    width: 20,
+  },
 });
+
+const getStatusColor = (status?: string) => {
+  if (status === 'approved') return colors.success.main;
+  if (status === 'rejected') return colors.error.main;
+  return colors.warning.dark;
+};

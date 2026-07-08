@@ -40,7 +40,7 @@ export interface MeResponse {
   };
 }
 
-export type VehicleType = 'motorbike' | 'car';
+export type VehicleType = 'car' | 'electric_car';
 
 export interface Vehicle {
   id: string;
@@ -52,6 +52,9 @@ export interface Vehicle {
   brand: string;
   model: string;
   color: string;
+  nickname?: string;
+  hexColor?: string;
+  registrationCardImage?: string;
   isDefault: boolean;
   status?: string;
   modelUrl?: string;
@@ -65,12 +68,71 @@ export interface CreateVehicleRequest {
   brand: string;
   model: string;
   color: string;
+  nickname?: string;
+  hexColor?: string;
+  registrationCardImage?: string;
 }
 
 export interface UpdateVehicleRequest {
   brand?: string;
   model?: string;
   color?: string;
+  nickname?: string;
+  hexColor?: string;
+}
+
+export type NotificationType =
+  | 'SYSTEM'
+  | 'PARKING'
+  | 'BOOKING'
+  | 'WALLET'
+  | 'PAYMENT'
+  | 'ACCOUNT'
+  | 'PROMOTION'
+  | 'CAMERA'
+  | 'VIOLATION';
+
+export type NotificationPriority = 'INFO' | 'SUCCESS' | 'WARNING' | 'ERROR' | 'SYSTEM';
+
+export interface UserNotification {
+  id?: string;
+  _id?: string;
+  notificationId?: string;
+  title: string;
+  content: string;
+  type: NotificationType;
+  priority: NotificationPriority;
+  isRead: boolean;
+  readAt?: string | null;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export type PolicyCategory = 'terms' | 'privacy' | 'refund' | 'parking_rules' | 'safety' | 'other';
+
+export interface Policy {
+  id?: string;
+  _id?: string;
+  slug: string;
+  title: string;
+  description?: string;
+  category: PolicyCategory;
+  currentVersion?: string;
+  versionNumber?: string;
+  requiresAcceptance?: boolean;
+  acceptedAt?: string | null;
+  isAccepted?: boolean;
+  publishedAt?: string;
+  createdAt?: string;
+}
+
+export interface PolicyDetail extends Policy {
+  content: string;
+  versionHistory?: Array<{
+    versionNumber: string;
+    publishedAt?: string;
+    changeSummary?: string;
+  }>;
 }
 
 export type TransactionType =
@@ -80,9 +142,20 @@ export type TransactionType =
   | 'refund'
   | 'booking_payment'
   | 'subscription_payment'
-  | 'topup';
+  | 'topup'
+  | 'TOP_UP'
+  | 'PAYMENT'
+  | 'REFUND';
 
-export type TransactionStatus = 'pending' | 'completed' | 'failed' | 'cancelled';
+export type TransactionStatus =
+  | 'pending'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'PENDING'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'CANCELLED';
 
 export interface Wallet {
   id?: string;
@@ -90,6 +163,13 @@ export interface Wallet {
   userId: string;
   balance: number;
   currency?: string;
+  totalTopUp?: number;
+  totalRefunded?: number;
+  monthlyTopUp?: number;
+  monthlySpent?: number;
+  monthlyRefunded?: number;
+  status?: 'active' | 'frozen';
+  overdraftLimit?: number;
   totalDeposited?: number;
   totalSpent?: number;
   createdAt?: string;
@@ -106,6 +186,12 @@ export interface WalletTransaction {
   description: string;
   referenceId?: string;
   orderCode?: number;
+  payosOrderCode?: number;
+  payosReference?: string;
+  balanceBefore?: number;
+  balanceAfter?: number;
+  refSource?: string;
+  refSourceId?: string;
   createdAt: string;
 }
 
@@ -119,7 +205,11 @@ export interface CreateTopUpRequest {
 export interface TopUpResponse {
   success: boolean;
   data: {
+    transactionId?: string;
     checkoutUrl: string;
     orderCode: string | number;
+    amount?: number;
+    qrCode?: string;
+    paymentLinkId?: string;
   };
 }

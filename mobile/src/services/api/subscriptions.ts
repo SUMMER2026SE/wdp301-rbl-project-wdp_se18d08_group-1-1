@@ -1,7 +1,19 @@
 import { apiClient } from './client';
+import type { APIResponse } from '@/types/api';
+import type {
+  CreateSubscriptionPaymentRequest,
+  CreateSubscriptionPaymentResponse,
+  MembershipStatus,
+  SubscriptionPackage,
+} from '@/types/subscription.types';
 
 export const subscriptionsService = {
-  createPayment: (data: unknown) => apiClient.post('/subscriptions/create-payment', data),
-  verifyPayment: (data: unknown) => apiClient.post('/subscriptions/verify-payment', data),
-  payWithWallet: (data: unknown) => apiClient.post('/subscriptions/pay-with-wallet', data),
+  getPackages: () => apiClient.get<APIResponse<SubscriptionPackage[]>>('/ticket-packages/active'),
+  getMembership: () => apiClient.get<APIResponse<MembershipStatus>>('/users/membership'),
+  createPayment: (data: CreateSubscriptionPaymentRequest) =>
+    apiClient.post<CreateSubscriptionPaymentResponse>('/subscriptions/payment', data),
+  verifyPayment: (data: { orderCode: number }) =>
+    apiClient.post<APIResponse>('/subscriptions/verify-payment', data),
+  payWithWallet: (data: CreateSubscriptionPaymentRequest) =>
+    apiClient.post<APIResponse>('/subscriptions/pay-with-wallet', data),
 };

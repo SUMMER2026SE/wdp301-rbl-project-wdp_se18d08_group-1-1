@@ -14,6 +14,7 @@ export type AuthStackParamList = {
 export type MainTabParamList = {
   HomeTab: undefined;
   BookingsTab: undefined;
+  NotificationsTab: undefined;
   WalletTab: undefined;
   ProfileTab: undefined;
 };
@@ -44,6 +45,12 @@ export type ProfileStackParamList = {
   VehicleList: undefined;
   AddVehicle: undefined;
   EditVehicle: { vehicleId: string };
+  Policies: undefined;
+  PolicyDetail: { slug: string };
+};
+
+export type NotificationStackParamList = {
+  Notifications: undefined;
 };
 
 export type WalletStackParamList = {
@@ -51,4 +58,13 @@ export type WalletStackParamList = {
   TopUp: undefined;
   TransactionHistory: undefined;
   TransactionDetail: { transactionId: string };
+  Membership: undefined;
+  SubscriptionPackages: undefined;
+  SubscriptionCheckout: { packageId: string };
+  SubscriptionPaymentStatus: {
+    orderCode: number;
+    checkoutUrl?: string;
+    qrCode?: string;
+    amount?: number;
+  };
 };

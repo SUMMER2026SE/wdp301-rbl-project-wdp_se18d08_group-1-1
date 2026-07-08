@@ -49,6 +49,10 @@ class AuthService {
   resetPassword(data: ResetPasswordRequest) {
     return apiClient.post<APIResponse>('/auth/reset-password', data);
   }
+
+  updatePushToken(expoPushToken: string) {
+    return apiClient.post<APIResponse>('/auth/update-push-token', { expoPushToken });
+  }
 }
 
 export const authService = new AuthService();

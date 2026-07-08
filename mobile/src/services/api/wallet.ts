@@ -12,11 +12,26 @@ class WalletService {
     return apiClient.post<TopUpResponse>('/wallet/top-up', data);
   }
 
-  getTopUpStatus(orderCode: string | number) {
-    return apiClient.get<APIResponse>(`/wallet/top-up/${orderCode}/status`);
+  getTopUpStatus(orderCode: string | number, cancel = false) {
+    return apiClient.get<
+      APIResponse<{
+        transactionId: string;
+        orderCode: number;
+        amount: number;
+        status: 'PENDING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+        payosStatus?: string | null;
+      }>
+    >(`/wallet/top-up/${orderCode}/status`, {
+      params: cancel ? { cancel: true } : undefined,
+    });
   }
 
-  getTransactions(params?: { page?: number; limit?: number }) {
+  getTransactions(params?: {
+    page?: number;
+    limit?: number;
+    type?: 'TOP_UP' | 'PAYMENT' | 'REFUND';
+    status?: 'PENDING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+  }) {
     return apiClient.get<PaginatedResponse<WalletTransaction>>('/wallet/transactions', {
       params,
     });

@@ -311,6 +311,29 @@ const getMe = async (req, res, next) => {
   }
 };
 
+const updatePushToken = async (req, res, next) => {
+  try {
+    const { expoPushToken } = req.body;
+    if (!expoPushToken || typeof expoPushToken !== 'string') {
+      return res.status(400).json({
+        success: false,
+        message: 'Expo push token is required.',
+      });
+    }
+
+    await User.findByIdAndUpdate(req.user._id, {
+      $addToSet: { expoPushTokens: expoPushToken },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Push token updated successfully',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 /**
  * @desc    Login / Register with Google OAuth
  * @route   POST /api/auth/google
@@ -731,6 +754,7 @@ module.exports = {
   refreshAccessToken,
   logout,
   getMe,
+  updatePushToken,
   googleLogin,
   sendOTP,
   getOTPConfig,
