@@ -47,6 +47,10 @@ const userSchema = new mongoose.Schema(
       packageId: { type: mongoose.Schema.Types.ObjectId, ref: 'TicketPackage', default: null },
       freeServiceCount: { type: Number, default: 0 },
     },
+    expoPushTokens: {
+      type: [String],
+      default: [],
+    },
   },
   {
     timestamps: true,

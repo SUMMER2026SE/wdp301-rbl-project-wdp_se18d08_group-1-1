@@ -5,6 +5,16 @@ const Slot = require('../models/Slot');
 const payos = require('../config/payos');
 const walletService = require('../services/walletService');
 
+const buildExpirationDate = (packageType, fromDate = new Date()) => {
+  const expireAt = new Date(fromDate);
+  if (packageType === 'monthly') {
+    expireAt.setMonth(expireAt.getMonth() + 1);
+  } else {
+    expireAt.setFullYear(expireAt.getFullYear() + 1);
+  }
+  return expireAt;
+};
+
 // Create payment order for subscription
 exports.createSubscriptionPayment = async (req, res, next) => {
   try {
@@ -39,12 +49,7 @@ exports.createSubscriptionPayment = async (req, res, next) => {
     const orderCode = Number(String(Date.now()).slice(-6) + Math.floor(Math.random() * 100));
 
     // Calculate expiration date
-    const expireAt = new Date();
-    if (ticketPackage.type === 'monthly') {
-      expireAt.setMonth(expireAt.getMonth() + 1);
-    } else {
-      expireAt.setFullYear(expireAt.getFullYear() + 1);
-    }
+    const expireAt = buildExpirationDate(ticketPackage.type);
 
     // Call PayOS API to create payment link
     const paymentData = {
@@ -84,6 +89,8 @@ exports.createSubscriptionPayment = async (req, res, next) => {
         orderCode,
         amount,
         checkoutUrl, // Client will redirect or show QR code
+        qrCode: paymentLink.qrCode,
+        paymentLinkId: paymentLink.paymentLinkId,
       }
     });
 
@@ -144,6 +151,12 @@ exports.verifyPayment = async (req, res, next) => {
 
       return res.status(200).json({ success: true, message: 'Subscription activated successfully!' });
     } else {
+      const payosInfo = await payos.paymentRequests.get(parseInt(orderCode)).catch(() => null);
+      if (['CANCELLED', 'FAILED'].includes(payosInfo?.status)) {
+        subscription.paymentStatus = payosInfo.status === 'CANCELLED' ? 'cancelled' : 'failed';
+        subscription.status = payosInfo.status === 'CANCELLED' ? 'cancelled' : 'failed';
+        await subscription.save();
+      }
       return res.status(400).json({ success: false, message: 'Payment not completed.' });
     }
   } catch (error) {
@@ -181,12 +194,7 @@ exports.paySubscriptionWithWallet = async (req, res, next) => {
     const amount = ticketPackage.price;
 
     // Calculate expiration date
-    const expireAt = new Date();
-    if (ticketPackage.type === 'monthly') {
-      expireAt.setMonth(expireAt.getMonth() + 1);
-    } else {
-      expireAt.setFullYear(expireAt.getFullYear() + 1);
-    }
+    const expireAt = buildExpirationDate(ticketPackage.type);
 
     // Create subscription
     const subscription = new Subscription({
@@ -242,3 +250,69 @@ exports.paySubscriptionWithWallet = async (req, res, next) => {
     next(error);
   }
 };
+
+exports.getMembership = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user._id)
+      .select('membership')
+      .populate('membership.packageId', 'name type price description isActive')
+      .lean();
+
+    const activeSubscription = await Subscription.findOne({
+      user: req.user._id,
+      status: 'active',
+      paymentStatus: 'paid',
+    })
+      .sort({ expireAt: -1 })
+      .populate('ticketPackage', 'name type price description isActive')
+      .populate('slots.floorId', 'name floorNumber')
+      .lean();
+
+    const expireAt = user?.membership?.expireAt ? new Date(user.membership.expireAt) : null;
+    const now = new Date();
+    const isActive = Boolean(user?.membership?.isVip && expireAt && expireAt > now);
+    const daysUntilExpiration = expireAt
+      ? Math.ceil((expireAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+      : null;
+    const pkg = activeSubscription?.ticketPackage || user?.membership?.packageId || null;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        isVip: isActive,
+        status: isActive ? 'active' : 'expired',
+        expireAt,
+        expirationWarning: Boolean(isActive && daysUntilExpiration !== null && daysUntilExpiration <= 7),
+        freeServiceCount: user?.membership?.freeServiceCount || 0,
+        package: pkg
+          ? {
+              id: pkg._id,
+              name: pkg.name,
+              type: pkg.type,
+              price: pkg.price,
+              description: pkg.description,
+            }
+          : null,
+        reservedSlots: (activeSubscription?.slots || []).map((slot) => ({
+          floorId: slot.floorId?._id || slot.floorId,
+          floorName: slot.floorId?.name || '',
+          floorNumber: slot.floorId?.floorNumber || null,
+          slotCode: slot.slotCode,
+        })),
+        benefits: isActive
+          ? ['Reserved VIP parking slots', 'Priority parking access', 'Membership parking coverage']
+          : [],
+        renewal: {
+          status: 'manual',
+          nextRenewalDate: expireAt,
+          price: pkg?.price || 0,
+          message: 'Auto-renewal is not yet supported.',
+        },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.buildExpirationDate = buildExpirationDate;

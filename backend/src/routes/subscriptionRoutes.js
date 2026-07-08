@@ -6,6 +6,8 @@ const { requirePolicyAcceptance } = require('../middlewares/policyAcceptanceMidd
 
 router.use(protect);
 
+router.get('/membership', subscriptionController.getMembership);
+router.post('/payment', requirePolicyAcceptance({ action: 'subscription:create-payment' }), subscriptionController.createSubscriptionPayment);
 router.post('/create-payment', requirePolicyAcceptance({ action: 'subscription:create-payment' }), subscriptionController.createSubscriptionPayment);
 router.post('/verify-payment', subscriptionController.verifyPayment);
 router.post('/pay-with-wallet', requirePolicyAcceptance({ action: 'subscription:pay-with-wallet' }), subscriptionController.paySubscriptionWithWallet);

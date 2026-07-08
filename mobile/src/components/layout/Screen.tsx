@@ -1,7 +1,10 @@
-import { ReactNode } from 'react';
+import { ReactElement, ReactNode } from 'react';
 import {
   KeyboardAvoidingView,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Platform,
+  RefreshControlProps,
   ScrollView,
   StyleProp,
   StyleSheet,
@@ -17,13 +20,18 @@ export interface ScreenProps {
   scrollable?: boolean;
   style?: StyleProp<ViewStyle>;
   contentStyle?: StyleProp<ViewStyle>;
+  onScroll?: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  refreshControl?: ReactElement<RefreshControlProps>;
 }
 
-export const Screen = ({ children, scrollable = false, style, contentStyle }: ScreenProps) => {
+export const Screen = ({ children, scrollable = false, style, contentStyle, onScroll, refreshControl }: ScreenProps) => {
   const content = scrollable ? (
     <ScrollView
       contentContainerStyle={[styles.content, contentStyle]}
       keyboardShouldPersistTaps="handled"
+      refreshControl={refreshControl}
+      scrollEventThrottle={16}
+      onScroll={onScroll}
     >
       {children}
     </ScrollView>

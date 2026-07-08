@@ -1,5 +1,6 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
+import { Alert } from 'react-native';
 
 import { AppText, Button, Input, LoadingSpinner } from '@/components/common';
 import { Screen } from '@/components/layout/Screen';
@@ -15,6 +16,8 @@ export const EditVehicleScreen = ({ navigation, route }: Props) => {
   const [brand, setBrand] = useState('');
   const [model, setModel] = useState('');
   const [color, setColor] = useState('');
+  const [nickname, setNickname] = useState('');
+  const [hexColor, setHexColor] = useState('#ffffff');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -27,6 +30,8 @@ export const EditVehicleScreen = ({ navigation, route }: Props) => {
           setBrand(response.data.brand);
           setModel(response.data.model);
           setColor(response.data.color);
+          setNickname(response.data.nickname || '');
+          setHexColor(response.data.hexColor || '#ffffff');
         }
       } finally {
         setLoading(false);
@@ -44,6 +49,8 @@ export const EditVehicleScreen = ({ navigation, route }: Props) => {
         brand: brand.trim(),
         model: model.trim(),
         color: color.trim(),
+        nickname: nickname.trim(),
+        hexColor,
       });
       toast.showSuccess('Vehicle updated');
       navigation.goBack();
@@ -52,6 +59,28 @@ export const EditVehicleScreen = ({ navigation, route }: Props) => {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleDelete = () => {
+    Alert.alert('Delete vehicle', 'This vehicle will be permanently deleted.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: async () => {
+          setSaving(true);
+          try {
+            await vehiclesService.deleteVehicle(route.params.vehicleId);
+            toast.showSuccess('Vehicle deleted successfully');
+            navigation.goBack();
+          } catch (deleteError) {
+            setError(deleteError instanceof Error ? deleteError.message : 'Vehicle delete failed.');
+          } finally {
+            setSaving(false);
+          }
+        },
+      },
+    ]);
   };
 
   const handleSetDefault = async () => {
@@ -79,9 +108,12 @@ export const EditVehicleScreen = ({ navigation, route }: Props) => {
       <Input label="Brand" onChangeText={setBrand} value={brand} />
       <Input label="Model" onChangeText={setModel} value={model} />
       <Input label="Color" onChangeText={setColor} value={color} />
+      <Input label="Nickname" onChangeText={setNickname} value={nickname} />
+      <Input label="Hex color" onChangeText={setHexColor} value={hexColor} />
       {error ? <AppText color={colors.error.main}>{error}</AppText> : null}
       <Button loading={saving} title="Save" onPress={handleSubmit} />
       <Button loading={saving} title="Set Default" variant="outline" onPress={handleSetDefault} />
+      <Button loading={saving} title="Delete Vehicle" variant="ghost" onPress={handleDelete} />
     </Screen>
   );
 };

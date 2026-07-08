@@ -1,92 +1,77 @@
-import * as ImagePicker from 'expo-image-picker';
-import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { RefreshControl, StyleSheet, View } from 'react-native';
 
-import { AppText, Avatar, Button, Card } from '@/components/common';
+import { AppText, Button, Card, LoadingSpinner } from '@/components/common';
 import { Screen } from '@/components/layout/Screen';
+import { MembershipBadge } from '@/components/profile/MembershipBadge';
+import { ProfileAvatar } from '@/components/profile/ProfileAvatar';
+import { ProfileInfoCard } from '@/components/profile/ProfileInfoCard';
 import { useAuth } from '@/hooks/useAuth';
-import { useToast } from '@/hooks/useToast';
-import { profileService } from '@/services/api/profile';
+import { useProfileData } from '@/hooks/useProfileData';
 import { colors, spacing } from '@/theme';
 
 type ProfileNavigation = {
-  navigate: (route: 'EditProfile' | 'ChangePassword' | 'VehicleList') => void;
+  navigate: (route: 'EditProfile' | 'ChangePassword' | 'VehicleList' | 'Policies') => void;
 };
 
 export const ProfileScreen = ({ navigation }: { navigation: ProfileNavigation }) => {
   const { user, logout, refreshUser } = useAuth();
-  const toast = useToast();
-  const [avatarUri, setAvatarUri] = useState<string | undefined>();
-  const [uploading, setUploading] = useState(false);
-
-  const pickAvatar = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-    if (!permission.granted) {
-      toast.showWarning('Permission needed', 'Photo library access is required.');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      allowsEditing: true,
-      aspect: [1, 1],
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.75,
-    });
-
-    if (result.canceled || !result.assets[0]) {
-      return;
-    }
-
-    const asset = result.assets[0];
-    setAvatarUri(asset.uri);
-    setUploading(true);
-    try {
-      await profileService.uploadAvatar({
-        uri: asset.uri,
-        name: asset.fileName || 'avatar.jpg',
-        type: asset.mimeType || 'image/jpeg',
-      });
-      await refreshUser();
-      toast.showSuccess('Avatar updated');
-    } catch (error) {
-      toast.showError('Upload failed', error instanceof Error ? error.message : undefined);
-    } finally {
-      setUploading(false);
-    }
-  };
+  const { profile, loading, fetchProfile } = useProfileData();
 
   const displayName = user?.username || user?.email || 'Customer';
 
+  if (loading) {
+    return (
+      <Screen>
+        <LoadingSpinner />
+      </Screen>
+    );
+  }
+
   return (
-    <Screen scrollable>
+    <Screen
+      scrollable
+      contentStyle={styles.content}
+      refreshControl={<RefreshControl refreshing={loading} onRefresh={() => void Promise.all([fetchProfile(), refreshUser()])} />}
+    >
       <Card>
         <View style={styles.header}>
-          <Avatar name={displayName} size={80} uri={avatarUri} />
+          <ProfileAvatar name={displayName} size={80} uri={profile?.avatar} />
           <View style={styles.identity}>
             <AppText variant="h2">{displayName}</AppText>
             <AppText color={colors.light.text.secondary}>{user?.email}</AppText>
+            <AppText color={user?.isEmailVerified ? colors.success.main : colors.warning.dark}>
+              {user?.isEmailVerified ? 'Email verified' : 'Email not verified'}
+            </AppText>
           </View>
         </View>
-        <Button loading={uploading} title="Upload Avatar" variant="outline" onPress={pickAvatar} />
       </Card>
+      <MembershipBadge membership={user?.membership} />
+      <ProfileInfoCard
+        rows={[
+          { label: 'First name', value: profile?.firstName },
+          { label: 'Last name', value: profile?.lastName },
+          { label: 'Phone', value: profile?.phone },
+          { label: 'Date of birth', value: profile?.dob ? new Date(profile.dob).toLocaleDateString('vi-VN') : '' },
+          { label: 'Gender', value: profile?.gender },
+          { label: 'Google account', value: user?.googleId ? 'Connected' : 'No' },
+          { label: 'Created', value: user?.createdAt ? new Date(user.createdAt).toLocaleDateString('vi-VN') : '' },
+        ]}
+      />
       <Button title="Edit Profile" onPress={() => navigation.navigate('EditProfile')} />
-      <Button
-        title="Change Password"
-        variant="outline"
-        onPress={() => navigation.navigate('ChangePassword')}
-      />
-      <Button
-        title="Vehicles"
-        variant="outline"
-        onPress={() => navigation.navigate('VehicleList')}
-      />
+      {!user?.googleId ? (
+        <Button title="Change Password" variant="outline" onPress={() => navigation.navigate('ChangePassword')} />
+      ) : null}
+      <Button title="Vehicles" variant="outline" onPress={() => navigation.navigate('VehicleList')} />
+      <Button title="Policies" variant="outline" onPress={() => navigation.navigate('Policies')} />
       <Button title="Logout" variant="ghost" onPress={logout} />
     </Screen>
   );
 };
 
 const styles = StyleSheet.create({
+  content: {
+    gap: spacing.lg,
+  },
   header: {
     alignItems: 'center',
     flexDirection: 'row',
