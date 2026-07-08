@@ -1,28 +1,21 @@
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import React from 'react';
 
-import LoginScreen from '../screens/LoginScreen';
-import RegisterScreen from '../screens/auth/RegisterScreen';
+import { ForgotPasswordScreen } from '@/screens/auth/ForgotPasswordScreen';
+import { LoginScreen } from '@/screens/auth/LoginScreen';
+import { RegisterScreen } from '@/screens/auth/RegisterScreen';
+import { ResetPasswordScreen } from '@/screens/auth/ResetPasswordScreen';
+import { VerifyOTPScreen } from '@/screens/auth/VerifyOTPScreen';
 
-export type AuthStackParamList = {
-  Login: undefined;
-  Register: undefined;
-};
+import type { AuthStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<AuthStackParamList>();
 
-export default function AuthNavigator() {
-  return (
-    <Stack.Navigator
-      initialRouteName="Login"
-      screenOptions={{
-        headerShown: false,
-        animation: 'slide_from_right',
-        contentStyle: { backgroundColor: '#0D0D0D' },
-      }}
-    >
-      <Stack.Screen component={LoginScreen} name="Login" />
-      <Stack.Screen component={RegisterScreen} name="Register" />
-    </Stack.Navigator>
-  );
-}
+export const AuthNavigator = () => (
+  <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Screen component={LoginScreen} name="Login" />
+    <Stack.Screen component={RegisterScreen} name="Register" />
+    <Stack.Screen component={ForgotPasswordScreen} name="ForgotPassword" />
+    <Stack.Screen component={VerifyOTPScreen} name="VerifyOTP" />
+    <Stack.Screen component={ResetPasswordScreen} name="ResetPassword" />
+  </Stack.Navigator>
+);

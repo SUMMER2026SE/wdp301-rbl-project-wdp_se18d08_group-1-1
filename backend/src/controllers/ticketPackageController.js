@@ -3,8 +3,21 @@ const TicketPackage = require('../models/TicketPackage');
 // Get active ticket packages (For Customer/Kiosk)
 exports.getActivePackages = async (req, res) => {
   try {
-    const packages = await TicketPackage.find({ isActive: true }).sort({ type: -1, price: 1 });
-    res.status(200).json({ success: true, data: packages });
+    const packages = await TicketPackage.find({
+      isActive: true,
+      type: { $in: ['monthly', 'yearly'] },
+    }).sort({ type: -1, price: 1 });
+    res.status(200).json({
+      success: true,
+      data: packages.map((pkg) => ({
+        ...pkg.toObject(),
+        durationMonths: pkg.type === 'yearly' ? 12 : 1,
+        benefits:
+          pkg.type === 'yearly'
+            ? ['Reserved VIP slots', '12 free services', 'Priority parking access']
+            : ['Reserved VIP slots', 'Priority parking access'],
+      })),
+    });
   } catch (error) {
     console.error('Error fetching active ticket packages:', error);
     res.status(500).json({ message: 'Server error while fetching ticket packages' });

@@ -6,6 +6,7 @@ const {
   refreshAccessToken,
   logout,
   getMe,
+  updatePushToken,
   googleLogin,
   sendOTP,
   getOTPConfig,
@@ -40,5 +41,6 @@ router.post('/reset-password', resetPasswordValidator, resetPassword);
 // Protected routes
 router.post('/logout', protect, logout);
 router.get('/me', protect, getMe);
+router.post('/update-push-token', protect, updatePushToken);
 
 module.exports = router;
