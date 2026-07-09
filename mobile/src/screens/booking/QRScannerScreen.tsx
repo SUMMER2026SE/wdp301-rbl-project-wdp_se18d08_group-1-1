@@ -1,4 +1,4 @@
-import { BarCodeScanner, BarCodeScannerResult } from 'expo-barcode-scanner';
+import { BarcodeScanningResult, CameraView, useCameraPermissions } from 'expo-camera';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
 import { Linking, StyleSheet, View } from 'react-native';
@@ -16,19 +16,16 @@ type Props = NativeStackScreenProps<BookingStackParamList, 'QRScanner'>;
 export const QRScannerScreen = ({ navigation, route }: Props) => {
   const toast = useToast();
   const { checkInBooking, checkOutBooking, isLoading } = useBooking();
-  const [hasPermission, setHasPermission] = useState<boolean | null>(null);
+  const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [manualId, setManualId] = useState(route.params.bookingId || '');
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const requestPermission = async () => {
-      const result = await BarCodeScanner.requestPermissionsAsync();
-      setHasPermission(result.status === 'granted');
-    };
-
-    void requestPermission();
-  }, []);
+    if (!permission) {
+      void requestPermission();
+    }
+  }, [permission, requestPermission]);
 
   const processBookingId = async (bookingId: string) => {
     if (!isValidBookingQrValue(bookingId)) {
@@ -52,7 +49,7 @@ export const QRScannerScreen = ({ navigation, route }: Props) => {
     }
   };
 
-  const handleBarCodeScanned = ({ data }: BarCodeScannerResult) => {
+  const handleBarCodeScanned = ({ data }: BarcodeScanningResult) => {
     if (scanned) {
       return;
     }
@@ -60,7 +57,7 @@ export const QRScannerScreen = ({ navigation, route }: Props) => {
     void processBookingId(data);
   };
 
-  if (hasPermission === false) {
+  if (permission?.granted === false) {
     return (
       <Screen>
         <AppText variant="h1">Camera Permission</AppText>
@@ -74,10 +71,10 @@ export const QRScannerScreen = ({ navigation, route }: Props) => {
     <Screen>
       <AppText variant="h1">{route.params.mode === 'check-in' ? 'Check-In' : 'Check-Out'} Scanner</AppText>
       <View style={styles.scanner}>
-        {hasPermission ? (
-          <BarCodeScanner
-            barCodeTypes={[BarCodeScanner.Constants.BarCodeType.qr]}
-            onBarCodeScanned={scanned ? undefined : handleBarCodeScanned}
+        {permission?.granted ? (
+          <CameraView
+            barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+            onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
             style={StyleSheet.absoluteFill}
           />
         ) : (
