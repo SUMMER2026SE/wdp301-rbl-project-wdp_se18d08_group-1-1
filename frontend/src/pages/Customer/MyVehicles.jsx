@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Car, Zap, Plus, Trash2, Star, ScanLine,
   Upload, X, Check, Pencil, AlertCircle, Loader2,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, AlertTriangle,
 } from 'lucide-react';
 import {
   getMyVehicles, addVehicle, updateVehicle,
@@ -27,7 +27,216 @@ const EMPTY_FORM = {
   nickname: '',
 };
 
+// ─── Vehicle Card ─────────────────────────────────────────────────────────────
+function VehicleCard({ vehicle, onDelete, onSetDefault, onEdit }) {
+  const [loading, setLoading] = useState(false);
+  const typeObj = VEHICLE_TYPES.find((t) => t.value === vehicle.vehicleType);
+
+  const handleDelete = async () => {
+    setLoading(true);
+    await onDelete(vehicle._id);
+    setLoading(false);
+  };
+
+  const handleDefault = async () => {
+    if (vehicle.isDefault) return;
+    setLoading(true);
+    await onSetDefault(vehicle._id);
+    setLoading(false);
+  };
+
+  return (
+    <div
+      className={`relative rounded-2xl p-5 border transition-all duration-300
+        bg-white dark:bg-white/[0.04] backdrop-blur-md
+        ${vehicle.isDefault
+          ? 'border-yellow-500/40 shadow-[0_0_24px_rgba(234,179,8,0.12)]'
+          : 'border-gray-200 dark:border-white/10 hover:border-yellow-500/30 hover:shadow-[0_0_24px_rgba(234,179,8,0.08)]'
+        }`}
+    >
+      {/* Default badge */}
+      {vehicle.isDefault && (
+        <span className="absolute top-3 right-3 text-[10px] font-bold
+          bg-yellow-500/15 text-yellow-500 dark:text-yellow-400
+          border border-yellow-500/30 rounded-full px-2 py-0.5 select-none">
+          Default
+        </span>
+      )}
+
+      {/* 3D Model Preview */}
+      {vehicle.modelUrl && (
+        <div className="w-full h-44 rounded-xl overflow-hidden mb-4
+          bg-gray-100 dark:bg-black/30 border border-gray-200 dark:border-white/10">
+          <CarViewer
+            modelUrl={vehicle.modelUrl}
+            carColor={vehicle.hexColor || '#ffffff'}
+            height={176}
+          />
+        </div>
+      )}
+
+      {/* Header */}
+      <div className="flex items-start gap-3 mb-4">
+        <div className="w-10 h-10 rounded-xl bg-yellow-500/10 border border-yellow-500/20
+          flex items-center justify-center text-yellow-500 dark:text-yellow-400 shrink-0">
+          {typeObj?.icon ?? <Car size={18} />}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-bold text-base text-gray-900 dark:text-white tracking-wide">
+            {formatLicensePlateDisplay(vehicle.licensePlateDisplay || vehicle.licensePlate)}
+          </p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 truncate flex items-center gap-1.5">
+            {vehicle.hexColor && vehicle.hexColor !== '#ffffff' && (
+              <span
+                className="inline-block w-3 h-3 rounded-full border border-gray-300 dark:border-white/20 shrink-0"
+                style={{ backgroundColor: vehicle.hexColor }}
+              />
+            )}
+            {[vehicle.brand, vehicle.model, vehicle.color].filter(Boolean).join(' · ')}
+          </p>
+        </div>
+      </div>
+
+      {/* Nickname */}
+      {vehicle.nickname && (
+        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4 italic">
+          "{vehicle.nickname}"
+        </p>
+      )}
+
+      {/* Type badge */}
+      <div className="flex items-center gap-1.5 mb-4">
+        <span className="inline-flex items-center gap-1 text-[11px] font-semibold
+          bg-yellow-500/10 text-yellow-600 dark:text-yellow-400
+          border border-yellow-500/20 rounded-full px-2.5 py-0.5">
+          {typeObj?.icon}
+          {typeObj?.label ?? vehicle.vehicleType}
+        </span>
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-2">
+        {!vehicle.isDefault && (
+          <button
+            onClick={handleDefault}
+            disabled={loading}
+            className="flex items-center gap-1.5 text-[11px] font-semibold
+              text-gray-500 dark:text-gray-400 hover:text-yellow-500 dark:hover:text-yellow-400
+              transition-colors disabled:opacity-50"
+            title="Set as default vehicle"
+          >
+            <Star size={13} />
+            Default
+          </button>
+        )}
+        <div className="flex-1" />
+        <button
+          onClick={() => onEdit(vehicle)}
+          disabled={loading}
+          className="p-1.5 rounded-lg text-gray-400 hover:text-yellow-500 dark:hover:text-yellow-400
+            hover:bg-yellow-500/10 transition-all disabled:opacity-50"
+          title="Edit"
+        >
+          <Pencil size={14} />
+        </button>
+        <button
+          onClick={handleDelete}
+          disabled={loading}
+          className="p-1.5 rounded-lg text-gray-400 hover:text-red-500
+            hover:bg-red-500/10 transition-all disabled:opacity-50"
+          title="Delete vehicle"
+        >
+          {loading ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Vehicle Modal (Add / Edit) ───────────────────────────────────────────────
+function DeleteVehicleModal({ vehicle, deleting, onCancel, onConfirm }) {
+  if (!vehicle) return null;
+
+  const plate = formatLicensePlateDisplay(vehicle.licensePlateDisplay || vehicle.licensePlate);
+  const vehicleName = [vehicle.brand, vehicle.model].filter(Boolean).join(' ') || 'This vehicle';
+
+  return (
+    <div className="fixed inset-0 z-[180] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md">
+      <div className="relative w-full max-w-md overflow-hidden rounded-2xl
+        border border-white/10 bg-[#101010]/95 text-white shadow-[0_24px_80px_rgba(0,0,0,0.55)]">
+        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-red-500 via-yellow-400 to-red-500" />
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={deleting}
+          className="absolute right-4 top-4 rounded-xl p-2 text-white/45
+            hover:bg-white/10 hover:text-white transition-all disabled:opacity-40"
+          title="Close"
+        >
+          <X size={18} />
+        </button>
+
+        <div className="px-6 pb-6 pt-7">
+          <div className="mb-5 flex items-start gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl
+              border border-red-500/30 bg-red-500/15 text-red-300 shadow-[0_0_28px_rgba(239,68,68,0.16)]">
+              <AlertTriangle size={24} />
+            </div>
+            <div className="min-w-0 pr-8">
+              <p className="text-lg font-black tracking-tight">Delete vehicle?</p>
+              <p className="mt-1 text-sm leading-6 text-white/55">
+                This vehicle will be removed from your garage. This action cannot be undone.
+              </p>
+            </div>
+          </div>
+
+          <div className="mb-6 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-widest text-white/35">
+              Selected vehicle
+            </p>
+            <div className="mt-2 flex items-center gap-3">
+              <div
+                className="h-9 w-9 rounded-full border-2 border-white/25 shadow-lg"
+                style={{ backgroundColor: vehicle.hexColor || '#ffffff' }}
+              />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-bold text-white/80">{vehicleName}</p>
+                <p className="text-xl font-black leading-tight tracking-[0.16em] text-white">
+                  {plate}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={deleting}
+              className="flex-1 rounded-xl border border-white/12 bg-white/[0.04] px-4 py-3
+                text-sm font-bold text-white/65 transition-all hover:bg-white/10 hover:text-white
+                disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onConfirm}
+              disabled={deleting}
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl
+                bg-red-500 px-4 py-3 text-sm font-black text-white shadow-lg shadow-red-500/20
+                transition-all hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {deleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+              Delete
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function VehicleModal({ editVehicle, onClose, onSaved }) {
   const [form, setForm] = useState(editVehicle
     ? {
@@ -370,6 +579,7 @@ export default function MyVehicles() {
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [modalOpen, setModalOpen]     = useState(false);
   const [editVehicle, setEditVehicle] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [toast, setToast]             = useState(null);
   const [quickColor, setQuickColor]   = useState(null); // local hex while picking
@@ -420,11 +630,16 @@ export default function MyVehicles() {
 
   const handleDelete = async () => {
     if (!selected) return;
-    if (!window.confirm(`Delete vehicle "${selected.licensePlate}"?`)) return;
+    setDeleteTarget(selected);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
     setActionLoading(true);
-    const { ok } = await deleteVehicle(selected._id);
+    const { ok } = await deleteVehicle(deleteTarget._id);
     setActionLoading(false);
     if (ok) {
+      setDeleteTarget(null);
       setSelectedIdx(0);
       await fetchVehicles();
       showToast('Vehicle deleted ✓');
@@ -744,6 +959,14 @@ export default function MyVehicles() {
           )}
         </>
       )}
+
+      {/* Delete confirmation */}
+      <DeleteVehicleModal
+        vehicle={deleteTarget}
+        deleting={actionLoading}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+      />
 
       {/* Modal */}
       {modalOpen && (
