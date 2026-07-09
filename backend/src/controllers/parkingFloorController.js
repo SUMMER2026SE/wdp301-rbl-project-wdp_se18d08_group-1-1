@@ -104,6 +104,14 @@ exports.updateFloorLayout = async (req, res) => {
         }
 
         const slotIdentifier = sEl.name.trim();
+        
+        if (validSlotNames.includes(slotIdentifier)) {
+          return res.status(400).json({ 
+            success: false, 
+            message: `Error: Duplicate parking slot name "${slotIdentifier}" detected. Slot names must be unique within a floor.`
+          });
+        }
+        
         validSlotNames.push(slotIdentifier);
 
         // 3. Validation: Every slot MUST belong to a zone

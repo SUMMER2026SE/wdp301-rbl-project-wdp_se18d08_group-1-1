@@ -11,7 +11,9 @@ router.post('/webhook', bookingController.handleBookingWebhook);
 router.get('/suggest-slot', bookingController.suggestSmartSlot);
 
 // Khóa ô đỗ tạm thời (Guest & User)
+router.get('/active-holds', softProtect, bookingController.getActiveHolds);
 router.post('/hold', softProtect, bookingController.createBookingHold);
+router.delete('/holds/:holdId', softProtect, bookingController.releaseBookingHold);
 
 // Các route yêu cầu khách hàng đã đăng nhập
 router.use(protect);
@@ -21,6 +23,8 @@ router.get('/available-slots', bookingController.getAvailableSlots);
 router.get('/my', bookingController.getMyBookings);
 router.get('/my-history', bookingController.getMyBookings);
 router.post('/', requirePolicyAcceptance({ action: 'booking:create' }), bookingController.createBooking);
+router.post('/bulk', requirePolicyAcceptance({ action: 'booking:create' }), bookingController.createBulkBooking);
+router.post('/bulk/quote', bookingController.quoteBulkBooking);
 router.get('/status/:orderCode', bookingController.checkVietQRStatus);
 router.post('/:id/cancel', bookingController.cancelBooking);
 router.put('/:id/time', bookingController.modifyBookingTime);

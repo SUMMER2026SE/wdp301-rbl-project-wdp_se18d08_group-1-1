@@ -27,133 +27,6 @@ const EMPTY_FORM = {
   nickname: '',
 };
 
-// ─── Vehicle Card ─────────────────────────────────────────────────────────────
-function VehicleCard({ vehicle, onDelete, onSetDefault, onEdit }) {
-  const [loading, setLoading] = useState(false);
-  const typeObj = VEHICLE_TYPES.find((t) => t.value === vehicle.vehicleType);
-
-  const handleDelete = async () => {
-    if (!window.confirm(`Delete vehicle "${vehicle.licensePlate}"?`)) return;
-    setLoading(true);
-    await onDelete(vehicle._id);
-    setLoading(false);
-  };
-
-  const handleDefault = async () => {
-    if (vehicle.isDefault) return;
-    setLoading(true);
-    await onSetDefault(vehicle._id);
-    setLoading(false);
-  };
-
-  return (
-    <div
-      className={`relative rounded-2xl p-5 border transition-all duration-300
-        bg-white dark:bg-white/[0.04] backdrop-blur-md
-        ${vehicle.isDefault
-          ? 'border-yellow-500/40 shadow-[0_0_24px_rgba(234,179,8,0.12)]'
-          : 'border-gray-200 dark:border-white/10 hover:border-yellow-500/30 hover:shadow-[0_0_24px_rgba(234,179,8,0.08)]'
-        }`}
-    >
-      {/* Default badge */}
-      {vehicle.isDefault && (
-        <span className="absolute top-3 right-3 text-[10px] font-bold
-          bg-yellow-500/15 text-yellow-500 dark:text-yellow-400
-          border border-yellow-500/30 rounded-full px-2 py-0.5 select-none">
-          Default
-        </span>
-      )}
-
-      {/* 3D Model Preview */}
-      {vehicle.modelUrl && (
-        <div className="w-full h-44 rounded-xl overflow-hidden mb-4
-          bg-gray-100 dark:bg-black/30 border border-gray-200 dark:border-white/10">
-          <CarViewer
-            modelUrl={vehicle.modelUrl}
-            carColor={vehicle.hexColor || '#ffffff'}
-            height={176}
-          />
-        </div>
-      )}
-
-      {/* Header */}
-      <div className="flex items-start gap-3 mb-4">
-        <div className="w-10 h-10 rounded-xl bg-yellow-500/10 border border-yellow-500/20
-          flex items-center justify-center text-yellow-500 dark:text-yellow-400 shrink-0">
-          {typeObj?.icon ?? <Car size={18} />}
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="font-bold text-base text-gray-900 dark:text-white tracking-wide">
-            {formatLicensePlateDisplay(vehicle.licensePlateDisplay || vehicle.licensePlate)}
-          </p>
-          <p className="text-sm text-gray-500 dark:text-gray-400 truncate flex items-center gap-1.5">
-            {vehicle.hexColor && vehicle.hexColor !== '#ffffff' && (
-              <span
-                className="inline-block w-3 h-3 rounded-full border border-gray-300 dark:border-white/20 shrink-0"
-                style={{ backgroundColor: vehicle.hexColor }}
-              />
-            )}
-            {[vehicle.brand, vehicle.model, vehicle.color].filter(Boolean).join(' · ')}
-          </p>
-        </div>
-      </div>
-
-      {/* Nickname */}
-      {vehicle.nickname && (
-        <p className="text-xs text-gray-500 dark:text-gray-400 mb-4 italic">
-          "{vehicle.nickname}"
-        </p>
-      )}
-
-      {/* Type badge */}
-      <div className="flex items-center gap-1.5 mb-4">
-        <span className="inline-flex items-center gap-1 text-[11px] font-semibold
-          bg-yellow-500/10 text-yellow-600 dark:text-yellow-400
-          border border-yellow-500/20 rounded-full px-2.5 py-0.5">
-          {typeObj?.icon}
-          {typeObj?.label ?? vehicle.vehicleType}
-        </span>
-      </div>
-
-      {/* Actions */}
-      <div className="flex items-center gap-2">
-        {!vehicle.isDefault && (
-          <button
-            onClick={handleDefault}
-            disabled={loading}
-            className="flex items-center gap-1.5 text-[11px] font-semibold
-              text-gray-500 dark:text-gray-400 hover:text-yellow-500 dark:hover:text-yellow-400
-              transition-colors disabled:opacity-50"
-            title="Set as default vehicle"
-          >
-            <Star size={13} />
-            Default
-          </button>
-        )}
-        <div className="flex-1" />
-        <button
-          onClick={() => onEdit(vehicle)}
-          disabled={loading}
-          className="p-1.5 rounded-lg text-gray-400 hover:text-yellow-500 dark:hover:text-yellow-400
-            hover:bg-yellow-500/10 transition-all disabled:opacity-50"
-          title="Edit"
-        >
-          <Pencil size={14} />
-        </button>
-        <button
-          onClick={handleDelete}
-          disabled={loading}
-          className="p-1.5 rounded-lg text-gray-400 hover:text-red-500
-            hover:bg-red-500/10 transition-all disabled:opacity-50"
-          title="Delete vehicle"
-        >
-          {loading ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ─── Vehicle Modal (Add / Edit) ───────────────────────────────────────────────
 function VehicleModal({ editVehicle, onClose, onSaved }) {
   const [form, setForm] = useState(editVehicle
@@ -515,13 +388,22 @@ export default function MyVehicles() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchVehicles(); }, []);
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      fetchVehicles();
+    }, 0);
+
+    return () => window.clearTimeout(timerId);
+  }, []);
 
   // Auto-select default vehicle whenever list reloads
   useEffect(() => {
     if (vehicles.length > 0) {
       const defIdx = vehicles.findIndex((v) => v.isDefault);
-      setSelectedIdx(defIdx >= 0 ? defIdx : 0);
+      const timerId = window.setTimeout(() => {
+        setSelectedIdx(defIdx >= 0 ? defIdx : 0);
+      }, 0);
+      return () => window.clearTimeout(timerId);
     }
   }, [vehicles]);
 
@@ -590,14 +472,26 @@ export default function MyVehicles() {
   const next = () => { setQuickColor(null); setSelectedIdx((i) => (i + 1) % vehicles.length); };
 
   // Reset quickColor whenever selected vehicle changes
-  useEffect(() => { setQuickColor(null); }, [clampedIdx]);
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      setQuickColor(null);
+    }, 0);
+
+    return () => window.clearTimeout(timerId);
+  }, [clampedIdx]);
 
   // ── Keyboard arrow navigation ──
   useEffect(() => {
     if (vehicles.length <= 1) return;
     const handler = (e) => {
-      if (e.key === 'ArrowLeft') prev();
-      if (e.key === 'ArrowRight') next();
+      if (e.key === 'ArrowLeft') {
+        setQuickColor(null);
+        setSelectedIdx((i) => (i - 1 + vehicles.length) % vehicles.length);
+      }
+      if (e.key === 'ArrowRight') {
+        setQuickColor(null);
+        setSelectedIdx((i) => (i + 1) % vehicles.length);
+      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Clock, CreditCard, Car, RefreshCw, ShieldCheck, Ban, ShieldAlert, Check } from 'lucide-react';
 import { Navigate } from 'react-router-dom';
 import KioskFastPass from './KioskFastPass';

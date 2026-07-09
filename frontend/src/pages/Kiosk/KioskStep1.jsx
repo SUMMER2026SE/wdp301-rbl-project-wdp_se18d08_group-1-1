@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Delete } from 'lucide-react';
+import { Delete, AlertCircle } from 'lucide-react';
 import { API_BASE } from '../../services/api';
+import { isValidLicensePlate } from '../../utils/licensePlate';
+import ParkingFullModal from './ParkingFullModal';
 
 export default function KioskStep1({ formData, updateFormData, onNext }) {
   const [activeField, setActiveField] = useState('plate'); // Default to plate
   const [isVerifying, setIsVerifying] = useState(false);
+  const [showFullModal, setShowFullModal] = useState(false);
 
   // Auto-verify logic
   useEffect(() => {
@@ -52,14 +55,44 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
               });
 
               if (verifyData.requiresSlotReallocation) {
-                alert('Booking của bạn đã quá hạn và ô đỗ cũ đã được sử dụng. Vui lòng chọn một ô đỗ trống khác trên bản đồ (Không mất thêm phí).');
-                onNext('2'); 
+                alert('Your booking has expired, and the previous parking space is now occupied. Please select another available space on the map (no extra charge).');
+                onNext('2');
               } else {
-                onNext('3'); 
+                onNext('3');
               }
-            } else if (verifyData.phone) {
-              // Just switch focus to phone so they can review/edit it
-              setActiveField('phone');
+            } else if (verifyData.isVIP || verifyData.isRegisteredVehicle || (verifyData.phone && verifyData.phone.length >= 10)) {
+              if (formData.isParkingFull || verifyData.isFull) {
+                if (!verifyData.isVIP) {
+                  setShowFullModal(true);
+                  updateFormData({ licensePlate: '', phone: '', entryImageBase64: null, isParkingFull: false });
+                  return;
+                }
+              }
+              updateFormData({
+                step3Mode: 'policy',
+                isVIP: !!verifyData.isVIP,
+                isRegisteredVehicle: !!verifyData.isRegisteredVehicle,
+                membershipType: verifyData.membershipType || null,
+                phone: verifyData.phone || formData.phone || '',
+                licensePlate: plate,
+                pricingPackage: verifyData.pricingPackage || null,
+                pricingSource: verifyData.pricingSource || 'default',
+                ticketPackageId: verifyData.pricingPackage?._id || null,
+                bookingMode: 'hourly',
+              });
+              onNext('2');
+            } else {
+              if (formData.isParkingFull || verifyData.isFull) {
+                setShowFullModal(true);
+                updateFormData({ licensePlate: '', phone: '', entryImageBase64: null, isParkingFull: false });
+                return;
+              }
+            }
+          } else {
+            if (formData.isParkingFull) {
+              alert('The parking lot is full. We apologize for the inconvenience.');
+              updateFormData({ licensePlate: '', phone: '', entryImageBase64: null, isParkingFull: false });
+              onNext(0);
             }
           }
         } catch (e) {
@@ -245,7 +278,6 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
           ticketPackageId: verifyData.bookingTicketPackageId || formData.ticketPackageId || null,
           bookingMode: verifyData.bookingMode || formData.bookingMode || 'hourly',
         });
-        setIsVerifying(false);
 
         if (verifyData.requiresSlotReallocation) {
           alert('Booking của bạn đã quá hạn và ô đỗ cũ đã được sử dụng. Vui lòng chọn một ô đỗ trống khác trên bản đồ (Không mất thêm phí).');
@@ -255,6 +287,12 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
         }
       }
       else if (data.success && (verifyData.isVIP || verifyData.isRegisteredVehicle)) {
+        if ((formData.isParkingFull || verifyData.isFull) && !verifyData.isVIP) {
+          setShowFullModal(true);
+          updateFormData({ licensePlate: '', phone: '', entryImageBase64: null, isParkingFull: false });
+          setIsVerifying(false);
+          return;
+        }
         updateFormData({
           step3Mode: 'policy',
           isVIP: !!verifyData.isVIP,
@@ -271,6 +309,12 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
         onNext('2');
       }
       else if (data.success && verifyData.phone && verifyData.phone.length >= 10) {
+        if (formData.isParkingFull || verifyData.isFull) {
+          setShowFullModal(true);
+          updateFormData({ licensePlate: '', phone: '', entryImageBase64: null, isParkingFull: false });
+          setIsVerifying(false);
+          return;
+        }
         updateFormData({
           step3Mode: 'policy',
           phone: verifyData.phone,
@@ -285,6 +329,13 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
         onNext('2');
       }
       else {
+        if (formData.isParkingFull || (data.data && data.data.isFull)) {
+          setShowFullModal(true);
+          updateFormData({ licensePlate: '', phone: '', entryImageBase64: null, isParkingFull: false });
+          setIsVerifying(false);
+          return;
+        }
+
         setIsVerifying(false);
         updateFormData({
           step3Mode: 'policy',
@@ -318,11 +369,16 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
       <div className="bg-[#FFDF00] w-full rounded-[32px] py-6 px-4 sm:px-8 flex flex-col items-center transition-all duration-500">
 
         {/* License Plate Field */}
-        <div className="w-full text-center mb-4">
+        <div className="w-full text-center mb-4 relative flex flex-col items-center">
           <label className="block text-xs font-bold text-[#0f172a] tracking-widest mb-2 uppercase">
             License Plate Number
             {isVerifying && <span className="ml-2 text-blue-500 animate-pulse font-normal lowercase tracking-normal">(verifying...)</span>}
           </label>
+          {!isValidLicensePlate(formData.licensePlate || '') && (formData.licensePlate || '').length > 0 && (
+            <div className="absolute -top-10 flex items-center gap-2 text-rose-600 bg-white/80 px-4 py-1 rounded-full font-bold shadow-sm animate-pulse">
+              <AlertCircle size={16} /> License plate format is incorrect.
+            </div>
+          )}
           <div
             className={`relative bg-white rounded-2xl h-[60px] flex items-center justify-center w-[90%] mx-auto transition-all border-2 cursor-pointer ${activeField === 'plate' ? 'border-[#0f172a] shadow-[0_4px_15px_rgba(0,0,0,0.05)]' : 'border-transparent'}`}
             onClick={() => setActiveField('plate')}
@@ -364,14 +420,19 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
       {/* Next Step Button */}
       <button
         onClick={handleManualNext}
-        disabled={isVerifying || !(formData.licensePlate || '')}
-        className={`mt-6 mb-2 font-bold text-[18px] px-16 py-[16px] rounded-full transition-all border-2 ${(isVerifying || !(formData.licensePlate || ''))
+        disabled={isVerifying || !(formData.licensePlate || '') || !isValidLicensePlate(formData.licensePlate || '')}
+        className={`mt-6 mb-2 font-bold text-[18px] px-16 py-[16px] rounded-full transition-all border-2 ${(isVerifying || !(formData.licensePlate || '') || !isValidLicensePlate(formData.licensePlate || ''))
           ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
           : 'bg-[#0f172a] border-[#0f172a] text-white hover:bg-black shadow-[0_10px_20px_rgba(0,0,0,0.2)] active:scale-95'
           }`}
       >
         Next step
       </button>
+
+      <ParkingFullModal
+        isOpen={showFullModal}
+        onClose={() => window.location.replace('/kiosk')}
+      />
     </div>
   );
 }

@@ -24,10 +24,10 @@ import { getWalletInfo } from '../../services/walletService';
 import { apiFetch } from '../../services/api';
 import {
   createBulkBooking,
-  createBulkBookingHolds,
+  createBookingHold,
   getAvailableBookingSlots,
   quoteBulkBooking,
-  releaseBulkBookingHolds,
+  releaseBookingHold,
 } from '../../services/bookingService';
 import { QRCodeSVG } from 'qrcode.react';
 import { createTopUpUrl, getTopUpStatus } from '../../services/walletService';
@@ -205,10 +205,6 @@ export default function CreateBookingPage() {
   const [cartItems, setCartItems] = useState([]);
   const [cartQuote, setCartQuote] = useState(null);
   const [cartItemErrors, setCartItemErrors] = useState({});
-  const [checkoutHolds, setCheckoutHolds] = useState([]);
-  const [checkoutHoldExpiresAt, setCheckoutHoldExpiresAt] = useState(null);
-  const [holdSecondsLeft, setHoldSecondsLeft] = useState(0);
-  const [holdLoading, setHoldLoading] = useState(false);
   const [editingClientItemId, setEditingClientItemId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [checkingSlots, setCheckingSlots] = useState(false);
@@ -376,10 +372,7 @@ export default function CreateBookingPage() {
     cartQuote?.grandTotal ?? cartItems.reduce((total, item) => total + Number(item.totalAmount || 0), 0)
   );
   const cartWalletShortfall = Math.max(cartGrandTotal - walletBalance, 0);
-  const hasActiveCheckoutHold =
-    checkoutHolds.length > 0 &&
-    checkoutHolds.length === cartItems.length &&
-    holdSecondsLeft > 0;
+  const hasActiveCheckoutHold = false;
 
   const loadData = () => {
     return Promise.all([
@@ -532,20 +525,6 @@ export default function CreateBookingPage() {
     }
   };
 
-  const releaseCurrentCheckoutHolds = async () => {
-    const holdIds = checkoutHolds.map((hold) => hold.holdId).filter(Boolean);
-    setCheckoutHolds([]);
-    setCheckoutHoldExpiresAt(null);
-    setHoldSecondsLeft(0);
-    if (holdIds.length === 0) return;
-    await releaseBulkBookingHolds(holdIds).catch(() => null);
-  };
-
-  const clearCheckoutHoldsForCartChange = () => {
-    if (checkoutHolds.length > 0) {
-      releaseCurrentCheckoutHolds();
-    }
-  };
 
   const handleAddOrUpdateCartItem = async () => {
     setError('');
@@ -585,6 +564,53 @@ export default function CreateBookingPage() {
       return;
     }
 
+    const hasOverlap = (startA, endA, startB, endB) => startA < endB && endA > startB;
+
+    const isDuplicate = cartItems.some((item) => {
+      if (editingClientItemId === item.clientItemId) return false;
+      const itemStart = new Date(item.startTime);
+      const itemEnd = new Date(item.endTime);
+      
+      if (hasOverlap(startObj, endObj, itemStart, itemEnd)) {
+        const isSameVehicle = (vehicleId && item.vehicleId === vehicleId) || 
+                              (!vehicleId && manualPlate.trim() === item.licensePlate);
+        if (isSameVehicle) {
+          setError(`This vehicle is already in the booking list for an overlapping time.`);
+          return true;
+        }
+        
+        if (item.slotCode === selectedSlot.slotCode && item.floorId === selectedSlot.floorId) {
+          setError(`Slot ${selectedSlot.slotCode} is already in the booking list for an overlapping time.`);
+          return true;
+        }
+      }
+      return false;
+    });
+
+    if (isDuplicate) return;
+
+    setSubmitting(true);
+    try {
+      if (editingClientItemId) {
+        const oldItem = cartItems.find(i => i.clientItemId === editingClientItemId);
+        if (oldItem && oldItem.holdId) {
+          await releaseBookingHold(oldItem.holdId).catch(() => {});
+        }
+      }
+
+      const holdRes = await createBookingHold({
+        floorId: selectedSlot.floorId,
+        slotCode: selectedSlot.slotCode,
+        licensePlate: vehicleId ? selectedVehicle?.licensePlate : manualPlate.trim(),
+        startTime: startObj.toISOString(),
+        endTime: endObj.toISOString(),
+      });
+
+      if (!holdRes.ok) {
+        setError(holdRes.data?.message || 'Không thể giữ chỗ cho ô đỗ này. Có thể ai đó đã nhanh tay hơn!');
+        return;
+      }
+
     const nextItem = {
       clientItemId: editingClientItemId || createClientItemId(),
       vehicleId: vehicleId || '',
@@ -605,6 +631,8 @@ export default function CreateBookingPage() {
       serviceAmount: serviceTotal,
       totalAmount: grandTotal,
       pricingDetails: pricePreview,
+      holdId: holdRes.data?.data?._id,
+      holdExpiresAt: holdRes.data?.data?.expiresAt,
     };
 
     setCartItems((current) => {
@@ -614,12 +642,16 @@ export default function CreateBookingPage() {
       return [...current, nextItem];
     });
 
-    clearCheckoutHoldsForCartChange();
     setCartItemErrors({});
     setEditingClientItemId(null);
     setSuccess(editingClientItemId ? 'Booking item updated.' : 'Booking item added to the list.');
+
     setSelectedServices([]);
     setSelectedSlotKey('');
+    handleFindSlots();
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleEditCartItem = (item) => {
@@ -639,9 +671,13 @@ export default function CreateBookingPage() {
     setError('');
   };
 
-  const handleRemoveCartItem = (clientItemId) => {
+  const handleRemoveCartItem = async (clientItemId) => {
+    const itemToRemove = cartItems.find(i => i.clientItemId === clientItemId);
+    if (itemToRemove && itemToRemove.holdId) {
+      await releaseBookingHold(itemToRemove.holdId).catch(() => {});
+      handleFindSlots();
+    }
     setCartItems((current) => current.filter((item) => item.clientItemId !== clientItemId));
-    clearCheckoutHoldsForCartChange();
     setCartItemErrors((current) => {
       const next = { ...current };
       delete next[clientItemId];
@@ -670,37 +706,6 @@ export default function CreateBookingPage() {
     }
   };
 
-  const createCheckoutHolds = async () => {
-    if (hasActiveCheckoutHold) {
-      return { holds: checkoutHolds, expiresAt: checkoutHoldExpiresAt, grandTotal: cartGrandTotal };
-    }
-
-    setHoldLoading(true);
-    try {
-      const res = await createBulkBookingHolds({ items: cartApiItems });
-      if (!res.ok) {
-        const itemErrors = res.data?.data?.itemErrors || [];
-        setCartItemErrors(toItemErrorMap(itemErrors));
-        setError(res.data?.message || 'Could not lock all selected slots. Please review highlighted items.');
-        await handleFindSlots();
-        return null;
-      }
-
-      const data = res.data?.data || {};
-      setCheckoutHolds(data.holds || []);
-      setCheckoutHoldExpiresAt(data.expiresAt || null);
-      setHoldSecondsLeft(Math.max(0, Math.ceil((new Date(data.expiresAt).getTime() - Date.now()) / 1000)));
-      setCartQuote({
-        grandTotal: data.grandTotal,
-        walletBalance: data.walletBalance,
-        shortfall: data.shortfall,
-        items: data.items,
-      });
-      return data;
-    } finally {
-      setHoldLoading(false);
-    }
-  };
 
   useEffect(() => {
     const startObj = new Date(startTime);
@@ -748,23 +753,6 @@ export default function CreateBookingPage() {
     return () => clearTimeout(timer);
   }, [cartApiItems, cartItems.length]);
 
-  useEffect(() => {
-    if (!checkoutHoldExpiresAt) return undefined;
-
-    const updateCountdown = () => {
-      const seconds = Math.max(0, Math.ceil((new Date(checkoutHoldExpiresAt).getTime() - Date.now()) / 1000));
-      setHoldSecondsLeft(seconds);
-      if (seconds <= 0) {
-        setCheckoutHolds([]);
-        setCheckoutHoldExpiresAt(null);
-        setError('Your cart slot holds expired. Please review checkout again.');
-      }
-    };
-
-    updateCountdown();
-    const timer = setInterval(updateCountdown, 1000);
-    return () => clearInterval(timer);
-  }, [checkoutHoldExpiresAt]);
 
   const toggleService = (serviceId) => {
     setSelectedServices((current) =>
@@ -797,30 +785,16 @@ export default function CreateBookingPage() {
       const latestBalance = Number(latestWallet?.balance || 0);
       const latestShortfall = Math.max(cartGrandTotal - latestBalance, 0);
       if (latestShortfall > 0) {
-        await releaseCurrentCheckoutHolds();
         await startTopUpForShortfall(latestShortfall);
         return;
       }
 
-      const holdData = await createCheckoutHolds();
-      if (!holdData?.holds?.length) {
-        return;
-      }
 
-      if (Number(holdData.shortfall || 0) > 0) {
-        await releaseCurrentCheckoutHolds();
-        await startTopUpForShortfall(Number(holdData.shortfall || 0));
-        return;
-      }
 
-      const holdByClientItemId = (holdData.holds || []).reduce((acc, hold) => {
-        acc[hold.clientItemId] = hold.holdId;
-        return acc;
-      }, {});
 
       const checkoutItems = cartApiItems.map((item) => ({
         ...item,
-        holdId: holdByClientItemId[item.clientItemId],
+        holdId: cartItems.find(c => c.clientItemId === item.clientItemId)?.holdId,
       }));
 
       const res = await createBulkBooking({
@@ -837,9 +811,6 @@ export default function CreateBookingPage() {
           return;
         }
 
-        setCheckoutHolds([]);
-        setCheckoutHoldExpiresAt(null);
-        setHoldSecondsLeft(0);
         const errorMessage = res.data?.message || '';
         const itemErrors = res.data?.data?.itemErrors || [];
         if (itemErrors.length > 0) {
@@ -859,9 +830,6 @@ export default function CreateBookingPage() {
       }
 
       setBookingInfo(res.data?.data);
-      setCheckoutHolds([]);
-      setCheckoutHoldExpiresAt(null);
-      setHoldSecondsLeft(0);
       setShowSuccessModal(true);
 
       setSuccess(`Booking order created. Wallet charged ${formatMoney(res.data?.data?.grandTotal || cartGrandTotal)}.`);
@@ -1249,10 +1217,7 @@ export default function CreateBookingPage() {
                   })}
 
                   {hasActiveCheckoutHold && (
-                    <div className="rounded-xl border border-cyan-100 bg-cyan-50 px-3 py-2 text-xs font-bold flex items-center gap-2 text-cyan-700">
-                      <Lock size={14} />
-                      Slots locked for {Math.floor(holdSecondsLeft / 60)}:{String(holdSecondsLeft % 60).padStart(2, '0')}
-                    </div>
+                    <div className="hidden"></div>
                   )}
 
                   <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4 space-y-2">
@@ -1274,10 +1239,10 @@ export default function CreateBookingPage() {
                   <button
                     type="button"
                     onClick={handleCheckoutCart}
-                    disabled={submitting || topUpLoading || holdLoading || cartItems.length === 0}
+                    disabled={submitting || topUpLoading  || cartItems.length === 0}
                     className="w-full rounded-2xl bg-gray-900 hover:bg-black disabled:opacity-50 text-white px-4 py-4 font-black transition flex items-center justify-center gap-2 shadow-sm active:scale-[0.98]"
                   >
-                    {(submitting || topUpLoading || holdLoading) ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
+                    {(submitting || topUpLoading ) ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
                     {cartWalletShortfall > 0 ? `Top Up ${formatMoney(cartWalletShortfall)}` : hasActiveCheckoutHold ? `Pay ${formatMoney(cartGrandTotal)}` : 'Review Checkout'}
                   </button>
                 </div>
@@ -1340,6 +1305,7 @@ export default function CreateBookingPage() {
                 onFloorSelect={setCurrentFloorId}
                 activeSessions={activeSessions}
                 dbSlots={dbSlots}
+                availableSlots={slots}
                 selectedSlotId={selectedSlot?.slotCode}
                 onSelectSlot={(slot, floorId) => setSelectedSlotKey(`${floorId}:${slot.id}`)}
                 is2DMode={true}

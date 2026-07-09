@@ -6,6 +6,8 @@ const User = require('../models/User');
 const contractService = require('./contractService');
 
 const error = (message, statusCode = 400, extra = {}) => Object.assign(new Error(message), { statusCode, ...extra });
+const getBookingEnd = (booking) => booking.scheduledEnd || booking.endTime;
+const isTransferableBookingStatus = (status) => ['PAID', 'ACTIVE', 'PAUSED', 'confirmed', 'active'].includes(status);
 
 const populateTransfer = (query) => query
   .populate('fromUserId', 'username email role')
@@ -35,11 +37,12 @@ async function validateBookingTransfer(bookingId, fromUserId, toUserId) {
     throw error('Only long-term bookings can be transferred', 400);
   }
 
-  if (!booking.endTime || new Date() > booking.endTime) {
+  const bookingEnd = getBookingEnd(booking);
+  if (!bookingEnd || new Date() > bookingEnd) {
     throw error('Cannot transfer expired booking', 400);
   }
 
-  if (!['active', 'confirmed'].includes(booking.status)) {
+  if (!isTransferableBookingStatus(booking.status)) {
     throw error('Only active or confirmed bookings can be transferred', 400);
   }
 
@@ -137,8 +140,8 @@ async function approveAndCompleteTransfer(transferId, adminId) {
     if (
       !booking.ticketPackageId ||
       !['monthly', 'yearly'].includes(booking.ticketPackageId.type) ||
-      !['active', 'confirmed'].includes(booking.status) ||
-      new Date() > booking.endTime
+      !isTransferableBookingStatus(booking.status) ||
+      new Date() > getBookingEnd(booking)
     ) {
       throw error('Booking is no longer eligible for transfer', 400);
     }

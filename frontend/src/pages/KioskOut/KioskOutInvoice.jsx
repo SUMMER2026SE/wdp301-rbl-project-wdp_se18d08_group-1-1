@@ -7,6 +7,8 @@ export default function KioskOutInvoice({ sessionData, exitImage, onCheckoutSucc
   const [isProcessing, setIsProcessing] = useState(false);
 
   const [isEarlyExitModalOpen, setIsEarlyExitModalOpen] = useState(false);
+  const [paymentData, setPaymentData] = useState(null);
+  const [keepPausedChoice, setKeepPausedChoice] = useState(false);
 
   const handleCheckout = useCallback(async (paymentMethod, keepPaused = false) => {
     setIsProcessing(true);
@@ -23,7 +25,12 @@ export default function KioskOutInvoice({ sessionData, exitImage, onCheckoutSucc
       });
       const data = await res.json();
       if (data.success) {
-        onCheckoutSuccess();
+        if (data.requiresPayment) {
+          setPaymentData(data.data);
+          setIsProcessing(false);
+        } else {
+          onCheckoutSuccess();
+        }
       } else {
         alert(data.message);
         setIsProcessing(false);
@@ -35,14 +42,20 @@ export default function KioskOutInvoice({ sessionData, exitImage, onCheckoutSucc
   }, [exitImage, onCheckoutSuccess, sessionData]);
 
   useEffect(() => {
+    const timerIds = [];
     if (sessionData && sessionData.isEarlyExit) {
-      setIsEarlyExitModalOpen(true);
+      timerIds.push(setTimeout(() => setIsEarlyExitModalOpen(true), 0));
     }
     // If AutoPay is allowed AND it's not an early exit, auto-trigger checkout
     if (sessionData && sessionData.canAutoPay && !sessionData.isEarlyExit) {
       const timerId = setTimeout(() => handleCheckout('wallet', false), 0);
-      return () => clearTimeout(timerId);
+      timerIds.push(timerId);
+    } else if (sessionData && !sessionData.canAutoPay && sessionData.totalPrice > 0 && !sessionData.isEarlyExit) {
+      const timerId = setTimeout(() => handleCheckout('vietqr', false), 0);
+      timerIds.push(timerId);
     }
+
+    return () => timerIds.forEach((timerId) => clearTimeout(timerId));
   }, [handleCheckout, sessionData]);
 
   if (!sessionData) {
@@ -182,7 +195,13 @@ export default function KioskOutInvoice({ sessionData, exitImage, onCheckoutSucc
           {/* QR Code Section */}
           <div className="bg-white rounded-2xl p-6 flex flex-col items-center text-black">
             <p className="font-bold text-sm mb-4">SCAN TO PAY</p>
-            <QRCode value={`VALOPARKING-${session._id}-${totalPrice}`} size={160} />
+            {paymentData ? (
+              <QRCode value={paymentData.qrCode} size={160} />
+            ) : (
+              <div className="w-[160px] h-[160px] bg-gray-200 flex items-center justify-center text-gray-500 text-xs text-center p-4 rounded-lg">
+                {isProcessing ? "Đang tạo mã QR..." : "Vui lòng chọn phương thức thanh toán"}
+              </div>
+            )}
             <p className="text-xs text-gray-500 mt-4 text-center">Use any banking app to scan and pay.</p>
           </div>
         </div>
@@ -194,14 +213,23 @@ export default function KioskOutInvoice({ sessionData, exitImage, onCheckoutSucc
           >
             Cancel
           </button>
-          
-          <button 
-            onClick={() => handleCheckout('qr')}
-            disabled={isProcessing}
-            className="flex-1 bg-yellow-500 hover:bg-yellow-400 text-black font-black text-lg py-4 rounded-xl flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
-          >
-            {isProcessing ? 'Processing...' : 'CONFIRM PAYMENT'} <ChevronRight />
-          </button>
+          {paymentData ? (
+            <button 
+              onClick={() => handleCheckout('qr', keepPausedChoice)}
+              disabled={isProcessing}
+              className="flex-1 bg-green-500 hover:bg-green-400 text-white font-black text-lg py-4 rounded-xl flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+            >
+              {isProcessing ? 'Processing...' : 'I HAVE PAID'} <ChevronRight />
+            </button>
+          ) : (
+            <button 
+              onClick={() => handleCheckout('vietqr', keepPausedChoice)}
+              disabled={isProcessing || (sessionData?.canAutoPay && !isEarlyExit)}
+              className="flex-1 bg-yellow-500 hover:bg-yellow-400 text-black font-black text-lg py-4 rounded-xl flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+            >
+              {isProcessing ? 'Processing...' : 'GENERATE QR'} <ChevronRight />
+            </button>
+          )}
         </div>
       </div>
       {/* Early Exit Modal */}
@@ -223,24 +251,27 @@ export default function KioskOutInvoice({ sessionData, exitImage, onCheckoutSucc
               <button 
                 onClick={() => {
                   setIsEarlyExitModalOpen(false);
+                  setKeepPausedChoice(true);
                   if (canAutoPay) handleCheckout('wallet', true);
+                  else handleCheckout('vietqr', true);
                 }}
                 disabled={isProcessing}
-                className={`w-full py-4 px-6 rounded-xl font-bold text-lg text-black transition-colors ${canAutoPay ? 'bg-yellow-500 hover:bg-yellow-400' : 'bg-gray-700 text-gray-300 cursor-not-allowed'}`}
-                title={!canAutoPay ? "Vui lòng quét QR để thanh toán phí trước khi chọn hành động" : ""}
+                className={`w-full py-4 px-6 rounded-xl font-bold text-lg text-black transition-colors bg-yellow-500 hover:bg-yellow-400`}
               >
-                {canAutoPay ? 'TẠM DỪNG (TÔI SẼ QUAY LẠI LẤY Ô ĐỖ)' : 'Vui lòng Thanh toán QR bên dưới'}
+                TẠM DỪNG (TÔI SẼ QUAY LẠI LẤY Ô ĐỖ)
               </button>
               
               <button 
                 onClick={() => {
                   setIsEarlyExitModalOpen(false);
+                  setKeepPausedChoice(false);
                   if (canAutoPay) handleCheckout('wallet', false);
+                  else handleCheckout('vietqr', false);
                 }}
                 disabled={isProcessing}
-                className={`w-full py-4 px-6 rounded-xl font-bold text-lg text-white border-2 transition-colors ${canAutoPay ? 'border-white/20 hover:bg-white/10' : 'border-gray-700 text-gray-500 cursor-not-allowed'}`}
+                className={`w-full py-4 px-6 rounded-xl font-bold text-lg text-white border-2 transition-colors border-white/20 hover:bg-white/10`}
               >
-                {canAutoPay ? 'KẾT THÚC HẲN (TRẢ LẠI Ô ĐỖ)' : 'Vui lòng Thanh toán QR bên dưới'}
+                KẾT THÚC HẲN (TRẢ LẠI Ô ĐỖ)
               </button>
             </div>
             {!canAutoPay && (

@@ -38,14 +38,6 @@ const getPwdStrength = (pwd) => {
   return [c.length, c.cases, c.number, c.special].filter(Boolean).length; // 0-4
 };
 
-const getInitials = (name = "") =>
-  name
-    .split(" ")
-    .map((w) => w[0])
-    .slice(-2)
-    .join("")
-    .toUpperCase();
-
 const buildProfile = (raw) => {
   const p = raw.profile || {};
   const firstName = p.firstName || raw.firstName || "";

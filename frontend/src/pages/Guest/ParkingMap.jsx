@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Car, Zap, Star, ShieldAlert, Circle,
-  Map as MapIcon, ChevronRight, Info, CheckCircle2, Lock,
+  Map as MapIcon, CheckCircle2, Lock,
   Filter, X
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -12,7 +12,10 @@ export default function ParkingMap() {
   const navigate = useNavigate();
   const [slots, setSlots] = useState([]);
   const [hoveredSlot, setHoveredSlot] = useState(null);
-  const [user, setUser] = useState(null);
+  const [user] = useState(() => {
+    const raw = sessionStorage.getItem('valo_user') || localStorage.getItem('valo_user');
+    return raw ? JSON.parse(raw) : null;
+  });
 
   // Filters
   const [filterType, setFilterType] = useState('all'); // all, standard, vip, ev
@@ -34,17 +37,18 @@ export default function ParkingMap() {
   };
 
   useEffect(() => {
-    // Check login state
-    const raw = sessionStorage.getItem('valo_user') || localStorage.getItem('valo_user');
-    if (raw) setUser(JSON.parse(raw));
-
-    fetchLiveMapData();
+    const timerId = window.setTimeout(() => {
+      fetchLiveMapData();
+    }, 0);
 
     // Auto-refresh data to simulate live
     const interval = setInterval(() => {
       fetchLiveMapData();
     }, 30000); // 30s
-    return () => clearInterval(interval);
+    return () => {
+      window.clearTimeout(timerId);
+      clearInterval(interval);
+    };
   }, []);
 
   /* ─── Stats ─── */
@@ -286,7 +290,7 @@ export default function ParkingMap() {
               </div>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 md:gap-6">
-              {slots.filter(s => s.zone === 'A').map((slot, idx) => {
+              {slots.filter(s => s.zone === 'A').map((slot) => {
                 const isVisible = filteredSlots.some(fs => fs.id === slot.id);
                 if (!isVisible && filterType !== 'all') return null; // Hide completely if filtered out to save space
                 return (
@@ -320,7 +324,7 @@ export default function ParkingMap() {
                 </div>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-4 md:gap-6">
-                {slots.filter(s => s.zone === 'B').map((slot, idx) => {
+                {slots.filter(s => s.zone === 'B').map((slot) => {
                   const isVisible = filteredSlots.some(fs => fs.id === slot.id);
                   if (!isVisible && filterType !== 'all') return null;
                   return (
@@ -353,7 +357,7 @@ export default function ParkingMap() {
                 </div>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-3 gap-4 md:gap-6">
-                {slots.filter(s => s.zone === 'C').map((slot, idx) => {
+                {slots.filter(s => s.zone === 'C').map((slot) => {
                   const isVisible = filteredSlots.some(fs => fs.id === slot.id);
                   if (!isVisible && filterType !== 'all') return null;
                   return (

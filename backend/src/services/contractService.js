@@ -14,6 +14,10 @@ const CONTRACT_TYPES_BY_PACKAGE = {
   yearly: 'YEARLY_PASS',
 };
 
+const getBookingStart = (booking) => booking.scheduledStart || booking.startTime;
+const getBookingEnd = (booking) => booking.scheduledEnd || booking.endTime;
+const getBookingSlot = (booking) => booking.parkingSlot || booking.slotCode;
+
 const populateContract = (query) => query
   .populate('userId', 'username email role')
   .populate('bookingId')
@@ -89,13 +93,16 @@ async function generateContract(bookingId, options = {}) {
   const user = await User.findById(booking.userId).lean();
   const type = CONTRACT_TYPES_BY_PACKAGE[booking.ticketPackageId.type];
   const contractCode = await generateUniqueContractCode();
+  const bookingStart = getBookingStart(booking);
+  const bookingEnd = getBookingEnd(booking);
+  const bookingSlot = getBookingSlot(booking);
   const terms = await buildTerms(type, {
     customerName: user?.username,
     vehiclePlate: vehicle.licensePlate,
-    startDate: booking.startTime,
-    endDate: booking.endTime,
+    startDate: bookingStart,
+    endDate: bookingEnd,
     totalAmount: booking.prepaidAmount,
-    slotCode: booking.slotCode,
+    slotCode: bookingSlot,
     contractCode,
   });
 
@@ -106,9 +113,9 @@ async function generateContract(bookingId, options = {}) {
     vehicleId: vehicle._id,
     type,
     status: 'DRAFT',
-    slotCode: booking.slotCode,
-    startTime: booking.startTime,
-    endTime: booking.endTime,
+    slotCode: bookingSlot,
+    startTime: bookingStart,
+    endTime: bookingEnd,
     totalAmount: booking.prepaidAmount,
     paymentStatus: booking.paymentStatus,
     terms,
@@ -258,13 +265,15 @@ async function createTransferContract({ transfer, booking, originalContractId, s
   const vehicle = await resolveBookingVehicle(booking, transfer.fromUserId);
   const user = await User.findById(transfer.toUserId).lean();
   const contractCode = await generateUniqueContractCode();
+  const bookingEnd = getBookingEnd(booking);
+  const bookingSlot = getBookingSlot(booking);
   const terms = await buildTerms('TRANSFER', {
     customerName: user?.username,
     vehiclePlate: vehicle.licensePlate,
     startDate: new Date(),
-    endDate: booking.endTime,
+    endDate: bookingEnd,
     totalAmount: booking.prepaidAmount,
-    slotCode: booking.slotCode,
+    slotCode: bookingSlot,
     contractCode,
   });
 
@@ -284,9 +293,9 @@ async function createTransferContract({ transfer, booking, originalContractId, s
       vehicleId: vehicle._id,
       type: 'TRANSFER',
       status: 'ACTIVE',
-      slotCode: booking.slotCode,
+      slotCode: bookingSlot,
       startTime: new Date(),
-      endTime: booking.endTime,
+      endTime: bookingEnd,
       totalAmount: booking.prepaidAmount,
       paymentStatus: booking.paymentStatus,
       terms,

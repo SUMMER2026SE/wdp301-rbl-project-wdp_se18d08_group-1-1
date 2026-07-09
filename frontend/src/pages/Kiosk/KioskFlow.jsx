@@ -7,6 +7,7 @@ import KioskStep2 from './KioskStep2';
 import KioskStep3 from './KioskStep3';
 import KioskLayout from './KioskLayout';
 import { API_BASE } from '../../services/api';
+import { createBookingHold, releaseBookingHold } from '../../services/bookingService';
 import { formatLicensePlateDisplay } from '../../utils/licensePlate';
 
 const createEmptyKioskFormData = () => ({
@@ -14,6 +15,9 @@ const createEmptyKioskFormData = () => ({
   phone: '',
   selectedSlot: null,
   floorId: null,
+  bookingHoldId: null,
+  bookingHoldSlot: null,
+  bookingHoldFloorId: null,
   bookingId: null,
   bookingFloorName: null,
   step3Mode: 'policy',
@@ -46,7 +50,96 @@ export default function KioskFlow() {
     navigate(`/kiosk/step${step}`);
   };
 
-  const handleBack = (step) => {
+  const releaseCurrentHold = async () => {
+    if (!formData.bookingHoldId) return;
+
+    const cleanPlate = formData.licensePlate
+      ? formData.licensePlate.replace(/[^A-Z0-9]/gi, '').toUpperCase()
+      : '';
+    await releaseBookingHold(formData.bookingHoldId, {
+      licensePlate: cleanPlate,
+      floorId: formData.bookingHoldFloorId,
+      slotCode: formData.bookingHoldSlot,
+    }).catch(() => null);
+    clearCurrentHoldState();
+  };
+
+  const clearCurrentHoldState = () => {
+    updateFormData({
+      bookingHoldId: null,
+      bookingHoldSlot: null,
+      bookingHoldFloorId: null,
+    });
+  };
+
+  const handleHoldSlotAndNext = async () => {
+    if (!formData.selectedSlot || !formData.floorId) {
+      alert('Please select a parking slot first.');
+      return;
+    }
+
+    const hasCurrentHold =
+      formData.bookingHoldId &&
+      formData.bookingHoldSlot === formData.selectedSlot &&
+      formData.bookingHoldFloorId === formData.floorId;
+
+    if (hasCurrentHold) {
+      handleNext(3);
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      if (formData.bookingHoldId) {
+        const previousCleanPlate = formData.licensePlate
+          ? formData.licensePlate.replace(/[^A-Z0-9]/gi, '').toUpperCase()
+          : '';
+        await releaseBookingHold(formData.bookingHoldId, {
+          licensePlate: previousCleanPlate,
+          floorId: formData.bookingHoldFloorId,
+          slotCode: formData.bookingHoldSlot,
+        }).catch(() => null);
+      }
+
+      const cleanPlate = formData.licensePlate
+        ? formData.licensePlate.replace(/[^A-Z0-9]/gi, '').toUpperCase()
+        : '';
+      const res = await createBookingHold({
+        floorId: formData.floorId,
+        slotCode: formData.selectedSlot,
+        licensePlate: cleanPlate,
+      });
+
+      if (!res.ok) {
+        alert('Ô đỗ này vừa có người khác chọn. Vui lòng chọn ô khác!');
+        updateFormData({
+          selectedSlot: null,
+          floorId: null,
+          bookingHoldId: null,
+          bookingHoldSlot: null,
+          bookingHoldFloorId: null,
+        });
+        return;
+      }
+
+      updateFormData({
+        bookingHoldId: res.data?.data?._id || null,
+        bookingHoldSlot: formData.selectedSlot,
+        bookingHoldFloorId: formData.floorId,
+      });
+      handleNext(3);
+    } catch (error) {
+      console.error('Hold slot error:', error);
+      alert('Network error while holding this slot. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleBack = async (step) => {
+    if (step === 2) {
+      await releaseCurrentHold();
+    }
     navigate(step === 0 ? '/kiosk' : `/kiosk/step${step}`);
   };
 
@@ -67,14 +160,17 @@ export default function KioskFlow() {
           ticketPackageId: formData.ticketPackageId,
           bookingMode: formData.bookingMode,
           bookingId: formData.bookingId,
+          bookingHoldId: formData.bookingHoldId,
         }),
       });
 
       const data = await response.json();
       if (data.success) {
+        clearCurrentHoldState();
+
         // Show success screen
         setSuccessSession(data.data);
-        
+
         // Auto close after 10 seconds
         setTimeout(() => {
           handleCloseSuccess();
@@ -120,6 +216,7 @@ export default function KioskFlow() {
         ticketPackageId: formData.ticketPackageId,
         bookingMode: formData.bookingMode,
         bookingId: formData.bookingId,
+        bookingHoldId: formData.bookingHoldId,
       }),
     });
 
@@ -128,6 +225,7 @@ export default function KioskFlow() {
       throw new Error(data.message || 'Fast-pass check-in failed.');
     }
 
+    clearCurrentHoldState();
     return data.data;
   };
 
@@ -148,10 +246,10 @@ export default function KioskFlow() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            
+
             <h2 className="text-3xl font-black mb-2 uppercase tracking-tight">Booking Confirmed</h2>
             <p className="text-gray-500 font-medium mb-6">Please proceed to your slot.</p>
-            
+
             <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-2xl p-6 w-full flex flex-col items-center mb-6">
               <QRCodeSVG value={successSession._id || successSession.sessionId || 'UNKNOWN'} size={200} className="mb-4" />
               <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mb-1">Scan at Exit</p>
@@ -171,7 +269,7 @@ export default function KioskFlow() {
               </div>
             </div>
 
-            <button 
+            <button
               onClick={handleCloseSuccess}
               className="bg-[#FFDF00] text-[#0f172a] font-bold text-lg w-full py-4 rounded-xl hover:bg-[#e6c800] active:scale-95 transition-all"
             >
@@ -194,7 +292,7 @@ export default function KioskFlow() {
           />
           <Route
             path="step2"
-            element={<KioskStep2 formData={formData} updateFormData={updateFormData} onNext={() => handleNext(3)} onBack={() => handleBack(1)} />}
+            element={<KioskStep2 formData={formData} updateFormData={updateFormData} onNext={handleHoldSlotAndNext} onBack={() => handleBack(1)} isHoldingSlot={isSubmitting} />}
           />
           <Route
             path="step3"
