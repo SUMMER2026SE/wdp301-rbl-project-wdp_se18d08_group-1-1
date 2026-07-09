@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
-  MonitorCheck, Car, Gauge, FileWarning, ClipboardList,
+  MonitorCheck, Car, FileWarning, ClipboardList,
   TrendingUp, CheckCircle2, AlertTriangle, Clock, DoorOpen,
   XCircle, ArrowRightCircle, QrCode,
 } from 'lucide-react';

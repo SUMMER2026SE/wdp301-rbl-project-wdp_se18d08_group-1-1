@@ -598,13 +598,22 @@ export default function MyVehicles() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchVehicles(); }, []);
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      fetchVehicles();
+    }, 0);
+
+    return () => window.clearTimeout(timerId);
+  }, []);
 
   // Auto-select default vehicle whenever list reloads
   useEffect(() => {
     if (vehicles.length > 0) {
       const defIdx = vehicles.findIndex((v) => v.isDefault);
-      setSelectedIdx(defIdx >= 0 ? defIdx : 0);
+      const timerId = window.setTimeout(() => {
+        setSelectedIdx(defIdx >= 0 ? defIdx : 0);
+      }, 0);
+      return () => window.clearTimeout(timerId);
     }
   }, [vehicles]);
 
@@ -678,14 +687,26 @@ export default function MyVehicles() {
   const next = () => { setQuickColor(null); setSelectedIdx((i) => (i + 1) % vehicles.length); };
 
   // Reset quickColor whenever selected vehicle changes
-  useEffect(() => { setQuickColor(null); }, [clampedIdx]);
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      setQuickColor(null);
+    }, 0);
+
+    return () => window.clearTimeout(timerId);
+  }, [clampedIdx]);
 
   // ── Keyboard arrow navigation ──
   useEffect(() => {
     if (vehicles.length <= 1) return;
     const handler = (e) => {
-      if (e.key === 'ArrowLeft') prev();
-      if (e.key === 'ArrowRight') next();
+      if (e.key === 'ArrowLeft') {
+        setQuickColor(null);
+        setSelectedIdx((i) => (i - 1 + vehicles.length) % vehicles.length);
+      }
+      if (e.key === 'ArrowRight') {
+        setQuickColor(null);
+        setSelectedIdx((i) => (i + 1) % vehicles.length);
+      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);

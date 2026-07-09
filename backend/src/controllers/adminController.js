@@ -469,3 +469,61 @@ exports.rejectVehicle = async (req, res, next) => {
     next(err);
   }
 };
+
+// ─── Pricing Config Management ────────────────────────────────────────────────
+
+const PricingConfig = require("../models/PricingConfig");
+
+/**
+ * @desc  Lấy cấu hình giá đỗ xe hiện tại của Admin
+ * @route GET /api/admin/pricing-config
+ * @access Admin only
+ */
+exports.getPricingConfig = async (req, res, next) => {
+  try {
+    const config = await PricingConfig.findOne({ isActive: true }).sort({ createdAt: -1 });
+    const DEFAULT_CONFIG = {
+      sessionFee: 10000,
+      dayRate: 10000,
+      nightRate: 15000,
+      cap6hDay: 50000,
+      cap6hNight: 75000,
+      cap12h: 100000,
+      cap24h: 180000,
+    };
+    res.status(200).json({ success: true, data: config || DEFAULT_CONFIG });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * @desc  Cập nhật cấu hình giá đỗ xe (Admin tự tạo/set số tiền)
+ * @route POST /api/admin/pricing-config
+ * @access Admin only
+ */
+exports.updatePricingConfig = async (req, res, next) => {
+  try {
+    const { sessionFee, dayRate, nightRate, cap6hDay, cap6hNight, cap12h, cap24h } = req.body;
+
+    // Vô hiệu hóa cấu hình cũ
+    await PricingConfig.updateMany({ isActive: true }, { isActive: false });
+
+    // Tạo cấu hình mới
+    const newConfig = await PricingConfig.create({
+      sessionFee: Number(sessionFee),
+      dayRate: Number(dayRate),
+      nightRate: Number(nightRate),
+      cap6hDay: Number(cap6hDay),
+      cap6hNight: Number(cap6hNight),
+      cap12h: Number(cap12h),
+      cap24h: Number(cap24h),
+      isActive: true
+    });
+
+    res.status(200).json({ success: true, data: newConfig });
+  } catch (err) {
+    next(err);
+  }
+};
+

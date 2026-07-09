@@ -1,6 +1,9 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Rnd } from "react-rnd";
-import { Save, Plus, X, Box, Type, Minus, ArrowRight, Square, AlertCircle, Zap, Accessibility, Bike, Navigation, Layers, MonitorSmartphone, TreePine, Car } from "lucide-react";
+import { Save, Box, Type, Minus, ArrowRight, Square, AlertCircle, Zap, Accessibility, Navigation, Layers, MonitorSmartphone, TreePine, Car } from "lucide-react";
+
+const createElementId = (prefix, suffix = "") =>
+  `${prefix}-${Date.now()}${suffix ? `-${suffix}` : ""}-${Math.random().toString(36).substring(7)}`;
 
 export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
   const [elements, setElements] = useState(floor?.layoutData?.elements || []);
@@ -27,7 +30,7 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
   const [guides, setGuides] = useState([]);
 
   // Undo/Redo State
-  const [historyState, setHistoryState] = useState({
+  const [, setHistoryState] = useState({
     history: [floor?.layoutData?.elements || []],
     index: 0
   });
@@ -83,7 +86,7 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
 
   const handleAddElement = (type, x = 50, y = 50) => {
     if (type === "zone-template") {
-      const zoneId = `zone-${Date.now()}`;
+      const zoneId = createElementId("zone");
       const newZone = {
         id: zoneId,
         type: "zone",
@@ -96,7 +99,7 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
         const row = Math.floor(i / 5); // 0 or 1
         const col = i % 5; // 0 to 4
         slots.push({
-          id: `slot-${Date.now()}-${i}`,
+          id: createElementId("slot", i),
           parentId: zoneId,
           type: "slot",
           x: x + 20 + (col * 60),
@@ -125,7 +128,7 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
     else if (type === "kiosk") { w = 40; h = 40; name = "PAYMENT"; }
     
     const newElement = {
-      id: `${type}-${Date.now()}`,
+      id: createElementId(type),
       type,
       x,
       y,
@@ -262,7 +265,7 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
                const newName = generateNextName(el.name, currentAll);
                const newEl = { 
                  ...el, 
-                 id: `${el.type}-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+                 id: createElementId(el.type),
                  name: newName,
                  x: el.x + 20, 
                  y: el.y + 20 
@@ -286,7 +289,7 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
                const newName = generateNextName(el.name, currentAll);
                const newEl = { 
                  ...el, 
-                 id: `${el.type}-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+                 id: createElementId(el.type),
                  name: newName,
                  x: el.x + 20, 
                  y: el.y + 20 

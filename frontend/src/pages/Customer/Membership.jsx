@@ -8,13 +8,11 @@ import { notifyAuthChange } from '../../services/authStorage';
 import ParkingMapViewer from '../../components/ParkingMapViewer';
 import PolicyAcceptancePrompt from '../../components/policies/PolicyAcceptancePrompt';
 import { extractMissingPolicies, isPolicyAcceptanceRequired } from '../../utils/policyErrors';
-import { QRCodeSVG } from 'qrcode.react';
 
 export default function Membership() {
   const [packages, setPackages] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const [user, setUser] = useState(null);
 
   const [selectedPackage, setSelectedPackage] = useState(null);
@@ -24,8 +22,6 @@ export default function Membership() {
   const [currentFloorId, setCurrentFloorId] = useState(null);
   const [dbSlots, setDbSlots] = useState([]);
   
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [paymentData, setPaymentData] = useState(null);
   const [verifying, setVerifying] = useState(false);
   const [success, setSuccess] = useState(false);
   const [walletBalance, setWalletBalance] = useState(0);
@@ -79,7 +75,9 @@ export default function Membership() {
         // Delete query string
         window.history.replaceState({}, document.title, window.location.pathname);
       } else {
-        setVerifying(true);
+        const timerId = window.setTimeout(() => {
+          setVerifying(true);
+        }, 0);
         verifySubscriptionPayment(orderCode).then(async (res) => {
           if (res.ok) {
             await syncCurrentUserProfile();
@@ -91,6 +89,7 @@ export default function Membership() {
           setVerifying(false);
           window.history.replaceState({}, document.title, window.location.pathname);
         });
+        return () => window.clearTimeout(timerId);
       }
     }
   }, []);

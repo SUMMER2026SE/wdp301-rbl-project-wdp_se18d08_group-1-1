@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ParkingMapViewer from '../../components/ParkingMapViewer';
 import { API_BASE } from '../../services/api';
 import { formatLicensePlateDisplay } from '../../utils/licensePlate';

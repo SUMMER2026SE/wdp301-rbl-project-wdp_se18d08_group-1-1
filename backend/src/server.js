@@ -67,6 +67,7 @@ app.use("/api/parking-floors", require("./routes/parkingFloorRoutes"));
 app.use("/api/maintenance", require("./routes/maintenanceRoutes"));
 app.use("/api/notifications", require("./routes/notificationRoutes"));
 app.use("/api/bookings", require("./routes/bookingRoutes"));
+app.use("/api/qr", require("./routes/qrRoutes"));
 app.use("/api/violations", require("./routes/violationRoutes"));
 app.use("/api/revenue", require("./routes/revenueRoutes"));
 app.use("/api", require("./routes/bookingTransferRoutes"));
