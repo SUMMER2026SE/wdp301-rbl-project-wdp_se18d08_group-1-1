@@ -1730,3 +1730,46 @@ exports.createBulkBooking = async (req, res, next) => {
     res.status(400).json({ success: false, message: error.message || 'Lỗi xử lý đặt chỗ' });
   }
 };
+
+exports.getAllBookings = async (req, res, next) => {
+  try {
+    const { date, floorId } = req.query;
+    const Booking = require('../models/Booking');
+
+    let filter = {};
+
+    if (date) {
+      // Date string format YYYY-MM-DD
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+
+      const endOfDay = new Date(date);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      // Bookings that overlap with the day
+      filter.$or = [
+        { scheduledStart: { $gte: startOfDay, $lte: endOfDay } },
+        { scheduledEnd: { $gte: startOfDay, $lte: endOfDay } },
+        { scheduledStart: { $lte: startOfDay }, scheduledEnd: { $gte: endOfDay } }
+      ];
+    }
+
+    if (floorId) {
+      filter.floorId = floorId;
+    }
+
+    const bookings = await Booking.find(filter)
+      .populate('userId', 'fullName phone email')
+      .populate('vehicleId', 'licensePlate brand color')
+      .populate('floorId', 'name floorNumber')
+      .sort({ scheduledStart: 1 });
+
+    res.status(200).json({
+      success: true,
+      data: bookings
+    });
+  } catch (error) {
+    console.error('Error getAllBookings:', error);
+    res.status(500).json({ success: false, message: 'Lỗi tải danh sách Booking' });
+  }
+};
