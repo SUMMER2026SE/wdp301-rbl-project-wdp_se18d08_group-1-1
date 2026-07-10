@@ -15,44 +15,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { fetchProfile, type Profile } from '../../api/profile.api';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '@/hooks/useAuth';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '../../constants/theme';
-
-// ─── Menu Item ────────────────────────────────────────────────────────────────
-function MenuItem({
-  icon,
-  label,
-  sublabel,
-  iconColor,
-  iconBg,
-  onPress,
-  showArrow = true,
-  danger = false,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  sublabel?: string;
-  iconColor: string;
-  iconBg: string;
-  onPress?: () => void;
-  showArrow?: boolean;
-  danger?: boolean;
-}) {
-  return (
-    <TouchableOpacity onPress={onPress} activeOpacity={0.7} style={styles.menuItem}>
-      <View style={[styles.menuIconWrap, { backgroundColor: iconBg }]}>
-        <Ionicons name={icon} size={20} color={iconColor} />
-      </View>
-      <View style={styles.menuTextWrap}>
-        <Text style={[styles.menuLabel, danger && { color: COLORS.error }]}>{label}</Text>
-        {sublabel && <Text style={styles.menuSublabel}>{sublabel}</Text>}
-      </View>
-      {showArrow && (
-        <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} />
-      )}
-    </TouchableOpacity>
-  );
-}
+import { MenuItem } from '@/components/profile/MenuItem';
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 export default function ProfileScreen({ navigation }: { navigation?: any }) {
@@ -164,7 +129,7 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
             sublabel="Quản lý phương tiện"
             iconColor="#7EE8A2"
             iconBg="rgba(126,232,162,0.12)"
-            onPress={() => navigation?.navigate?.('MyVehicles')}
+            onPress={() => navigation?.navigate?.('VehicleList')}
           />
           <View style={styles.menuDivider} />
           <MenuItem
@@ -173,7 +138,7 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
             sublabel="VIP & ưu đãi"
             iconColor="#FFD700"
             iconBg="rgba(255,215,0,0.12)"
-            onPress={() => navigation?.navigate?.('Membership')}
+            onPress={() => navigation?.navigate?.('WalletTab', { screen: 'Membership' })}
           />
           <View style={styles.menuDivider} />
           <MenuItem
@@ -195,7 +160,7 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
             }
             iconColor="#FF9F43"
             iconBg="rgba(255,159,67,0.12)"
-            onPress={() => navigation?.navigate?.('Wallet')}
+            onPress={() => navigation?.navigate?.('WalletTab')}
           />
         </View>
 
@@ -207,7 +172,7 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
             label="Thông báo"
             iconColor="#60B4FF"
             iconBg="rgba(96,180,255,0.12)"
-            onPress={() => navigation?.navigate?.('Notifications')}
+            onPress={() => navigation?.navigate?.('NotificationsTab')}
           />
           <View style={styles.menuDivider} />
           <MenuItem
@@ -215,7 +180,16 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
             label="Đổi mật khẩu"
             iconColor={COLORS.textSecondary}
             iconBg={COLORS.surfaceElevated}
-            onPress={() => {}}
+            onPress={() => navigation?.navigate?.('ChangePassword')}
+          />
+          <View style={styles.menuDivider} />
+          <MenuItem
+            icon="sparkles-outline"
+            label="Dịch vụ"
+            sublabel="Bảng giá và thời gian xử lý"
+            iconColor="#7EE8A2"
+            iconBg="rgba(126,232,162,0.12)"
+            onPress={() => navigation?.navigate?.('Services')}
           />
           <View style={styles.menuDivider} />
           <MenuItem
@@ -223,7 +197,7 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
             label="Chính sách & Điều khoản"
             iconColor={COLORS.textSecondary}
             iconBg={COLORS.surfaceElevated}
-            onPress={() => navigation?.navigate?.('PolicyList')}
+            onPress={() => navigation?.navigate?.('Policies')}
           />
         </View>
 
@@ -335,22 +309,6 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     overflow: 'hidden',
   },
-  menuItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: SPACING.md,
-    gap: SPACING.md,
-  },
-  menuIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: RADIUS.sm,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  menuTextWrap: { flex: 1 },
-  menuLabel: { fontSize: FONT_SIZES.md, color: COLORS.textPrimary, fontWeight: '500' },
-  menuSublabel: { fontSize: FONT_SIZES.xs, color: COLORS.textMuted, marginTop: 2 },
   menuDivider: { height: 1, backgroundColor: COLORS.border, marginLeft: 56 + SPACING.md },
 
   versionText: {

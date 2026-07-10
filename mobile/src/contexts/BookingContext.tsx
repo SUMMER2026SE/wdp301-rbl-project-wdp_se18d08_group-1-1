@@ -71,9 +71,10 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
     setError('');
     try {
       const response = await bookingService.getAvailableSlots(startTime, endTime);
-      setAvailableSlots(response.data || []);
+      setAvailableSlots(bookingService.normalizeAvailableSlots(response));
     } catch (fetchError) {
       setError(fetchError instanceof Error ? fetchError.message : 'Unable to load slots.');
+      setAvailableSlots([]);
     } finally {
       setIsLoading(false);
     }

@@ -8,6 +8,7 @@ export const COLORS = {
   gold: '#D4AF37',
   goldLight: '#F0D060',
   goldDark: '#A8892A',
+  staffBlue: '#60B4FF',
 
   // Text
   textPrimary: '#F5F5F5',
@@ -22,10 +23,12 @@ export const COLORS = {
   // Status
   error: '#FF4D4D',
   success: '#4CAF50',
+  warning: '#FF9F43',
 
   // Gradient stops (used with LinearGradient)
   gradientGold: ['#F0D060', '#D4AF37', '#A8892A'] as const,
   gradientDark: ['#1E1E1E', '#0D0D0D'] as const,
+  gradientStaff: ['#60B4FF', '#2F7FD8'] as const,
 };
 
 export const FONT_SIZES = {

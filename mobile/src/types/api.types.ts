@@ -6,7 +6,14 @@ export interface GetAvailableSlotsRequest {
   endTime: string;
 }
 
-export interface GetAvailableSlotsResponse extends APIResponse<AvailableSlot[]> {
+export interface AvailableSlotsData {
+  startTime?: string;
+  endTime?: string;
+  count?: number;
+  slots?: AvailableSlot[];
+}
+
+export interface GetAvailableSlotsResponse extends APIResponse<AvailableSlot[] | AvailableSlotsData> {
   count?: number;
 }
 

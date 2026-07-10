@@ -2,7 +2,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
   RefreshControl,
   ScrollView,
   StatusBar,
@@ -14,7 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { fetchProfile, type Profile } from '../../api/profile.api';
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '@/hooks/useAuth';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '../../constants/theme';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -24,16 +23,52 @@ type QuickAction = {
   color: string;
   bg: string;
   screen?: string;
+  params?: Record<string, unknown>;
 };
 
 // ─── Quick actions data ───────────────────────────────────────────────────────
 const QUICK_ACTIONS: QuickAction[] = [
-  { icon: 'navigate-circle-outline', label: 'Tìm bãi xe', color: '#D4AF37', bg: 'rgba(212,175,55,0.12)', screen: 'FindParking' },
-  { icon: 'calendar-outline', label: 'Đặt chỗ', color: '#60B4FF', bg: 'rgba(96,180,255,0.12)', screen: 'BookingList' },
-  { icon: 'car-outline', label: 'Xe của tôi', color: '#7EE8A2', bg: 'rgba(126,232,162,0.12)', screen: 'MyVehicles' },
-  { icon: 'wallet-outline', label: 'Ví tiền', color: '#FF9F43', bg: 'rgba(255,159,67,0.12)', screen: 'Wallet' },
-  { icon: 'receipt-outline', label: 'Lịch sử', color: '#E07BE0', bg: 'rgba(224,123,224,0.12)', screen: 'ParkingHistory' },
-  { icon: 'ribbon-outline', label: 'Membership', color: '#FFD700', bg: 'rgba(255,215,0,0.12)', screen: 'Membership' },
+  {
+    icon: 'navigate-circle-outline',
+    label: 'Tìm bãi xe',
+    color: '#D4AF37',
+    bg: 'rgba(212,175,55,0.12)',
+    screen: 'Bookings',
+    params: { screen: 'FindParking' },
+  },
+  {
+    icon: 'calendar-outline',
+    label: 'Đặt chỗ',
+    color: '#60B4FF',
+    bg: 'rgba(96,180,255,0.12)',
+    screen: 'Bookings',
+    params: { screen: 'CreateBooking' },
+  },
+  {
+    icon: 'car-outline',
+    label: 'Xe của tôi',
+    color: '#7EE8A2',
+    bg: 'rgba(126,232,162,0.12)',
+    screen: 'ProfileTab',
+    params: { screen: 'VehicleList' },
+  },
+  { icon: 'wallet-outline', label: 'Ví tiền', color: '#FF9F43', bg: 'rgba(255,159,67,0.12)', screen: 'WalletTab' },
+  {
+    icon: 'receipt-outline',
+    label: 'Lịch sử',
+    color: '#E07BE0',
+    bg: 'rgba(224,123,224,0.12)',
+    screen: 'ProfileTab',
+    params: { screen: 'ParkingHistory' },
+  },
+  {
+    icon: 'ribbon-outline',
+    label: 'Membership',
+    color: '#FFD700',
+    bg: 'rgba(255,215,0,0.12)',
+    screen: 'WalletTab',
+    params: { screen: 'Membership' },
+  },
 ];
 
 // ─── Greeting helper ──────────────────────────────────────────────────────────
@@ -97,7 +132,7 @@ export default function HomeScreen({ navigation }: { navigation?: any }) {
             {/* Notification bell */}
             <TouchableOpacity
               style={styles.headerIconBtn}
-              onPress={() => navigation?.navigate?.('Notifications')}
+              onPress={() => navigation?.navigate?.('NotificationsTab')}
               activeOpacity={0.7}
             >
               <Ionicons name="notifications-outline" size={22} color={COLORS.textSecondary} />
@@ -173,7 +208,7 @@ export default function HomeScreen({ navigation }: { navigation?: any }) {
             <TouchableOpacity
               key={action.label}
               style={styles.quickItem}
-              onPress={() => navigation?.navigate?.(action.screen ?? 'Home')}
+              onPress={() => navigation?.navigate?.(action.screen ?? 'Home', action.params)}
               activeOpacity={0.7}
             >
               <View style={[styles.quickIconWrap, { backgroundColor: action.bg }]}>

@@ -1,5 +1,6 @@
 import { apiClient } from '@/services/api/client';
 import type {
+  AvailableSlotsData,
   CheckInBookingResponse,
   CheckOutBookingResponse,
   CreateBookingRequest,
@@ -7,7 +8,7 @@ import type {
   GetAvailableSlotsResponse,
   GetMyBookingsResponse,
 } from '@/types/api.types';
-import type { Booking } from '@/types/booking.types';
+import type { AvailableSlot, Booking } from '@/types/booking.types';
 
 class BookingService {
   getAvailableSlots(startTime: Date, endTime: Date) {
@@ -41,6 +42,20 @@ class BookingService {
 
   normalizeBookings(response: GetMyBookingsResponse | { data?: Booking[] }) {
     return response.data || [];
+  }
+
+  normalizeAvailableSlots(response: GetAvailableSlotsResponse | { data?: AvailableSlot[] | AvailableSlotsData }) {
+    const data = response.data;
+
+    if (Array.isArray(data)) {
+      return data;
+    }
+
+    if (data && typeof data === 'object' && Array.isArray(data.slots)) {
+      return data.slots;
+    }
+
+    return [];
   }
 }
 

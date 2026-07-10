@@ -1,15 +1,25 @@
+import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AppText, Button, Card, LoadingSpinner } from '@/components/common';
-import { Screen } from '@/components/layout/Screen';
+import { EmptyState, ErrorState, ScreenHeader, SectionTitle } from '@/components/common';
+import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
 import type { WalletStackParamList } from '@/navigation/types';
 import parkingFloorService from '@/services/ParkingFloorService';
 import { subscriptionsService } from '@/services/api/subscriptions';
 import { vehiclesService } from '@/services/api/vehicles';
 import { walletService } from '@/services/api/wallet';
-import { borderRadius, colors, spacing } from '@/theme';
 import type { Slot } from '@/types/booking.types';
 import type { Wallet } from '@/types/models';
 import type { SubscriptionPackage, SubscriptionPaymentMethod, SubscriptionSlotSelection } from '@/types/subscription.types';
@@ -34,8 +44,11 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
     [packages, route.params.packageId],
   );
 
+  const maxSlots = Math.min(3, vehicleCount);
+  const hasEnoughWallet = (wallet?.balance || 0) >= (pkg?.price || 0);
+
   const loadData = useCallback(async () => {
-    setLoading(true);
+    setError('');
     try {
       const [packageResponse, vehicleResponse, walletResponse, floors] = await Promise.all([
         subscriptionsService.getPackages(),
@@ -51,7 +64,12 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
       if (firstFloor?._id) {
         const floorSlots = await parkingFloorService.getSlotsByFloor(firstFloor._id);
         setSlots(floorSlots.filter((slot) => slot.status !== 'occupied'));
+      } else {
+        setSlots([]);
       }
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Không thể tải dữ liệu gói.');
+      setSlots([]);
     } finally {
       setLoading(false);
     }
@@ -69,20 +87,24 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
       if (exists) {
         return current.filter((item) => !(item.floorId === floorId && item.slotCode === slotCode));
       }
+      if (current.length >= maxSlots) {
+        return current;
+      }
       return [...current, { floorId, slotCode }];
     });
   };
 
   const handlePurchase = async () => {
     if (!pkg) {
+      setError('Không tìm thấy gói đã chọn.');
       return;
     }
     if (!validateSubscriptionSlots(selectedSlots.length, vehicleCount)) {
-      setError(`Select 1-${Math.min(3, vehicleCount)} slots based on your registered vehicles.`);
+      setError(`Chọn 1-${maxSlots} chỗ theo số xe đã đăng ký.`);
       return;
     }
-    if (method === 'wallet' && (wallet?.balance || 0) < pkg.price) {
-      setError('Insufficient wallet balance.');
+    if (method === 'wallet' && !hasEnoughWallet) {
+      setError('Số dư ví không đủ.');
       return;
     }
 
@@ -102,99 +124,252 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
         });
       }
     } catch (purchaseError) {
-      setError(purchaseError instanceof Error ? purchaseError.message : 'Subscription purchase failed.');
+      setError(purchaseError instanceof Error ? purchaseError.message : 'Mua gói thất bại.');
     } finally {
       setSubmitting(false);
     }
   };
 
-  if (loading) {
-    return (
-      <Screen>
-        <LoadingSpinner />
-      </Screen>
-    );
-  }
-
   return (
-    <Screen scrollable>
-      <AppText variant="h1">Checkout</AppText>
-      {pkg ? (
-        <Card style={styles.card}>
-          <AppText variant="h2">{pkg.name}</AppText>
-          <AppText variant="h1">{formatCurrency(pkg.price)}</AppText>
-          <AppText>Expires: {calculateExpirationDate(pkg.type).toLocaleDateString('vi-VN')}</AppText>
-        </Card>
-      ) : null}
-      <Card style={styles.card}>
-        <AppText variant="h3">Payment method</AppText>
-        {(['wallet', 'payos'] as const).map((option) => (
-          <Pressable
-            key={option}
-            style={[styles.option, method === option && styles.optionActive]}
-            onPress={() => setMethod(option)}
-          >
-            <AppText>{option === 'wallet' ? 'Wallet' : 'PayOS QR'}</AppText>
-          </Pressable>
-        ))}
-        <AppText color={colors.light.text.secondary}>Wallet balance: {formatCurrency(wallet?.balance || 0)}</AppText>
-      </Card>
-      <Card style={styles.card}>
-        <AppText variant="h3">Select reserved slots</AppText>
-        <AppText color={colors.light.text.secondary}>Maximum {Math.min(3, vehicleCount)} slots.</AppText>
-        <View style={styles.slotGrid}>
-          {slots.map((slot) => {
-            const floorId = slot.floorId || '';
-            const slotCode = slot.slotCode || slot.code || '';
-            const selected = selectedSlots.some((item) => item.floorId === floorId && item.slotCode === slotCode);
-            return (
-              <Pressable
-                key={`${floorId}-${slotCode}`}
-                style={[styles.slot, selected && styles.slotActive]}
-                onPress={() => toggleSlot(slot)}
-              >
-                <AppText color={selected ? colors.neutral.white : colors.light.text.primary}>{slotCode}</AppText>
-              </Pressable>
-            );
-          })}
+    <SafeAreaView edges={['top']} style={styles.safe}>
+      <StatusBar barStyle="light-content" backgroundColor="#080808" />
+      <ScreenHeader title="Thanh toán gói" onBack={() => navigation.goBack()} />
+
+      {loading ? (
+        <View style={styles.stateWrap}>
+          <ActivityIndicator color={COLORS.gold} size="large" />
         </View>
-      </Card>
-      {error ? <AppText color={colors.error.main}>{error}</AppText> : null}
-      <Button loading={submitting} title="Confirm Purchase" onPress={handlePurchase} />
-    </Screen>
+      ) : error && !pkg ? (
+        <ErrorState message={error} onRetry={loadData} />
+      ) : (
+        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+          {pkg ? (
+            <View style={styles.packageCard}>
+              <Text style={styles.packageName}>{pkg.name}</Text>
+              <Text style={styles.packagePrice}>{formatCurrency(pkg.price)}</Text>
+              <Text style={styles.packageMeta}>
+                Hết hạn: {calculateExpirationDate(pkg.type).toLocaleDateString('vi-VN')}
+              </Text>
+            </View>
+          ) : (
+            <EmptyState icon="cube-outline" title="Không tìm thấy gói" message="Vui lòng quay lại chọn gói khác." />
+          )}
+
+          <View style={styles.section}>
+            <SectionTitle>Phương thức thanh toán</SectionTitle>
+            {(['wallet', 'payos'] as const).map((option) => {
+              const active = method === option;
+              return (
+                <Pressable
+                  key={option}
+                  style={[styles.methodCard, active && styles.methodCardActive]}
+                  onPress={() => setMethod(option)}
+                >
+                  <View style={styles.methodLeft}>
+                    <Ionicons
+                      name={option === 'wallet' ? 'wallet-outline' : 'qr-code-outline'}
+                      size={20}
+                      color={active ? COLORS.gold : COLORS.textMuted}
+                    />
+                    <Text style={[styles.methodText, active && styles.methodTextActive]}>
+                      {option === 'wallet' ? 'Ví VALO' : 'PayOS QR'}
+                    </Text>
+                  </View>
+                  {active ? <Ionicons name="checkmark-circle" size={20} color={COLORS.gold} /> : null}
+                </Pressable>
+              );
+            })}
+            <Text style={[styles.walletBalance, { color: hasEnoughWallet ? COLORS.success : COLORS.error }]}>
+              Số dư ví: {formatCurrency(wallet?.balance || 0)}
+            </Text>
+          </View>
+
+          <View style={styles.section}>
+            <SectionTitle>Chọn chỗ giữ riêng</SectionTitle>
+            <Text style={styles.helperText}>Tối đa {maxSlots} chỗ theo số xe đã đăng ký.</Text>
+            {slots.length === 0 ? (
+              <EmptyState icon="car-outline" title="Chưa có chỗ khả dụng" message="Vui lòng thử lại sau." />
+            ) : (
+              <View style={styles.slotGrid}>
+                {slots.map((slot) => {
+                  const floorId = slot.floorId || '';
+                  const slotCode = slot.slotCode || slot.code || '';
+                  const selected = selectedSlots.some((item) => item.floorId === floorId && item.slotCode === slotCode);
+                  return (
+                    <Pressable
+                      key={`${floorId}-${slotCode}`}
+                      style={[styles.slot, selected && styles.slotActive]}
+                      onPress={() => toggleSlot(slot)}
+                    >
+                      <Text style={[styles.slotText, selected && styles.slotTextActive]}>{slotCode}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+
+          {error ? (
+            <View style={styles.warningBox}>
+              <Ionicons name="alert-circle-outline" size={18} color={COLORS.error} />
+              <Text style={styles.warningText}>{error}</Text>
+            </View>
+          ) : null}
+
+          <TouchableOpacity activeOpacity={0.85} disabled={submitting || !pkg} style={[styles.primaryButton, (submitting || !pkg) && styles.disabled]} onPress={handlePurchase}>
+            {submitting ? (
+              <ActivityIndicator color={COLORS.textInverse} size="small" />
+            ) : (
+              <>
+                <Ionicons name="checkmark-circle-outline" size={20} color={COLORS.textInverse} />
+                <Text style={styles.primaryButtonText}>Xác nhận mua gói</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </ScrollView>
+      )}
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  card: {
-    gap: spacing.md,
+  safe: {
+    backgroundColor: COLORS.background,
+    flex: 1,
   },
-  option: {
-    borderColor: colors.light.border,
-    borderRadius: borderRadius.md,
+  stateWrap: {
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+  },
+  scroll: {
+    gap: SPACING.lg,
+    padding: SPACING.lg,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.xxl,
+  },
+  packageCard: {
+    backgroundColor: COLORS.surface,
+    borderColor: 'rgba(212,175,55,0.28)',
+    borderRadius: RADIUS.xl,
     borderWidth: 1,
-    padding: spacing.md,
+    padding: SPACING.lg,
   },
-  optionActive: {
-    borderColor: colors.primary[500],
-    borderWidth: 2,
+  packageName: {
+    color: COLORS.textPrimary,
+    fontSize: FONT_SIZES.xl,
+    fontWeight: '900',
+  },
+  packagePrice: {
+    color: COLORS.gold,
+    fontSize: 30,
+    fontWeight: '900',
+    marginTop: SPACING.sm,
+  },
+  packageMeta: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.sm,
+    marginTop: SPACING.xs,
+  },
+  section: {
+    gap: SPACING.sm,
+  },
+  methodCard: {
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 54,
+    paddingHorizontal: SPACING.md,
+  },
+  methodCardActive: {
+    backgroundColor: 'rgba(212,175,55,0.1)',
+    borderColor: COLORS.gold,
+  },
+  methodLeft: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  methodText: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '700',
+  },
+  methodTextActive: {
+    color: COLORS.gold,
+  },
+  walletBalance: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '700',
+    marginTop: SPACING.xs,
+  },
+  helperText: {
+    color: COLORS.textMuted,
+    fontSize: FONT_SIZES.sm,
   },
   slotGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.sm,
+    gap: SPACING.sm,
   },
   slot: {
     alignItems: 'center',
-    borderColor: colors.light.border,
-    borderRadius: borderRadius.md,
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.sm,
     borderWidth: 1,
-    height: 48,
+    height: 46,
     justifyContent: 'center',
-    width: 72,
+    minWidth: 66,
+    paddingHorizontal: SPACING.sm,
   },
   slotActive: {
-    backgroundColor: colors.primary[500],
-    borderColor: colors.primary[500],
+    backgroundColor: 'rgba(212,175,55,0.14)',
+    borderColor: COLORS.gold,
+  },
+  slotText: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.xs,
+    fontWeight: '800',
+  },
+  slotTextActive: {
+    color: COLORS.gold,
+  },
+  warningBox: {
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(255,77,77,0.1)',
+    borderColor: 'rgba(255,77,77,0.24)',
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    padding: SPACING.md,
+  },
+  warningText: {
+    color: COLORS.error,
+    flex: 1,
+    fontSize: FONT_SIZES.sm,
+    lineHeight: 20,
+  },
+  primaryButton: {
+    alignItems: 'center',
+    backgroundColor: COLORS.gold,
+    borderRadius: RADIUS.md,
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    height: 54,
+    justifyContent: 'center',
+  },
+  disabled: {
+    opacity: 0.6,
+  },
+  primaryButtonText: {
+    color: COLORS.textInverse,
+    fontSize: FONT_SIZES.md,
+    fontWeight: '800',
   },
 });

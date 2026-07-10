@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   RefreshControl,
   ScrollView,
@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { useAuth } from '../../contexts/AuthContext';
+import { useAuth } from '@/hooks/useAuth';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '../../constants/theme';
 
 // ─── Types ────────────────────────────────────────────────────────────────────

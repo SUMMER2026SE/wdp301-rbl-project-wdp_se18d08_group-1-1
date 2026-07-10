@@ -1,14 +1,28 @@
 import { Ionicons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import React from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 
+import { COLORS, FONT_SIZES, RADIUS } from '../constants/theme';
+import LiveGridScreen from '../screens/staff/LiveGridScreen';
 import StaffDashboardScreen from '../screens/staff/StaffDashboardScreen';
 import StaffProfileScreen from '../screens/staff/StaffProfileScreen';
-import ComingSoonScreen from '../screens/shared/ComingSoonScreen';
-import { COLORS, FONT_SIZES, RADIUS } from '../constants/theme';
+import { SessionDetailScreen } from '../screens/staff/SessionDetailScreen';
+import { SessionListScreen } from '../screens/staff/SessionListScreen';
+import type { StaffSessionStackParamList } from '../screens/staff/SessionListScreen';
 
-// ─── Tab param list ───────────────────────────────────────────────────────────
+const SessionStack = createNativeStackNavigator<StaffSessionStackParamList>();
+
+function SessionStackNavigator() {
+  return (
+    <SessionStack.Navigator screenOptions={{ headerShown: false, contentStyle: { backgroundColor: COLORS.background } }}>
+      <SessionStack.Screen name="SessionList" component={SessionListScreen} />
+      <SessionStack.Screen name="SessionDetail" component={SessionDetailScreen} />
+    </SessionStack.Navigator>
+  );
+}
+
 export type StaffTabParamList = {
   Dashboard: undefined;
   LiveGrid: undefined;
@@ -17,8 +31,6 @@ export type StaffTabParamList = {
 };
 
 const Tab = createBottomTabNavigator<StaffTabParamList>();
-
-// ─── Tab icon helper ──────────────────────────────────────────────────────────
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
 function tabIcon(focused: boolean, activeIcon: IoniconName, inactiveIcon: IoniconName, color: string) {
@@ -29,14 +41,13 @@ function tabIcon(focused: boolean, activeIcon: IoniconName, inactiveIcon: Ionico
   );
 }
 
-// ─── Navigator ────────────────────────────────────────────────────────────────
 export default function StaffNavigator() {
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
         tabBarStyle: tabStyles.bar,
-        tabBarActiveTintColor: '#60B4FF',
+        tabBarActiveTintColor: COLORS.staffBlue,
         tabBarInactiveTintColor: COLORS.textMuted,
         tabBarLabelStyle: tabStyles.label,
         tabBarHideOnKeyboard: true,
@@ -47,26 +58,23 @@ export default function StaffNavigator() {
         component={StaffDashboardScreen}
         options={{
           tabBarLabel: 'Tổng quan',
-          tabBarIcon: ({ focused, color }) =>
-            tabIcon(focused, 'grid', 'grid-outline', color),
+          tabBarIcon: ({ focused, color }) => tabIcon(focused, 'grid', 'grid-outline', color),
         }}
       />
       <Tab.Screen
         name="LiveGrid"
-        component={ComingSoonScreen}
+        component={LiveGridScreen}
         options={{
           tabBarLabel: 'Lưới xe',
-          tabBarIcon: ({ focused, color }) =>
-            tabIcon(focused, 'map', 'map-outline', color),
+          tabBarIcon: ({ focused, color }) => tabIcon(focused, 'map', 'map-outline', color),
         }}
       />
       <Tab.Screen
         name="Sessions"
-        component={ComingSoonScreen}
+        component={SessionStackNavigator}
         options={{
           tabBarLabel: 'Phiên xe',
-          tabBarIcon: ({ focused, color }) =>
-            tabIcon(focused, 'car-sport', 'car-sport-outline', color),
+          tabBarIcon: ({ focused, color }) => tabIcon(focused, 'car-sport', 'car-sport-outline', color),
         }}
       />
       <Tab.Screen
@@ -74,20 +82,18 @@ export default function StaffNavigator() {
         component={StaffProfileScreen}
         options={{
           tabBarLabel: 'Hồ sơ',
-          tabBarIcon: ({ focused, color }) =>
-            tabIcon(focused, 'person', 'person-outline', color),
+          tabBarIcon: ({ focused, color }) => tabIcon(focused, 'person', 'person-outline', color),
         }}
       />
     </Tab.Navigator>
   );
 }
 
-// ─── Tab bar styles ───────────────────────────────────────────────────────────
 const tabStyles = StyleSheet.create({
   bar: {
     backgroundColor: '#0F1A2A',
-    borderTopWidth: 1,
     borderTopColor: 'rgba(96,180,255,0.12)',
+    borderTopWidth: 1,
     height: Platform.OS === 'ios' ? 84 : 64,
     paddingBottom: Platform.OS === 'ios' ? 24 : 8,
     paddingTop: 8,
@@ -97,11 +103,11 @@ const tabStyles = StyleSheet.create({
     fontWeight: '500',
   },
   iconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: RADIUS.sm,
-    justifyContent: 'center',
     alignItems: 'center',
+    borderRadius: RADIUS.sm,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
   },
   iconWrapActive: {
     backgroundColor: 'rgba(96,180,255,0.12)',
