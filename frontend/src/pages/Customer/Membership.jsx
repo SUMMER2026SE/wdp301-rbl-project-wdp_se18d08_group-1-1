@@ -72,24 +72,40 @@ export default function Membership() {
     if (orderCode) {
       if (cancel === 'true') {
         alert('Payment transaction was cancelled.');
-        // Delete query string
         window.history.replaceState({}, document.title, window.location.pathname);
       } else {
-        const timerId = window.setTimeout(() => {
-          setVerifying(true);
-        }, 0);
-        verifySubscriptionPayment(orderCode).then(async (res) => {
-          if (res.ok) {
-            await syncCurrentUserProfile();
-            setSuccess(true);
-          } else {
-            alert(res.data?.message || 'The transaction is incomplete or failed');
+        setVerifying(true);
+        let attempts = 0;
+        
+        const intervalId = setInterval(async () => {
+          try {
+            attempts++;
+            const res = await verifySubscriptionPayment(orderCode);
+            
+            if (res.ok && res.data?.success) {
+              clearInterval(intervalId);
+              await syncCurrentUserProfile();
+              setSuccess(true);
+              setVerifying(false);
+              window.history.replaceState({}, document.title, window.location.pathname);
+            } else if (attempts >= 100) { // Timeout after 5 minutes (3s * 100)
+              clearInterval(intervalId);
+              setVerifying(false);
+              alert('Payment verification timed out. Please contact support if you have paid.');
+              window.history.replaceState({}, document.title, window.location.pathname);
+            } else if (res.data?.message !== 'Payment not completed.') {
+              // If it's a hard error (not just pending), stop polling
+              clearInterval(intervalId);
+              setVerifying(false);
+              alert(res.data?.message || 'The transaction failed');
+              window.history.replaceState({}, document.title, window.location.pathname);
+            }
+          } catch (err) {
+            console.error("Polling error:", err);
           }
-        }).finally(() => {
-          setVerifying(false);
-          window.history.replaceState({}, document.title, window.location.pathname);
-        });
-        return () => window.clearTimeout(timerId);
+        }, 3000);
+
+        return () => clearInterval(intervalId);
       }
     }
   }, []);
