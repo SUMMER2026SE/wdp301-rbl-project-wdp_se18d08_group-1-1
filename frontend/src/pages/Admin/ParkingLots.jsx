@@ -4,17 +4,20 @@ import ParkingLotsBuilder from "./ParkingLotsBuilder/ParkingLotsBuilder";
 import ParkingMapGrid from "../../components/ParkingMapGrid";
 import { getAllFloors, createFloor, updateFloorLayout, deleteFloor, getFloorSlots } from "../../services/parkingFloorService";
 import { startMaintenance, endMaintenance } from "../../services/maintenanceService";
-import { apiFetch } from "../../services/api";
+import { apiFetch, API_BASE } from "../../services/api";
+import { getAvailableBookingSlots, getActiveHolds } from "../../services/bookingService";
 
 export default function ParkingLots() {
   const [floors, setFloors] = useState([]);
   const [currentFloorId, setCurrentFloorId] = useState(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [availableSlots, setAvailableSlots] = useState(null);
+  const [activeHolds, setActiveHolds] = useState([]);
   const [selectedItem, setSelectedItem] = useState(null);
   const [dbSlots, setDbSlots] = useState([]);
 
-  // activeSessions to track live cars - mock or fetch if admin wants live too
+  // activeSessions to track live cars
   const [activeSessions, setActiveSessions] = useState([]);
 
   useEffect(() => {
@@ -152,6 +155,39 @@ export default function ParkingLots() {
     fetchDbSlots(currentFloorId);
   }, [currentFloorId, fetchDbSlots]);
 
+  const fetchLiveData = useCallback(async () => {
+    try {
+      const sessionRes = await fetch(`${API_BASE}/sessions/active-status`);
+      const sessionData = await sessionRes.json();
+      if (sessionData.success) {
+        setActiveSessions(sessionData.data);
+      }
+
+      const startTimeStr = new Date().toISOString();
+      const endTimeStr = new Date(Date.now() + 60 * 1000).toISOString();
+      const availableRes = await getAvailableBookingSlots({
+        startTime: startTimeStr,
+        endTime: endTimeStr,
+      });
+      if (availableRes.ok && availableRes.data?.data?.slots) {
+        setAvailableSlots(availableRes.data.data.slots);
+      }
+
+      const holdsRes = await getActiveHolds();
+      if (holdsRes.ok && holdsRes.data?.data) {
+        setActiveHolds(holdsRes.data.data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch live data', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchLiveData();
+    const interval = setInterval(fetchLiveData, 15000); // refresh every 15s
+    return () => clearInterval(interval);
+  }, [fetchLiveData]);
+
   const handleCreateFloor = async () => {
     const floorNumber = getNextFloorNumber();
     const name = `Floor ${floorNumber}`;
@@ -286,27 +322,6 @@ export default function ParkingLots() {
     }
   };
 
-  // Fetch Active Sessions so Admin also sees live cars
-  useEffect(() => {
-    const fetchLiveStatus = async () => {
-      try {
-        const token = localStorage.getItem("accessToken");
-        const res = await apiFetch("/sessions/active-status", {
-          method: "GET",
-          headers: token ? { Authorization: `Bearer ${token}` } : {}
-        });
-        if (res.ok && res.data.success) {
-          setActiveSessions(res.data.data);
-        }
-      } catch (err) {
-        console.error("Failed to fetch active status", err);
-      }
-    };
-    fetchLiveStatus();
-    const interval = setInterval(fetchLiveStatus, 15000);
-    return () => clearInterval(interval);
-  }, []);
-
   if (isEditMode && currentFloor) {
     return (
       <ParkingLotsBuilder 
@@ -364,6 +379,8 @@ export default function ParkingLots() {
           onZoneClick={setSelectedItem}
           activeSessions={activeSessions}
           dbSlots={dbSlots}
+          availableSlots={availableSlots}
+          activeHolds={activeHolds}
           loading={loading}
           isEditMode={isEditMode}
         />
@@ -475,6 +492,14 @@ export default function ParkingLots() {
                       <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Check-in Time</span><span className="font-medium text-white">{new Date(selectedItem.session.checkInTime).toLocaleString('vi-VN')}</span></div>
                       <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Expected Duration</span><span className="font-medium text-white">{selectedItem.session.expectedDurationHours} hr(s)</span></div>
                       <div className="flex justify-between items-center"><span className="text-slate-400 text-sm">Expiration Time</span><span className="font-bold text-rose-400">{new Date(new Date(selectedItem.session.checkInTime).getTime() + (selectedItem.session.expectedDurationHours || 0) * 3600000).toLocaleString('vi-VN')}</span></div>
+                  </div>
+                ) : !isZone && selectedItem.isReserved ? (
+                  <div className="flex flex-col gap-4 h-full items-center justify-center text-center py-10 opacity-90">
+                      <div className="w-16 h-16 rounded-full bg-purple-900/30 flex items-center justify-center border border-purple-500/50 mb-2">
+                          <span className="text-purple-500 font-bold text-2xl">★</span>
+                      </div>
+                      <p className="text-purple-400 font-bold uppercase tracking-widest">Reserved / VIP</p>
+                      <p className="text-xs text-purple-300 max-w-[200px]">This slot is currently reserved for a VIP subscription package or an upcoming booking.</p>
                   </div>
                 ) : (
                   <div className="flex flex-col gap-4 h-full items-center justify-center text-center py-10 opacity-70">

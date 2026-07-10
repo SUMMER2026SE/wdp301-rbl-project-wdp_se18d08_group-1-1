@@ -1,14 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { Camera, Clock, X, Search, ShieldCheck } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Camera, X, ShieldCheck } from 'lucide-react';
 
 export default function SessionManagement() {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedSession, setSelectedSession] = useState(null);
-
-  useEffect(() => {
-    fetchSessions();
-  }, []);
 
   const fetchSessions = async () => {
     try {
@@ -23,6 +19,14 @@ export default function SessionManagement() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      fetchSessions();
+    }, 0);
+
+    return () => window.clearTimeout(timerId);
+  }, []);
 
   const formatDate = (dateString) => {
     if (!dateString) return '-';

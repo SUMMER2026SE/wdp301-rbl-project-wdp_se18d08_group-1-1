@@ -13,6 +13,13 @@ export const getAvailableBookingSlots = ({ startTime, endTime }) => {
   });
 };
 
+export const getActiveHolds = () => {
+  return apiFetch(`/bookings/active-holds`, {
+    method: 'GET',
+    headers: authHeader(),
+  });
+};
+
 export const createBooking = (payload) =>
   apiFetch('/bookings', {
     method: 'POST',
@@ -28,16 +35,17 @@ export const quoteBooking = (payload) =>
   });
 
 export const createBookingHold = (payload) =>
-  apiFetch('/bookings/holds', {
+  apiFetch('/bookings/hold', {
     method: 'POST',
     headers: authHeader(),
     body: JSON.stringify(payload),
   });
 
-export const releaseBookingHold = (holdId) =>
+export const releaseBookingHold = (holdId, payload = {}) =>
   apiFetch(`/bookings/holds/${holdId}`, {
     method: 'DELETE',
     headers: authHeader(),
+    body: JSON.stringify(payload),
   });
 
 export const quoteBulkBooking = (payload) =>
@@ -98,16 +106,16 @@ export const cancelBooking = (bookingId) =>
     headers: authHeader(),
   });
 
-export const updateBookingLicensePlate = (bookingId, payload) =>
-  apiFetch(`/bookings/${bookingId}/license-plate`, {
-    method: 'PATCH',
+export const updateBookingVehicle = (bookingId, payload) =>
+  apiFetch(`/bookings/${bookingId}/vehicle`, {
+    method: 'PUT',
     headers: authHeader(),
     body: JSON.stringify(payload),
   });
 
 export const extendBooking = (bookingId, payload) =>
-  apiFetch(`/bookings/${bookingId}/extend`, {
-    method: 'POST',
+  apiFetch(`/bookings/${bookingId}/time`, {
+    method: 'PUT',
     headers: authHeader(),
     body: JSON.stringify(payload),
   });

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import ParkingMapGrid from "../../components/ParkingMapGrid";
 import { getAllFloors } from "../../services/parkingFloorService";
 import { apiFetch } from "../../services/api";
@@ -72,10 +72,15 @@ export default function LiveGridMonitor() {
   };
 
   useEffect(() => {
-    fetchFloors();
-    fetchLiveStatus();
+    const timerId = window.setTimeout(() => {
+      fetchFloors();
+      fetchLiveStatus();
+    }, 0);
     const interval = setInterval(fetchLiveStatus, 15000); // refresh every 15s
-    return () => clearInterval(interval);
+    return () => {
+      window.clearTimeout(timerId);
+      clearInterval(interval);
+    };
   }, []);
 
   return (

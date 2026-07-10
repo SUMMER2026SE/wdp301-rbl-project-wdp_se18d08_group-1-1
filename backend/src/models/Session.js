@@ -13,6 +13,16 @@ const sessionSchema = new mongoose.Schema(
       ref: 'User',
       default: null,
     },
+    bookingId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Booking',
+      default: null,
+    },
+    type: {
+      type: String,
+      enum: ['BOOKING', 'WALK_IN', 'SUBSCRIPTION'],
+      default: 'WALK_IN',
+    },
     phone: {
       type: String,
       trim: true,
@@ -30,13 +40,18 @@ const sessionSchema = new mongoose.Schema(
     },
     vehicleType: {
       type: String,
-      enum: ['car', 'electric_car', 'motorcycle'], // Added motorcycle just in case
+      enum: ['car', 'electric_car', 'motorcycle'],
       default: 'car',
     },
     status: {
       type: String,
       enum: ['active', 'completed', 'cancelled'],
       default: 'active',
+    },
+    paymentStatus: {
+      type: String,
+      enum: ['unpaid', 'paid', 'refunded'],
+      default: 'unpaid',
     },
     parkingSlot: {
       type: String,
@@ -68,39 +83,36 @@ const sessionSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    entryCamera: {
+      type: String,
+      default: null,
+    },
+    exitCamera: {
+      type: String,
+      default: null,
+    },
+    confidence: {
+      type: Number,
+      default: 100,
+    },
+    aiRecognitionResult: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+    entryGate: {
+      type: String,
+      default: null,
+    },
+    exitGate: {
+      type: String,
+      default: null,
+    },
     totalPrice: {
       type: Number,
       default: 0,
     },
-    hourlyRate: {
-      type: Number,
-      default: 0,
-    },
-    prepaidAmount: {
-      type: Number,
-      default: 0,
-    },
-    refundAmount: {
-      type: Number,
-      default: 0,
-    },
-    exitRequestedAt: {
-      type: Date,
-      default: null,
-    },
-    paymentMethod: {
-      type: String,
-      enum: ['wallet', 'cash', 'payos', 'none'],
-      default: 'none',
-    },
-    paymentStatus: {
-      type: String,
-      enum: ['pending', 'paid', 'refunded', 'failed'],
-      default: 'pending',
-    },
-    ticketPackageId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'TicketPackage',
+    pricingBreakdown: {
+      type: mongoose.Schema.Types.Mixed,
       default: null,
     },
   },

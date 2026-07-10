@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { enUS } from "date-fns/locale";
 import { getAdminHistory, createNotification } from "../../services/notificationService";
@@ -45,7 +45,11 @@ export default function NotificationManagement() {
   };
 
   useEffect(() => {
-    fetchHistory();
+    const timerId = window.setTimeout(() => {
+      fetchHistory();
+    }, 0);
+
+    return () => window.clearTimeout(timerId);
   }, []);
 
   return (
@@ -286,7 +290,7 @@ function ComposeTab({ onSent }) {
       } else {
         setToast("API error: " + (res.data?.message || JSON.stringify(res.data?.errors) || "Unknown error"));
       }
-    } catch (err) {
+    } catch {
       setToast("API connection error.");
     } finally {
       setIsSubmitting(false);

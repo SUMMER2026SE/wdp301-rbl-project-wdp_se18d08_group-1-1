@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
-import { Car, Zap, ZoomIn, ZoomOut, Maximize, TreePine, ArrowRight, Accessibility, Bike, Navigation, Layers, MonitorSmartphone } from "lucide-react";
+import { Car, Zap, Maximize, TreePine, ArrowRight, Accessibility, Navigation, Layers, MonitorSmartphone } from "lucide-react";
 
-const SlotElement = React.memo(({ el, floorId, style, isHovered, session, isMaintenance, onMouseEnter, onMouseLeave, onClick }) => {
+const SlotElement = React.memo(({ el, floorId, style, isHovered, session, isMaintenance, isReserved, isHeld, onMouseEnter, onMouseLeave, onClick }) => {
   const slotZ = 5;
   const slotTransition = 'all 0.2s ease-in-out';
   const hasName = !!el.name && el.name.trim() !== '';
@@ -9,7 +9,7 @@ const SlotElement = React.memo(({ el, floorId, style, isHovered, session, isMain
     e.stopPropagation();
     if (!hasName) return;
     if (onClick) {
-      onClick({ id: el.name || el.id, type, session, floorId });
+      onClick({ id: el.name || el.id, type, session, floorId, isReserved });
     }
   };
 
@@ -24,6 +24,8 @@ const SlotElement = React.memo(({ el, floorId, style, isHovered, session, isMain
     let borderColor = '#94a3b8';
     if (isMaintenance) { bgColor = '#fee2e2'; borderColor = '#ef4444'; }
     else if (isOccupied) { bgColor = '#fecdd3'; borderColor = '#e11d48'; } 
+    else if (isHeld) { bgColor = '#ffedd5'; borderColor = '#f97316'; }
+    else if (isReserved) { bgColor = '#f3e8ff'; borderColor = '#a855f7'; }
     else if (isHovered) { bgColor = '#67e8f9'; borderColor = '#06b6d4'; }
 
     return (
@@ -31,10 +33,10 @@ const SlotElement = React.memo(({ el, floorId, style, isHovered, session, isMain
            onMouseEnter={() => onMouseEnter(el.id)}
            onMouseLeave={onMouseLeave}
            onClick={(e) => handleClick(e, 'hourly')}>
-        <span className={`text-[10px] font-bold mb-1 ${isMaintenance ? 'text-red-700' : isOccupied ? 'text-rose-700' : 'text-slate-500 group-hover:text-[#0891b2]'}`} style={{ transform: 'translateZ(2px)' }}>
+        <span className={`text-[10px] font-bold mb-1 ${isMaintenance ? 'text-red-700' : isReserved ? 'text-purple-700' : isHeld ? 'text-orange-700' : isOccupied ? 'text-rose-700' : 'text-slate-500 group-hover:text-[#0891b2]'}`} style={{ transform: 'translateZ(2px)' }}>
           {isOccupied ? session.licensePlate : (hasName ? el.name : '')}
         </span>
-        <Car size={20} className={isMaintenance ? 'text-red-500' : isOccupied ? 'text-rose-500' : 'text-slate-400 group-hover:text-[#06b6d4]'} style={{ transform: 'translateZ(5px)' }} />
+        <Car size={20} className={isMaintenance ? 'text-red-500' : isReserved ? 'text-purple-500' : isHeld ? 'text-orange-500' : isOccupied ? 'text-rose-500' : 'text-slate-400 group-hover:text-[#06b6d4]'} style={{ transform: 'translateZ(5px)' }} />
       </div>
     );
   }
@@ -44,16 +46,18 @@ const SlotElement = React.memo(({ el, floorId, style, isHovered, session, isMain
     let borderColor = '#10b981';
     if (isMaintenance) { bgColor = '#fee2e2'; borderColor = '#ef4444'; }
     else if (isOccupied) { bgColor = '#fecdd3'; borderColor = '#e11d48'; }
+    else if (isHeld) { bgColor = '#ffedd5'; borderColor = '#f97316'; }
+    else if (isReserved) { bgColor = '#f3e8ff'; borderColor = '#a855f7'; }
     else if (isHovered) { bgColor = '#6ee7b7'; borderColor = '#059669'; }
     return (
       <div style={{...style, ...maintenanceStyle, opacity: hasName ? 1 : 0.3, cursor: hasName ? 'pointer' : 'not-allowed', transform: `translateZ(${slotZ}px) rotateZ(${el.rot || 0}deg)`, borderColor, backgroundColor: bgColor, transition: slotTransition }} className="border-[2px] border-solid rounded-lg shadow-sm flex flex-col items-center justify-center group"
            onMouseEnter={() => onMouseEnter(el.id)}
            onMouseLeave={onMouseLeave}
            onClick={(e) => handleClick(e, 'ev')}>
-        <span className={`text-[10px] font-bold mb-1 ${isMaintenance ? 'text-red-700' : isOccupied ? 'text-rose-700' : 'text-emerald-600'}`} style={{ transform: 'translateZ(2px)' }}>
+        <span className={`text-[10px] font-bold mb-1 ${isMaintenance ? 'text-red-700' : isReserved ? 'text-purple-700' : isHeld ? 'text-orange-700' : isOccupied ? 'text-rose-700' : 'text-emerald-600'}`} style={{ transform: 'translateZ(2px)' }}>
           {isOccupied ? session.licensePlate : (hasName ? el.name : '')}
         </span>
-        <Zap size={20} className={isMaintenance ? 'text-red-500' : isOccupied ? 'text-rose-500' : 'text-emerald-500'} style={{ transform: 'translateZ(5px)' }} />
+        <Zap size={20} className={isMaintenance ? 'text-red-500' : isReserved ? 'text-purple-500' : isHeld ? 'text-orange-500' : isOccupied ? 'text-rose-500' : 'text-emerald-500'} style={{ transform: 'translateZ(5px)' }} />
       </div>
     );
   }
@@ -63,16 +67,18 @@ const SlotElement = React.memo(({ el, floorId, style, isHovered, session, isMain
     let borderColor = '#3b82f6';
     if (isMaintenance) { bgColor = '#fee2e2'; borderColor = '#ef4444'; }
     else if (isOccupied) { bgColor = '#fecdd3'; borderColor = '#e11d48'; }
+    else if (isHeld) { bgColor = '#ffedd5'; borderColor = '#f97316'; }
+    else if (isReserved) { bgColor = '#f3e8ff'; borderColor = '#a855f7'; }
     else if (isHovered) { bgColor = '#93c5fd'; borderColor = '#2563eb'; }
     return (
       <div style={{...style, ...maintenanceStyle, opacity: hasName ? 1 : 0.3, cursor: hasName ? 'pointer' : 'not-allowed', transform: `translateZ(${slotZ}px) rotateZ(${el.rot || 0}deg)`, borderColor, backgroundColor: bgColor, transition: slotTransition }} className="border-[2px] border-solid rounded-lg shadow-sm flex flex-col items-center justify-center group"
            onMouseEnter={() => onMouseEnter(el.id)}
            onMouseLeave={onMouseLeave}
            onClick={(e) => handleClick(e, 'handicap')}>
-        <span className={`text-[10px] font-bold mb-1 ${isMaintenance ? 'text-red-700' : isOccupied ? 'text-rose-700' : 'text-blue-600'}`} style={{ transform: 'translateZ(2px)' }}>
+        <span className={`text-[10px] font-bold mb-1 ${isMaintenance ? 'text-red-700' : isReserved ? 'text-purple-700' : isHeld ? 'text-orange-700' : isOccupied ? 'text-rose-700' : 'text-blue-600'}`} style={{ transform: 'translateZ(2px)' }}>
           {isOccupied ? session.licensePlate : (hasName ? el.name : '')}
         </span>
-        <Accessibility size={20} className={isMaintenance ? 'text-red-500' : isOccupied ? 'text-rose-500' : 'text-blue-500'} style={{ transform: 'translateZ(5px)' }} />
+        <Accessibility size={20} className={isMaintenance ? 'text-red-500' : isReserved ? 'text-purple-500' : isHeld ? 'text-orange-500' : isOccupied ? 'text-rose-500' : 'text-blue-500'} style={{ transform: 'translateZ(5px)' }} />
       </div>
     );
   }
@@ -86,10 +92,11 @@ export default function ParkingMapGrid({
   onFloorSelect, 
   onSlotClick,
   onZoneClick,
-  activeSessions = [], // Array of sessions to determine slot status
-  dbSlots = [], // Array of slot data from DB to check maintenance status
+  activeSessions = [], 
+  dbSlots = [], 
+  availableSlots = null, 
+  activeHolds = [],
   loading = false,
-  isEditMode = false // In case we want to reuse something, but currently builder is separated
 }) {
   const [camera, setCamera] = useState({ rotX: 60, rotZ: -30, panX: 0, panY: 0, zoom: 0.7 });
   const [dragStart, setDragStart] = useState(null);
@@ -111,6 +118,14 @@ export default function ParkingMapGrid({
       return acc;
     }, {});
   }, [dbSlots]);
+
+  const availableSlotMap = useMemo(() => {
+    if (!availableSlots) return null;
+    return availableSlots.reduce((acc, curr) => {
+      acc[`${curr.floorId}-${curr.slotCode}`] = true;
+      return acc;
+    }, {});
+  }, [availableSlots]);
 
   const handleMouseEnterSlot = useCallback((id) => setHoveredSlotId(id), []);
   const handleMouseLeaveSlot = useCallback(() => setHoveredSlotId(null), []);
@@ -220,6 +235,17 @@ export default function ParkingMapGrid({
         const session = sessionMap[`${floorId}-${el.name || el.id}`];
         const dbSlot = dbSlotMap[`${floorId}-${el.name || el.id}`];
         const isMaintenance = dbSlot?.status === 'maintenance';
+        
+        const hasName = !!el.name && el.name.trim() !== '';
+        // Only evaluate if it has a valid name (real slot). Phantom unnamed slots are not reserved.
+        const isAvailable = (hasName && availableSlotMap) ? !!availableSlotMap[`${floorId}-${el.name}`] : (hasName ? false : true);
+        
+        let isHeld = false;
+        if (activeHolds && hasName) {
+          isHeld = activeHolds.some(h => String(h.floorId) === String(floorId) && String(h.slotCode).toUpperCase() === String(el.name).toUpperCase());
+        }
+
+        const isReserved = (hasName && availableSlotMap) ? (!isAvailable && !session && !isMaintenance && !isHeld) : false;
 
         return (
           <SlotElement
@@ -230,6 +256,8 @@ export default function ParkingMapGrid({
             isHovered={isHovered}
             session={session}
             isMaintenance={isMaintenance}
+            isReserved={isReserved}
+            isHeld={isHeld}
             onMouseEnter={handleMouseEnterSlot}
             onMouseLeave={handleMouseLeaveSlot}
             onClick={onSlotClick}

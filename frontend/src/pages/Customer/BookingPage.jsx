@@ -16,9 +16,10 @@ import {
   checkOutBooking,
   extendBooking,
   getMyBookings,
-  updateBookingLicensePlate,
+  updateBookingVehicle,
 } from '../../services/bookingService';
-import { useSocket } from '../../contexts/SocketProvider';
+import { getMyVehicles } from '../../services/vehicleService';
+import { useSocket } from '../../hooks/useSocket';
 
 const formatMoney = (value = 0) => `${Number(value || 0).toLocaleString('vi-VN')} VND`;
 
@@ -28,12 +29,18 @@ const formatDateTime = (value) =>
     timeStyle: 'short',
   });
 
+const getBookingStatus = (booking) => String(booking?.status || '').toUpperCase();
+const getBookingStart = (booking) => booking.scheduledStart || booking.startTime;
+const getBookingEnd = (booking) => booking.scheduledEnd || booking.endTime;
+const getBookingSlot = (booking) => booking.parkingSlot || booking.slotCode || '--';
+
 const statusClass = (status) => {
-  if (status === 'confirmed') return 'bg-blue-500/10 text-blue-300 border-blue-500/30';
-  if (status === 'active') return 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30';
-  if (status === 'paused') return 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30';
-  if (status === 'completed') return 'bg-white/10 text-white/70 border-white/10';
-  if (status === 'cancelled') return 'bg-rose-500/10 text-rose-300 border-rose-500/30';
+  const normalizedStatus = String(status || '').toUpperCase();
+  if (normalizedStatus === 'PAID') return 'bg-blue-500/10 text-blue-300 border-blue-500/30';
+  if (normalizedStatus === 'ACTIVE') return 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30';
+  if (normalizedStatus === 'PAUSED') return 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30';
+  if (normalizedStatus === 'COMPLETED') return 'bg-white/10 text-white/70 border-white/10';
+  if (normalizedStatus === 'CANCELLED') return 'bg-rose-500/10 text-rose-300 border-rose-500/30';
   return 'bg-amber-500/10 text-amber-300 border-amber-500/30';
 };
 
@@ -46,16 +53,17 @@ const addMinutesLocalInput = (dateValue, minutes) => {
 
 const getBookingTiming = (booking) => {
   const now = new Date();
-  const start = new Date(booking.startTime);
-  const end = new Date(booking.endTime);
+  const status = getBookingStatus(booking);
+  const start = new Date(getBookingStart(booking));
+  const end = new Date(getBookingEnd(booking));
   const minutesToStart = Math.ceil((start.getTime() - now.getTime()) / 60000);
   const minutesToEnd = Math.ceil((end.getTime() - now.getTime()) / 60000);
 
   return {
-    canEditBeforeCheckIn: booking.status === 'confirmed' && now < start,
-    canExtend: ['confirmed', 'active'].includes(booking.status),
-    canComplete: booking.status === 'active',
-    isNearExpiry: booking.status === 'active' && minutesToEnd > 0 && minutesToEnd <= 30,
+    canEditBeforeCheckIn: status === 'PAID' && now < start,
+    canExtend: ['PAID', 'ACTIVE', 'PAUSED'].includes(status),
+    canComplete: status === 'ACTIVE',
+    isNearExpiry: status === 'ACTIVE' && minutesToEnd > 0 && minutesToEnd <= 30,
     minutesToStart,
     minutesToEnd,
   };
@@ -68,8 +76,10 @@ export default function BookingPage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [actionLoading, setActionLoading] = useState('');
-  const [dialog, setDialog] = useState(null);
-  const [plateInput, setPlateInput] = useState('');
+  const [dialog, setDialog] = useState(null); // { type: 'plate' | 'extend', booking: obj }
+  const [vehicles, setVehicles] = useState([]);
+  const [vehicleInput, setVehicleInput] = useState('');
+  const [manualPlateInput, setManualPlateInput] = useState('');
   const [extendEndTime, setExtendEndTime] = useState('');
   const lastEventRef = useRef(null);
 
@@ -78,17 +88,25 @@ export default function BookingPage() {
     setError('');
 
     try {
-      const bookingRes = await getMyBookings();
+      const [bookingRes, vehicleRes] = await Promise.all([
+        getMyBookings(),
+        getMyVehicles()
+      ]);
       if (bookingRes.ok) setBookings(bookingRes.data?.data || []);
+      if (vehicleRes.ok) setVehicles(vehicleRes.data?.data || []);
     } catch {
-      setError('Could not load booking data.');
+      setError('Could not load data.');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadData();
+    const timerId = window.setTimeout(() => {
+      loadData();
+    }, 0);
+
+    return () => window.clearTimeout(timerId);
   }, []);
 
   useEffect(() => {
@@ -152,29 +170,40 @@ export default function BookingPage() {
 
   const openPlateDialog = (booking) => {
     setDialog({ type: 'plate', booking });
-    setPlateInput(booking.licensePlate || '');
+    const approvedVehicles = vehicles.filter(v => v.status === 'approved');
+    const match = approvedVehicles.find(v => v.licensePlate === booking.licensePlate);
+    setVehicleInput(match ? match._id : (approvedVehicles.length > 0 ? approvedVehicles[0]._id : ''));
     setError('');
   };
 
   const openExtendDialog = (booking, minutes = 60) => {
     setDialog({ type: 'extend', booking });
-    setExtendEndTime(addMinutesLocalInput(booking.endTime, minutes));
+    setExtendEndTime(addMinutesLocalInput(getBookingEnd(booking), minutes));
     setError('');
   };
 
   const submitPlateChange = async () => {
-    if (!dialog?.booking || !plateInput.trim()) {
-      setError('License plate is required.');
+    if (!dialog?.booking || !vehicleInput) {
+      setError('Please select a vehicle.');
       return;
     }
 
+    if (vehicleInput === 'manual' && !manualPlateInput.trim()) {
+      setError('Please enter a license plate.');
+      return;
+    }
+
+    const payload = vehicleInput === 'manual'
+      ? { licensePlate: manualPlateInput.trim() }
+      : { vehicleId: vehicleInput };
+
     const res = await runBookingAction(`plate-${dialog.booking._id}`, () =>
-      updateBookingLicensePlate(dialog.booking._id, { licensePlate: plateInput.trim() })
+      updateBookingVehicle(dialog.booking._id, payload)
     );
 
     if (res) {
       setDialog(null);
-      setSuccess('License plate updated.');
+      setSuccess('Vehicle updated successfully.');
     }
   };
 
@@ -185,7 +214,10 @@ export default function BookingPage() {
     }
 
     const res = await runBookingAction(`extend-${dialog.booking._id}`, () =>
-      extendBooking(dialog.booking._id, { endTime: new Date(extendEndTime).toISOString() })
+      extendBooking(dialog.booking._id, {
+        newStart: new Date(getBookingStart(dialog.booking)).toISOString(),
+        newEnd: new Date(extendEndTime).toISOString(),
+      })
     );
 
     if (res) {
@@ -219,7 +251,7 @@ export default function BookingPage() {
     }
   };
 
-
+  const approvedVehicles = vehicles.filter(v => v.status === 'approved');
 
   if (loading) {
     return (
@@ -294,7 +326,7 @@ export default function BookingPage() {
                 }`}>
                   <div className="min-w-0">
                     <div className="flex items-center gap-3 flex-wrap">
-                      <span className="text-xl font-black text-white">{booking.slotCode}</span>
+                      <span className="text-xl font-black text-white">{getBookingSlot(booking)}</span>
                       <span className={`px-2.5 py-1 rounded-full border text-xs font-bold uppercase ${statusClass(booking.status)}`}>
                         {booking.status}
                       </span>
@@ -304,7 +336,7 @@ export default function BookingPage() {
                           {timing.minutesToEnd} min left
                         </span>
                       )}
-                      {booking.status === 'confirmed' && timing.minutesToStart <= 15 && timing.minutesToStart >= -15 && (
+                      {getBookingStatus(booking) === 'PAID' && timing.minutesToStart <= 15 && timing.minutesToStart >= -15 && (
                         <span className="px-2.5 py-1 rounded-full border border-cyan-400/30 bg-cyan-400/10 text-xs font-bold uppercase text-cyan-200">
                           Arrival window
                         </span>
@@ -317,7 +349,7 @@ export default function BookingPage() {
                       </div>
                       <div className="flex flex-col">
                         <span className="text-[10px] font-bold tracking-widest uppercase text-white/30 mb-0.5">Time</span>
-                        <span className="font-semibold text-white/80">{formatDateTime(booking.startTime)} - {formatDateTime(booking.endTime)}</span>
+                        <span className="font-semibold text-white/80">{formatDateTime(getBookingStart(booking))} - {formatDateTime(getBookingEnd(booking))}</span>
                       </div>
                       <div className="flex flex-col">
                         <span className="text-[10px] font-bold tracking-widest uppercase text-white/30 mb-0.5">Paid</span>
@@ -334,7 +366,7 @@ export default function BookingPage() {
                         Refunded: {formatMoney(booking.refundAmount)}
                       </div>
                     )}
-                    {booking.status === 'expired' && (
+                    {getBookingStatus(booking) === 'EXPIRED' && (
                       <div className="mt-2 text-xs text-amber-300/80 font-medium">
                         This booking expired after the 15-minute late arrival grace period.
                       </div>
@@ -414,7 +446,7 @@ export default function BookingPage() {
                   {dialog.type === 'plate' ? 'Change License Plate' : 'Extend Parking'}
                 </h3>
                 <p className="text-sm text-white/45 mt-1">
-                  Slot {dialog.booking.slotCode} - {dialog.booking.floorId?.name || 'Floor'}
+                  Slot {getBookingSlot(dialog.booking)} - {dialog.booking.floorId?.name || 'Floor'}
                 </p>
               </div>
               <button
@@ -426,16 +458,44 @@ export default function BookingPage() {
               </button>
             </div>
 
+            {error && (
+              <div className="mb-4 rounded-xl border border-rose-500/20 bg-rose-500/10 px-4 py-3 flex items-start gap-3 text-rose-400">
+                <AlertCircle size={16} className="mt-0.5 shrink-0" />
+                <span className="text-sm font-medium">{error}</span>
+              </div>
+            )}
+
             {dialog.type === 'plate' ? (
-              <label className="block">
-                <span className="text-[11px] font-bold uppercase tracking-widest text-white/35">New license plate</span>
-                <input
-                  value={plateInput}
-                  onChange={(event) => setPlateInput(event.target.value)}
-                  className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white outline-none focus:border-yellow-400"
-                  placeholder="Example: 51G12345"
-                />
-              </label>
+              <div className="space-y-4">
+                <label className="block">
+                  <span className="text-[11px] font-bold uppercase tracking-widest text-white/35">Select New Vehicle</span>
+                  <select
+                    value={vehicleInput}
+                    onChange={(event) => setVehicleInput(event.target.value)}
+                    className="mt-2 w-full rounded-2xl border border-white/10 bg-[#1e1e1e] px-4 py-3 text-sm font-bold text-white outline-none focus:border-yellow-400"
+                  >
+                    <option value="" disabled>-- Choose a registered vehicle --</option>
+                    <option value="manual">Manual plate</option>
+                    {approvedVehicles.map(v => (
+                      <option key={v._id} value={v._id}>
+                        {v.licensePlate} ({v.type})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {vehicleInput === 'manual' && (
+                  <label className="block">
+                    <span className="text-[11px] font-bold uppercase tracking-widest text-white/35">Enter License Plate</span>
+                    <input
+                      type="text"
+                      placeholder="e.g. 51G12345"
+                      value={manualPlateInput}
+                      onChange={(event) => setManualPlateInput(event.target.value.toUpperCase())}
+                      className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white outline-none focus:border-yellow-400"
+                    />
+                  </label>
+                )}
+              </div>
             ) : (
               <div className="space-y-4">
                 <label className="block">
@@ -443,7 +503,7 @@ export default function BookingPage() {
                   <input
                     type="datetime-local"
                     value={extendEndTime}
-                    min={addMinutesLocalInput(dialog.booking.endTime, 30)}
+                    min={addMinutesLocalInput(getBookingEnd(dialog.booking), 30)}
                     onChange={(event) => setExtendEndTime(event.target.value)}
                     className="mt-2 w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-bold text-white outline-none focus:border-yellow-400"
                   />
@@ -453,7 +513,7 @@ export default function BookingPage() {
                     <button
                       key={minutes}
                       type="button"
-                      onClick={() => setExtendEndTime(addMinutesLocalInput(dialog.booking.endTime, minutes))}
+                      onClick={() => setExtendEndTime(addMinutesLocalInput(getBookingEnd(dialog.booking), minutes))}
                       className="rounded-xl border border-white/10 px-3 py-2 text-xs font-bold text-white/60 hover:text-white hover:bg-white/5 transition flex items-center justify-center gap-1"
                     >
                       <Clock size={13} />

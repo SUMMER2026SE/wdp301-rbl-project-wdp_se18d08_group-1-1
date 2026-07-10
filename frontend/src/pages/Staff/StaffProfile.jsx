@@ -465,7 +465,6 @@ export default function StaffProfile() {
   const GOLD_DIM = "rgba(234,179,8,0.7)";
   const GOLD_GLOW = "rgba(234,179,8,0.3)";
   const GOLD_BG = "rgba(234,179,8,0.08)";
-  const GOLD_BORDER = "rgba(234,179,8,0.25)";
   const GOLD_TEXT = "#ffdea8";
 
   // ───────────────────────────────────────────────────────────────────────────

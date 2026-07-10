@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, User, ArrowRight, Zap, ShieldCheck, CheckCircle, XCircle, Scan, MapPin } from 'lucide-react';
 import Logo from '../../assets/images/logo.png';
@@ -130,7 +130,7 @@ export default function LoginPage() {
         setSignupStep('otp');
         showToast('success', `Verification code was sent to ${form.email}`);
       }
-    } catch (err) {
+    } catch {
       showToast('error', 'Could not connect to the server. Please try again later.');
     } finally {
       setLoading(false);

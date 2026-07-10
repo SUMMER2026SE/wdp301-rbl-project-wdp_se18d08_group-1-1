@@ -191,9 +191,13 @@ const creditWallet = async (userId, amount, type, description, options = {}) => 
  * @returns {Object} { transaction, wallet }
  */
 const debitWallet = async (userId, amount, description, options = {}) => {
-  const externalSession = options.session;
+  const externalSession = options.session || null;
   const session = externalSession || await mongoose.startSession();
-  if (!externalSession) session.startTransaction();
+  const ownsSession = !externalSession;
+
+  if (ownsSession) {
+    session.startTransaction();
+  }
 
   try {
     const wallet = await getOrCreateWallet(userId, { session });
@@ -241,17 +245,23 @@ const debitWallet = async (userId, amount, description, options = {}) => {
       { session }
     );
 
-    if (!externalSession) await session.commitTransaction();
+    if (ownsSession) {
+      await session.commitTransaction();
+    }
 
     return {
       transaction: transaction[0],
       newBalance: balanceAfter,
     };
   } catch (error) {
-    if (!externalSession) await session.abortTransaction();
+    if (ownsSession) {
+      await session.abortTransaction();
+    }
     throw error;
   } finally {
-    if (!externalSession) session.endSession();
+    if (ownsSession) {
+      session.endSession();
+    }
   }
 };
 

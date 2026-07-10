@@ -23,8 +23,11 @@ import { getMyVehicles } from '../../services/vehicleService';
 import { getWalletInfo } from '../../services/walletService';
 import { apiFetch } from '../../services/api';
 import {
-  createBooking,
+  createBulkBooking,
+  createBookingHold,
   getAvailableBookingSlots,
+  quoteBulkBooking,
+  releaseBookingHold,
 } from '../../services/bookingService';
 import { QRCodeSVG } from 'qrcode.react';
 import { createTopUpUrl, getTopUpStatus } from '../../services/walletService';
@@ -186,7 +189,10 @@ export default function CreateBookingPage() {
   const [wallet, setWallet] = useState(null);
   const [slots, setSlots] = useState([]);
   const [selectedSlotKey, setSelectedSlotKey] = useState('');
-  const [hourlyRate, setHourlyRate] = useState(10000);
+  const [cartItems, setCartItems] = useState([]);
+  const [cartQuote, setCartQuote] = useState(null);
+  const [cartItemErrors, setCartItemErrors] = useState({});
+  const [editingClientItemId, setEditingClientItemId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [checkingSlots, setCheckingSlots] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -335,6 +341,33 @@ export default function CreateBookingPage() {
     selectedDbSlot &&
     !selectedSlotIsOwnVipSlot
   );
+  const pricePreview = useMemo(
+    () => calculateBookingPrice(startTime, endTime, { waiveOpeningFee: selectedSlotIsOwnVipSlot }),
+    [endTime, selectedSlotIsOwnVipSlot, startTime]
+  );
+  const parkingTotal = selectedSlotIsOwnVipSlot ? 0 : pricePreview.totalAmount;
+  const grandTotal = parkingTotal + serviceTotal;
+  const walletBalance = Number(wallet?.balance || 0);
+  const walletShortfall = Math.max(grandTotal - walletBalance, 0);
+  const hasEnoughWallet = walletShortfall <= 0;
+  const cartApiItems = useMemo(
+    () => cartItems.map((item) => ({
+      clientItemId: item.clientItemId,
+      vehicleId: item.vehicleId || undefined,
+      licensePlate: item.vehicleId ? undefined : item.licensePlate,
+      floorId: item.floorId,
+      slotCode: item.slotCode,
+      startTime: item.startTime,
+      endTime: item.endTime,
+      serviceIds: item.serviceIds,
+    })),
+    [cartItems]
+  );
+  const cartGrandTotal = Number(
+    cartQuote?.grandTotal ?? cartItems.reduce((total, item) => total + Number(item.totalAmount || 0), 0)
+  );
+  const cartWalletShortfall = Math.max(cartGrandTotal - walletBalance, 0);
+  const hasActiveCheckoutHold = false;
 
   const loadData = () => {
     Promise.all([
@@ -488,6 +521,188 @@ export default function CreateBookingPage() {
     }
   };
 
+
+  const handleAddOrUpdateCartItem = async () => {
+    setError('');
+    setSuccess('');
+
+    const startObj = new Date(startTime);
+    const endObj = new Date(endTime);
+    const now = new Date();
+
+    if (startObj < now) {
+      setError('Start time cannot be in the past.');
+      return;
+    }
+
+    if ((endObj.getTime() - startObj.getTime()) / 60000 < 30) {
+      setError('Minimum booking duration is 30 minutes.');
+      return;
+    }
+
+    if (!selectedSlot) {
+      setError('Please select an available slot first.');
+      return;
+    }
+
+    if (!vehicleId && !manualPlate.trim()) {
+      setError('Please select a vehicle or enter a license plate.');
+      return;
+    }
+
+    if (selectedRegisteredVehicleBlockedByVip) {
+      setError('This registered vehicle is already covered by your active VIP membership. Please use your assigned VIP slot instead of booking another slot.');
+      return;
+    }
+
+    if (!editingClientItemId && cartItems.length >= 5) {
+      setError('You can add up to 5 vehicles in one checkout.');
+      return;
+    }
+
+    const hasOverlap = (startA, endA, startB, endB) => startA < endB && endA > startB;
+
+    const isDuplicate = cartItems.some((item) => {
+      if (editingClientItemId === item.clientItemId) return false;
+      const itemStart = new Date(item.startTime);
+      const itemEnd = new Date(item.endTime);
+      
+      if (hasOverlap(startObj, endObj, itemStart, itemEnd)) {
+        const isSameVehicle = (vehicleId && item.vehicleId === vehicleId) || 
+                              (!vehicleId && manualPlate.trim() === item.licensePlate);
+        if (isSameVehicle) {
+          setError(`This vehicle is already in the booking list for an overlapping time.`);
+          return true;
+        }
+        
+        if (item.slotCode === selectedSlot.slotCode && item.floorId === selectedSlot.floorId) {
+          setError(`Slot ${selectedSlot.slotCode} is already in the booking list for an overlapping time.`);
+          return true;
+        }
+      }
+      return false;
+    });
+
+    if (isDuplicate) return;
+
+    setSubmitting(true);
+    try {
+      if (editingClientItemId) {
+        const oldItem = cartItems.find(i => i.clientItemId === editingClientItemId);
+        if (oldItem && oldItem.holdId) {
+          await releaseBookingHold(oldItem.holdId).catch(() => {});
+        }
+      }
+
+      const holdRes = await createBookingHold({
+        floorId: selectedSlot.floorId,
+        slotCode: selectedSlot.slotCode,
+        licensePlate: vehicleId ? selectedVehicle?.licensePlate : manualPlate.trim(),
+        startTime: startObj.toISOString(),
+        endTime: endObj.toISOString(),
+      });
+
+      if (!holdRes.ok) {
+        setError(holdRes.data?.message || 'Không thể giữ chỗ cho ô đỗ này. Có thể ai đó đã nhanh tay hơn!');
+        return;
+      }
+
+    const nextItem = {
+      clientItemId: editingClientItemId || createClientItemId(),
+      vehicleId: vehicleId || '',
+      licensePlate: vehicleId ? selectedVehicle?.licensePlate : manualPlate.trim(),
+      vehicleLabel: vehicleId
+        ? `${selectedVehicle?.licensePlate || 'Vehicle'} - ${selectedVehicle?.brand || 'Vehicle'} ${selectedVehicle?.model || ''}`.trim()
+        : manualPlate.trim(),
+      floorId: selectedSlot.floorId,
+      floorName: selectedSlot.floorName,
+      slotCode: selectedSlot.slotCode,
+      startTime: startObj.toISOString(),
+      endTime: endObj.toISOString(),
+      serviceIds: selectedServices,
+      serviceNames: services
+        .filter((service) => selectedServices.includes(service._id))
+        .map((service) => service.name),
+      parkingAmount: parkingTotal,
+      serviceAmount: serviceTotal,
+      totalAmount: grandTotal,
+      pricingDetails: pricePreview,
+      holdId: holdRes.data?.data?._id,
+      holdExpiresAt: holdRes.data?.data?.expiresAt,
+    };
+
+    setCartItems((current) => {
+      if (editingClientItemId) {
+        return current.map((item) => item.clientItemId === editingClientItemId ? nextItem : item);
+      }
+      return [...current, nextItem];
+    });
+
+    setCartItemErrors({});
+    setEditingClientItemId(null);
+    setSuccess(editingClientItemId ? 'Booking item updated.' : 'Booking item added to the list.');
+
+    setSelectedServices([]);
+    setSelectedSlotKey('');
+    handleFindSlots();
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleEditCartItem = (item) => {
+    const localStart = toDateTimeLocal(new Date(item.startTime));
+    const localEnd = toDateTimeLocal(new Date(item.endTime));
+
+    setEditingClientItemId(item.clientItemId);
+    setStartDate(localStart.split('T')[0]);
+    setStartTimeStr(localStart.split('T')[1]);
+    setEndDate(localEnd.split('T')[0]);
+    setEndTimeStr(localEnd.split('T')[1]);
+    setVehicleId(item.vehicleId || '');
+    setManualPlate(item.vehicleId ? '' : item.licensePlate);
+    setSelectedServices(item.serviceIds || []);
+    setSelectedSlotKey(`${item.floorId}:${item.slotCode}`);
+    setSuccess('');
+    setError('');
+  };
+
+  const handleRemoveCartItem = async (clientItemId) => {
+    const itemToRemove = cartItems.find(i => i.clientItemId === clientItemId);
+    if (itemToRemove && itemToRemove.holdId) {
+      await releaseBookingHold(itemToRemove.holdId).catch(() => {});
+      handleFindSlots();
+    }
+    setCartItems((current) => current.filter((item) => item.clientItemId !== clientItemId));
+    setCartItemErrors((current) => {
+      const next = { ...current };
+      delete next[clientItemId];
+      return next;
+    });
+    if (editingClientItemId === clientItemId) {
+      setEditingClientItemId(null);
+    }
+  };
+
+  const startTopUpForShortfall = async (shortfall) => {
+    const amountToTopUp = Math.max(shortfall, 10000);
+    setTopUpLoading(true);
+    try {
+      const topUpRes = await createTopUpUrl(amountToTopUp);
+      if (topUpRes.ok) {
+        setTopUpData(topUpRes.data?.data);
+        setShowTopUpModal(true);
+      } else {
+        setError('Insufficient balance and failed to generate top-up QR.');
+      }
+    } catch {
+      setError('Insufficient balance. Network error while generating top-up QR.');
+    } finally {
+      setTopUpLoading(false);
+    }
+  };
+
+
   useEffect(() => {
     const startObj = new Date(startTime);
     const endObj = new Date(endTime);
@@ -499,6 +714,37 @@ export default function CreateBookingPage() {
     handleFindSlots();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startTime, endTime]);
+
+  useEffect(() => {
+    if (cartItems.length === 0) {
+      const timer = setTimeout(() => {
+        setCartQuote(null);
+        setCartItemErrors({});
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await quoteBulkBooking({ items: cartApiItems });
+        const data = res.data?.data || {};
+        if (data.items || data.grandTotal !== undefined) {
+          setCartQuote({
+            grandTotal: data.grandTotal,
+            walletBalance: data.walletBalance,
+            shortfall: data.shortfall,
+            items: data.items,
+          });
+        }
+        setCartItemErrors(res.ok ? {} : toItemErrorMap(data.itemErrors || []));
+      } catch (err) {
+        console.error('Bulk quote failed', err);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [cartApiItems, cartItems.length]);
+
 
   const toggleService = (serviceId) => {
     setSelectedServices((current) =>
@@ -534,28 +780,29 @@ export default function CreateBookingPage() {
         return;
       }
 
-      if (!vehicleId && !manualPlate.trim()) {
-        setError('Please select a vehicle or enter a license plate.');
+      const walletRes = await getWalletInfo();
+      const latestWallet = walletRes.ok ? walletRes.data?.data : wallet;
+      if (latestWallet) setWallet(latestWallet);
+
+      const latestBalance = Number(latestWallet?.balance || 0);
+      const latestShortfall = Math.max(cartGrandTotal - latestBalance, 0);
+      if (latestShortfall > 0) {
+        await startTopUpForShortfall(latestShortfall);
         return;
       }
 
-      if (selectedRegisteredVehicleBlockedByVip) {
-        setError('This registered vehicle is already covered by your active VIP membership. Please use your assigned VIP slot instead of booking another slot.');
-        return;
-      }
 
-      const payload = {
-        startTime: new Date(startTime).toISOString(),
-        endTime: new Date(endTime).toISOString(),
-        floorId: selectedSlot.floorId,
-        slotCode: selectedSlot.slotCode,
-        serviceIds: selectedServices,
-      };
 
-      if (vehicleId) payload.vehicleId = vehicleId;
-      else payload.licensePlate = manualPlate;
 
-      const res = await createBooking(payload);
+      const checkoutItems = cartApiItems.map((item) => ({
+        ...item,
+        holdId: cartItems.find(c => c.clientItemId === item.clientItemId)?.holdId,
+      }));
+
+      const res = await createBulkBooking({
+        idempotencyKey: createClientItemId(),
+        items: checkoutItems,
+      });
 
       if (!res.ok) {
         if (isPolicyAcceptanceRequired(res.data)) {
@@ -592,7 +839,7 @@ export default function CreateBookingPage() {
         return;
       }
 
-      setBookingInfo(res.data?.data?.booking);
+      setBookingInfo(res.data?.data);
       setShowSuccessModal(true);
 
       setSuccess(`Booking created for slot ${selectedSlot.slotCode}. Wallet charged ${formatMoney(grandTotal)}.`);
@@ -854,6 +1101,117 @@ export default function CreateBookingPage() {
                 Book Now
               </button>
             </div>
+
+            <div className="rounded-3xl bg-white border border-gray-200 p-4 md:p-5 shadow-sm">
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <div>
+                  <h2 className="text-lg font-black text-gray-900">Booking List</h2>
+                  <p className="text-sm text-gray-500 font-medium">Checkout one or many vehicles together.</p>
+                </div>
+                <div className="rounded-full bg-gray-100 px-3 py-1 text-xs font-black text-gray-700">
+                  {cartItems.length}/5
+                </div>
+              </div>
+
+              {cartItems.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-center">
+                  <p className="text-sm font-bold text-gray-500">No vehicles added yet.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {cartItems.map((item, index) => {
+                    const itemError = cartItemErrors[item.clientItemId];
+                    const quotedItem = cartQuote?.items?.find((quoteItem) => quoteItem.clientItemId === item.clientItemId);
+                    const itemTotal = quotedItem?.totalAmount ?? item.totalAmount;
+
+                    return (
+                      <div
+                        key={item.clientItemId}
+                        className={`rounded-2xl border p-3 ${
+                          itemError ? 'border-rose-200 bg-rose-50' : 'border-gray-200 bg-white'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="text-[11px] font-black text-gray-400 uppercase tracking-widest">
+                              Vehicle {index + 1}
+                            </div>
+                            <div className="font-black text-gray-900 truncate">{item.vehicleLabel}</div>
+                            <div className="text-xs font-semibold text-gray-500 mt-1">
+                              Slot {item.slotCode} {item.floorName ? `- ${item.floorName}` : ''}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleEditCartItem(item)}
+                              className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-black transition"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveCartItem(item.clientItemId)}
+                              className="w-8 h-8 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center transition"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-semibold text-gray-500">
+                          <div>{formatDateTime(item.startTime)}</div>
+                          <div>{formatDateTime(item.endTime)}</div>
+                        </div>
+
+                        {item.serviceNames.length > 0 && (
+                          <div className="mt-2 text-xs font-semibold text-gray-500">
+                            Services: {item.serviceNames.join(', ')}
+                          </div>
+                        )}
+
+                        <div className="mt-3 flex items-center justify-between">
+                          <span className={`text-xs font-black ${itemError ? 'text-rose-600' : 'text-emerald-600'}`}>
+                            {itemError ? itemError.message : 'Ready'}
+                          </span>
+                          <span className="text-sm font-black text-gray-900">{formatMoney(itemTotal)}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {hasActiveCheckoutHold && (
+                    <div className="hidden"></div>
+                  )}
+
+                  <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4 space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-500 font-semibold">Wallet balance</span>
+                      <span className="font-black text-gray-900">{formatMoney(walletBalance)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-500 font-semibold">Cart total</span>
+                      <span className="font-black text-gold text-lg">{formatMoney(cartGrandTotal)}</span>
+                    </div>
+                    {cartWalletShortfall > 0 && (
+                      <div className="rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-600">
+                        Top up {formatMoney(cartWalletShortfall)} before checkout. No bookings will be created until the full cart is covered.
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleCheckoutCart}
+                    disabled={submitting || topUpLoading  || cartItems.length === 0}
+                    className="w-full rounded-2xl bg-gray-900 hover:bg-black disabled:opacity-50 text-white px-4 py-4 font-black transition flex items-center justify-center gap-2 shadow-sm active:scale-[0.98]"
+                  >
+                    {(submitting || topUpLoading ) ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
+                    {cartWalletShortfall > 0 ? `Top Up ${formatMoney(cartWalletShortfall)}` : hasActiveCheckoutHold ? `Pay ${formatMoney(cartGrandTotal)}` : 'Review Checkout'}
+                  </button>
+                </div>
+              )}
+            </div>
           </section>
 
           <section className="xl:col-span-7 rounded-3xl bg-white border border-gray-200 p-3 md:p-4 shadow-sm flex flex-col min-h-[400px] lg:min-h-[480px]">
@@ -911,6 +1269,7 @@ export default function CreateBookingPage() {
                 onFloorSelect={setCurrentFloorId}
                 activeSessions={activeSessions}
                 dbSlots={dbSlots}
+                availableSlots={slots}
                 selectedSlotId={selectedSlot?.slotCode}
                 onSelectSlot={(slot, floorId) => setSelectedSlotKey(`${floorId}:${slot.id}`)}
                 is2DMode={true}
