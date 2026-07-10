@@ -288,6 +288,20 @@ export default function CreateBookingPage() {
   };
 
   const handleEndChange = (newDate, newTime) => {
+    if (newDate && newTime) {
+      const startObj = new Date(`${startDate}T${startTimeStr}`);
+      const newEndObj = new Date(`${newDate}T${newTime}`);
+      
+      const minEndObj = new Date(startObj);
+      minEndObj.setMinutes(minEndObj.getMinutes() + 30);
+      
+      if (newEndObj < minEndObj) {
+        const minEndStr = toDateTimeLocal(minEndObj);
+        setEndDate(minEndStr.split('T')[0]);
+        setEndTimeStr(minEndStr.split('T')[1]);
+        return;
+      }
+    }
     setEndDate(newDate);
     setEndTimeStr(newTime);
   };
