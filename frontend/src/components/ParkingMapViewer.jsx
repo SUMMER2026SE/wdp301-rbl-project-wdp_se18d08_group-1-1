@@ -37,9 +37,9 @@ const SlotElement = React.memo(({ el, floorId, style, isOccupied, isSelected, is
     finalBorderColor = '#f97316'; // orange-500
     textColor = '#c2410c'; // orange-700
   } else if (isReserved) {
-    finalBgColor = '#f3e8ff'; // purple-100
-    finalBorderColor = '#a855f7'; // purple-500
-    textColor = '#9333ea'; // purple-600
+    finalBgColor = '#fef08a'; // yellow-200
+    finalBorderColor = '#eab308'; // yellow-500
+    textColor = '#ca8a04'; // yellow-600
   } else if (isSelected) {
     finalBgColor = '#cffafe'; // cyan-100
     finalBorderColor = '#06b6d4'; // cyan-500
@@ -53,7 +53,7 @@ const SlotElement = React.memo(({ el, floorId, style, isOccupied, isSelected, is
       : isHeld
         ? `${slotName}: Holding`
         : isReserved
-          ? `${slotName}: Reserved / VIP`
+          ? `${slotName}: VIP Pass`
           : hasName
             ? `${slotName}: Available`
             : 'Unavailable slot';
@@ -122,6 +122,7 @@ export default function ParkingMapViewer({ floors, currentFloorId, onFloorSelect
       return acc;
     }, {});
   }, [availableSlots]);
+
 
   const handleSelectSlot = useCallback((slot, floorId) => {
     if (onSelectSlot) {
@@ -269,32 +270,27 @@ export default function ParkingMapViewer({ floors, currentFloorId, onFloorSelect
       if (el.type && el.type.startsWith('slot')) {
         const hasName = !!el.name && el.name.trim() !== '';
         const slotName = hasName ? el.name : el.id;
-        const sessionKey = `${floorId}-${slotName}`;
+        const slotCode = hasName ? el.name : el.id;
+        const sessionKey = `${floorId}-${slotCode}`;
         const occupiedSession = sessionMap[sessionKey];
         
         let isOccupied = !!occupiedSession;
         
-        const dbSlot = dbSlotMap[sessionKey];
+        const dbSlot = dbSlotMap[`${floorId}-${slotCode}`];
         const isMaintenance = dbSlot?.status === 'maintenance';
+        
+        let isReserved = !!dbSlot?.reservedFor;
 
-        let isAvailable = true;
-        let isReserved = false;
-        let isHeld = false;
+        const isHeld = activeHolds.some(h => String(h.floorId) === String(floorId) && String(h.slotCode).toUpperCase() === String(slotCode).toUpperCase());
 
-        if (activeHolds && hasName) {
-          isHeld = activeHolds.some(h => String(h.floorId) === String(floorId) && String(h.slotCode).toUpperCase() === String(el.name).toUpperCase());
-        }
-
-        if (hasName && availableSlotMap) {
-          isAvailable = !!availableSlotMap[sessionKey];
-          if (!isOccupied && !isMaintenance && !isAvailable && !isHeld) {
-            isReserved = true;
+        if (availableSlotMap) {
+          // If availableSlots logic is active, unavailable means it's not in the map
+          if (!availableSlotMap[`${floorId}-${slotCode}`] && !isOccupied && !isHeld && !isMaintenance) {
+            isReserved = true; 
           }
-        } else if (!hasName) {
-          isAvailable = false;
         }
 
-        const isSelected = Array.isArray(selectedSlotId) ? selectedSlotId.includes(slotName) : selectedSlotId === slotName;
+        const isSelected = Array.isArray(selectedSlotId) ? selectedSlotId.includes(slotCode) : selectedSlotId === slotCode;
 
         return (
           <SlotElement

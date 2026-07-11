@@ -1,9 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { format } from 'date-fns';
 import {
   MonitorCheck, Car, FileWarning, ClipboardList,
   TrendingUp, CheckCircle2, AlertTriangle, Clock, DoorOpen,
   XCircle, ArrowRightCircle, QrCode,
 } from 'lucide-react';
+import { getAllFloors } from '../../services/parkingFloorService';
+import { getAllBookings } from '../../services/bookingService';
+import toast, { Toaster } from 'react-hot-toast';
 
 // ─── Stat Card ─────────────────────────────────────────────────────────────────
 const StatCard = ({ icon, label, value, sub, color }) => (
@@ -21,18 +25,33 @@ const StatCard = ({ icon, label, value, sub, color }) => (
 );
 
 // ─── Slot status grid cell ─────────────────────────────────────────────────────
-const SlotCell = ({ id, status, plate }) => {
+const SlotCell = ({ id, name, status, plate }) => {
   const cfg = {
     OCCUPIED: { bg: 'bg-gray-800 border-gray-700',        text: 'text-gray-400', badge: 'text-gray-500 bg-gray-700/50' },
     EMPTY:    { bg: 'bg-emerald-900/30 border-emerald-700/40', text: 'text-emerald-400', badge: 'text-emerald-400 bg-emerald-900/50' },
     RESERVED: { bg: 'bg-yellow-900/20 border-yellow-700/30',   text: 'text-yellow-400', badge: 'text-yellow-400 bg-yellow-900/40'   },
   }[status] || {};
 
+  const hasName = name && name.trim().length > 0;
+  const displayName = hasName ? name : 'Unnamed Slot';
+
   return (
-    <div className={`rounded-xl border p-3 flex flex-col items-center gap-1.5 ${cfg.bg}`}>
-      <span className={`text-xs font-extrabold ${cfg.text}`}>{id}</span>
-      {plate && <span className="text-[9px] text-gray-500 font-mono">{plate}</span>}
-      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${cfg.badge}`}>{status}</span>
+    <div className={`rounded-xl border p-3 flex flex-col items-center justify-center gap-1.5 ${cfg.bg} ${!hasName ? 'opacity-60 border-dashed bg-transparent' : ''} text-center h-[90px] w-full overflow-hidden`}>
+      <span className={`text-xs font-extrabold ${cfg.text} truncate w-full`} title={hasName ? name : id}>
+        {displayName}
+      </span>
+      
+      {!hasName ? (
+        <span className="text-[8px] text-gray-500 font-mono truncate w-full px-1" title={id}>
+          #{id.split('-').pop()}
+        </span>
+      ) : (
+        plate && <span className="text-[9px] text-gray-500 font-mono">{plate}</span>
+      )}
+      
+      <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${cfg.badge} mt-auto`}>
+        {status}
+      </span>
     </div>
   );
 };
@@ -50,9 +69,10 @@ const BookingRow = ({ id, plate, slot, time, status }) => (
     <div className="text-right shrink-0">
       <p className="text-[10px] text-gray-500">{time}</p>
       <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-        status === 'Active'    ? 'bg-green-900/50 text-green-400'  :
-        status === 'Completed' ? 'bg-blue-900/50 text-blue-400'    :
-                                 'bg-yellow-900/50 text-yellow-400'
+        status === 'ACTIVE'    ? 'bg-green-900/50 text-green-400'  :
+        status === 'COMPLETED' ? 'bg-blue-900/50 text-blue-400'    :
+        status === 'PENDING'   ? 'bg-yellow-900/50 text-yellow-400':
+                                 'bg-red-900/50 text-red-400'
       }`}>{status}</span>
     </div>
   </div>
@@ -75,10 +95,88 @@ const AlertPill = ({ icon, text, time, level }) => (
 
 export default function StaffDashboard() {
   const [gateOpen, setGateOpen] = useState(false);
+  const [floors, setFloors] = useState([]);
+  const [bookings, setBookings] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchData();
+    const interval = setInterval(fetchData, 30000); // refresh every 30s
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      const [floorsRes, bookingsRes] = await Promise.all([
+        getAllFloors(),
+        getAllBookings({ date: format(new Date(), 'yyyy-MM-dd') })
+      ]);
+      
+      if (floorsRes.data?.success) setFloors(floorsRes.data.data || floorsRes.data.floors || []);
+      if (bookingsRes.data?.success) setBookings(bookingsRes.data.data || []);
+    } catch (error) {
+      toast.error('Failed to sync dashboard data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const { totalSlots, activeFloor, activeFloorSlots, activeBookings, recentBookings } = useMemo(() => {
+    let tSlots = 0;
+    floors.forEach(f => {
+      const elements = f.layoutData?.elements || [];
+      tSlots += elements.filter(e => e.type?.startsWith('slot')).length;
+    });
+
+    const activeB = bookings.filter(b => b.status === 'ACTIVE');
+    
+    // Sort bookings descending by creation time (or start time)
+    const sorted = [...bookings].sort((a, b) => new Date(b.createdAt || b.scheduledStart) - new Date(a.createdAt || a.scheduledStart)).reverse();
+    const recent = sorted.slice(0, 4);
+
+    const aFloor = floors.length > 0 ? floors[0] : null;
+    let aFloorSlots = [];
+    if (aFloor) {
+      const elements = aFloor.layoutData?.elements || [];
+      aFloorSlots = elements.filter(e => e.type?.startsWith('slot'))
+                            .map(e => ({ id: e.id, name: e.name || '' }))
+                            .sort((a, b) => {
+                              const nameA = a.name || a.id;
+                              const nameB = b.name || b.id;
+                              return nameA.localeCompare(nameB, undefined, { numeric: true });
+                            });
+    }
+
+    return { totalSlots: tSlots, activeFloor: aFloor, activeFloorSlots: aFloorSlots, activeBookings: activeB, recentBookings: recent };
+  }, [floors, bookings]);
+
+  const getSlotData = (slotLabel) => {
+    if (!activeFloor) return { status: 'EMPTY' };
+    const booking = bookings.find(b => 
+      b.parkingSlot === slotLabel && 
+      (b.floorId?._id === activeFloor._id || b.floorId === activeFloor._id) &&
+      ['ACTIVE', 'PENDING'].includes(b.status)
+    );
+    if (booking) {
+      if (booking.status === 'ACTIVE') return { status: 'OCCUPIED', plate: booking.licensePlate };
+      if (booking.status === 'PENDING') return { status: 'RESERVED', plate: booking.licensePlate };
+    }
+    return { status: 'EMPTY' };
+  };
+
+  if (loading && floors.length === 0) {
+    return (
+      <div className="flex h-full items-center justify-center text-white/40">
+        Loading Staff Dashboard...
+      </div>
+    );
+  }
+
+  const occupancyRate = totalSlots > 0 ? Math.round((activeBookings.length / totalSlots) * 100) : 0;
 
   return (
     <div className="p-6 lg:p-8 space-y-8 min-h-full">
-
+      <Toaster position="top-right" />
       {/* Page header */}
       <div>
         <h1 className="text-2xl font-extrabold text-white">Staff Overview</h1>
@@ -91,15 +189,15 @@ export default function StaffDashboard() {
           icon={<MonitorCheck size={18} className="text-yellow-400" />}
           color="bg-yellow-500/10"
           label="Slots Under Management"
-          value="124"
-          sub="3 lots assigned"
+          value={totalSlots}
+          sub={`${floors.length} lots assigned`}
         />
         <StatCard
           icon={<Car size={18} className="text-sky-400" />}
           color="bg-sky-500/10"
           label="Vehicles Inside Now"
-          value="87"
-          sub="70% occupancy"
+          value={activeBookings.length}
+          sub={`${occupancyRate}% occupancy`}
         />
         <StatCard
           icon={<Clock size={18} className="text-violet-400" />}
@@ -112,19 +210,19 @@ export default function StaffDashboard() {
           icon={<FileWarning size={18} className="text-orange-400" />}
           color="bg-orange-500/10"
           label="Violations Today"
-          value="3"
-          sub="1 pending review"
+          value="0"
+          sub="0 pending review"
         />
       </div>
 
       {/* ── Mid row ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        {/* Live Grid – Lot A */}
+        {/* Live Grid */}
         <div className="lg:col-span-2 bg-[#16181F] border border-white/5 rounded-2xl p-5">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h3 className="text-white font-bold text-sm">Live Grid — Lot A</h3>
+              <h3 className="text-white font-bold text-sm">Live Grid — {activeFloor ? activeFloor.name : 'Loading...'}</h3>
               <p className="text-gray-600 text-[10px] mt-0.5">Real-time slot status</p>
             </div>
             <div className="flex items-center gap-1.5">
@@ -132,15 +230,25 @@ export default function StaffDashboard() {
               <span className="text-[10px] text-gray-500">Live</span>
             </div>
           </div>
-          <div className="grid grid-cols-4 gap-2.5">
-            <SlotCell id="A-01" status="OCCUPIED" plate="51G-123.45" />
-            <SlotCell id="A-02" status="EMPTY"    />
-            <SlotCell id="A-03" status="RESERVED" plate="43A-567.89" />
-            <SlotCell id="A-04" status="OCCUPIED" plate="92C-444.22" />
-            <SlotCell id="A-05" status="EMPTY"    />
-            <SlotCell id="A-06" status="OCCUPIED" plate="61B-238.10" />
-            <SlotCell id="A-07" status="OCCUPIED" plate="30H-999.11" />
-            <SlotCell id="A-08" status="RESERVED" plate="77A-001.55" />
+          
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
+            {activeFloorSlots.length === 0 ? (
+              <p className="text-white/40 text-sm col-span-full">No slots found on this floor.</p>
+            ) : (
+              activeFloorSlots.map(slotObj => {
+                const slotLabel = slotObj.name || slotObj.id;
+                const data = getSlotData(slotLabel);
+                return (
+                  <SlotCell 
+                    key={slotObj.id} 
+                    id={slotObj.id} 
+                    name={slotObj.name}
+                    status={data.status} 
+                    plate={data.plate} 
+                  />
+                );
+              })
+            )}
           </div>
 
           {/* Legend */}
@@ -225,31 +333,35 @@ export default function StaffDashboard() {
               Manage all →
             </span>
           </div>
-          <BookingRow id="#B-2041" plate="51G-123.45" slot="A-01" time="09:12 AM" status="Active"    />
-          <BookingRow id="#B-2040" plate="43A-567.89" slot="A-03" time="08:55 AM" status="Active"    />
-          <BookingRow id="#B-2038" plate="92C-444.22" slot="B-07" time="08:20 AM" status="Completed" />
-          <BookingRow id="#B-2036" plate="77A-001.55" slot="A-08" time="07:45 AM" status="Pending"   />
+          <div className="space-y-1">
+            {recentBookings.length === 0 ? (
+              <p className="text-white/40 text-xs py-4">No recent bookings today.</p>
+            ) : (
+              recentBookings.map(b => (
+                <BookingRow 
+                  key={b._id} 
+                  id={`#B-${b._id.slice(-4).toUpperCase()}`} 
+                  plate={b.licensePlate} 
+                  slot={b.parkingSlot} 
+                  time={format(new Date(b.createdAt || b.scheduledStart), 'HH:mm')} 
+                  status={b.status} 
+                />
+              ))
+            )}
+          </div>
         </div>
 
         {/* Alerts */}
         <div className="bg-[#16181F] border border-white/5 rounded-2xl p-5">
           <h3 className="text-white font-bold text-sm mb-4">Lot Alerts & Violations</h3>
           <div className="space-y-2.5">
-            <AlertPill
-              icon={<AlertTriangle size={14} className="text-yellow-400" />}
-              text="Lot B near capacity (92%) — consider diverting traffic"
-              time="5 min ago" level="warn"
-            />
-            <AlertPill
-              icon={<XCircle size={14} className="text-red-400" />}
-              text="Sensor A-07 signal lost — manual check required"
-              time="20 min ago" level="error"
-            />
-            <AlertPill
-              icon={<FileWarning size={14} className="text-orange-400" />}
-              text="Parking violation reported — Slot C-03 unauthorized vehicle"
-              time="35 min ago" level="warn"
-            />
+            {occupancyRate > 90 && (
+              <AlertPill
+                icon={<AlertTriangle size={14} className="text-yellow-400" />}
+                text={`Lot ${activeFloor?.name || 'A'} near capacity (${occupancyRate}%) — consider diverting traffic`}
+                time="Just now" level="warn"
+              />
+            )}
             <AlertPill
               icon={<CheckCircle2 size={14} className="text-emerald-400" />}
               text="Gate A-01 maintenance completed — fully operational"

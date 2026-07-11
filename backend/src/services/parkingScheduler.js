@@ -205,6 +205,66 @@ async function checkExpiredContracts(app) {
   }
 }
 
+async function checkVIPSubscriptions(app) {
+  try {
+    const Subscription = require('../models/Subscription');
+    const now = new Date();
+    const threeDaysFromNow = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+
+    // 1. Send warning for subscriptions expiring in <= 3 days
+    const expiringSubscriptions = await Subscription.find({
+      status: 'active',
+      expireAt: { $lte: threeDaysFromNow, $gt: now },
+      expireWarningSent: { $ne: true }
+    });
+
+    for (const sub of expiringSubscriptions) {
+      if (sub.user) {
+        notifTriggers.notifySystemMessage(app, sub.user, {
+          title: 'Sắp hết hạn VIP Pass / VIP Pass Expiring',
+          body: `Gói đỗ xe tháng của bạn sẽ hết hạn vào ${sub.expireAt.toLocaleDateString()}. Vui lòng gia hạn để giữ vị trí ô đỗ cố định của bạn. / Your monthly pass expires on ${sub.expireAt.toLocaleDateString()}. Please renew to keep your fixed parking slot.`,
+          type: 'SYSTEM'
+        }).catch(err => console.error('Failed to send VIP warning:', err));
+      }
+      sub.expireWarningSent = true;
+      await sub.save();
+      console.log(`[ParkingScheduler] Sent VIP expiration warning for subscription ${sub._id}.`);
+    }
+
+    // 2. Mark expired subscriptions
+    const expiredSubscriptions = await Subscription.find({
+      status: 'active',
+      expireAt: { $lte: now }
+    });
+
+    const Slot = require('../models/Slot');
+    for (const sub of expiredSubscriptions) {
+      sub.status = 'expired';
+      await sub.save();
+      
+      // Release slots
+      for (const slot of sub.slots) {
+        await Slot.updateOne(
+          { floorID: slot.floorId, slotNumber: slot.slotCode },
+          { $unset: { reservedFor: "" } }
+        );
+      }
+      
+      if (sub.user) {
+        notifTriggers.notifySystemMessage(app, sub.user, {
+          title: 'Hết hạn VIP Pass / VIP Pass Expired',
+          body: `Gói đỗ xe tháng của bạn đã hết hạn. Vị trí ô đỗ cố định đã được mở lại cho mọi người. / Your monthly pass has expired. Your fixed parking slot has been released.`,
+          type: 'SYSTEM'
+        }).catch(err => console.error('Failed to send VIP expired:', err));
+      }
+      console.log(`[ParkingScheduler] Marked subscription ${sub._id} as expired and released slots.`);
+    }
+
+  } catch (err) {
+    console.error('[ParkingScheduler] Error checking VIP subscriptions:', err.message);
+  }
+}
+
 /**
  * Start the parking session scheduler
  * @param {Express.Application} app - Express app instance (for io access)
@@ -227,6 +287,9 @@ function startScheduler(app) {
   checkExpiredContracts(app).catch((err) =>
     console.error('[ParkingScheduler] Initial contract expiration error:', err.message)
   );
+  checkVIPSubscriptions(app).catch((err) =>
+    console.error('[ParkingScheduler] Initial VIP subscription check error:', err.message)
+  );
 
   // Then run every interval
   schedulerInterval = setInterval(() => {
@@ -241,6 +304,9 @@ function startScheduler(app) {
   contractSchedulerInterval = setInterval(() => {
     checkExpiredContracts(app).catch((err) =>
       console.error('[ParkingScheduler] Contract expiration interval error:', err.message)
+    );
+    checkVIPSubscriptions(app).catch((err) =>
+      console.error('[ParkingScheduler] VIP subscription interval error:', err.message)
     );
   }, CONTRACT_EXPIRATION_INTERVAL_MS);
 }
@@ -266,5 +332,6 @@ module.exports = {
   checkActiveSessions,
   checkBookings,
   checkExpiredContracts,
+  checkVIPSubscriptions,
   LOW_BALANCE_THRESHOLD,
 };

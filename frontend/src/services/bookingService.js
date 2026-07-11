@@ -4,6 +4,14 @@ const authHeader = () => ({
   Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
 });
 
+export const getAllBookings = (params = {}) => {
+  const query = new URLSearchParams(params).toString();
+  return apiFetch(`/bookings/all${query ? `?${query}` : ''}`, {
+    method: 'GET',
+    headers: authHeader(),
+  });
+};
+
 export const getAvailableBookingSlots = ({ startTime, endTime }) => {
   const query = new URLSearchParams({ startTime, endTime }).toString();
 

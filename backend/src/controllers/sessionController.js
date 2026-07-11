@@ -141,19 +141,40 @@ exports.verifyPlate = async (req, res, next) => {
     if (!hasPreBooking && !isMonthly) {
       const floors = await ParkingFloor.find();
       let totalSlots = 0;
+      const validSlotCodesByFloor = {};
+      
       for (const f of floors) {
-        if (f.layoutData && f.layoutData.elements) {
-          const slots = f.layoutData.elements.filter(el => 
+        let parsedLayout = null;
+        if (typeof f.layoutData === 'string') {
+          try {
+            parsedLayout = JSON.parse(f.layoutData);
+          } catch (e) {
+            console.error('Failed to parse layoutData', e);
+          }
+        } else {
+          parsedLayout = f.layoutData;
+        }
+        
+        if (parsedLayout && parsedLayout.elements) {
+          const slots = parsedLayout.elements.filter(el => 
             ['slot', 'slot-ev', 'slot-handicap', 'slot-moto'].includes(el.type) && 
             el.name && el.name.trim() !== ''
           );
           totalSlots += slots.length;
+          validSlotCodesByFloor[f._id.toString()] = slots.map(s => s.name);
         }
       }
       
       const Slot = require('../models/Slot');
-      const maintenanceCount = await Slot.countDocuments({ status: 'maintenance' });
-      const effectiveTotalSlots = totalSlots - maintenanceCount;
+      const maintenanceSlots = await Slot.find({ status: 'maintenance' });
+      let validMaintenanceCount = 0;
+      for (const mSlot of maintenanceSlots) {
+        const floorIdStr = mSlot.floorID?.toString();
+        if (floorIdStr && validSlotCodesByFloor[floorIdStr]?.includes(mSlot.slotNumber)) {
+          validMaintenanceCount++;
+        }
+      }
+      const effectiveTotalSlots = totalSlots - validMaintenanceCount;
 
       const activeSessionsCount = await Session.countDocuments({ status: 'active' });
       const upcomingBookingsCount = await Booking.countDocuments({
