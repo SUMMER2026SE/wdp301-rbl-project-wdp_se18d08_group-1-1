@@ -181,13 +181,15 @@ export default function Membership() {
 
   const cardShellClass = "group relative z-10 flex min-h-[430px] w-full flex-col overflow-hidden rounded-3xl bg-white p-5 shadow-[0_14px_34px_rgba(15,23,42,0.08)] transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_22px_46px_rgba(15,23,42,0.14)] md:p-6";
 
-  const totalCards = subscriptionPackages.length + 1;
+  const visibleCardsCount = subscriptionPackages.length === 0 ? 2 : subscriptionPackages.length + 1;
   const getDesktopGridBalanceClass = (cardIndex) => {
-    const lastRowCount = totalCards % 3;
-    const lastRowStartIndex = totalCards - lastRowCount;
+    if (visibleCardsCount === 2) return ''; // Left-align if only 2 cards (Member + Empty State or 1 Package)
+    
+    const lastRowCount = visibleCardsCount % 3;
+    const lastRowStartIndex = visibleCardsCount - lastRowCount;
 
     if (lastRowCount === 1 && cardIndex === lastRowStartIndex) return 'lg:col-start-2';
-    if (lastRowCount === 2 && cardIndex === lastRowStartIndex + 1) return 'lg:col-start-3';
+    // Remove the awkward col-start-3 gap for 2 items in the last row
     return '';
   };
 
