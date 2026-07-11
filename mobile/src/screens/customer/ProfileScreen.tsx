@@ -11,6 +11,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -96,16 +97,26 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
           {loading ? (
             <ActivityIndicator color={COLORS.gold} style={{ padding: SPACING.xl }} />
           ) : (
-            <View style={styles.profileCardContent}>
+            <TouchableOpacity 
+              style={styles.profileCardContent}
+              activeOpacity={0.8}
+              onPress={() => navigation?.navigate?.('EditProfile')}
+            >
               {/* Avatar */}
               <View style={styles.avatarWrap}>
-                <View style={styles.avatarRing}>
-                  <Text style={styles.avatarText}>{initial}</Text>
+                <View style={[styles.avatarRing, { overflow: 'hidden' }]}>
+                  {profile?.avatar ? (
+                    <Image source={{ uri: profile.avatar }} style={{ width: '100%', height: '100%' }} />
+                  ) : user?.avatar ? (
+                    <Image source={{ uri: user.avatar }} style={{ width: '100%', height: '100%' }} />
+                  ) : (
+                    <Text style={styles.avatarText}>{initial}</Text>
+                  )}
                 </View>
                 {/* Edit badge */}
-                <TouchableOpacity style={styles.editBadge} activeOpacity={0.8}>
+                <View style={styles.editBadge}>
                   <Ionicons name="camera-outline" size={12} color={COLORS.textInverse} />
-                </TouchableOpacity>
+                </View>
               </View>
 
               <View style={styles.profileInfo}>
@@ -116,13 +127,24 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
                   <Text style={styles.rolePillText}>{roleBadge}</Text>
                 </View>
               </View>
-            </View>
+
+              <Ionicons name="chevron-forward" size={20} color={COLORS.gold} style={{ opacity: 0.5 }} />
+            </TouchableOpacity>
           )}
         </View>
 
         {/* ── Account section ─────────────────────────────────── */}
         <Text style={styles.sectionTitle}>Tài khoản của tôi</Text>
         <View style={styles.menuCard}>
+          <MenuItem
+            icon="person-outline"
+            label="Hồ sơ cá nhân"
+            sublabel="Thông tin cá nhân"
+            iconColor="#4ECDC4"
+            iconBg="rgba(78,205,196,0.12)"
+            onPress={() => navigation?.navigate?.('EditProfile')}
+          />
+          <View style={styles.menuDivider} />
           <MenuItem
             icon="car-outline"
             label="Xe của tôi"

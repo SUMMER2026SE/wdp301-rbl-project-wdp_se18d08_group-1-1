@@ -83,6 +83,12 @@ export default function CustomerNavigator() {
           tabBarLabel: 'Tài khoản',
           tabBarIcon: ({ focused, color }) => tabIcon(focused, 'person', 'person-outline', color),
         }}
+        listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            e.preventDefault();
+            navigation.navigate('ProfileTab', { screen: 'Profile' });
+          },
+        })}
       />
     </Tab.Navigator>
   );

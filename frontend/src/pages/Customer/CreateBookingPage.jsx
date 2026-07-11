@@ -31,6 +31,7 @@ import {
 } from '../../services/bookingService';
 import { QRCodeSVG } from 'qrcode.react';
 import { createTopUpUrl, getTopUpStatus } from '../../services/walletService';
+import { calculateBookingPrice } from '../../utils/bookingPricing';
 
 const formatMoney = (value = 0) => `${Number(value || 0).toLocaleString('vi-VN')} VND`;
 
@@ -306,14 +307,6 @@ export default function CreateBookingPage() {
     [services, selectedServices]
   );
 
-  const parkingTotal = useMemo(() => {
-    let paidHours = durationHours;
-    if (paidHours < 1) paidHours = 1;
-    return paidHours * hourlyRate;
-  }, [durationHours, hourlyRate]);
-
-  const grandTotal = parkingTotal + serviceTotal;
-
   const selectedSlot = slots.find((slot) => `${slot.floorId}:${slot.slotCode}` === selectedSlotKey);
   const selectedVehicle = vehicles.find((vehicle) => vehicle._id === vehicleId);
   const activeMembershipType = useMemo(() => {
@@ -393,10 +386,6 @@ export default function CreateBookingPage() {
         const fls = floorsData.data || [];
         setFloors(fls);
         if (fls.length > 0) setCurrentFloorId(fls[0]._id);
-      }
-      if (packagesData && packagesData.success) {
-        const hourlyPkg = packagesData.data?.find(p => p.type === 'hourly');
-        if (hourlyPkg) setHourlyRate(hourlyPkg.price);
       }
     }).finally(() => {
       setLoading(false);

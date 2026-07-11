@@ -9,12 +9,15 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { fetchProfile, type Profile } from '../../api/profile.api';
 import { useAuth } from '@/hooks/useAuth';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '../../constants/theme';
+import { walletService } from '@/services/api/wallet';
+import { formatCurrency } from '@/utils/formatters';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type QuickAction = {
@@ -52,7 +55,7 @@ const QUICK_ACTIONS: QuickAction[] = [
     screen: 'ProfileTab',
     params: { screen: 'VehicleList' },
   },
-  { icon: 'wallet-outline', label: 'Ví tiền', color: '#FF9F43', bg: 'rgba(255,159,67,0.12)', screen: 'WalletTab' },
+  { icon: 'wallet-outline', label: 'Ví tiền', color: '#FF9F43', bg: 'rgba(255,159,67,0.12)', screen: 'WalletTab', params: { screen: 'Wallet' } },
   {
     icon: 'receipt-outline',
     label: 'Lịch sử',
@@ -83,6 +86,7 @@ function getGreeting() {
 export default function HomeScreen({ navigation }: { navigation?: any }) {
   const { user } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   const loadProfile = async () => {
@@ -94,16 +98,28 @@ export default function HomeScreen({ navigation }: { navigation?: any }) {
     }
   };
 
-  useEffect(() => { loadProfile(); }, []);
+  const loadWallet = async () => {
+    try {
+      const res = await walletService.getWallet();
+      if (res?.data?.balance !== undefined) {
+        setWalletBalance(res.data.balance);
+      }
+    } catch {
+      // silently fail
+    }
+  };
+
+  useEffect(() => { loadProfile(); loadWallet(); }, []);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await loadProfile();
+    await Promise.all([loadProfile(), loadWallet()]);
     setRefreshing(false);
   };
 
   const displayName = profile?.fullName || user?.username || 'Khách hàng';
   const initial = displayName.charAt(0).toUpperCase();
+  const avatarUri = profile?.avatar || null;
 
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
@@ -140,9 +156,13 @@ export default function HomeScreen({ navigation }: { navigation?: any }) {
               <View style={styles.notifDot} />
             </TouchableOpacity>
 
-            {/* Avatar */}
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{initial}</Text>
+                      {/* Avatar */}
+            <View style={[styles.avatar, { overflow: 'hidden' }]}>
+              {avatarUri ? (
+                <Image source={{ uri: avatarUri }} style={{ width: '100%', height: '100%' }} />
+              ) : (
+                <Text style={styles.avatarText}>{initial}</Text>
+              )}
             </View>
           </View>
         </View>
@@ -181,7 +201,7 @@ export default function HomeScreen({ navigation }: { navigation?: any }) {
           </View>
         </View>
 
-        {/* ── Stats Row ───────────────────────────────────────── */}
+                {/* ── Stats Row ───────────────────────────────────────── */}
         <View style={styles.statsRow}>
           <StatCard
             icon="time-outline"
@@ -193,8 +213,8 @@ export default function HomeScreen({ navigation }: { navigation?: any }) {
             icon="wallet-outline"
             label="Số dư ví"
             value={
-              profile?.wallet?.balance !== undefined
-                ? `${profile.wallet.balance.toLocaleString('vi-VN')}đ`
+              walletBalance !== null
+                ? formatCurrency(walletBalance)
                 : '--'
             }
             color="#60B4FF"

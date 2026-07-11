@@ -30,6 +30,7 @@ export interface ParkingFloor {
   floorNumber: number;
   name: string;
   layout?: FloorLayoutData;
+  layoutData?: any;
   slots?: Slot[];
 }
 

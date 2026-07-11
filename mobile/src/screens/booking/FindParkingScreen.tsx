@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { ParkingMap2D } from '@/components/booking/ParkingMap2D';
 import { EmptyState, ErrorState, ScreenHeader } from '@/components/common';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
 import { useBooking } from '@/hooks/useBooking';
@@ -65,8 +66,6 @@ export const FindParkingScreen = ({ navigation, route }: Props) => {
     [availableSlots, selectedFloorId],
   );
   const totalAvailable = availableSlots.length;
-  const mapRows = Math.max(6, Math.ceil(Math.max(floorSlots.length, 1) / 5));
-  const mapHeight = 16 + mapRows * 68 + 16;
 
   const handleConfirmSlot = () => {
     if (!selectedSlot) return;
@@ -132,7 +131,7 @@ export const FindParkingScreen = ({ navigation, route }: Props) => {
 
       <ScrollView style={styles.mapScroll}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={[styles.mapCanvas, { minHeight: mapHeight }]}>
+          <View style={styles.mapCanvas}>
             {isLoading ? (
               <View style={styles.mapState}>
                 <ActivityIndicator color={COLORS.gold} size="large" />
@@ -156,46 +155,13 @@ export const FindParkingScreen = ({ navigation, route }: Props) => {
                   message="Không tìm thấy tầng bãi xe để hiển thị."
                 />
               </View>
-            ) : floorSlots.length === 0 ? (
-              <View style={styles.mapState}>
-                <EmptyState
-                  icon="car-outline"
-                  title="Không có chỗ trống"
-                  message="Tầng này không còn vị trí phù hợp với khung giờ đã chọn."
-                />
-              </View>
             ) : (
-              floorSlots.map((slot, index) => {
-                const col = index % 5;
-                const row = Math.floor(index / 5);
-                const isSelected = selectedSlot?.slotCode === slot.slotCode && selectedSlot.floorId === slot.floorId;
-                const color = isSelected
-                  ? COLORS.gold
-                  : SLOT_STATUS_COLOR[slot.status ?? 'available'] ?? COLORS.textMuted;
-
-                return (
-                  <Pressable
-                    key={`${slot.floorId}-${slot.slotCode}`}
-                    style={[
-                      styles.slotBox,
-                      {
-                        backgroundColor: isSelected ? 'rgba(212,175,55,0.2)' : `${color}18`,
-                        borderColor: color,
-                        left: 16 + col * 72,
-                        top: 16 + row * 68,
-                      },
-                    ]}
-                    onPress={() => setSelectedSlot(isSelected ? null : slot)}
-                  >
-                    <Ionicons
-                      name={slot.status === 'occupied' ? 'car' : 'car-outline'}
-                      size={20}
-                      color={color}
-                    />
-                    <Text style={[styles.slotBoxText, { color }]}>{slot.slotCode}</Text>
-                  </Pressable>
-                );
-              })
+              <ParkingMap2D
+                floor={selectedFloor}
+                floorSlots={floorSlots}
+                selectedSlot={selectedSlot}
+                onSelectSlot={setSelectedSlot}
+              />
             )}
           </View>
         </ScrollView>
@@ -271,7 +237,7 @@ const styles = StyleSheet.create({
     margin: SPACING.md,
     minHeight: 420,
     position: 'relative',
-    width: 16 + 5 * 72 + 16,
+    overflow: 'hidden',
   },
   mapState: {
     alignItems: 'center',

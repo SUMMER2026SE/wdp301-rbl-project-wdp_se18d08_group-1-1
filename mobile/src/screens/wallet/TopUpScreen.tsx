@@ -1,9 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Image,
   Linking,
   ScrollView,
   StatusBar,
@@ -14,6 +13,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import QRCode from 'react-native-qrcode-svg';
 
 import { ErrorState, ScreenHeader, SectionTitle } from '@/components/common';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
@@ -37,6 +37,31 @@ export const TopUpScreen = ({ navigation }: Props) => {
     amount?: number;
   } | null>(null);
   const [status, setStatus] = useState('');
+  const [successCountdown, setSuccessCountdown] = useState<number | null>(null);
+  const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Clean up timers on unmount
+  useEffect(() => () => {
+    if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current);
+    if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+  }, []);
+
+  const triggerSuccessRedirect = () => {
+    setSuccessCountdown(3);
+    countdownTimerRef.current = setInterval(() => {
+      setSuccessCountdown(prev => {
+        if (prev === null || prev <= 1) {
+          clearInterval(countdownTimerRef.current!);
+          return null;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    redirectTimerRef.current = setTimeout(() => {
+      navigation.navigate('Wallet');
+    }, 3000);
+  };
 
   const handleSubmit = async () => {
     const numericAmount = Number(amount);
@@ -60,21 +85,21 @@ export const TopUpScreen = ({ navigation }: Props) => {
   };
 
   const checkStatus = async () => {
-    if (!payment) {
-      return;
-    }
+    if (!payment) return;
     try {
       const response = await walletService.getTopUpStatus(payment.orderCode);
-      setStatus(response.data?.status || 'PENDING');
+      const newStatus = response.data?.status || 'PENDING';
+      setStatus(newStatus);
+      if (newStatus === 'COMPLETED' || newStatus === 'SUCCESS') {
+        triggerSuccessRedirect();
+      }
     } catch (statusError) {
       setError(statusError instanceof Error ? statusError.message : 'Không thể kiểm tra thanh toán.');
     }
   };
 
   useEffect(() => {
-    if (!payment || status !== 'PENDING') {
-      return;
-    }
+    if (!payment || status !== 'PENDING') return;
 
     const startedAt = Date.now();
     const interval = setInterval(() => {
@@ -88,6 +113,16 @@ export const TopUpScreen = ({ navigation }: Props) => {
 
     return () => clearInterval(interval);
   }, [payment, status]);
+
+  // When status transitions to COMPLETED via polling, trigger redirect
+  useEffect(() => {
+    if (status === 'COMPLETED' || status === 'SUCCESS') {
+      if (successCountdown === null) {
+        triggerSuccessRedirect();
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
 
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
@@ -153,29 +188,51 @@ export const TopUpScreen = ({ navigation }: Props) => {
               <Ionicons name="sync-circle-outline" size={18} color={COLORS.gold} />
               <Text style={styles.statusText}>Trạng thái: {status}</Text>
             </View>
-            {payment.qrCode ? <Image source={{ uri: payment.qrCode }} style={styles.qr} /> : null}
+                        {payment.qrCode ? (
+              <View style={styles.qrWrapper}>
+                <QRCode
+                  value={payment.qrCode}
+                  size={220}
+                  backgroundColor="white"
+                  color="black"
+                />
+                <Text style={styles.qrHint}>Quét bằng app ngân hàng để thanh toán</Text>
+              </View>
+            ) : null}
             <Text style={styles.helpText}>
               Quét QR bằng ứng dụng ngân hàng hoặc mở trang thanh toán PayOS. Hệ thống sẽ tự cập nhật qua webhook.
             </Text>
             {error ? <Text style={styles.inlineError}>{error}</Text> : null}
-            <View style={styles.actions}>
-              <TouchableOpacity activeOpacity={0.8} style={styles.outlineButton} onPress={() => Linking.openURL(payment.checkoutUrl)}>
-                <Text style={styles.outlineButtonText}>Mở PayOS</Text>
-              </TouchableOpacity>
-              <TouchableOpacity activeOpacity={0.8} style={styles.outlineButton} onPress={checkStatus}>
-                <Text style={styles.outlineButtonText}>Kiểm tra</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                activeOpacity={0.8}
-                style={styles.cancelButton}
-                onPress={async () => {
-                  const response = await walletService.getTopUpStatus(payment.orderCode, true);
-                  setStatus(response.data?.status || 'CANCELLED');
-                }}
-              >
-                <Text style={styles.cancelButtonText}>Hủy</Text>
-              </TouchableOpacity>
-            </View>
+
+            {/* Success banner */}
+            {(status === 'COMPLETED' || status === 'SUCCESS') && successCountdown !== null ? (
+              <View style={styles.successBanner}>
+                <Ionicons name="checkmark-circle" size={28} color="#7EE8A2" />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.successTitle}>Nạp tiền thành công! 🎉</Text>
+                  <Text style={styles.successSub}>Đang chuyển về Ví tiền sau {successCountdown}s...</Text>
+                </View>
+              </View>
+            ) : (
+              <View style={styles.actions}>
+                <TouchableOpacity activeOpacity={0.8} style={styles.outlineButton} onPress={() => Linking.openURL(payment.checkoutUrl)}>
+                  <Text style={styles.outlineButtonText}>Mở PayOS</Text>
+                </TouchableOpacity>
+                <TouchableOpacity activeOpacity={0.8} style={styles.outlineButton} onPress={checkStatus}>
+                  <Text style={styles.outlineButtonText}>Kiểm tra</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  activeOpacity={0.8}
+                  style={styles.cancelButton}
+                  onPress={async () => {
+                    const response = await walletService.getTopUpStatus(payment.orderCode, true);
+                    setStatus(response.data?.status || 'CANCELLED');
+                  }}
+                >
+                  <Text style={styles.cancelButtonText}>Hủy</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         ) : null}
       </ScrollView>
@@ -303,11 +360,19 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     fontSize: FONT_SIZES.sm,
   },
-  qr: {
+  qrWrapper: {
     alignSelf: 'center',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    backgroundColor: 'white',
     borderRadius: RADIUS.md,
-    height: 220,
-    width: 220,
+    padding: SPACING.md,
+  },
+  qrHint: {
+    color: '#555',
+    fontSize: FONT_SIZES.xs,
+    textAlign: 'center',
+    marginTop: 4,
   },
   helpText: {
     color: COLORS.textMuted,
@@ -343,5 +408,25 @@ const styles = StyleSheet.create({
     color: COLORS.error,
     fontSize: FONT_SIZES.sm,
     fontWeight: '800',
+  },
+  successBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+    backgroundColor: 'rgba(126,232,162,0.1)',
+    borderColor: 'rgba(126,232,162,0.35)',
+    borderWidth: 1,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+  },
+  successTitle: {
+    color: '#7EE8A2',
+    fontSize: FONT_SIZES.md,
+    fontWeight: '800',
+  },
+  successSub: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.xs,
+    marginTop: 2,
   },
 });
