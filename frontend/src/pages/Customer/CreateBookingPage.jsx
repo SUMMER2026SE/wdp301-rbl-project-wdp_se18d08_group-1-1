@@ -526,8 +526,6 @@ export default function CreateBookingPage() {
 
       const nextSlots = res.data?.data?.slots || [];
       setSlots(nextSlots);
-
-
     } catch (err) {
       console.error('Error finding slots:', err);
       setError(`Network error while checking slots: ${err.message}`);
@@ -1340,6 +1338,10 @@ export default function CreateBookingPage() {
                     <div className="flex items-center gap-1.5">
                       <div className="w-3.5 h-3.5 rounded-sm bg-cyan-500 border border-cyan-400"></div>
                       <span className="text-[10px] text-gray-300 font-bold tracking-wide">Selected</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-3.5 h-3.5 rounded-sm bg-yellow-100 border border-yellow-500"></div>
+                      <span className="text-[10px] text-yellow-500 font-bold tracking-wide">VIP Pass</span>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <div className="w-3.5 h-3.5 rounded-sm bg-red-200 border border-red-500" style={{ backgroundImage: 'repeating-linear-gradient(45deg, rgba(239, 68, 68, 0.2), rgba(239, 68, 68, 0.2) 4px, rgba(127, 29, 29, 0.3) 4px, rgba(127, 29, 29, 0.3) 8px)' }}></div>

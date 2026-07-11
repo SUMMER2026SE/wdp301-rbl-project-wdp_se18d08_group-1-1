@@ -8,6 +8,7 @@ import { notifyAuthChange } from '../../services/authStorage';
 import ParkingMapViewer from '../../components/ParkingMapViewer';
 import PolicyAcceptancePrompt from '../../components/policies/PolicyAcceptancePrompt';
 import { extractMissingPolicies, isPolicyAcceptanceRequired } from '../../utils/policyErrors';
+import toast, { Toaster } from 'react-hot-toast';
 
 export default function Membership() {
   const [packages, setPackages] = useState([]);
@@ -71,7 +72,7 @@ export default function Membership() {
 
     if (orderCode) {
       if (cancel === 'true') {
-        alert('Payment transaction was cancelled.');
+        toast.error('Payment transaction was cancelled.');
         window.history.replaceState({}, document.title, window.location.pathname);
       } else {
         setVerifying(true);
@@ -91,13 +92,13 @@ export default function Membership() {
             } else if (attempts >= 100) { // Timeout after 5 minutes (3s * 100)
               clearInterval(intervalId);
               setVerifying(false);
-              alert('Payment verification timed out. Please contact support if you have paid.');
+              toast.error('Payment verification timed out. Please contact support if you have paid.');
               window.history.replaceState({}, document.title, window.location.pathname);
             } else if (res.data?.message !== 'Payment not completed.') {
               // If it's a hard error (not just pending), stop polling
               clearInterval(intervalId);
               setVerifying(false);
-              alert(res.data?.message || 'The transaction failed');
+              toast.error(res.data?.message || 'The transaction failed');
               window.history.replaceState({}, document.title, window.location.pathname);
             }
           } catch (err) {
@@ -262,11 +263,11 @@ export default function Membership() {
       // Add
       const maxSlots = Math.min(3, vehicles.length);
       if (vehicles.length === 0) {
-        alert("You need to add a vehicle before buying a VIP pass.");
+        toast.error("You need to add a vehicle before buying a VIP pass.");
         return;
       }
       if (selectedSlots.length >= maxSlots) {
-        alert(`You can select at most ${maxSlots} parking slots (matching your number of vehicles).`);
+        toast.error(`You can select at most ${maxSlots} parking slots (matching your number of vehicles).`);
         return;
       }
       setSelectedSlots(prev => [...prev, { floorId, slotCode: slotData.slotNumber }]);
@@ -275,7 +276,7 @@ export default function Membership() {
 
   const handleConfirmSlots = async () => {
     if (selectedSlots.length === 0) {
-      alert("Please select at least one parking slot to reserve.");
+      toast.error("Please select at least one parking slot to reserve.");
       return;
     }
     
@@ -294,7 +295,7 @@ export default function Membership() {
             missingPolicies: extractMissingPolicies(res.data),
           });
         } else {
-          alert(res.data?.message || "Error while paying with Valo Wallet");
+          toast.error(res.data?.message || "Error while paying with Valo Wallet");
         }
         setVerifying(false);
       } else {
@@ -309,12 +310,12 @@ export default function Membership() {
           });
           setVerifying(false);
         } else {
-          alert(res.data?.message || "Error creating PayOS transaction");
+          toast.error(res.data?.message || "Error creating PayOS transaction");
           setVerifying(false);
         }
       }
     } catch {
-      alert("Network error");
+      toast.error("Network error");
       setVerifying(false);
     }
   };
@@ -331,6 +332,7 @@ export default function Membership() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
+      <Toaster position="top-right" />
       {/* Header Banner */}
       <div className="bg-[#181C23] text-white pt-28 pb-20 px-6 rounded-b-[32px] text-center relative overflow-hidden">
         <div className="absolute inset-0 opacity-10 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-gold via-[#181C23] to-[#181C23]"></div>

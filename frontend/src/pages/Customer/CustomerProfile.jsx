@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import Logo from "../../assets/images/logo.png";
 import { apiFetch, API_BASE } from "../../services/api";
 import {
@@ -21,8 +22,9 @@ import {
   Shield,
   Lock,
   LockOpen,
-  ArrowLeft,
-  RotateCw,
+  MapPin,
+  Car,
+  Wifi,
 } from "lucide-react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -204,6 +206,7 @@ function GoldUnderlineField({
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function CustomerProfile() {
+  const navigate = useNavigate();
   const avatarInputRef = useRef(null);
   const spotlightRef = useRef(null);
   const orbRef = useRef(null);
@@ -891,9 +894,73 @@ export default function CustomerProfile() {
       </section>
 
       {/* ════════════════════ CONTENT GRID ════════════════════ */}
-      <section className="px-8 py-8 grid grid-cols-12 gap-8 flex-1">
+      <section className="px-8 py-8 grid grid-cols-12 gap-8 flex-1 overflow-y-auto custom-scrollbar">
+        {/* ── VIP Pass Banner (Full Width) ── */}
+        {isVip && profile.membership?.reservedSlots?.length > 0 && (
+          <div className="col-span-12">
+            <div
+              className="rounded-2xl p-6 lg:p-8 border relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6 shadow-xl"
+              style={{
+                background: "linear-gradient(135deg, rgba(30,25,10,0.8) 0%, rgba(10,8,4,0.9) 100%)",
+                borderColor: "rgba(234, 179, 8, 0.4)",
+              }}
+            >
+              {/* Subtle background effects */}
+              <div className="absolute inset-0 pointer-events-none" style={{
+                background: "linear-gradient(105deg, transparent 20%, rgba(255,220,120,0.05) 25%, transparent 30%, transparent 40%, rgba(255,220,120,0.02) 45%, transparent 50%)"
+              }} />
+              <div className="absolute right-0 top-1/2 -translate-y-1/2 p-4 opacity-5 pointer-events-none">
+                <Crown size={200} />
+              </div>
+
+              {/* Left: Branding & Info */}
+              <div className="relative z-10 flex items-center gap-5 md:w-1/3">
+                <div className="p-4 rounded-full bg-gradient-to-br from-yellow-400 to-yellow-600 shadow-[0_0_20px_rgba(234,179,8,0.3)]">
+                  <Crown size={28} className="text-black" />
+                </div>
+                <div>
+                  <h4 className="text-yellow-400 font-black tracking-widest text-xl mb-1" style={{ textShadow: "0 2px 4px rgba(0,0,0,0.8)" }}>VIP PASS</h4>
+                  <p className="text-[11px] text-yellow-500/70 font-semibold uppercase tracking-widest">Active Fixed Slots</p>
+                </div>
+              </div>
+
+              {/* Middle: Slots list */}
+              <div className="relative z-10 flex gap-4 overflow-x-auto custom-scrollbar flex-1 justify-center md:justify-start px-4 border-l border-r border-yellow-500/10">
+                {profile.membership.reservedSlots.map((slot, idx) => (
+                  <div key={idx} className="flex-shrink-0 flex items-center gap-3 bg-black/40 border border-yellow-500/20 rounded-xl px-5 py-3 shadow-[0_0_15px_rgba(234,179,8,0.05)]">
+                    <div>
+                      <p className="text-[9px] text-yellow-500/60 tracking-widest font-bold uppercase">{slot.floorName}</p>
+                      <p className="text-xl font-black text-yellow-300 tracking-widest" style={{ fontFamily: "monospace", letterSpacing: "0.1em" }}>{slot.slotNumber}</p>
+                    </div>
+                    <Car size={24} className="text-yellow-500/30" />
+                  </div>
+                ))}
+              </div>
+
+              {/* Right: Expiration & Action */}
+              <div className="relative z-10 flex flex-col items-center md:items-end gap-3 md:w-1/4">
+                {profile.membership.expireAt && (
+                  <div className="text-center md:text-right">
+                    <p className="text-[9px] text-yellow-500/60 uppercase tracking-widest">Valid Thru</p>
+                    <p className="text-sm text-yellow-400 font-bold tracking-widest mt-0.5" style={{ fontFamily: "monospace" }}>
+                      {new Date(profile.membership.expireAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })}
+                    </p>
+                  </div>
+                )}
+                {profile.membership.expireAt && (
+                  <button onClick={() => navigate('/membership')} className="text-[11px] bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 px-6 py-2.5 rounded-full font-bold hover:bg-yellow-500/20 transition-all uppercase tracking-wider shadow-[0_0_15px_rgba(234,179,8,0.15)] hover:shadow-[0_0_25px_rgba(234,179,8,0.3)] hover:-translate-y-0.5">
+                    Renew Pass
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ── Left: Personal Records ── */}
         <div className="col-span-12 md:col-span-7">
+
+
           {!profile.phone && !editMode && (
             <div
               className="mb-8 rounded-2xl p-5 border cursor-pointer transition-all duration-300 hover:scale-[1.02]"

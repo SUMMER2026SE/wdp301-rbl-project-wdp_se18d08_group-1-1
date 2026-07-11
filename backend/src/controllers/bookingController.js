@@ -115,6 +115,12 @@ const getUnavailableSlotKeys = async (start, end, userId = null) => {
     .select('floorId slotCode')
     .lean();
 
+  const Subscription = require('../models/Subscription');
+  const activeSubscriptionsPromise = Subscription.find({
+    status: 'active',
+    expireAt: { $gt: new Date() }
+  }).select('slots user').lean();
+
   // Find slots reserved for other users
   const reservedSlotsQuery = { reservedFor: { $ne: null } };
   if (userId) {
@@ -129,13 +135,15 @@ const getUnavailableSlotKeys = async (start, end, userId = null) => {
     activeSessions,
     maintenanceSlots,
     activeHolds,
-    reservedSlots
+    reservedSlots,
+    activeSubscriptions
   ] = await Promise.all([
     overlappingBookingsPromise,
     activeSessionsPromise,
     maintenanceSlotsPromise,
     activeHoldsPromise,
-    reservedSlotsPromise
+    reservedSlotsPromise,
+    activeSubscriptionsPromise
   ]);
 
   const unavailable = new Set();
@@ -158,6 +166,13 @@ const getUnavailableSlotKeys = async (start, end, userId = null) => {
 
   reservedSlots.forEach((slot) => {
     unavailable.add(buildSlotKey(slot.floorID, slot.slotNumber));
+  });
+
+  activeSubscriptions.forEach((sub) => {
+    sub.slots.forEach(slot => {
+      const key = buildSlotKey(slot.floorId, slot.slotCode);
+      unavailable.add(key);
+    });
   });
 
   return unavailable;
