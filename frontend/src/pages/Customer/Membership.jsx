@@ -8,6 +8,7 @@ import { notifyAuthChange } from '../../services/authStorage';
 import ParkingMapViewer from '../../components/ParkingMapViewer';
 import PolicyAcceptancePrompt from '../../components/policies/PolicyAcceptancePrompt';
 import { extractMissingPolicies, isPolicyAcceptanceRequired } from '../../utils/policyErrors';
+import toast, { Toaster } from 'react-hot-toast';
 
 export default function Membership() {
   const [packages, setPackages] = useState([]);
@@ -71,25 +72,41 @@ export default function Membership() {
 
     if (orderCode) {
       if (cancel === 'true') {
-        alert('Payment transaction was cancelled.');
-        // Delete query string
+        toast.error('Payment transaction was cancelled.');
         window.history.replaceState({}, document.title, window.location.pathname);
       } else {
-        const timerId = window.setTimeout(() => {
-          setVerifying(true);
-        }, 0);
-        verifySubscriptionPayment(orderCode).then(async (res) => {
-          if (res.ok) {
-            await syncCurrentUserProfile();
-            setSuccess(true);
-          } else {
-            alert(res.data?.message || 'The transaction is incomplete or failed');
+        setVerifying(true);
+        let attempts = 0;
+        
+        const intervalId = setInterval(async () => {
+          try {
+            attempts++;
+            const res = await verifySubscriptionPayment(orderCode);
+            
+            if (res.ok && res.data?.success) {
+              clearInterval(intervalId);
+              await syncCurrentUserProfile();
+              setSuccess(true);
+              setVerifying(false);
+              window.history.replaceState({}, document.title, window.location.pathname);
+            } else if (attempts >= 100) { // Timeout after 5 minutes (3s * 100)
+              clearInterval(intervalId);
+              setVerifying(false);
+              toast.error('Payment verification timed out. Please contact support if you have paid.');
+              window.history.replaceState({}, document.title, window.location.pathname);
+            } else if (res.data?.message !== 'Payment not completed.') {
+              // If it's a hard error (not just pending), stop polling
+              clearInterval(intervalId);
+              setVerifying(false);
+              toast.error(res.data?.message || 'The transaction failed');
+              window.history.replaceState({}, document.title, window.location.pathname);
+            }
+          } catch (err) {
+            console.error("Polling error:", err);
           }
-        }).finally(() => {
-          setVerifying(false);
-          window.history.replaceState({}, document.title, window.location.pathname);
-        });
-        return () => window.clearTimeout(timerId);
+        }, 3000);
+
+        return () => clearInterval(intervalId);
       }
     }
   }, []);
@@ -164,13 +181,15 @@ export default function Membership() {
 
   const cardShellClass = "group relative z-10 flex min-h-[430px] w-full flex-col overflow-hidden rounded-3xl bg-white p-5 shadow-[0_14px_34px_rgba(15,23,42,0.08)] transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_22px_46px_rgba(15,23,42,0.14)] md:p-6";
 
-  const totalCards = subscriptionPackages.length + 1;
+  const visibleCardsCount = subscriptionPackages.length === 0 ? 2 : subscriptionPackages.length + 1;
   const getDesktopGridBalanceClass = (cardIndex) => {
-    const lastRowCount = totalCards % 3;
-    const lastRowStartIndex = totalCards - lastRowCount;
+    if (visibleCardsCount === 2) return ''; // Left-align if only 2 cards (Member + Empty State or 1 Package)
+    
+    const lastRowCount = visibleCardsCount % 3;
+    const lastRowStartIndex = visibleCardsCount - lastRowCount;
 
     if (lastRowCount === 1 && cardIndex === lastRowStartIndex) return 'lg:col-start-2';
-    if (lastRowCount === 2 && cardIndex === lastRowStartIndex + 1) return 'lg:col-start-3';
+    // Remove the awkward col-start-3 gap for 2 items in the last row
     return '';
   };
 
@@ -246,11 +265,11 @@ export default function Membership() {
       // Add
       const maxSlots = Math.min(3, vehicles.length);
       if (vehicles.length === 0) {
-        alert("You need to add a vehicle before buying a VIP pass.");
+        toast.error("You need to add a vehicle before buying a VIP pass.");
         return;
       }
       if (selectedSlots.length >= maxSlots) {
-        alert(`You can select at most ${maxSlots} parking slots (matching your number of vehicles).`);
+        toast.error(`You can select at most ${maxSlots} parking slots (matching your number of vehicles).`);
         return;
       }
       setSelectedSlots(prev => [...prev, { floorId, slotCode: slotData.slotNumber }]);
@@ -259,7 +278,7 @@ export default function Membership() {
 
   const handleConfirmSlots = async () => {
     if (selectedSlots.length === 0) {
-      alert("Please select at least one parking slot to reserve.");
+      toast.error("Please select at least one parking slot to reserve.");
       return;
     }
     
@@ -278,7 +297,7 @@ export default function Membership() {
             missingPolicies: extractMissingPolicies(res.data),
           });
         } else {
-          alert(res.data?.message || "Error while paying with Valo Wallet");
+          toast.error(res.data?.message || "Error while paying with Valo Wallet");
         }
         setVerifying(false);
       } else {
@@ -293,12 +312,12 @@ export default function Membership() {
           });
           setVerifying(false);
         } else {
-          alert(res.data?.message || "Error creating PayOS transaction");
+          toast.error(res.data?.message || "Error creating PayOS transaction");
           setVerifying(false);
         }
       }
     } catch {
-      alert("Network error");
+      toast.error("Network error");
       setVerifying(false);
     }
   };
@@ -315,6 +334,7 @@ export default function Membership() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
+      <Toaster position="top-right" />
       {/* Header Banner */}
       <div className="bg-[#181C23] text-white pt-28 pb-20 px-6 rounded-b-[32px] text-center relative overflow-hidden">
         <div className="absolute inset-0 opacity-10 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-gold via-[#181C23] to-[#181C23]"></div>

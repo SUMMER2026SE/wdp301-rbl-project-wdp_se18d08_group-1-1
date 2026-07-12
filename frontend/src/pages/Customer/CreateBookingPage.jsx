@@ -276,6 +276,20 @@ export default function CreateBookingPage() {
   };
 
   const handleEndChange = (newDate, newTime) => {
+    if (newDate && newTime) {
+      const startObj = new Date(`${startDate}T${startTimeStr}`);
+      const newEndObj = new Date(`${newDate}T${newTime}`);
+      
+      const minEndObj = new Date(startObj);
+      minEndObj.setMinutes(minEndObj.getMinutes() + 30);
+      
+      if (newEndObj < minEndObj) {
+        const minEndStr = toDateTimeLocal(minEndObj);
+        setEndDate(minEndStr.split('T')[0]);
+        setEndTimeStr(minEndStr.split('T')[1]);
+        return;
+      }
+    }
     setEndDate(newDate);
     setEndTimeStr(newTime);
   };
@@ -497,11 +511,6 @@ export default function CreateBookingPage() {
 
       const nextSlots = res.data?.data?.slots || [];
       setSlots(nextSlots);
-
-
-      if (nextSlots[0]) {
-        setSelectedSlotKey(`${nextSlots[0].floorId}:${nextSlots[0].slotCode}`);
-      }
     } catch (err) {
       console.error('Error finding slots:', err);
       setError(`Network error while checking slots: ${err.message}`);
@@ -856,7 +865,7 @@ export default function CreateBookingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA] text-charcoal pt-32 pb-12 px-6 md:px-8">
+    <div className="min-h-screen bg-[#FAFAFA] text-charcoal pt-24 pb-6 px-6 md:px-8 flex flex-col">
       <style dangerouslySetInnerHTML={{ __html: `
         .custom-date-input::-webkit-calendar-picker-indicator {
           background: transparent;
@@ -884,8 +893,8 @@ export default function CreateBookingPage() {
           background-color: #d1d5db;
         }
       `}} />
-      <div className="max-w-7xl mx-auto">
-        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-8">
+      <div className="max-w-[1400px] mx-auto w-full flex-1 flex flex-col">
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-4">
           <div>
             <h1 className="text-3xl lg:text-4xl font-black text-gray-900 tracking-tight">Book Parking</h1>
             <p className="text-gray-500 font-medium mt-1">Reserve your spot and check live availability.</p>
@@ -919,12 +928,12 @@ export default function CreateBookingPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-          <section className="xl:col-span-5 flex flex-col gap-6">
-            <div className="rounded-3xl bg-white border border-gray-200 p-4 md:p-5 shadow-sm">
-              <h2 className="text-lg font-black mb-4 text-gray-900">Booking Details</h2>
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 flex-1 lg:min-h-0">
+          <section className="xl:col-span-4 flex flex-col gap-4 xl:overflow-y-auto time-scrollbar xl:pr-2 pb-4 h-full">
+            <div className="rounded-3xl bg-white border border-gray-200 p-4 shadow-sm shrink-0">
+              <h2 className="text-lg font-black mb-3 text-gray-900">Booking Details</h2>
 
-              <div className="grid grid-cols-1 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-4">
                 <label className="block">
                   <span className="text-[11px] text-gray-400 uppercase tracking-widest font-bold mb-1.5 block">Start time</span>
                   <div className="flex gap-2 h-11">
@@ -973,7 +982,7 @@ export default function CreateBookingPage() {
                 </label>
               </div>
 
-              <div className="mt-5">
+              <div className="mt-4">
                 <span className="text-[11px] text-gray-400 uppercase tracking-widest font-bold">Vehicle</span>
                 {vehicles.length > 0 ? (
                   <select
@@ -1019,12 +1028,12 @@ export default function CreateBookingPage() {
                 )}
               </div>
 
-              <div className="mt-6">
-                <div className="flex items-center justify-between mb-3">
+              <div className="mt-4">
+                <div className="flex items-center justify-between mb-2">
                   <span className="text-[11px] text-gray-400 uppercase tracking-widest font-bold">Extra services</span>
                   <span className="text-xs font-black text-gray-900">{formatMoney(serviceTotal)}</span>
                 </div>
-                <div className="space-y-1.5 max-h-36 overflow-auto pr-1">
+                <div className="space-y-1.5 max-h-32 overflow-auto pr-1 time-scrollbar">
                   {services.length === 0 ? (
                     <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-sm text-gray-400 font-medium">
                       No active services.
@@ -1059,7 +1068,7 @@ export default function CreateBookingPage() {
                 </div>
               </div>
 
-              <div className="mt-6 rounded-2xl border border-gray-100 bg-gray-50 p-4 space-y-3 shadow-inner">
+              <div className="mt-4 rounded-2xl border border-gray-100 bg-gray-50 p-3 space-y-2 shadow-inner">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-gray-500 font-medium flex items-center gap-2"><Clock size={15} /> Duration</span>
                   <span className="font-bold text-gray-900">{durationHours || 0} hour(s)</span>
@@ -1079,7 +1088,7 @@ export default function CreateBookingPage() {
               </div>
             </div>
 
-            <div className="mt-2">
+            <div className="mt-1 shrink-0">
               <button
                 type="button"
                 onClick={handleCreateBooking}
@@ -1091,11 +1100,11 @@ export default function CreateBookingPage() {
               </button>
             </div>
 
-            <div className="rounded-3xl bg-white border border-gray-200 p-4 md:p-5 shadow-sm">
-              <div className="flex items-start justify-between gap-3 mb-4">
+            <div className="rounded-3xl bg-white border border-gray-200 p-4 shadow-sm shrink-0">
+              <div className="flex items-start justify-between gap-3 mb-3">
                 <div>
                   <h2 className="text-lg font-black text-gray-900">Booking List</h2>
-                  <p className="text-sm text-gray-500 font-medium">Checkout one or many vehicles together.</p>
+                  <p className="text-xs text-gray-500 font-medium">Checkout one or many vehicles together.</p>
                 </div>
                 <div className="rounded-full bg-gray-100 px-3 py-1 text-xs font-black text-gray-700">
                   {cartItems.length}/5
@@ -1203,7 +1212,7 @@ export default function CreateBookingPage() {
             </div>
           </section>
 
-          <section className="xl:col-span-7 rounded-3xl bg-white border border-gray-200 p-3 md:p-4 shadow-sm flex flex-col min-h-[400px] lg:min-h-[480px]">
+          <section className="xl:col-span-8 rounded-3xl bg-white border border-gray-200 p-3 shadow-sm flex flex-col h-[500px] xl:h-[calc(100vh-140px)]">
             <div className="flex items-center justify-between gap-4 mb-3 px-2 pt-2">
               <div>
                 <h2 className="text-lg font-black text-gray-900">Available Slots Map</h2>
@@ -1282,6 +1291,10 @@ export default function CreateBookingPage() {
                     <div className="flex items-center gap-1.5">
                       <div className="w-3.5 h-3.5 rounded-sm bg-cyan-500 border border-cyan-400"></div>
                       <span className="text-[10px] text-gray-300 font-bold tracking-wide">Selected</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-3.5 h-3.5 rounded-sm bg-yellow-100 border border-yellow-500"></div>
+                      <span className="text-[10px] text-yellow-500 font-bold tracking-wide">VIP Pass</span>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <div className="w-3.5 h-3.5 rounded-sm bg-red-200 border border-red-500" style={{ backgroundImage: 'repeating-linear-gradient(45deg, rgba(239, 68, 68, 0.2), rgba(239, 68, 68, 0.2) 4px, rgba(127, 29, 29, 0.3) 4px, rgba(127, 29, 29, 0.3) 8px)' }}></div>
