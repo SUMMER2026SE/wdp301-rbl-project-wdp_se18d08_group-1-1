@@ -51,6 +51,10 @@ const subscriptionSchema = new mongoose.Schema(
       enum: ['pending', 'active', 'expired', 'cancelled', 'failed'],
       default: 'pending',
     },
+    expireWarningSent: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

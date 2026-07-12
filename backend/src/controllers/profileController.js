@@ -5,7 +5,9 @@ const Session = require("../models/Session");
 const TicketPackage = require("../models/TicketPackage");
 const { uploadToCloudinary } = require("../middlewares/uploadMiddleware");
 
-const buildMembershipPayload = async (membership = {}) => {
+const Slot = require("../models/Slot");
+
+const buildMembershipPayload = async (membership = {}, userId = null) => {
   const raw =
     typeof membership.toObject === "function" ? membership.toObject() : membership;
   let packageType = null;
@@ -15,12 +17,22 @@ const buildMembershipPayload = async (membership = {}) => {
     packageType = ticketPackage?.type || null;
   }
 
+  let reservedSlots = [];
+  if (userId && raw?.isVip) {
+    const slots = await Slot.find({ reservedFor: userId }).populate('floorID', 'name').lean();
+    reservedSlots = slots.map(s => ({
+      floorName: s.floorID?.name || 'Unknown Floor',
+      slotNumber: s.slotNumber
+    }));
+  }
+
   return {
     isVip: raw?.isVip || false,
     expireAt: raw?.expireAt || null,
     packageId: raw?.packageId || null,
     freeServiceCount: raw?.freeServiceCount || 0,
     packageType,
+    reservedSlots,
   };
 };
 
@@ -41,7 +53,7 @@ const getProfile = async (req, res, next) => {
       });
     }
 
-    const membership = await buildMembershipPayload(user.membership);
+    const membership = await buildMembershipPayload(user.membership, req.user._id);
 
     res.status(200).json({
       success: true,
@@ -109,7 +121,7 @@ const updateProfile = async (req, res, next) => {
       claimedSessions = result.modifiedCount || 0;
     }
 
-    const membership = await buildMembershipPayload(user.membership);
+    const membership = await buildMembershipPayload(user.membership, req.user._id);
 
     res.status(200).json({
       success: true,

@@ -15,6 +15,9 @@ router.get('/active-holds', softProtect, bookingController.getActiveHolds);
 router.post('/hold', softProtect, bookingController.createBookingHold);
 router.delete('/holds/:holdId', softProtect, bookingController.releaseBookingHold);
 
+// Route cho Staff/Admin xem toàn bộ booking
+router.get('/all', protect, authorize('staff', 'admin'), bookingController.getAllBookings);
+
 // Các route yêu cầu khách hàng đã đăng nhập
 router.use(protect);
 router.use(authorize('customer', 'admin'));
