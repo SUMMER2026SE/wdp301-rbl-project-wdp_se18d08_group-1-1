@@ -153,7 +153,13 @@ export default function VehicleModels() {
     setLoading(false);
   };
 
-  useEffect(() => { loadModels(); }, []);
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      loadModels();
+    }, 0);
+
+    return () => window.clearTimeout(timerId);
+  }, []);
 
   const handleUpload = async (e) => {
     e.preventDefault();
@@ -250,7 +256,7 @@ export default function VehicleModels() {
         <ul className="mt-2 space-y-0.5 text-gray-600 dark:text-gray-400 list-disc list-inside">
           <li>Brand + Model will be converted to <em>lowercase-slug</em> (spaces to hyphens)</li>
           <li>VD: <strong>Toyota</strong> + <strong>Land Cruiser</strong> → <code className="font-mono">vehicles/toyota/land-cruiser</code></li>
-          <li>If Model is left blank -> use <code className="font-mono">default</code> (fallback for the whole brand)</li>
+          <li>If Model is left blank -&gt; use <code className="font-mono">default</code> (fallback for the whole brand)</li>
         </ul>
       </div>
 

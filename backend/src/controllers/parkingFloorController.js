@@ -104,6 +104,14 @@ exports.updateFloorLayout = async (req, res) => {
         }
 
         const slotIdentifier = sEl.name.trim();
+        
+        if (validSlotNames.includes(slotIdentifier)) {
+          return res.status(400).json({ 
+            success: false, 
+            message: `Error: Duplicate parking slot name "${slotIdentifier}" detected. Slot names must be unique within a floor.`
+          });
+        }
+        
         validSlotNames.push(slotIdentifier);
 
         // 3. Validation: Every slot MUST belong to a zone
@@ -183,6 +191,81 @@ exports.getFloorSlots = async (req, res) => {
     const { id } = req.params;
     const slots = await Slot.find({ floorID: id }).populate('zoneID', 'zoneName zoneType');
     res.status(200).json({ success: true, data: slots });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Get Live Map Data (Unified slots across all floors with real-time status)
+exports.getLiveMapData = async (req, res) => {
+  try {
+    const Session = require('../models/Session');
+    const Booking = require('../models/Booking');
+    const BookingHold = require('../models/BookingHold');
+    const SlotMaintenanceLog = require('../models/SlotMaintenanceLog');
+    const Subscription = require('../models/Subscription');
+
+    const slots = await Slot.find()
+      .populate('zoneID', 'zoneName zoneType')
+      .populate('floorID', 'name floorNumber');
+
+    const now = new Date();
+    const next2Hours = new Date(now.getTime() + 2 * 60 * 60 * 1000);
+
+    const activeSessions = await Session.find({ status: 'active', parkingSlot: { $ne: null } });
+    const upcomingBookings = await Booking.find({
+      status: { $in: ['PAID', 'PAUSED'] },
+      scheduledStart: { $lt: next2Hours },
+      scheduledEnd: { $gt: now }
+    });
+    const activeHolds = await BookingHold.find({ status: 'active', expiresAt: { $gt: now } });
+    const activeSubscriptions = await Subscription.find({ status: 'active', expireAt: { $gt: now } });
+    const maintenanceLogs = await SlotMaintenanceLog.find({
+      status: 'in_progress',
+      startTime: { $lte: now },
+      $or: [{ endTime: { $gte: now } }, { endTime: null }]
+    });
+
+    // Hash maps for quick lookup
+    const occupiedSlots = new Set(activeSessions.map(s => s.parkingSlot));
+    const bookedSlots = new Set(upcomingBookings.map(b => b.parkingSlot));
+    const heldSlots = new Set(activeHolds.map(h => h.slotCode));
+    const maintenanceSet = new Set(maintenanceLogs.map(m => m.slotNumber));
+    const subscriptionSlots = new Set();
+    activeSubscriptions.forEach(sub => {
+      if (sub.slots && sub.slots.length > 0) {
+        sub.slots.forEach(s => subscriptionSlots.add(s.slotCode));
+      }
+    });
+
+    const mapData = slots.map(slot => {
+      let status = 'available';
+      if (maintenanceSet.has(slot.slotNumber)) {
+        status = 'maintenance';
+      } else if (occupiedSlots.has(slot.slotNumber)) {
+        status = 'occupied';
+      } else if (bookedSlots.has(slot.slotNumber) || heldSlots.has(slot.slotNumber) || subscriptionSlots.has(slot.slotNumber)) {
+        status = 'reserved';
+      }
+
+      // Map type for frontend
+      let type = 'standard';
+      if (slot.slotType === 'vip') type = 'vip';
+      else if (slot.slotType === 'ev') type = 'ev';
+      else if (slot.slotType === 'moto') type = 'moto';
+
+      return {
+        id: slot.slotNumber,
+        floorId: slot.floorID ? slot.floorID._id : null,
+        floorName: slot.floorID ? slot.floorID.name : '',
+        zone: slot.zoneID ? slot.zoneID.zoneName : '',
+        type,
+        status,
+        price: type === 'vip' ? '30,000₫/h' : type === 'ev' ? '20,000₫/h + EV' : '10,000₫/h'
+      };
+    });
+
+    res.status(200).json({ success: true, data: mapData });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

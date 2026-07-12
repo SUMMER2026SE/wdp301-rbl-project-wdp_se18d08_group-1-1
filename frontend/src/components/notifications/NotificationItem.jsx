@@ -1,5 +1,5 @@
 import {
-  Bell, Wallet, Car, CalendarCheck, CreditCard, Shield, Megaphone,
+  Wallet, Car, CalendarCheck, CreditCard, Shield, Megaphone,
   Camera, Info, CheckCircle2, AlertTriangle, XCircle, Trash2, Eye
 } from 'lucide-react';
 

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useRef } from 'react';
+import { createContext, useEffect, useState, useRef } from 'react';
 import { io } from 'socket.io-client';
 
 const SocketContext = createContext(null);
@@ -92,13 +92,6 @@ export function SocketProvider({ children }) {
       {children}
     </SocketContext.Provider>
   );
-}
-
-/**
- * Hook to access the socket instance
- */
-export function useSocket() {
-  return useContext(SocketContext);
 }
 
 export default SocketContext;

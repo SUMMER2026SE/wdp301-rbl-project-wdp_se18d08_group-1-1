@@ -1,7 +1,6 @@
-import React from 'react';
 import {
   Users, ShieldCheck, ParkingCircle, Ticket, Wrench,
-  BarChart2, TrendingUp, DollarSign, AlertTriangle, CheckCircle2,
+  TrendingUp, DollarSign, AlertTriangle, CheckCircle2,
   UserX, UserCheck, Settings2,
 } from 'lucide-react';
 

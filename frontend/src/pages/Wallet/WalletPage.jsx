@@ -82,11 +82,11 @@ const transactionTitle = (transaction) => {
   return "Wallet payment";
 };
 
-const transactionIcon = (transaction) => {
-  if (transaction?.type === "TOP_UP") return ArrowDownLeft;
-  if (transaction?.type === "REFUND") return RefreshCw;
-  if (transaction?.refSource === "parking") return Car;
-  return ArrowUpRight;
+const transactionIcon = (transaction, className = "") => {
+  if (transaction?.type === "TOP_UP") return <ArrowDownLeft className={className} />;
+  if (transaction?.type === "REFUND") return <RefreshCw className={className} />;
+  if (transaction?.refSource === "parking") return <Car className={className} />;
+  return <ArrowUpRight className={className} />;
 };
 
 export default function WalletPage() {
@@ -172,8 +172,10 @@ export default function WalletPage() {
     const cancelFlag = params.get("cancel");
 
     if (!orderCode) {
-      fetchWalletData();
-      return;
+      const timerId = window.setTimeout(() => {
+        fetchWalletData();
+      }, 0);
+      return () => window.clearTimeout(timerId);
     }
 
     window.history.replaceState({}, document.title, window.location.pathname);
@@ -191,13 +193,18 @@ export default function WalletPage() {
       return;
     }
 
-    setPollingOrderCode(orderCode);
+    const timerId = window.setTimeout(() => {
+      setPollingOrderCode(orderCode);
+    }, 0);
+    return () => window.clearTimeout(timerId);
   }, [fetchWalletData, showToast]);
 
   useEffect(() => {
     if (!pollingOrderCode) return undefined;
 
-    setVerifyingPayment(true);
+    const verifyingTimerId = window.setTimeout(() => {
+      setVerifyingPayment(true);
+    }, 0);
     const intervalId = setInterval(async () => {
       try {
         const statusRes = await getTopUpStatus(pollingOrderCode);
@@ -234,6 +241,7 @@ export default function WalletPage() {
     }, 300000);
 
     return () => {
+      window.clearTimeout(verifyingTimerId);
       clearInterval(intervalId);
       clearTimeout(timeoutId);
     };
@@ -251,25 +259,25 @@ export default function WalletPage() {
   const stats = useMemo(
     () => [
       {
-        icon: WalletIcon,
+        icon: <WalletIcon className="h-5 w-5" />,
         label: "Current Balance",
         value: formatMoney(wallet?.balance),
         note: wallet?.balance < 0 ? "Using overdraft" : "Available now",
       },
       {
-        icon: TrendingDown,
+        icon: <TrendingDown className="h-5 w-5" />,
         label: "Spent This Month",
         value: formatMoney(wallet?.monthlySpent),
         note: `${wallet?.monthlyParkingPayments || 0} parking payments`,
       },
       {
-        icon: TrendingUp,
+        icon: <TrendingUp className="h-5 w-5" />,
         label: "Top-up This Month",
         value: formatMoney(wallet?.monthlyTopUp),
         note: "Synced from completed top-ups",
       },
       {
-        icon: Sparkles,
+        icon: <Sparkles className="h-5 w-5" />,
         label: "Refunds",
         value: formatMoney(wallet?.totalRefunded),
         note: `${formatMoney(wallet?.monthlyRefunded)} this month`,
@@ -458,12 +466,12 @@ function BalancePanel({ wallet, loading, onTopUp, onRefresh, refreshing }) {
   );
 }
 
-function StatCard({ icon: Icon, label, value, note }) {
+function StatCard({ icon, label, value, note }) {
   return (
     <div className="min-h-[150px] rounded-[24px] border border-white/5 bg-[#1A1A1A] p-5 shadow-sm transition hover:border-yellow-500/20">
       <div className="flex items-center justify-between">
         <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/5 bg-white/5 text-gray-300">
-          <Icon className="h-5 w-5" />
+          {icon}
         </div>
         <MoreHorizontal className="h-4 w-4 text-gray-500" />
       </div>
@@ -535,7 +543,6 @@ function TransactionsPanel({ transactions, loading, showAll, onToggle }) {
 }
 
 function TransactionRow({ transaction }) {
-  const Icon = transactionIcon(transaction);
   const credit = isCredit(transaction);
 
   return (
@@ -552,7 +559,7 @@ function TransactionRow({ transaction }) {
               : "bg-yellow-500/10 text-yellow-300"
           }`}
         >
-          <Icon className="h-5 w-5" />
+          {transactionIcon(transaction, "h-5 w-5")}
         </div>
         <div className="min-w-0">
           <p className="truncate text-sm font-bold text-white">

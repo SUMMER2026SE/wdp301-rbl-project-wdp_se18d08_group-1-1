@@ -27,7 +27,10 @@ function CarModel({ modelUrl, carColor }) {
   // Ref to call bounds.refresh().fit() once after the model loads,
   // do not put bounds in the dependency array because bounds changes reference every render.
   const boundsRef = useRef(bounds);
-  boundsRef.current = bounds;
+
+  useEffect(() => {
+    boundsRef.current = bounds;
+  }, [bounds]);
 
   // ── Cleanup when the model changes or unmounts ──────────────────────────────────
   useEffect(() => {
@@ -39,6 +42,7 @@ function CarModel({ modelUrl, carColor }) {
   // ── Effect 1: Scale + ground — only runs when the scene/model changes ─────────
   // DO NOT put bounds in dependencies: bounds creates a new reference every render,
   // if added, the effect runs continuously and the vehicle jitters.
+  // eslint-disable-next-line react-hooks/immutability
   useEffect(() => {
     scene.scale.set(1, 1, 1);
     scene.position.set(0, 0, 0);
@@ -52,6 +56,7 @@ function CarModel({ modelUrl, carColor }) {
 
     // Ground:  Ground vehicle bottom to Y = 0
     const boxAfterScale = new THREE.Box3().setFromObject(scene);
+    // eslint-disable-next-line react-hooks/immutability
     scene.position.y = -boxAfterScale.min.y;
 
     // Read bounds through the ref so bounds is not needed in the dependency array
@@ -138,7 +143,11 @@ const CarViewer = forwardRef(function CarViewer({ modelUrl, carColor = '#ffffff'
 
   // Sync when parent updates the carColor prop
   useEffect(() => {
-    setActiveColor(carColor);
+    const timerId = window.setTimeout(() => {
+      setActiveColor(carColor);
+    }, 0);
+
+    return () => window.clearTimeout(timerId);
   }, [carColor]);
 
   // ── Expose changeCarColor() so parent can call it without lifting state ──────

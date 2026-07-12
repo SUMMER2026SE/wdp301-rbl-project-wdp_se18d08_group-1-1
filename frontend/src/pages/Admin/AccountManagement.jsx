@@ -3,9 +3,9 @@ import { Menu, Transition } from '@headlessui/react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, X, Mail, Phone, Calendar, Users, User, Shield, UserX,
-  ChevronDown, ChevronUp, Trash2, Send, Download, Edit3, Ban,
-  RotateCcw, AlertTriangle, Check, Clock, UserPlus,
-  CheckSquare, Square, RefreshCw, Layers, Eye
+  ChevronDown, Edit3,
+  AlertTriangle, Check, Clock, UserPlus,
+  RefreshCw, Layers, Eye
 } from 'lucide-react';
 import { apiFetch } from '../../services/api';
 
@@ -153,11 +153,8 @@ export default function AccountManagement() {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [sortCol, setSortCol] = useState('createdAt');
-  const [sortDir, setSortDir] = useState('desc');
   const [page, setPage] = useState(1);
   const [panelUser, setPanelUser] = useState(null);
-  const [panelTab, setPanelTab] = useState('overview'); // overview | roles | activity | audit
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({});
   const [saveState, setSaveState] = useState('idle'); // idle | saving | success | error
@@ -180,8 +177,13 @@ export default function AccountManagement() {
     finally { setLoading(false); }
   };
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { fetchUsers(); }, []);
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      fetchUsers();
+    }, 0);
+
+    return () => window.clearTimeout(timerId);
+  }, []);
 
   const handleBlockToggle = async (userId, currentStatus) => {
     try {
@@ -202,7 +204,7 @@ export default function AccountManagement() {
     }
   };
 
-  const openPanel = (u) => { setPanelUser(u); setIsEditing(false); setPanelTab('overview'); setBlockConfirm(false); setSaveState('idle'); };
+  const openPanel = (u) => { setPanelUser(u); setIsEditing(false); setBlockConfirm(false); setSaveState('idle'); };
   const closePanel = () => { setPanelUser(null); setIsEditing(false); setBlockConfirm(false); };
 
   const startEdit = (u) => {
@@ -337,20 +339,10 @@ export default function AccountManagement() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageUsers = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const toggleSort = (col) => {
-    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    else { setSortCol(col); setSortDir('asc'); }
-  };
-
   const formatDate = (d) => !d ? 'N/A' : new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const displayName = (u) => `${u?.profile?.firstName || ''} ${u?.profile?.lastName || ''}`.trim() || u?.username || u?.email || '-';
   const initials = (u) => displayName(u).charAt(0).toUpperCase();
   const avatarGrad = (u) => (ROLES[u?.role] || ROLES.customer).gradient;
-
-  const SortIcon = ({ col }) => {
-    if (sortCol !== col) return <ChevronDown size={12} className="text-white/20" />;
-    return sortDir === 'asc' ? <ChevronUp size={12} className="text-[#ffd555]" /> : <ChevronDown size={12} className="text-[#ffd555]" />;
-  };
 
   return (
     <div className="flex h-[calc(100vh-70px)] bg-[#080808] text-white relative overflow-hidden">
@@ -685,9 +677,9 @@ export default function AccountManagement() {
                         <h4 className="text-xs font-bold uppercase tracking-widest text-[#ffd555]/80 mb-3">Account Activity</h4>
                         <div className="relative pl-3 border-l border-white/10 space-y-4">
                           {[
-                            { icon: UserPlus, label: 'Account Created', date: panelUser.createdAt, color: 'text-emerald-400', bg: 'bg-emerald-400/10' },
-                            { icon: Edit3, label: 'Last Updated', date: panelUser.updatedAt, color: 'text-[#ffd555]', bg: 'bg-[#ffd555]/10' },
-                          ].map(({ icon: Ic, label, date, color, bg }, i) => (
+                            { label: 'Account Created', date: panelUser.createdAt, color: 'text-emerald-400', bg: 'bg-emerald-400/10' },
+                            { label: 'Last Updated', date: panelUser.updatedAt, color: 'text-[#ffd555]', bg: 'bg-[#ffd555]/10' },
+                          ].map(({ label, date, color, bg }, i) => (
                             <div key={i} className="relative">
                               <div className={`absolute -left-[21px] w-6 h-6 rounded-full border-[3px] border-[#1B2027] flex items-center justify-center ${bg}`}>
                                 <div className={`w-1.5 h-1.5 rounded-full ${color.replace('text-', 'bg-')}`} />
@@ -863,4 +855,3 @@ export default function AccountManagement() {
     </div>
   );
 }
-

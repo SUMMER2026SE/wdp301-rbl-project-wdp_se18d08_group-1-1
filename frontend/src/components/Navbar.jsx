@@ -6,7 +6,6 @@ import { clearAuthSession, notifyAuthChange } from "../services/authStorage";
 import {
   LogOut,
   User,
-  Wallet,
   Crown,
   ChevronDown,
   Bell,
@@ -14,15 +13,11 @@ import {
   Map,
   FileText,
   X,
-  Car,
-  Menu,
   Shield,
   History,
   Sparkles,
   Settings,
-  CircleParking,
   ArrowUpRight,
-  CreditCard,
   ChevronRight,
 } from "lucide-react";
 import Logo from "../assets/images/logo.png";
@@ -51,20 +46,6 @@ const roleBadge = {
   admin: { label: "Admin", bg: "bg-red-500", text: "text-white" },
   manager: { label: "Manager", bg: "bg-blue-500", text: "text-white" },
   customer: { label: "Customer", bg: "bg-emerald-500", text: "text-white" },
-};
-
-const avatarGradients = [
-  "from-violet-500 to-fuchsia-500",
-  "from-amber-400 to-orange-500",
-  "from-cyan-400 to-blue-500",
-  "from-rose-500 to-pink-600",
-  "from-emerald-400 to-teal-600",
-  "from-indigo-500 to-purple-600",
-];
-
-const getGradient = (name = "") => {
-  const h = [...name].reduce((a, c) => a + c.charCodeAt(0), 0);
-  return avatarGradients[h % avatarGradients.length];
 };
 
 const getMembershipTier = (membership = {}) => {
@@ -126,10 +107,13 @@ export default function Navbar() {
   }, []);
 
   useEffect(() => {
-    syncUser();
+    const timerId = window.setTimeout(() => {
+      syncUser();
+    }, 0);
     window.addEventListener("focus", syncUser);
     window.addEventListener("valo_auth_change", syncUser);
     return () => {
+      window.clearTimeout(timerId);
       window.removeEventListener("focus", syncUser);
       window.removeEventListener("valo_auth_change", syncUser);
     };
@@ -233,7 +217,6 @@ export default function Navbar() {
     "User"
     : "User";
 
-  const grad = getGradient(displayName);
   const isScrolled = scrollY > 40;
   const membershipTier = getMembershipTier(user?.membership);
   const navAvatarTheme = navAvatarThemes[membershipTier];

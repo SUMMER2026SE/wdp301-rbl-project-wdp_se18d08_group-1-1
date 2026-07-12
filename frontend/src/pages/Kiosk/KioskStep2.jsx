@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, ArrowRight, CarFront, Clock, CreditCard, Minus, Plus, X } from 'lucide-react';
 import ParkingMapViewer from '../../components/ParkingMapViewer';
 import { API_BASE } from '../../services/api';
+import { getAvailableBookingSlots, getActiveHolds } from '../../services/bookingService';
 
 const DEFAULT_PRICING = {
   name: 'Standard',
@@ -9,13 +10,16 @@ const DEFAULT_PRICING = {
   price: 10000,
 };
 
-export default function KioskStep2({ formData, updateFormData, onNext, onBack }) {
+export default function KioskStep2({ formData, updateFormData, onNext, onBack, isHoldingSlot = false }) {
   const [floors, setFloors] = useState([]);
   const [activeSessions, setActiveSessions] = useState([]);
   const [currentFloorId, setCurrentFloorId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [dbSlots, setDbSlots] = useState([]);
+  const [availableSlots, setAvailableSlots] = useState(null);
+  const [activeHolds, setActiveHolds] = useState([]);
+  const [checkingSlots, setCheckingSlots] = useState(false);
 
   const bookingMode = formData.bookingMode || 'hourly';
   const appliedPricing = formData.pricingPackage || DEFAULT_PRICING;
@@ -62,7 +66,7 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack })
         if (sessionData.success) {
           setActiveSessions(sessionData.data);
         }
-      } catch (err) {
+      } catch {
         setError('Failed to fetch data. Please check network.');
       } finally {
         setLoading(false);
@@ -71,6 +75,38 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack })
 
     fetchData();
   }, []);
+
+  useEffect(() => {
+    const fetchAvailable = async () => {
+      setCheckingSlots(true);
+      try {
+        const effectiveHours = Number(formData.durationHours || (bookingMode === 'daily' ? 24 : 1));
+        const startTimeStr = new Date().toISOString();
+        const endTimeStr = new Date(Date.now() + effectiveHours * 60 * 60 * 1000).toISOString();
+
+        const availableRes = await getAvailableBookingSlots({
+          startTime: startTimeStr,
+          endTime: endTimeStr,
+        });
+
+        if (availableRes.ok && availableRes.data?.data?.slots) {
+          setAvailableSlots(availableRes.data.data.slots);
+        }
+
+        const holdsRes = await getActiveHolds();
+        if (holdsRes.ok && holdsRes.data?.data) {
+          setActiveHolds(holdsRes.data.data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch available slots', err);
+        setAvailableSlots([]);
+      } finally {
+        setCheckingSlots(false);
+      }
+    };
+
+    fetchAvailable();
+  }, [formData.durationHours, bookingMode]);
 
   const closePanel = () => {
     updateFormData({ selectedSlot: null, floorId: null });
@@ -125,9 +161,10 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack })
             ))}
           </div>
 
-          {loading ? (
-            <div className="flex-1 flex items-center justify-center z-10">
-              <div className="text-cyan-400 font-bold text-xl animate-pulse tracking-widest">LOADING MAP...</div>
+          {loading || checkingSlots ? (
+            <div className="flex-1 flex flex-col items-center justify-center z-10 bg-[#0b0e16]/80 backdrop-blur-sm absolute inset-0">
+              <div className="w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+              <div className="text-cyan-400 font-bold text-xl tracking-widest">{checkingSlots ? 'CHECKING SLOTS...' : 'LOADING MAP...'}</div>
             </div>
           ) : error ? (
             <div className="flex-1 flex flex-col items-center justify-center text-red-400 gap-4 z-10">
@@ -141,6 +178,8 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack })
               onFloorSelect={setCurrentFloorId}
               activeSessions={activeSessions}
               dbSlots={dbSlots}
+              availableSlots={availableSlots}
+              activeHolds={activeHolds}
               selectedSlotId={formData.selectedSlot}
               onSelectSlot={(slot, floorId) => updateFormData({ selectedSlot: slot.id, floorId })}
               is2DMode={true}
@@ -337,15 +376,15 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack })
                   </button>
                   <button
                     onClick={onNext}
-                    disabled={!formData.selectedSlot}
+                    disabled={!formData.selectedSlot || isHoldingSlot}
                     className={`flex-[2] flex items-center justify-center gap-2 text-lg font-bold py-4 rounded-2xl transition-all ${
-                      !formData.selectedSlot
+                      !formData.selectedSlot || isHoldingSlot
                         ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                         : 'bg-[#FFDF00] text-[#0f172a] hover:bg-[#e6c800] shadow-[0_8px_20px_rgba(255,223,0,0.3)] active:scale-95'
                     }`}
                   >
-                    Next Step
-                    <ArrowRight size={20} strokeWidth={3} />
+                    {isHoldingSlot ? 'Holding Slot...' : 'Next Step'}
+                    {!isHoldingSlot && <ArrowRight size={20} strokeWidth={3} />}
                   </button>
                 </div>
               </div>
