@@ -1,4 +1,5 @@
 const Session = require('../models/Session');
+const Booking = require('../models/Booking');
 const notifTriggers = require('./notificationTriggers');
 const pricingEngine = require('./pricingEngine');
 const walletService = require('./walletService');
@@ -7,6 +8,7 @@ const contractService = require('./contractService');
 const CHECK_INTERVAL_MS = 60 * 1000; // 1 minute
 const CONTRACT_EXPIRATION_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const LOW_BALANCE_THRESHOLD = 30000; // 30,000 VND
+const NO_SHOW_GRACE_MS = 15 * 60 * 1000;
 
 let schedulerInterval = null;
 let contractSchedulerInterval = null;
