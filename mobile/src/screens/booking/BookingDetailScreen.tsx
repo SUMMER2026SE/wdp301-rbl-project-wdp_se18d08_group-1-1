@@ -5,7 +5,7 @@ import { format } from 'date-fns';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
+  Modal,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -16,21 +16,45 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { EmptyState, ScreenHeader, SectionTitle } from '@/components/common';
+import {
+  BookingActionModal,
+  type BookingModalVariant,
+} from '@/components/booking/BookingActionModal';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
 import { useBooking } from '@/hooks/useBooking';
 import type { BookingStackParamList } from '@/navigation/BookingStackNavigator';
 import type { BookingStatus, PaymentStatus } from '@/types/booking.types';
+import { canExtendBookingBy, getBookingActionAvailability } from '@/utils/bookingActions';
 import { formatCurrency } from '@/utils/formatters';
 
 type Props = NativeStackScreenProps<BookingStackParamList, 'BookingDetail'>;
 
+interface ActionDialog {
+  variant: BookingModalVariant;
+  title: string;
+  message: string;
+  primaryLabel: string;
+  secondaryLabel?: string;
+  destructive?: boolean;
+  onConfirm?: () => Promise<void>;
+}
+
+const EXTENSION_OPTIONS = [30, 60, 120];
+
 const STATUS_LABELS: Record<BookingStatus, { label: string; color: string; bg: string }> = {
+  pending: { label: 'Chờ thanh toán', color: COLORS.warning, bg: 'rgba(255,159,67,0.12)' },
   confirmed: { label: 'Đã xác nhận', color: COLORS.staffBlue, bg: 'rgba(96,180,255,0.12)' },
   active: { label: 'Đang đỗ xe', color: COLORS.success, bg: 'rgba(76,175,80,0.12)' },
+  paused: { label: 'Tạm dừng', color: COLORS.warning, bg: 'rgba(255,159,67,0.12)' },
   completed: { label: 'Hoàn thành', color: COLORS.textMuted, bg: COLORS.surfaceElevated },
   cancelled: { label: 'Đã hủy', color: COLORS.error, bg: 'rgba(255,77,77,0.12)' },
   expired: { label: 'Hết hạn', color: COLORS.warning, bg: 'rgba(255,159,67,0.12)' },
 };
+
+function safeFormat(dateValue: string, pattern: string) {
+  const date = new Date(dateValue);
+  return Number.isNaN(date.getTime()) ? 'N/A' : format(date, pattern);
+}
 
 const PAYMENT_LABELS: Record<PaymentStatus, string> = {
   paid: 'Đã thanh toán',
@@ -50,53 +74,150 @@ function InfoRow({ label, value, valueColor }: { label: string; value: string; v
 }
 
 export const BookingDetailScreen = ({ navigation, route }: Props) => {
-  const { bookings, isLoading, fetchBookings, getBookingById, checkInBooking, checkOutBooking } = useBooking();
+  const {
+    isLoading,
+    fetchBookings,
+    getBookingById,
+    checkInBooking,
+    checkOutBooking,
+    cancelBooking,
+    extendBooking,
+  } = useBooking();
   const [actionLoading, setActionLoading] = useState(false);
+  const [extendModalVisible, setExtendModalVisible] = useState(false);
+  const [extendingMinutes, setExtendingMinutes] = useState<number | null>(null);
+  const [actionDialog, setActionDialog] = useState<ActionDialog | null>(null);
   const booking = getBookingById(route.params.bookingId);
 
   useEffect(() => {
-    if (!booking && bookings.length === 0) {
+    if (!booking) {
       void fetchBookings();
     }
-  }, [booking, bookings.length, fetchBookings]);
+  }, [booking, fetchBookings]);
+
+  const showFeedback = (variant: BookingModalVariant, title: string, message: string) => {
+    setActionDialog({ variant, title, message, primaryLabel: 'Đóng' });
+  };
+
+  const runAction = async (
+    action: () => Promise<void>,
+    successTitle: string,
+    successMessage: string,
+    fallbackError: string,
+  ) => {
+    setActionLoading(true);
+    try {
+      await action();
+      showFeedback('success', successTitle, successMessage);
+    } catch (error) {
+      showFeedback('error', 'Không thể thực hiện', error instanceof Error ? error.message : fallbackError);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDialogPrimary = () => {
+    if (!actionDialog?.onConfirm) {
+      setActionDialog(null);
+      return;
+    }
+
+    void actionDialog.onConfirm();
+  };
 
   const handleCheckIn = () => {
-    Alert.alert('Check-in', 'Xác nhận check-in vào bãi xe?', [
-      { text: 'Hủy', style: 'cancel' },
-      {
-        text: 'Check-in',
-        onPress: async () => {
-          setActionLoading(true);
-          try {
-            await checkInBooking(route.params.bookingId);
-          } catch (error) {
-            Alert.alert('Lỗi', error instanceof Error ? error.message : 'Check-in thất bại');
-          } finally {
-            setActionLoading(false);
-          }
-        },
-      },
-    ]);
+    setActionDialog({
+      variant: 'info',
+      title: 'Xác nhận Check-in',
+      message: 'Bạn đã đến đúng ô đỗ và muốn bắt đầu phiên gửi xe?',
+      primaryLabel: 'Check-in ngay',
+      secondaryLabel: 'Để sau',
+      onConfirm: () =>
+        runAction(
+          () => checkInBooking(route.params.bookingId),
+          'Check-in thành công',
+          'Phiên gửi xe của bạn đã bắt đầu.',
+          'Check-in thất bại',
+        ),
+    });
   };
 
   const handleCheckOut = () => {
-    Alert.alert('Check-out', 'Xác nhận kết thúc phiên đỗ xe?', [
-      { text: 'Hủy', style: 'cancel' },
-      {
-        text: 'Check-out',
-        onPress: async () => {
-          setActionLoading(true);
-          try {
-            await checkOutBooking(route.params.bookingId);
-            Alert.alert('Hoàn thành', 'Phiên đỗ xe đã kết thúc.');
-          } catch (error) {
-            Alert.alert('Lỗi', error instanceof Error ? error.message : 'Check-out thất bại');
-          } finally {
-            setActionLoading(false);
-          }
-        },
-      },
-    ]);
+    setActionDialog({
+      variant: 'warning',
+      title: 'Kết thúc phiên gửi xe?',
+      message: 'Hệ thống sẽ tính phí thực tế và tự động thu thêm hoặc hoàn tiền vào ví.',
+      primaryLabel: 'Xác nhận Check-out',
+      secondaryLabel: 'Tiếp tục gửi',
+      onConfirm: () =>
+        runAction(
+          () => checkOutBooking(route.params.bookingId),
+          'Check-out thành công',
+          'Phiên gửi xe đã kết thúc và số dư ví đã được cập nhật.',
+          'Check-out thất bại',
+        ),
+    });
+  };
+
+  const handleCancel = () => {
+    if (!booking) return;
+
+    setActionDialog({
+      variant: 'error',
+      title: 'Hủy đặt chỗ?',
+      message: `${formatCurrency(booking.prepaidAmount)} sẽ được hoàn lại vào ví VALO sau khi hủy.`,
+      primaryLabel: 'Xác nhận hủy',
+      secondaryLabel: 'Giữ đặt chỗ',
+      destructive: true,
+      onConfirm: () =>
+        runAction(
+          () => cancelBooking(booking._id),
+          'Đã hủy đặt chỗ',
+          'Tiền đặt trước đã được hoàn lại vào ví VALO.',
+          'Hủy đặt chỗ thất bại',
+        ),
+    });
+  };
+
+  const handleExtend = async (minutes: number) => {
+    if (!booking) return;
+
+    const currentEnd = new Date(booking.endTime);
+    if (Number.isNaN(currentEnd.getTime())) {
+      showFeedback('error', 'Không thể gia hạn', 'Thời gian kết thúc hiện tại không hợp lệ.');
+      return;
+    }
+
+    if (!canExtendBookingBy(booking, minutes)) {
+      showFeedback('warning', 'Vượt giới hạn thời gian', 'Tổng thời lượng đặt chỗ không được vượt quá 24 giờ.');
+      return;
+    }
+
+    const newEnd = new Date(currentEnd.getTime() + minutes * 60_000);
+    setExtendingMinutes(minutes);
+    setActionLoading(true);
+    try {
+      await extendBooking(booking._id, {
+        newStart: booking.startTime,
+        newEnd: newEnd.toISOString(),
+      });
+      setExtendModalVisible(false);
+      showFeedback(
+        'success',
+        'Gia hạn thành công',
+        `Giờ kết thúc mới: ${safeFormat(newEnd.toISOString(), 'HH:mm dd/MM/yyyy')}`,
+      );
+    } catch (error) {
+      setExtendModalVisible(false);
+      showFeedback(
+        'error',
+        'Không thể gia hạn',
+        error instanceof Error ? error.message : 'Gia hạn đặt chỗ thất bại',
+      );
+    } finally {
+      setExtendingMinutes(null);
+      setActionLoading(false);
+    }
   };
 
   if (!booking) {
@@ -121,8 +242,7 @@ export const BookingDetailScreen = ({ navigation, route }: Props) => {
 
   const statusConfig = STATUS_LABELS[booking.status];
   const floorName = typeof booking.floorId === 'object' ? booking.floorId.name : booking.floorId;
-  const canCheckIn = booking.status === 'confirmed';
-  const canCheckOut = booking.status === 'active';
+  const { canCancel, canCheckIn, canCheckOut, canExtend } = getBookingActionAvailability(booking);
 
   return (
     <SafeAreaView edges={['top', 'bottom']} style={styles.safe}>
@@ -154,8 +274,8 @@ export const BookingDetailScreen = ({ navigation, route }: Props) => {
           <View style={styles.timeRow}>
             <View style={styles.timeBlock}>
               <Text style={styles.timeLabel}>Vào lúc</Text>
-              <Text style={styles.timeValue}>{format(new Date(booking.startTime), 'HH:mm')}</Text>
-              <Text style={styles.timeDate}>{format(new Date(booking.startTime), 'dd/MM/yyyy')}</Text>
+              <Text style={styles.timeValue}>{safeFormat(booking.startTime, 'HH:mm')}</Text>
+              <Text style={styles.timeDate}>{safeFormat(booking.startTime, 'dd/MM/yyyy')}</Text>
             </View>
             <View style={styles.timeSep}>
               <Ionicons name="arrow-forward" size={18} color={COLORS.textMuted} />
@@ -163,8 +283,8 @@ export const BookingDetailScreen = ({ navigation, route }: Props) => {
             </View>
             <View style={[styles.timeBlock, styles.timeBlockRight]}>
               <Text style={styles.timeLabel}>Ra lúc</Text>
-              <Text style={styles.timeValue}>{format(new Date(booking.endTime), 'HH:mm')}</Text>
-              <Text style={styles.timeDate}>{format(new Date(booking.endTime), 'dd/MM/yyyy')}</Text>
+              <Text style={styles.timeValue}>{safeFormat(booking.endTime, 'HH:mm')}</Text>
+              <Text style={styles.timeDate}>{safeFormat(booking.endTime, 'dd/MM/yyyy')}</Text>
             </View>
           </View>
         </View>
@@ -181,7 +301,7 @@ export const BookingDetailScreen = ({ navigation, route }: Props) => {
         <View style={styles.section}>
           <SectionTitle>Thanh toán</SectionTitle>
           <View style={styles.infoCard}>
-            <InfoRow label="Phương thức" value="Ví VALO" />
+            <InfoRow label="Phương thức" value={booking.paymentMethod === 'vietqr' ? 'VietQR' : 'Ví VALO'} />
             <View style={styles.divider} />
             <InfoRow
               label="Trạng thái"
@@ -213,6 +333,33 @@ export const BookingDetailScreen = ({ navigation, route }: Props) => {
             </View>
           </View>
         </View>
+
+        {canExtend || canCancel ? (
+          <View style={styles.managementRow}>
+            {canExtend ? (
+              <TouchableOpacity
+                activeOpacity={0.8}
+                disabled={actionLoading}
+                style={[styles.managementBtn, styles.extendBtn]}
+                onPress={() => setExtendModalVisible(true)}
+              >
+                <Ionicons name="time-outline" size={19} color={COLORS.gold} />
+                <Text style={styles.extendText}>Gia hạn</Text>
+              </TouchableOpacity>
+            ) : null}
+            {canCancel ? (
+              <TouchableOpacity
+                activeOpacity={0.8}
+                disabled={actionLoading}
+                style={[styles.managementBtn, styles.cancelBtn]}
+                onPress={handleCancel}
+              >
+                <Ionicons name="trash-outline" size={19} color={COLORS.error} />
+                <Text style={styles.cancelText}>Hủy đặt chỗ</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        ) : null}
 
         {canCheckIn || canCheckOut ? (
           <View style={styles.actionsRow}>
@@ -260,6 +407,84 @@ export const BookingDetailScreen = ({ navigation, route }: Props) => {
           </View>
         ) : null}
       </ScrollView>
+
+      <Modal
+        animationType="fade"
+        transparent
+        visible={extendModalVisible}
+        onRequestClose={() => setExtendModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalIconGlow}>
+              <Ionicons name="time" size={70} color={COLORS.gold} />
+            </View>
+            <Text style={styles.modalTitle}>Gia hạn đặt chỗ</Text>
+            <Text style={styles.modalSubtitle}>
+              Giờ kết thúc hiện tại: {safeFormat(booking.endTime, 'HH:mm dd/MM/yyyy')}
+            </Text>
+            <Text style={styles.modalHint}>Chọn thời gian muốn gia hạn</Text>
+            <View style={styles.extensionOptions}>
+              {EXTENSION_OPTIONS.map((minutes) => {
+                const optionAvailable = canExtendBookingBy(booking, minutes);
+                return (
+                  <TouchableOpacity
+                    key={minutes}
+                    activeOpacity={0.8}
+                    disabled={actionLoading || !optionAvailable}
+                    style={[styles.extensionOption, !optionAvailable && styles.extensionOptionDisabled]}
+                    onPress={() => void handleExtend(minutes)}
+                  >
+                    {extendingMinutes === minutes ? (
+                      <ActivityIndicator color={COLORS.gold} size="small" />
+                    ) : (
+                      <>
+                        <Ionicons
+                          name="add-circle-outline"
+                          size={20}
+                          color={optionAvailable ? COLORS.gold : COLORS.textMuted}
+                        />
+                        <Text
+                          style={[
+                            styles.extensionOptionText,
+                            !optionAvailable && styles.extensionOptionTextDisabled,
+                          ]}
+                        >
+                          +{minutes < 60 ? `${minutes} phút` : `${minutes / 60} giờ`}
+                        </Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <Text style={styles.modalNote}>Phí phát sinh sẽ được trừ từ ví sau khi hệ thống kiểm tra ô đỗ.</Text>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              disabled={actionLoading}
+              style={styles.modalCloseBtn}
+              onPress={() => setExtendModalVisible(false)}
+            >
+              <Text style={styles.modalCloseText}>Đóng</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <BookingActionModal
+        destructive={actionDialog?.destructive}
+        loading={actionLoading}
+        message={actionDialog?.message}
+        primaryLabel={actionDialog?.primaryLabel ?? 'Đóng'}
+        secondaryLabel={actionDialog?.secondaryLabel}
+        title={actionDialog?.title ?? ''}
+        variant={actionDialog?.variant ?? 'info'}
+        visible={Boolean(actionDialog)}
+        onClose={() => {
+          if (!actionLoading) setActionDialog(null);
+        }}
+        onPrimary={handleDialogPrimary}
+      />
     </SafeAreaView>
   );
 };
@@ -336,6 +561,21 @@ const styles = StyleSheet.create({
   totalLabel: { color: COLORS.textPrimary, fontSize: FONT_SIZES.sm, fontWeight: '700' },
   totalValue: { color: COLORS.gold, fontSize: FONT_SIZES.lg, fontWeight: '800' },
   actionsRow: { flexDirection: 'row', gap: SPACING.md, marginTop: SPACING.sm },
+  managementRow: { flexDirection: 'row', gap: SPACING.md, marginTop: SPACING.sm },
+  managementBtn: {
+    alignItems: 'center',
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    flex: 1,
+    flexDirection: 'row',
+    gap: SPACING.xs,
+    height: 52,
+    justifyContent: 'center',
+  },
+  extendBtn: { backgroundColor: 'rgba(212,175,55,0.1)', borderColor: COLORS.gold },
+  extendText: { color: COLORS.gold, fontSize: FONT_SIZES.md, fontWeight: '600' },
+  cancelBtn: { backgroundColor: 'rgba(255,77,77,0.1)', borderColor: COLORS.error },
+  cancelText: { color: COLORS.error, fontSize: FONT_SIZES.md, fontWeight: '600' },
   checkInBtn: {
     alignItems: 'center',
     backgroundColor: 'rgba(96,180,255,0.12)',
@@ -358,4 +598,77 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   checkoutText: { color: COLORS.textInverse, fontSize: FONT_SIZES.md, fontWeight: '700' },
+  modalOverlay: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.72)',
+    flex: 1,
+    justifyContent: 'center',
+    padding: SPACING.lg,
+  },
+  modalCard: {
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderColor: 'rgba(212,175,55,0.3)',
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+    padding: SPACING.xl,
+    width: '100%',
+  },
+  modalIconGlow: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(212,175,55,0.1)',
+    borderRadius: RADIUS.round,
+    height: 92,
+    justifyContent: 'center',
+    marginBottom: SPACING.md,
+    width: 92,
+  },
+  modalTitle: {
+    color: COLORS.gold,
+    fontSize: FONT_SIZES.xl,
+    fontWeight: '800',
+    marginBottom: SPACING.sm,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.sm,
+    lineHeight: 21,
+    textAlign: 'center',
+  },
+  modalHint: { color: COLORS.textPrimary, fontSize: FONT_SIZES.sm, fontWeight: '600', marginTop: SPACING.lg },
+  extensionOptions: { gap: SPACING.sm, marginTop: SPACING.md, width: '100%' },
+  extensionOption: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(212,175,55,0.08)',
+    borderColor: 'rgba(212,175,55,0.35)',
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    height: 50,
+    justifyContent: 'center',
+  },
+  extensionOptionText: { color: COLORS.gold, fontSize: FONT_SIZES.md, fontWeight: '700' },
+  extensionOptionDisabled: { backgroundColor: COLORS.surfaceElevated, borderColor: COLORS.border, opacity: 0.55 },
+  extensionOptionTextDisabled: { color: COLORS.textMuted },
+  modalNote: {
+    color: COLORS.textMuted,
+    fontSize: FONT_SIZES.xs,
+    lineHeight: 18,
+    marginTop: SPACING.md,
+    textAlign: 'center',
+  },
+  modalCloseBtn: {
+    alignItems: 'center',
+    backgroundColor: COLORS.surfaceElevated,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    justifyContent: 'center',
+    marginTop: SPACING.lg,
+    minHeight: 50,
+    width: '100%',
+  },
+  modalCloseText: { color: COLORS.textPrimary, fontSize: FONT_SIZES.md, fontWeight: '600' },
 });

@@ -145,7 +145,9 @@ const creditWallet = async (userId, amount, type, description, options = {}) => 
           balanceAfter,
           status: 'COMPLETED',
           description,
-          payosOrderCode: options.payosOrderCode || null,
+          ...(options.payosOrderCode != null
+            ? { payosOrderCode: options.payosOrderCode }
+            : {}),
           payosPaymentLinkId: options.payosPaymentLinkId || null,
           payosReference: options.payosReference || null,
           refSource: options.refSource || null,

@@ -28,23 +28,36 @@ type FilterType = BookingStatus | 'all';
 
 const STATUS_CONFIG: Record<BookingStatus | 'all', { label: string; color: string; bg: string }> = {
   all: { label: 'Tất cả', color: COLORS.textSecondary, bg: COLORS.surface },
+  pending: { label: 'Chờ thanh toán', color: COLORS.warning, bg: 'rgba(255,159,67,0.12)' },
   confirmed: { label: 'Đã xác nhận', color: COLORS.staffBlue, bg: 'rgba(96,180,255,0.12)' },
   active: { label: 'Đang đỗ', color: COLORS.success, bg: 'rgba(76,175,80,0.12)' },
+  paused: { label: 'Tạm dừng', color: COLORS.warning, bg: 'rgba(255,159,67,0.12)' },
   completed: { label: 'Hoàn thành', color: COLORS.textMuted, bg: COLORS.surfaceElevated },
   cancelled: { label: 'Đã hủy', color: COLORS.error, bg: 'rgba(255,77,77,0.12)' },
   expired: { label: 'Hết hạn', color: COLORS.warning, bg: 'rgba(255,159,67,0.12)' },
 };
 
-const FILTERS: FilterType[] = ['all', 'confirmed', 'active', 'completed', 'cancelled', 'expired'];
+const FILTERS: FilterType[] = ['all', 'pending', 'confirmed', 'active', 'paused', 'completed', 'cancelled', 'expired'];
 
 function getStatusConfig(status: BookingStatus) {
   return STATUS_CONFIG[status] ?? STATUS_CONFIG.all;
 }
 
+function safeFormat(dateStr: string | undefined | null, fmt: string) {
+  try {
+    if (!dateStr) return 'N/A';
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return 'N/A';
+    return format(d, fmt);
+  } catch {
+    return 'N/A';
+  }
+}
+
 function BookingCard({ booking, onPress }: { booking: Booking; onPress: () => void }) {
   const statusConfig = getStatusConfig(booking.status);
-  const startDate = format(new Date(booking.startTime), 'dd/MM/yyyy HH:mm');
-  const endTime = format(new Date(booking.endTime), 'HH:mm');
+  const startDate = safeFormat(booking.startTime, 'dd/MM/yyyy HH:mm');
+  const endTime = safeFormat(booking.endTime, 'HH:mm');
 
   return (
     <Pressable style={({ pressed }) => [styles.card, pressed && styles.pressed]} onPress={onPress}>

@@ -5,6 +5,7 @@ import type { WalletTransaction } from '@/types/models';
 import {
   calculateExpirationDate,
   calculateWalletBalanceFromTransactions,
+  getSubscriptionPackageRestriction,
   isValidTopUpAmount,
   isVipActive,
   TOP_UP_MIN_AMOUNT,
@@ -62,6 +63,17 @@ describe('walletSubscription properties', () => {
       ),
       { numRuns: 100 },
     );
+  });
+
+  it('prevents buying the active package or downgrading a yearly package', () => {
+    const membership = {
+      isVip: true,
+      package: { id: 'year', type: 'yearly' },
+    } as any;
+
+    expect(getSubscriptionPackageRestriction(membership, { _id: 'year', type: 'yearly' } as any)).toBeTruthy();
+    expect(getSubscriptionPackageRestriction(membership, { _id: 'month', type: 'monthly' } as any)).toBeTruthy();
+    expect(getSubscriptionPackageRestriction({ ...membership, package: { id: 'month', type: 'monthly' } }, { _id: 'year', type: 'yearly' } as any)).toBeNull();
   });
 
   // Feature: wallet-subscription-management, Property 22: Subscription Expiration Calculation

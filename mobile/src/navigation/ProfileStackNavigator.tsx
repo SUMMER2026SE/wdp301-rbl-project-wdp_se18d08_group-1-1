@@ -10,6 +10,8 @@ import { ServiceListScreen }       from '../screens/profile/ServiceListScreen';
 import { PoliciesListScreen }      from '../screens/profile/PoliciesListScreen';
 import { PolicyDetailScreen }      from '../screens/profile/PolicyDetailScreen';
 import { ParkingHistoryScreen }    from '../screens/customer/ParkingHistoryScreen';
+import { BookingListScreen }       from '../screens/booking/BookingListScreen';
+import { BookingDetailScreen }     from '../screens/booking/BookingDetailScreen';
 import type { ProfileStackParamList } from './types';
 
 const Stack = createNativeStackNavigator<ProfileStackParamList>();
@@ -32,5 +34,7 @@ export const ProfileStackNavigator = () => (
     <Stack.Screen name="Policies"        component={PoliciesListScreen} />
     <Stack.Screen name="PolicyDetail"    component={PolicyDetailScreen} />
     <Stack.Screen name="ParkingHistory"  component={ParkingHistoryScreen} />
+    <Stack.Screen name="BookingList"     component={BookingListScreen} />
+    <Stack.Screen name="BookingDetail"   component={BookingDetailScreen} />
   </Stack.Navigator>
 );

@@ -1,26 +1,52 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useMemo } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo } from 'react';
+import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { COLORS } from '@/constants/theme';
 import type { AvailableSlot, ParkingFloor } from '@/types/booking.types';
+import type { SubscriptionSlotSelection } from '@/types/subscription.types';
+import {
+  isParkingSlotSelectable,
+  isVipParkingSlotLayoutName,
+  resolveParkingSlotStatus,
+} from '@/utils/parkingSlotStatus';
+
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface ParkingMap2DProps {
   floor: ParkingFloor;
   floorSlots: AvailableSlot[];
   selectedSlot: AvailableSlot | null;
   onSelectSlot: (slot: AvailableSlot | null) => void;
+  dbSlots?: any[] | null;
+  activeSessions?: any[];
+  activeHolds?: any[];
+  selectionMode?: 'booking' | 'membership';
+  selectedSlots?: SubscriptionSlotSelection[];
+  onToggleSlot?: (slot: SubscriptionSlotSelection) => void;
 }
 
 const SLOT_STATUS_COLOR: Record<string, string> = {
   available: '#7EE8A2',
   occupied: '#FF6B6B',
   booked: COLORS.staffBlue,
-  reserved: COLORS.staffBlue,
+  reserved: '#FFD700', // Gold
+  held: '#FFA500', // Orange
   maintenance: '#A0A0A0',
 };
 
-export const ParkingMap2D = ({ floor, floorSlots, selectedSlot, onSelectSlot }: ParkingMap2DProps) => {
+export const ParkingMap2D = ({
+  floor,
+  floorSlots,
+  selectedSlot,
+  onSelectSlot,
+  dbSlots = [],
+  activeSessions = [],
+  activeHolds = [],
+  selectionMode = 'booking',
+  selectedSlots = [],
+  onToggleSlot,
+}: ParkingMap2DProps) => {
   // Parse layout data safely
   const layout = useMemo(() => {
     let parsedLayout = { width: 1000, height: 600, elements: [] as any[] };
@@ -53,6 +79,65 @@ export const ParkingMap2D = ({ floor, floorSlots, selectedSlot, onSelectSlot }: 
   const mapWidth = layout.width || 1000;
   const mapHeight = layout.height || 600;
 
+  // Calculate scale to fit screen
+  const containerWidth = SCREEN_WIDTH - 32; // 16px margin on each side
+  const scale = Math.min(1, containerWidth / mapWidth);
+
+  const floorId = String(floor._id ?? floor.id ?? floor.floorNumber);
+  const getSlotInteractionState = useCallback((slotName: string) => {
+    const normalizedSlotName = slotName.toUpperCase();
+    const isVipLayoutSlot = isVipParkingSlotLayoutName(slotName);
+    const bookingSlotData = slotLookup[normalizedSlotName];
+    const dbSlot = dbSlots?.find(
+      (slot: any) => String(slot.slotNumber ?? '').toUpperCase() === normalizedSlotName,
+    );
+    const isHeld = activeHolds.some((hold: any) => {
+      const holdFloorId = String(hold.floorId?._id ?? hold.floorId ?? '');
+      const holdSlotCode = String(hold.slotCode ?? hold.parkingSlot ?? '').toUpperCase();
+      return holdFloorId === floorId && holdSlotCode === normalizedSlotName;
+    });
+    const isOccupied = activeSessions.some((session: any) => {
+      const sessionFloorId = String(session.floorId?._id ?? session.floorId ?? '');
+      const sessionSlotCode = String(session.slotCode ?? session.parkingSlot ?? '').toUpperCase();
+      return sessionFloorId === floorId && sessionSlotCode === normalizedSlotName;
+    });
+    const isMembershipMode = selectionMode === 'membership';
+    const isDbOccupied = dbSlot?.status === 'occupied' || dbSlot?.status === 'booked';
+    const slotData = isMembershipMode && dbSlot
+      ? {
+          id: String(dbSlot._id ?? `${floorId}-${normalizedSlotName}`),
+          slotCode: String(dbSlot.slotNumber ?? normalizedSlotName),
+          floorId,
+          status: dbSlot.status ?? 'available',
+        } as AvailableSlot
+      : bookingSlotData;
+    const status = resolveParkingSlotStatus({
+      hasAvailableSlot: isMembershipMode ? Boolean(dbSlot) : Boolean(bookingSlotData),
+      isMaintenance: dbSlot?.status === 'maintenance',
+      isOccupied: isOccupied || isDbOccupied,
+      isHeld,
+      isReserved: (isMembershipMode ? false : isVipLayoutSlot) || Boolean(dbSlot?.reservedFor),
+    });
+
+    return {
+      slotData,
+      status,
+      isSelectable: isParkingSlotSelectable(status, Boolean(slotData)),
+    };
+  }, [activeHolds, activeSessions, dbSlots, floorId, selectionMode, slotLookup]);
+
+  useEffect(() => {
+    if (selectionMode === 'membership' || !selectedSlot || String(selectedSlot.floorId) !== floorId) return;
+    const selectedLayoutElement = layout.elements.find(
+      (element: any) => element.type?.startsWith('slot')
+        && String(element.name ?? '').toUpperCase() === selectedSlot.slotCode.toUpperCase(),
+    );
+    const { isSelectable } = getSlotInteractionState(
+      selectedLayoutElement?.name ?? selectedSlot.slotCode,
+    );
+    if (!isSelectable) onSelectSlot(null);
+  }, [floorId, getSlotInteractionState, layout.elements, onSelectSlot, selectedSlot, selectionMode]);
+
   const renderElement = (el: any) => {
     const isSlot = el.type && el.type.startsWith('slot');
     const hasName = !!el.name && el.name.trim() !== '';
@@ -71,15 +156,15 @@ export const ParkingMap2D = ({ floor, floorSlots, selectedSlot, onSelectSlot }: 
     if (isSlot) {
       if (!hasName) return null; // Ignore slots without names
 
-      const slotName = el.name.toUpperCase();
-      const slotData = slotLookup[slotName];
+      const layoutSlotName = String(el.name);
+      const slotName = layoutSlotName.toUpperCase();
+      const { slotData, status, isSelectable } = getSlotInteractionState(layoutSlotName);
+      const isSelected = selectionMode === 'membership'
+        ? selectedSlots.some((slot) => String(slot.floorId) === floorId && slot.slotCode.toUpperCase() === slotName)
+        : selectedSlot?.slotCode?.toUpperCase() === slotName && String(selectedSlot?.floorId) === floorId;
 
-      const isSelected = selectedSlot?.slotCode?.toUpperCase() === slotName && selectedSlot?.floorId === floor._id;
-      const status = slotData ? 'available' : 'occupied'; // We only have available slots in floorSlots
-      const isAvailable = status === 'available';
-
-      const color = isSelected ? COLORS.gold : SLOT_STATUS_COLOR[status] || COLORS.textMuted;
-      const bgColor = isSelected ? 'rgba(212,175,55,0.2)' : `${color}18`;
+      const color = isSelected ? COLORS.staffBlue : SLOT_STATUS_COLOR[status] || COLORS.textMuted;
+      const bgColor = isSelected ? 'rgba(96,180,255,0.2)' : `${color}18`;
 
       return (
         <Pressable
@@ -92,13 +177,24 @@ export const ParkingMap2D = ({ floor, floorSlots, selectedSlot, onSelectSlot }: 
               borderColor: color,
             },
           ]}
+          disabled={!isSelectable}
+          accessibilityState={{ disabled: !isSelectable, selected: isSelected }}
           onPress={() => {
-            if (isAvailable || isSelected) {
+            if (!isSelectable || !slotData) return;
+            if (selectionMode === 'membership') {
+              onToggleSlot?.({ floorId, slotCode: slotData.slotCode || slotName });
+            } else {
               onSelectSlot(isSelected ? null : slotData);
             }
           }}
         >
-          <Ionicons name={status === 'occupied' ? 'car' : 'car-outline'} size={el.w < 40 ? 14 : 20} color={color} />
+          {status === 'held' || status === 'reserved' ? (
+            <Ionicons name="lock-closed" size={el.w < 40 ? 12 : 18} color={color} />
+          ) : status === 'maintenance' ? (
+            <Ionicons name="construct" size={el.w < 40 ? 12 : 18} color={color} />
+          ) : (
+            <Ionicons name={status === 'occupied' ? 'car' : 'car-outline'} size={el.w < 40 ? 14 : 20} color={color} />
+          )}
           <Text style={[styles.slotBoxText, { color, fontSize: el.w < 40 ? 8 : 10 }]}>{el.name}</Text>
         </Pressable>
       );
@@ -205,14 +301,29 @@ export const ParkingMap2D = ({ floor, floorSlots, selectedSlot, onSelectSlot }: 
   };
 
   return (
-    <View style={[styles.container, { width: mapWidth, height: mapHeight }]}>
-      {/* Background Grid Pattern (Simulated with absolute views or just plain background for simplicity) */}
-      <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-        {/* React Native doesn't have a simple repeating linear gradient background like CSS. 
-            We'll stick to a solid color to maintain performance. */}
+    <View style={{ width: mapWidth * scale, height: mapHeight * scale, overflow: 'hidden' }}>
+      <View
+        style={[
+          styles.container,
+          {
+            width: mapWidth,
+            height: mapHeight,
+            transform: [
+              { scale },
+              { translateX: -mapWidth * (1 - scale) / 2 },
+              { translateY: -mapHeight * (1 - scale) / 2 }
+            ]
+          }
+        ]}
+      >
+        {/* Background Grid Pattern (Simulated with absolute views or just plain background for simplicity) */}
+        <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+          {/* React Native doesn't have a simple repeating linear gradient background like CSS.
+              We'll stick to a solid color to maintain performance. */}
+        </View>
+
+        {layout.elements.map((el: any) => renderElement(el))}
       </View>
-      
-      {layout.elements.map((el: any) => renderElement(el))}
     </View>
   );
 };

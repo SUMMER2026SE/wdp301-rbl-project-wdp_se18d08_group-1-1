@@ -49,6 +49,8 @@ export type ProfileStackParamList = {
   Policies: undefined;
   PolicyDetail: { slug: string };
   ParkingHistory: undefined;
+  BookingList: undefined;
+  BookingDetail: { bookingId: string };
 };
 
 export type NotificationStackParamList = {

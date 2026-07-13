@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -17,18 +16,12 @@ import { ParkingMap2D } from '@/components/booking/ParkingMap2D';
 import { EmptyState, ErrorState, ScreenHeader } from '@/components/common';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
 import { useBooking } from '@/hooks/useBooking';
+import bookingService from '@/services/BookingService';
+import parkingFloorService from '@/services/ParkingFloorService';
 import type { BookingStackParamList } from '@/navigation/BookingStackNavigator';
 import type { AvailableSlot, ParkingFloor } from '@/types/booking.types';
 
 type Props = NativeStackScreenProps<BookingStackParamList, 'FindParking'>;
-
-const SLOT_STATUS_COLOR: Record<string, string> = {
-  available: '#7EE8A2',
-  occupied: '#FF6B6B',
-  booked: COLORS.staffBlue,
-  reserved: COLORS.staffBlue,
-  maintenance: '#A0A0A0',
-};
 
 const getFloorId = (floor: ParkingFloor) => floor._id ?? floor.id ?? String(floor.floorNumber);
 
@@ -36,6 +29,10 @@ export const FindParkingScreen = ({ navigation, route }: Props) => {
   const { availableSlots, parkingFloors, isLoading, error, fetchParkingFloors, getAvailableSlots } = useBooking();
   const [selectedFloor, setSelectedFloor] = useState<ParkingFloor | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<AvailableSlot | null>(null);
+
+  const [dbSlots, setDbSlots] = useState<any[]>([]);
+  const [activeSessions, setActiveSessions] = useState<any[]>([]);
+  const [activeHolds, setActiveHolds] = useState<any[]>([]);
 
   const startTime = useMemo(
     () => (route.params?.startTime ? new Date(route.params.startTime) : new Date()),
@@ -60,13 +57,41 @@ export const FindParkingScreen = ({ navigation, route }: Props) => {
     setSelectedFloor(preferredFloor ?? parkingFloors[0]);
   }, [parkingFloors, route.params?.floorId, selectedFloor]);
 
+  useEffect(() => {
+    const fetchExtraData = async () => {
+      try {
+        const [sessionsRes, holdsRes] = await Promise.all([
+          bookingService.getActiveSessions(),
+          bookingService.getActiveHolds()
+        ]);
+        setActiveSessions(sessionsRes.data?.data || []);
+        setActiveHolds(holdsRes.data?.data || []);
+      } catch (err) {
+        console.warn('Failed to fetch extra map data:', err);
+      }
+    };
+    void fetchExtraData();
+  }, []);
+
+  useEffect(() => {
+    const fetchSlots = async () => {
+      if (!selectedFloor) return;
+      try {
+        const floorId = getFloorId(selectedFloor);
+        const slots = await parkingFloorService.getSlotsByFloor(floorId);
+        setDbSlots(slots || []);
+      } catch (err) {
+        console.warn('Failed to fetch db slots:', err);
+      }
+    };
+    void fetchSlots();
+  }, [selectedFloor]);
+
   const selectedFloorId = selectedFloor ? getFloorId(selectedFloor) : '';
   const floorSlots = useMemo(
     () => availableSlots.filter((slot) => slot.floorId === selectedFloorId),
     [availableSlots, selectedFloorId],
   );
-  const totalAvailable = availableSlots.length;
-
   const handleConfirmSlot = () => {
     if (!selectedSlot) return;
 
@@ -85,11 +110,19 @@ export const FindParkingScreen = ({ navigation, route }: Props) => {
       <View style={styles.statsBar}>
         <View style={styles.statItem}>
           <View style={[styles.statDot, { backgroundColor: '#7EE8A2' }]} />
-          <Text style={styles.statText}>Trống ({totalAvailable})</Text>
+          <Text style={styles.statText}>Trống</Text>
         </View>
         <View style={styles.statItem}>
-          <View style={[styles.statDot, { backgroundColor: COLORS.staffBlue }]} />
-          <Text style={styles.statText}>Đã đặt</Text>
+          <View style={[styles.statDot, { backgroundColor: '#FF6B6B' }]} />
+          <Text style={styles.statText}>Có xe</Text>
+        </View>
+        <View style={styles.statItem}>
+          <View style={[styles.statDot, { backgroundColor: '#FFD700' }]} />
+          <Text style={styles.statText}>VIP</Text>
+        </View>
+        <View style={styles.statItem}>
+          <View style={[styles.statDot, { backgroundColor: '#FFA500' }]} />
+          <Text style={styles.statText}>Giữ chỗ</Text>
         </View>
         <View style={styles.statItem}>
           <View style={[styles.statDot, { backgroundColor: '#A0A0A0' }]} />
@@ -161,6 +194,9 @@ export const FindParkingScreen = ({ navigation, route }: Props) => {
                 floorSlots={floorSlots}
                 selectedSlot={selectedSlot}
                 onSelectSlot={setSelectedSlot}
+                dbSlots={dbSlots}
+                activeSessions={activeSessions}
+                activeHolds={activeHolds}
               />
             )}
           </View>
@@ -264,7 +300,7 @@ const styles = StyleSheet.create({
   selectedPanel: {
     alignItems: 'center',
     backgroundColor: COLORS.surface,
-    borderColor: 'rgba(212,175,55,0.3)',
+    borderColor: 'rgba(96,180,255,0.35)',
     borderRadius: RADIUS.lg,
     borderWidth: 1,
     flexDirection: 'row',
@@ -273,7 +309,7 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
   },
   selectedInfo: { flex: 1 },
-  selectedSlotCode: { color: COLORS.gold, fontSize: FONT_SIZES.lg, fontWeight: '800' },
+  selectedSlotCode: { color: COLORS.staffBlue, fontSize: FONT_SIZES.lg, fontWeight: '800' },
   selectedFloor: { color: COLORS.textSecondary, fontSize: FONT_SIZES.xs, marginTop: 2 },
   selectBtn: {
     alignItems: 'center',

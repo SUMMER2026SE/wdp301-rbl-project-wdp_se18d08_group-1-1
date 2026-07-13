@@ -1,9 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useEffect, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   RefreshControl,
   ScrollView,
   StatusBar,
@@ -17,15 +17,17 @@ import { fetchProfile, type Profile } from '../../api/profile.api';
 import { useAuth } from '@/hooks/useAuth';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '../../constants/theme';
 import { MenuItem } from '@/components/profile/MenuItem';
+import { useAppAlert } from '@/contexts/AppAlertContext';
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 export default function StaffProfileScreen({ navigation }: { navigation?: any }) {
   const { user, logout } = useAuth();
+  const { alert } = useAppAlert();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const loadProfile = async () => {
+  const loadProfile = useCallback(async () => {
     try {
       const data = await fetchProfile();
       setProfile(data);
@@ -34,9 +36,13 @@ export default function StaffProfileScreen({ navigation }: { navigation?: any })
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { loadProfile(); }, []);
+  useFocusEffect(
+    useCallback(() => {
+      void loadProfile();
+    }, [loadProfile]),
+  );
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -45,7 +51,7 @@ export default function StaffProfileScreen({ navigation }: { navigation?: any })
   };
 
   const handleLogout = () => {
-    Alert.alert('Đăng xuất', 'Bạn có chắc muốn đăng xuất?', [
+    alert('Đăng xuất', 'Bạn có chắc muốn đăng xuất?', [
       { text: 'Huỷ', style: 'cancel' },
       { text: 'Đăng xuất', style: 'destructive', onPress: logout },
     ]);

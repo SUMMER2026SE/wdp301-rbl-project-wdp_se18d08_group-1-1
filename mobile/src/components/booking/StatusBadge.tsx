@@ -5,8 +5,10 @@ import { borderRadius, colors, spacing } from '@/theme';
 import type { BookingStatus } from '@/types/booking.types';
 
 const statusColor: Record<BookingStatus, string> = {
+  pending: colors.warning.main,
   confirmed: colors.primary[500],
   active: colors.success.main,
+  paused: colors.warning.dark,
   completed: colors.neutral[600],
   cancelled: colors.error.main,
   expired: colors.warning.main,

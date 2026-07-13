@@ -1,4 +1,4 @@
-import type { AvailableSlot, Booking, Service, Session } from './booking.types';
+import type { AvailableSlot, Booking, BookingServiceItem, Service, Session } from './booking.types';
 import type { APIResponse, PaginatedResponse } from './api';
 
 export interface GetAvailableSlotsRequest {
@@ -6,11 +6,20 @@ export interface GetAvailableSlotsRequest {
   endTime: string;
 }
 
+export interface BookingMembershipPolicy {
+  activeMembership: boolean;
+  membershipType: 'monthly' | 'yearly' | null;
+  assignedSlotOccupied: boolean;
+  requiresAssignedSlotUse: boolean;
+  reservedSlots: Array<{ floorId: string; slotCode: string }>;
+}
+
 export interface AvailableSlotsData {
   startTime?: string;
   endTime?: string;
   count?: number;
   slots?: AvailableSlot[];
+  bookingPolicy?: BookingMembershipPolicy;
 }
 
 export interface GetAvailableSlotsResponse extends APIResponse<AvailableSlot[] | AvailableSlotsData> {
@@ -24,9 +33,15 @@ export interface CreateBookingRequest {
   slotCode: string;
   vehicleId: string;
   serviceIds?: string[];
+  paymentMethod?: 'wallet' | 'vietqr';
 }
 
-export interface CreateBookingResponse extends APIResponse<Booking> {}
+export interface CreateBookingData {
+  booking: Booking;
+  services?: BookingServiceItem[];
+}
+
+export interface CreateBookingResponse extends APIResponse<Booking | CreateBookingData> {}
 
 export interface BookingConflictResponse {
   success: false;
@@ -58,6 +73,13 @@ export interface CheckOutBookingResponse
     refundAmount: number;
     walletBalance?: number;
   }> {}
+
+export interface ModifyBookingTimeRequest {
+  newStart: string;
+  newEnd: string;
+}
+
+export interface BookingMutationResponse extends APIResponse<Booking> {}
 
 export interface ServicesResponse extends APIResponse<Service[]> {
   count?: number;

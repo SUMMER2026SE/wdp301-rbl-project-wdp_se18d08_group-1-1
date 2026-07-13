@@ -201,6 +201,7 @@ export default function CreateBookingPage() {
   const [selectedServices, setSelectedServices] = useState([]);
   const [wallet, setWallet] = useState(null);
   const [slots, setSlots] = useState([]);
+  const [bookingPolicy, setBookingPolicy] = useState(null);
   const [selectedSlotKey, setSelectedSlotKey] = useState('');
   const [cartItems, setCartItems] = useState([]);
   const [cartQuote, setCartQuote] = useState(null);
@@ -354,11 +355,8 @@ export default function CreateBookingPage() {
     String(selectedSlotReservedFor) === String(profile?.id)
   );
   const selectedRegisteredVehicleBlockedByVip = Boolean(
-    activeMembershipType &&
     selectedVehicle &&
-    selectedSlot &&
-    selectedDbSlot &&
-    !selectedSlotIsOwnVipSlot
+    bookingPolicy?.requiresAssignedSlotUse
   );
   const pricePreview = useMemo(
     () => calculateBookingPrice(startTime, endTime, { waiveOpeningFee: selectedSlotIsOwnVipSlot }),
@@ -511,6 +509,7 @@ export default function CreateBookingPage() {
     setError('');
     setSuccess('');
     setSlots([]);
+    setBookingPolicy(null);
     setSelectedSlotKey('');
 
     try {
@@ -526,6 +525,7 @@ export default function CreateBookingPage() {
 
       const nextSlots = res.data?.data?.slots || [];
       setSlots(nextSlots);
+      setBookingPolicy(res.data?.data?.bookingPolicy || null);
     } catch (err) {
       console.error('Error finding slots:', err);
       setError(`Network error while checking slots: ${err.message}`);
@@ -533,6 +533,34 @@ export default function CreateBookingPage() {
       setCheckingSlots(false);
     }
   };
+
+  useEffect(() => {
+    const refreshBookingPolicy = async () => {
+      const startObj = new Date(startTime);
+      const endObj = new Date(endTime);
+      if (startObj <= new Date() || endObj <= startObj) return;
+
+      try {
+        const res = await getAvailableBookingSlots({
+          startTime: startObj.toISOString(),
+          endTime: endObj.toISOString(),
+        });
+        if (res.ok) {
+          setSlots(res.data?.data?.slots || []);
+          setBookingPolicy(res.data?.data?.bookingPolicy || null);
+        }
+      } catch {
+        // Keep the last valid state when a background refresh fails.
+      }
+    };
+
+    const intervalId = setInterval(refreshBookingPolicy, 15000);
+    window.addEventListener('focus', refreshBookingPolicy);
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener('focus', refreshBookingPolicy);
+    };
+  }, [endTime, startTime]);
 
 
   const handleAddOrUpdateCartItem = async () => {
@@ -564,7 +592,7 @@ export default function CreateBookingPage() {
     }
 
     if (selectedRegisteredVehicleBlockedByVip) {
-      setError('This registered vehicle is already covered by your active VIP membership. Please use your assigned VIP slot instead of booking another slot.');
+      setError('Your membership VIP slot is still empty. Park one vehicle in the assigned VIP slot first; then another vehicle may book a regular slot.');
       return;
     }
 
@@ -1040,7 +1068,7 @@ export default function CreateBookingPage() {
                   }`}>
                     {selectedSlotIsOwnVipSlot
                       ? 'This is your assigned VIP slot, so this registered vehicle can use it while your membership is active.'
-                      : 'This registered vehicle is covered by an active VIP membership. Please use your assigned VIP slot instead of booking another slot.'}
+                      : 'Park one vehicle in your assigned VIP slot first; then another registered vehicle may book a regular slot.'}
                   </div>
                 )}
               </div>

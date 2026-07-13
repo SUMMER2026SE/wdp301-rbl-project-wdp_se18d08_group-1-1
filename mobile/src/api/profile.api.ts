@@ -1,4 +1,5 @@
-import axiosClient from './axiosClient';
+import { apiClient } from '@/services/api/client';
+import type { APIResponse } from '@/types/api';
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 export type Profile = {
@@ -15,20 +16,47 @@ export type Profile = {
   };
 };
 
+type ProfileResponseData = {
+  id?: string;
+  _id?: string;
+  username: string;
+  email: string;
+  role: string;
+  createdAt?: string;
+  profile?: {
+    firstName?: string;
+    lastName?: string;
+    phone?: string;
+    avatar?: string;
+  } | null;
+  wallet?: { balance: number };
+};
+
 // ─── Endpoints ─────────────────────────────────────────────────────────────────
 export const fetchProfile = async (): Promise<Profile> => {
-  const res = await axiosClient.get<{ data: any }>('/profile');
-  const d = res.data.data;
+  const response = await apiClient.get<APIResponse<ProfileResponseData>>('/profile');
+  const d = response.data;
+
+  if (!d) {
+    throw new Error('Dữ liệu hồ sơ không hợp lệ.');
+  }
+
+  const id = d.id || d._id;
+  if (!id) {
+    throw new Error('Hồ sơ không có mã người dùng.');
+  }
+
+  const firstName = d.profile?.firstName?.trim() || '';
+  const lastName = d.profile?.lastName?.trim() || '';
+  const fullName = `${lastName} ${firstName}`.trim();
   
   return {
-    _id: d.id || d._id,
+    _id: id,
     username: d.username,
     email: d.email,
     role: d.role,
     createdAt: d.createdAt,
-    fullName: d.profile?.lastName || d.profile?.firstName 
-      ? `${d.profile.lastName || ''} ${d.profile.firstName || ''}`.trim() 
-      : undefined,
+    fullName: fullName || undefined,
     phone: d.profile?.phone,
     avatar: d.profile?.avatar,
     wallet: d.wallet,

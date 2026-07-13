@@ -1,11 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { addMinutes, format } from 'date-fns';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -14,23 +14,39 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { EmptyState, ErrorState, ScreenHeader, SectionTitle } from '@/components/common';
+import {
+  BookingActionModal,
+  type BookingModalVariant,
+} from '@/components/booking/BookingActionModal';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
 import { useBooking } from '@/hooks/useBooking';
 import type { BookingStackParamList } from '@/navigation/BookingStackNavigator';
+import type { CustomerTabParamList } from '@/navigation/CustomerNavigator';
 import { vehiclesService } from '@/services/api/vehicles';
 import { ParkingMap2D } from '@/components/booking/ParkingMap2D';
+import bookingService from '@/services/BookingService';
+import parkingFloorService from '@/services/ParkingFloorService';
 import type { AvailableSlot, ParkingFloor } from '@/types/booking.types';
 import type { Vehicle } from '@/types/models';
 import { formatCurrency } from '@/utils/formatters';
 import { subscriptionsService } from '@/services/api/subscriptions';
 
 type Props = NativeStackScreenProps<BookingStackParamList, 'CreateBooking'>;
+
+interface CreateFeedback {
+  variant: BookingModalVariant;
+  title: string;
+  message: string;
+  primaryLabel?: string;
+  onPrimary?: () => void;
+}
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 const roundUpTo15Min = (date: Date) => {
@@ -219,6 +235,7 @@ const mpStyles = StyleSheet.create({
 export const CreateBookingScreen = ({ navigation, route }: Props) => {
   const {
     availableSlots,
+    bookingPolicy,
     parkingFloors,
     services,
     walletBalance,
@@ -240,16 +257,56 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
   // ── Data state ────────────────────────────────────────────────────────────
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [vehicleError, setVehicleError] = useState('');
-  const [selectedVehicleId, setSelectedVehicleId] = useState('');
+  const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null);
+  const [manualPlate, setManualPlate] = useState<string>('');
   const [selectedSlot, setSelectedSlot] = useState<AvailableSlot | null>(null);
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
   const [hourlyRate, setHourlyRate] = useState(10000);
   const [submitting, setSubmitting] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [createdBookingId, setCreatedBookingId] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<CreateFeedback | null>(null);
+  const [dbSlots, setDbSlots] = useState<any[] | null>(null);
+  const [activeSessions, setActiveSessions] = useState<any[]>([]);
+  const [activeHolds, setActiveHolds] = useState<any[]>([]);
   const [selectedFloor, setSelectedFloor] = useState<ParkingFloor | null>(null);
 
   const selectedFloorId = route.params?.selectedFloorId;
   const selectedSlotCode = route.params?.selectedSlotCode;
   const selectedFloorName = route.params?.selectedFloorName;
+
+  const fetchExtraData = useCallback(async () => {
+    try {
+      const [sessionsRes, holdsRes] = await Promise.all([
+        bookingService.getActiveSessions(),
+        bookingService.getActiveHolds(),
+      ]);
+      setActiveSessions(sessionsRes.data?.data || []);
+      setActiveHolds(holdsRes.data?.data || []);
+    } catch (err) {
+      console.warn('Failed to fetch extra map data:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchExtraData();
+  }, [fetchExtraData]);
+
+  useEffect(() => {
+    const fetchSlots = async () => {
+      if (!selectedFloor) return;
+      setDbSlots(null);
+      try {
+        const floorId = selectedFloor._id ?? selectedFloor.id ?? String(selectedFloor.floorNumber);
+        const slots = await parkingFloorService.getSlotsByFloor(floorId);
+        setDbSlots(slots || []);
+      } catch (err) {
+        console.warn('Failed to fetch db slots:', err);
+        setDbSlots([]);
+      }
+    };
+    void fetchSlots();
+  }, [selectedFloor]);
 
   // ── Load data ─────────────────────────────────────────────────────────────
   const loadVehicles = useCallback(async () => {
@@ -292,6 +349,17 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
   }, [endTime, getAvailableSlots, startTime]);
 
   useEffect(() => {
+    const refreshLiveBookingState = () => {
+      void fetchExtraData();
+      if (startTime > new Date() && endTime > startTime) {
+        void getAvailableSlots(startTime, endTime, { silent: true });
+      }
+    };
+    const intervalId = setInterval(refreshLiveBookingState, 15000);
+    return () => clearInterval(intervalId);
+  }, [endTime, fetchExtraData, getAvailableSlots, startTime]);
+
+  useEffect(() => {
     if (parkingFloors.length > 0 && !selectedFloor) {
       const preferredFloor = route.params?.selectedFloorId
         ? parkingFloors.find((f) => String(f._id ?? f.id ?? f.floorNumber) === route.params?.selectedFloorId)
@@ -301,12 +369,15 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
   }, [parkingFloors, route.params?.selectedFloorId, selectedFloor]);
 
   useEffect(() => {
-    if (!selectedFloorId || !selectedSlotCode) return;
+    if (!selectedFloorId || !selectedSlotCode || dbSlots === null) return;
+    const dbSlot = dbSlots.find(
+      (slot) => String(slot.slotNumber || '').toUpperCase() === selectedSlotCode.toUpperCase(),
+    );
     const matched = availableSlots.find(
       (s) => s.floorId === selectedFloorId && s.slotCode === selectedSlotCode,
     );
-    setSelectedSlot(matched ?? null);
-  }, [availableSlots, selectedFloorId, selectedSlotCode]);
+    setSelectedSlot(dbSlot?.reservedFor || dbSlot?.status === 'maintenance' ? null : matched ?? null);
+  }, [availableSlots, dbSlots, selectedFloorId, selectedSlotCode]);
 
   useEffect(() => {
     if (!selectedSlot || isLoading) return;
@@ -315,6 +386,16 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
     );
     if (!stillAvailable) setSelectedSlot(null);
   }, [availableSlots, isLoading, selectedSlot]);
+
+  useEffect(() => {
+    if (!selectedSlot || dbSlots === null) return;
+    const dbSlot = dbSlots.find(
+      (slot) => String(slot.slotNumber || '').toUpperCase() === selectedSlot.slotCode.toUpperCase(),
+    );
+    if (dbSlot?.reservedFor || dbSlot?.status === 'maintenance') {
+      setSelectedSlot(null);
+    }
+  }, [dbSlots, selectedSlot]);
 
   // ── Derived values ────────────────────────────────────────────────────────
   const durationMs = Math.max(endTime.getTime() - startTime.getTime(), 0);
@@ -333,7 +414,18 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
   const grandTotal = parkingCost + serviceTotal;
   const hasEnoughBalance = walletBalance >= grandTotal;
   const selectedVehicle = vehicles.find((v) => (v.id ?? v._id ?? '') === selectedVehicleId);
-  const canBook = Boolean(selectedSlot && selectedVehicleId && hasEnoughBalance && !submitting && durationHours >= 1);
+  const membershipBlocksRegisteredVehicle = Boolean(
+    selectedVehicle && bookingPolicy?.requiresAssignedSlotUse,
+  );
+  const canBook = Boolean(
+    selectedSlot &&
+    selectedVehicleId &&
+    hasEnoughBalance &&
+    !membershipBlocksRegisteredVehicle &&
+    !submitting &&
+    durationMs >= 30 * 60 * 1000 &&
+    durationMs <= 24 * 60 * 60 * 1000,
+  );
   const selectedRouteSlotUnavailable =
     Boolean(selectedFloorId && selectedSlotCode) && !selectedSlot && !isLoading && availableSlots.length > 0;
 
@@ -360,19 +452,36 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
   };
 
   // ── Submit ────────────────────────────────────────────────────────────────
+  const showFeedback = (variant: BookingModalVariant, title: string, message: string) => {
+    setFeedback({ variant, title, message });
+  };
+
   const handleSubmit = async () => {
     if (!selectedSlot || !selectedVehicleId) return;
     const now = new Date();
     if (startTime < now) {
-      Alert.alert('Lỗi', 'Thời gian bắt đầu không thể ở quá khứ.');
+      showFeedback('error', 'Thời gian không hợp lệ', 'Thời gian bắt đầu không thể ở quá khứ.');
       return;
     }
     if (durationMs < 30 * 60 * 1000) {
-      Alert.alert('Lỗi', 'Thời gian đặt chỗ tối thiểu là 30 phút.');
+      showFeedback('warning', 'Thời lượng quá ngắn', 'Thời gian đặt chỗ tối thiểu là 30 phút.');
+      return;
+    }
+    if (durationMs > 24 * 60 * 60 * 1000) {
+      showFeedback('warning', 'Thời lượng quá dài', 'Thời gian đặt chỗ tối đa là 24 giờ.');
+      return;
+    }
+    if (membershipBlocksRegisteredVehicle) {
+      showFeedback(
+        'warning',
+        'Hãy sử dụng ô VIP trước',
+        'Gói membership của bạn đang có ô VIP trống. Hãy cho một xe vào ô VIP trước; sau đó xe còn lại mới có thể đặt ô thường.',
+      );
       return;
     }
     if (!hasEnoughBalance) {
-      Alert.alert(
+      showFeedback(
+        'warning',
         'Không đủ số dư',
         `Bạn cần ${formatCurrency(grandTotal)} nhưng ví chỉ còn ${formatCurrency(walletBalance)}. Hãy nạp thêm tiền vào ví.`,
       );
@@ -380,26 +489,54 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
     }
     setSubmitting(true);
     try {
-      const booking = await createBooking({
-        floorId: selectedSlot.floorId,
-        slotCode: selectedSlot.slotCode,
-        vehicleId: selectedVehicleId,
-        startTime: startTime.toISOString(),
-        endTime: endTime.toISOString(),
-        serviceIds: selectedServiceIds,
-      });
-      Alert.alert(
-        'Đặt chỗ thành công! 🎉',
-        `Vị trí ${booking.slotCode} đã được giữ.\nVí bị trừ: ${formatCurrency(grandTotal)}`,
-        [
-          {
-            text: 'Xem chi tiết',
-            onPress: () => navigation.navigate('BookingDetail', { bookingId: booking._id }),
-          },
-        ],
-      );
+      let bookingId: string | undefined;
+      if (selectedVehicleId === 'manual') {
+        if (!manualPlate.trim()) throw new Error('Vui lòng nhập biển số xe.');
+        const response = await bookingService.createBulkBooking({
+          idempotencyKey: Date.now().toString(),
+          items: [{
+            licensePlate: manualPlate.trim(),
+            floorId: selectedSlot.floorId,
+            slotCode: selectedSlot.slotCode,
+            startTime: startTime.toISOString(),
+            endTime: endTime.toISOString(),
+            serviceIds: selectedServiceIds,
+          }],
+          paymentMethod: 'wallet',
+        });
+
+        const responseData = response.data?.data ?? response.data;
+        const rawBooking = responseData?.bookings?.[0] ?? responseData?.items?.[0] ?? responseData?.booking;
+        bookingId = bookingService.normalizeBooking(rawBooking)?._id;
+
+        if (responseData?.checkoutUrl) {
+          setFeedback({
+            variant: 'info',
+            title: 'Thanh toán VietQR',
+            message: 'Vui lòng hoàn tất thanh toán để giữ chỗ.',
+            primaryLabel: 'Đã hiểu',
+            onPrimary: () => navigation.goBack(),
+          });
+          return;
+        }
+      } else {
+        const booking = await createBooking({
+          vehicleId: selectedVehicleId,
+          floorId: selectedSlot.floorId,
+          slotCode: selectedSlot.slotCode,
+          startTime: startTime.toISOString(),
+          endTime: endTime.toISOString(),
+          serviceIds: selectedServiceIds,
+          paymentMethod: 'wallet',
+        });
+        bookingId = booking._id;
+      }
+
+      setCreatedBookingId(bookingId ?? null);
+      setShowSuccessModal(true);
     } catch (submitError) {
-      Alert.alert(
+      showFeedback(
+        'error',
         'Đặt chỗ thất bại',
         submitError instanceof Error ? submitError.message : 'Vui lòng thử lại.',
       );
@@ -511,8 +648,38 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
                     </Pressable>
                   );
                 })}
+                <Pressable
+                  style={[styles.vehiclePill, selectedVehicleId === 'manual' && styles.vehiclePillActive]}
+                  onPress={() => setSelectedVehicleId('manual')}
+                >
+                  <Ionicons name="create-outline" size={16} color={selectedVehicleId === 'manual' ? COLORS.gold : COLORS.textMuted} />
+                  <Text style={[styles.vehicleText, selectedVehicleId === 'manual' && styles.vehicleTextActive]}>
+                    Biển số ngoài
+                  </Text>
+                </Pressable>
               </ScrollView>
             )}
+
+            {selectedVehicleId === 'manual' && (
+              <View style={{ marginTop: 12 }}>
+                <TextInput
+                  style={[styles.input, { borderWidth: 1, borderColor: COLORS.border, padding: 12, borderRadius: 8, color: COLORS.textPrimary }]}
+                  placeholder="Nhập biển số xe (VD: 30A-12345)"
+                  placeholderTextColor={COLORS.textMuted}
+                  value={manualPlate}
+                  onChangeText={setManualPlate}
+                  autoCapitalize="characters"
+                />
+              </View>
+            )}
+            {membershipBlocksRegisteredVehicle ? (
+              <View style={styles.warningBox}>
+                <Ionicons name="alert-circle-outline" size={18} color={COLORS.warning} />
+                <Text style={styles.warningText}>
+                  Membership đang có ô VIP trống. Hãy cho một xe vào ô VIP trước, rồi mới đặt ô thường cho xe còn lại.
+                </Text>
+              </View>
+            ) : null}
           </View>
 
           {/* ── Slot Map ──────────────────────────────────────── */}
@@ -522,7 +689,7 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
             {selectedSlot ? (
               <View style={styles.selectedSlotCard}>
                 <View style={styles.selectedSlotIcon}>
-                  <Ionicons name="location" size={20} color={COLORS.gold} />
+                  <Ionicons name="location" size={20} color={COLORS.staffBlue} />
                 </View>
                 <View style={styles.selectedSlotInfo}>
                   <Text style={styles.selectedSlotCode}>{selectedSlot.slotCode}</Text>
@@ -571,9 +738,32 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
               </ScrollView>
             )}
 
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, paddingHorizontal: 16, marginBottom: 8, justifyContent: 'center' }}>
+              <View style={{ alignItems: 'center', flexDirection: 'row', gap: 6 }}>
+                <View style={{ borderRadius: 5, height: 10, width: 10, backgroundColor: '#7EE8A2' }} />
+                <Text style={{ color: COLORS.textSecondary, fontSize: 11 }}>Trống</Text>
+              </View>
+              <View style={{ alignItems: 'center', flexDirection: 'row', gap: 6 }}>
+                <View style={{ borderRadius: 5, height: 10, width: 10, backgroundColor: '#FF6B6B' }} />
+                <Text style={{ color: COLORS.textSecondary, fontSize: 11 }}>Có xe</Text>
+              </View>
+              <View style={{ alignItems: 'center', flexDirection: 'row', gap: 6 }}>
+                <View style={{ borderRadius: 5, height: 10, width: 10, backgroundColor: '#FFD700' }} />
+                <Text style={{ color: COLORS.textSecondary, fontSize: 11 }}>VIP</Text>
+              </View>
+              <View style={{ alignItems: 'center', flexDirection: 'row', gap: 6 }}>
+                <View style={{ borderRadius: 5, height: 10, width: 10, backgroundColor: '#FFA500' }} />
+                <Text style={{ color: COLORS.textSecondary, fontSize: 11 }}>Giữ chỗ</Text>
+              </View>
+              <View style={{ alignItems: 'center', flexDirection: 'row', gap: 6 }}>
+                <View style={{ borderRadius: 5, height: 10, width: 10, backgroundColor: '#A0A0A0' }} />
+                <Text style={{ color: COLORS.textSecondary, fontSize: 11 }}>Bảo trì</Text>
+              </View>
+            </View>
+
             <ScrollView horizontal showsHorizontalScrollIndicator={false}>
               <View style={styles.mapCanvas}>
-                {isLoading ? (
+                {isLoading || dbSlots === null ? (
                   <View style={styles.mapState}>
                     <ActivityIndicator color={COLORS.gold} size="large" />
                     <Text style={styles.mapStateText}>Đang tải sơ đồ...</Text>
@@ -600,6 +790,9 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
                     )}
                     selectedSlot={selectedSlot}
                     onSelectSlot={setSelectedSlot}
+                    dbSlots={dbSlots}
+                    activeSessions={activeSessions}
+                    activeHolds={activeHolds}
                   />
                 )}
               </View>
@@ -712,6 +905,48 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
         </ScrollView>
       </KeyboardAvoidingView>
 
+      <BookingActionModal
+        message={`Vị trí ${selectedSlot?.slotCode ?? '--'} đã được giữ.\nSố tiền đã thanh toán: ${formatCurrency(grandTotal)}`}
+        primaryLabel="Xem chi tiết đặt chỗ"
+        secondaryLabel="Danh sách đặt chỗ"
+        title="Đặt chỗ thành công! 🎉"
+        variant="success"
+        visible={showSuccessModal}
+        onClose={() => setShowSuccessModal(false)}
+        onPrimary={() => {
+          setShowSuccessModal(false);
+          const parentNavigation = navigation.getParent<BottomTabNavigationProp<CustomerTabParamList>>();
+          if (createdBookingId) {
+            parentNavigation?.navigate('ProfileTab', {
+              screen: 'BookingDetail',
+              params: { bookingId: createdBookingId },
+            });
+          } else {
+            parentNavigation?.navigate('ProfileTab', { screen: 'BookingList' });
+          }
+        }}
+        onSecondary={() => {
+          setShowSuccessModal(false);
+          navigation
+            .getParent<BottomTabNavigationProp<CustomerTabParamList>>()
+            ?.navigate('ProfileTab', { screen: 'BookingList' });
+        }}
+      />
+
+      <BookingActionModal
+        message={feedback?.message}
+        primaryLabel={feedback?.primaryLabel ?? 'Đóng'}
+        title={feedback?.title ?? ''}
+        variant={feedback?.variant ?? 'info'}
+        visible={Boolean(feedback)}
+        onClose={() => setFeedback(null)}
+        onPrimary={() => {
+          const callback = feedback?.onPrimary;
+          setFeedback(null);
+          callback?.();
+        }}
+      />
+
       {/* ── Time Picker Modals ─────────────────────────────────── */}
       <TimePickerModal
         visible={showStartPicker}
@@ -806,7 +1041,7 @@ const styles = StyleSheet.create({
   selectedSlotCard: {
     alignItems: 'center',
     backgroundColor: COLORS.surface,
-    borderColor: 'rgba(212,175,55,0.28)',
+    borderColor: 'rgba(96,180,255,0.35)',
     borderRadius: RADIUS.lg,
     borderWidth: 1,
     flexDirection: 'row',
@@ -815,14 +1050,14 @@ const styles = StyleSheet.create({
   },
   selectedSlotIcon: {
     alignItems: 'center',
-    backgroundColor: 'rgba(212,175,55,0.1)',
+    backgroundColor: 'rgba(96,180,255,0.12)',
     borderRadius: RADIUS.md,
     height: 44,
     justifyContent: 'center',
     width: 44,
   },
   selectedSlotInfo: { flex: 1 },
-  selectedSlotCode: { color: COLORS.gold, fontSize: FONT_SIZES.lg, fontWeight: '800' },
+  selectedSlotCode: { color: COLORS.staffBlue, fontSize: FONT_SIZES.lg, fontWeight: '800' },
   selectedSlotMeta: { color: COLORS.textSecondary, fontSize: FONT_SIZES.xs, marginTop: 2 },
   clearSlotBtn: { padding: 4 },
   warningBox: {
@@ -969,4 +1204,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   submitText: { color: COLORS.textInverse, fontSize: FONT_SIZES.md, fontWeight: '700' },
+  input: { backgroundColor: COLORS.surfaceElevated },
 });

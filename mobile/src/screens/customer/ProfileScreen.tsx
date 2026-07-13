@@ -1,9 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useEffect, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   RefreshControl,
   ScrollView,
   StatusBar,
@@ -19,26 +19,75 @@ import { fetchProfile, type Profile } from '../../api/profile.api';
 import { useAuth } from '@/hooks/useAuth';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '../../constants/theme';
 import { MenuItem } from '@/components/profile/MenuItem';
+import { useAppAlert } from '@/contexts/AppAlertContext';
+import { subscriptionsService } from '@/services/api/subscriptions';
+import type { MembershipStatus } from '@/types/subscription.types';
+import {
+  getMembershipTierLabel,
+  getMembershipVisualTier,
+  MEMBERSHIP_TIER_COLORS,
+  type MembershipVisualTier,
+} from '@/utils/membershipDisplay';
+
+const MEMBERSHIP_THEMES: Record<MembershipVisualTier, {
+  accent: string;
+  avatarBackground: string;
+  avatarText: string;
+  border: string;
+  gradient: [string, string];
+  pillBackground: string;
+}> = {
+  standard: {
+    ...MEMBERSHIP_TIER_COLORS.standard,
+    border: 'rgba(148,163,184,0.28)',
+    gradient: ['rgba(148,163,184,0.09)', 'rgba(148,163,184,0.02)'],
+    pillBackground: 'rgba(148,163,184,0.12)',
+  },
+  monthly: {
+    ...MEMBERSHIP_TIER_COLORS.monthly,
+    border: 'rgba(212,175,55,0.38)',
+    gradient: ['rgba(212,175,55,0.14)', 'rgba(212,175,55,0.03)'],
+    pillBackground: 'rgba(212,175,55,0.12)',
+  },
+  yearly: {
+    ...MEMBERSHIP_TIER_COLORS.yearly,
+    border: 'rgba(168,85,247,0.46)',
+    gradient: ['rgba(168,85,247,0.18)', 'rgba(76,29,149,0.04)'],
+    pillBackground: 'rgba(168,85,247,0.14)',
+  },
+};
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 export default function ProfileScreen({ navigation }: { navigation?: any }) {
   const { user, logout } = useAuth();
+  const { alert } = useAppAlert();
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [membership, setMembership] = useState<MembershipStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const loadProfile = async () => {
+  const loadProfile = useCallback(async () => {
     try {
-      const data = await fetchProfile();
-      setProfile(data);
+      const [profileResult, membershipResult] = await Promise.allSettled([
+        fetchProfile(),
+        subscriptionsService.getMembership(),
+      ]);
+      if (profileResult.status === 'fulfilled') setProfile(profileResult.value);
+      if (membershipResult.status === 'fulfilled') {
+        setMembership(membershipResult.value.data || null);
+      }
     } catch {
       // use auth context data
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { loadProfile(); }, []);
+  useFocusEffect(
+    useCallback(() => {
+      void loadProfile();
+    }, [loadProfile]),
+  );
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -47,7 +96,7 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
   };
 
   const handleLogout = () => {
-    Alert.alert('Đăng xuất', 'Bạn có chắc muốn đăng xuất?', [
+    alert('Đăng xuất', 'Bạn có chắc muốn đăng xuất?', [
       { text: 'Huỷ', style: 'cancel' },
       { text: 'Đăng xuất', style: 'destructive', onPress: logout },
     ]);
@@ -57,6 +106,11 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
   const email = profile?.email || user?.email || '';
   const initial = displayName.charAt(0).toUpperCase();
   const roleBadge = user?.role === 'customer' ? 'Khách hàng' : user?.role ?? '';
+  const membershipTier = getMembershipVisualTier(membership);
+  const membershipTheme = MEMBERSHIP_THEMES[membershipTier];
+  const accountBadge = user?.role === 'customer'
+    ? getMembershipTierLabel(membershipTier)
+    : roleBadge;
 
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
@@ -80,15 +134,15 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
         </View>
 
         {/* ── Profile Card ────────────────────────────────────── */}
-        <View style={styles.profileCard}>
+        <View style={[styles.profileCard, { borderColor: membershipTheme.border }]}>
           <LinearGradient
-            colors={['rgba(212,175,55,0.12)', 'rgba(212,175,55,0.03)']}
+            colors={membershipTheme.gradient}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={StyleSheet.absoluteFill}
           />
           <LinearGradient
-            colors={[COLORS.gold, 'transparent']}
+            colors={[membershipTheme.accent, 'transparent']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.cardTopLine}
@@ -104,17 +158,26 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
             >
               {/* Avatar */}
               <View style={styles.avatarWrap}>
-                <View style={[styles.avatarRing, { overflow: 'hidden' }]}>
+                <View
+                  style={[
+                    styles.avatarRing,
+                    {
+                      backgroundColor: membershipTheme.avatarBackground,
+                      borderColor: membershipTheme.accent,
+                      overflow: 'hidden',
+                    },
+                  ]}
+                >
                   {profile?.avatar ? (
                     <Image source={{ uri: profile.avatar }} style={{ width: '100%', height: '100%' }} />
                   ) : user?.avatar ? (
                     <Image source={{ uri: user.avatar }} style={{ width: '100%', height: '100%' }} />
                   ) : (
-                    <Text style={styles.avatarText}>{initial}</Text>
+                    <Text style={[styles.avatarText, { color: membershipTheme.avatarText }]}>{initial}</Text>
                   )}
                 </View>
                 {/* Edit badge */}
-                <View style={styles.editBadge}>
+                <View style={[styles.editBadge, { backgroundColor: membershipTheme.accent }]}>
                   <Ionicons name="camera-outline" size={12} color={COLORS.textInverse} />
                 </View>
               </View>
@@ -122,13 +185,13 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
               <View style={styles.profileInfo}>
                 <Text style={styles.profileName}>{displayName}</Text>
                 <Text style={styles.profileEmail} numberOfLines={1}>{email}</Text>
-                <View style={styles.rolePill}>
-                  <Ionicons name="shield-checkmark-outline" size={11} color={COLORS.gold} />
-                  <Text style={styles.rolePillText}>{roleBadge}</Text>
+                <View style={[styles.rolePill, { backgroundColor: membershipTheme.pillBackground }]}>
+                  <Ionicons name="shield-checkmark-outline" size={11} color={membershipTheme.accent} />
+                  <Text style={[styles.rolePillText, { color: membershipTheme.accent }]}>{accountBadge}</Text>
                 </View>
               </View>
 
-              <Ionicons name="chevron-forward" size={20} color={COLORS.gold} style={{ opacity: 0.5 }} />
+              <Ionicons name="chevron-forward" size={20} color={membershipTheme.accent} style={{ opacity: 0.65 }} />
             </TouchableOpacity>
           )}
         </View>
@@ -152,6 +215,15 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
             iconColor="#7EE8A2"
             iconBg="rgba(126,232,162,0.12)"
             onPress={() => navigation?.navigate?.('VehicleList')}
+          />
+          <View style={styles.menuDivider} />
+          <MenuItem
+            icon="calendar-outline"
+            label="Danh sách Đặt chỗ"
+            sublabel="Quản lý lịch hẹn trước"
+            iconColor="#4ECDC4"
+            iconBg="rgba(78,205,196,0.12)"
+            onPress={() => navigation?.navigate?.('BookingList')}
           />
           <View style={styles.menuDivider} />
           <MenuItem

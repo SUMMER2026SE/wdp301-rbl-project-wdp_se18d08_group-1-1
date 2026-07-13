@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import React, { useEffect, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import React, { useCallback, useState } from 'react';
 import {
   RefreshControl,
   ScrollView,
@@ -16,8 +17,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { fetchProfile, type Profile } from '../../api/profile.api';
 import { useAuth } from '@/hooks/useAuth';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '../../constants/theme';
+import { subscriptionsService } from '@/services/api/subscriptions';
 import { walletService } from '@/services/api/wallet';
-import { formatCurrency } from '@/utils/formatters';
+import type { MembershipStatus } from '@/types/subscription.types';
+import { formatCurrency, formatDate } from '@/utils/formatters';
+import { getMembershipVisualTier, MEMBERSHIP_TIER_COLORS } from '@/utils/membershipDisplay';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type QuickAction = {
@@ -87,18 +91,19 @@ export default function HomeScreen({ navigation }: { navigation?: any }) {
   const { user } = useAuth();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [membership, setMembership] = useState<MembershipStatus | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
-  const loadProfile = async () => {
+  const loadProfile = useCallback(async () => {
     try {
       const data = await fetchProfile();
       setProfile(data);
     } catch {
       // silently fail — show data from auth context
     }
-  };
+  }, []);
 
-  const loadWallet = async () => {
+  const loadWallet = useCallback(async () => {
     try {
       const res = await walletService.getWallet();
       if (res?.data?.balance !== undefined) {
@@ -107,19 +112,38 @@ export default function HomeScreen({ navigation }: { navigation?: any }) {
     } catch {
       // silently fail
     }
-  };
+  }, []);
 
-  useEffect(() => { loadProfile(); loadWallet(); }, []);
+  const loadMembership = useCallback(async () => {
+    try {
+      const response = await subscriptionsService.getMembership();
+      setMembership(response.data || null);
+    } catch {
+      // Keep the home screen usable when membership data is temporarily unavailable.
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadProfile();
+      void loadWallet();
+      void loadMembership();
+    }, [loadMembership, loadProfile, loadWallet]),
+  );
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([loadProfile(), loadWallet()]);
+    await Promise.all([loadProfile(), loadWallet(), loadMembership()]);
     setRefreshing(false);
   };
 
   const displayName = profile?.fullName || user?.username || 'Khách hàng';
   const initial = displayName.charAt(0).toUpperCase();
   const avatarUri = profile?.avatar || null;
+  const avatarTheme = MEMBERSHIP_TIER_COLORS[getMembershipVisualTier(membership)];
+  const activeMembership = membership?.status === 'active' && membership.isVip
+    ? membership
+    : null;
 
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
@@ -157,11 +181,20 @@ export default function HomeScreen({ navigation }: { navigation?: any }) {
             </TouchableOpacity>
 
                       {/* Avatar */}
-            <View style={[styles.avatar, { overflow: 'hidden' }]}>
+            <View
+              style={[
+                styles.avatar,
+                {
+                  backgroundColor: avatarTheme.avatarBackground,
+                  borderColor: avatarTheme.accent,
+                  overflow: 'hidden',
+                },
+              ]}
+            >
               {avatarUri ? (
                 <Image source={{ uri: avatarUri }} style={{ width: '100%', height: '100%' }} />
               ) : (
-                <Text style={styles.avatarText}>{initial}</Text>
+                <Text style={[styles.avatarText, { color: avatarTheme.avatarText }]}>{initial}</Text>
               )}
             </View>
           </View>
@@ -222,6 +255,73 @@ export default function HomeScreen({ navigation }: { navigation?: any }) {
         </View>
 
         {/* ── Quick Actions ───────────────────────────────────── */}
+        {activeMembership ? (
+          <TouchableOpacity
+            accessibilityLabel="Xem chi tiết gói Membership và ô VIP được cấp"
+            activeOpacity={0.82}
+            onPress={() => navigation?.navigate?.('WalletTab', { screen: 'Membership' })}
+            style={styles.membershipCard}
+          >
+            <LinearGradient
+              colors={['rgba(212,175,55,0.18)', 'rgba(212,175,55,0.05)', 'rgba(13,13,13,0.96)']}
+              end={{ x: 1, y: 1 }}
+              start={{ x: 0, y: 0 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={styles.membershipTopRow}>
+              <View style={styles.membershipIdentity}>
+                <View style={styles.membershipIcon}>
+                  <Ionicons name="ribbon" size={20} color={COLORS.gold} />
+                </View>
+                <View style={styles.membershipTitleWrap}>
+                  <Text style={styles.membershipEyebrow}>
+                    {activeMembership.package?.type === 'yearly' ? 'THÀNH VIÊN NĂM' : 'THÀNH VIÊN THÁNG'}
+                  </Text>
+                  <Text numberOfLines={1} style={styles.membershipName}>
+                    {activeMembership.package?.name ?? 'VALO Membership'}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.membershipActivePill}>
+                <View style={styles.membershipActiveDot} />
+                <Text style={styles.membershipActiveText}>Đang hoạt động</Text>
+              </View>
+            </View>
+
+            <View style={styles.membershipDivider} />
+
+            <View style={styles.vipSlotHeader}>
+              <Text style={styles.vipSlotLabel}>Ô VIP ĐƯỢC CẤP</Text>
+              {activeMembership.expireAt ? (
+                <Text style={styles.membershipExpiry}>Hết hạn {formatDate(activeMembership.expireAt)}</Text>
+              ) : null}
+            </View>
+            {activeMembership.reservedSlots.length > 0 ? (
+              <View style={styles.vipSlotList}>
+                {activeMembership.reservedSlots.map((slot) => (
+                  <View key={`${slot.floorId}-${slot.slotCode}`} style={styles.vipSlotPill}>
+                    <Ionicons name="location" size={15} color={COLORS.gold} />
+                    <Text style={styles.vipSlotCode}>{slot.slotCode}</Text>
+                    <Text numberOfLines={1} style={styles.vipSlotFloor}>
+                      · {slot.floorName || `Tầng ${slot.floorNumber ?? '--'}`}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <View style={styles.vipSlotPending}>
+                <Ionicons name="time-outline" size={16} color={COLORS.warning} />
+                <Text style={styles.vipSlotPendingText}>Gói đang hoạt động, ô VIP đang chờ được cấp.</Text>
+              </View>
+            )}
+
+            <View style={styles.membershipFooter}>
+              <Text style={styles.membershipFooterText}>Xem quyền lợi Membership</Text>
+              <Ionicons name="chevron-forward" size={16} color={COLORS.gold} />
+            </View>
+          </TouchableOpacity>
+        ) : null}
+
         <Text style={styles.sectionTitle}>Truy cập nhanh</Text>
         <View style={styles.quickGrid}>
           {QUICK_ACTIONS.map((action) => (
@@ -395,6 +495,113 @@ const styles = StyleSheet.create({
   },
   statValue: { fontSize: FONT_SIZES.xl, fontWeight: '700', color: COLORS.textPrimary },
   statLabel: { fontSize: FONT_SIZES.xs, color: COLORS.textSecondary, marginTop: 2 },
+
+  // Active membership identity
+  membershipCard: {
+    borderColor: 'rgba(212,175,55,0.34)',
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+    marginHorizontal: SPACING.lg,
+    marginTop: SPACING.md,
+    overflow: 'hidden',
+    padding: SPACING.md,
+  },
+  membershipTopRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  membershipIdentity: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    minWidth: 0,
+  },
+  membershipIcon: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(212,175,55,0.14)',
+    borderColor: 'rgba(212,175,55,0.28)',
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    height: 42,
+    justifyContent: 'center',
+    width: 42,
+  },
+  membershipTitleWrap: { flex: 1, minWidth: 0 },
+  membershipEyebrow: {
+    color: COLORS.gold,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.9,
+  },
+  membershipName: {
+    color: COLORS.textPrimary,
+    fontSize: FONT_SIZES.md,
+    fontWeight: '800',
+    marginTop: 2,
+  },
+  membershipActivePill: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(126,232,162,0.1)',
+    borderRadius: RADIUS.round,
+    flexDirection: 'row',
+    gap: 5,
+    marginLeft: SPACING.sm,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 5,
+  },
+  membershipActiveDot: {
+    backgroundColor: COLORS.success,
+    borderRadius: 3,
+    height: 6,
+    width: 6,
+  },
+  membershipActiveText: { color: COLORS.success, fontSize: 10, fontWeight: '700' },
+  membershipDivider: {
+    backgroundColor: 'rgba(212,175,55,0.15)',
+    height: 1,
+    marginVertical: SPACING.md,
+  },
+  vipSlotHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: SPACING.sm,
+  },
+  vipSlotLabel: { color: COLORS.gold, fontSize: 10, fontWeight: '800', letterSpacing: 0.8 },
+  membershipExpiry: { color: COLORS.textMuted, fontSize: 10 },
+  vipSlotList: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
+  vipSlotPill: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(255,215,0,0.1)',
+    borderColor: 'rgba(255,215,0,0.34)',
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    maxWidth: '100%',
+    minHeight: 38,
+    paddingHorizontal: SPACING.sm,
+  },
+  vipSlotCode: { color: COLORS.gold, fontSize: FONT_SIZES.md, fontWeight: '900', marginLeft: 5 },
+  vipSlotFloor: { color: COLORS.textSecondary, flexShrink: 1, fontSize: FONT_SIZES.xs, marginLeft: 3 },
+  vipSlotPending: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,159,67,0.08)',
+    borderRadius: RADIUS.md,
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    padding: SPACING.sm,
+  },
+  vipSlotPendingText: { color: COLORS.warning, flex: 1, fontSize: FONT_SIZES.xs, lineHeight: 17 },
+  membershipFooter: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: SPACING.md,
+  },
+  membershipFooterText: { color: COLORS.gold, fontSize: FONT_SIZES.xs, fontWeight: '700' },
 
   // Quick actions
   sectionTitle: {

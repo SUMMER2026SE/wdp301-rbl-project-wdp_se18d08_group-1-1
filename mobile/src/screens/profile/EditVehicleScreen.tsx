@@ -1,6 +1,6 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
-import { Alert, ActivityIndicator, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -9,11 +9,13 @@ import { useToast } from '@/hooks/useToast';
 import type { ProfileStackParamList } from '@/navigation/types';
 import { vehiclesService } from '@/services/api/vehicles';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
+import { useAppAlert } from '@/contexts/AppAlertContext';
 
 type Props = NativeStackScreenProps<ProfileStackParamList, 'EditVehicle'>;
 
 export const EditVehicleScreen = ({ navigation, route }: Props) => {
   const toast = useToast();
+  const { alert } = useAppAlert();
   const [brand, setBrand] = useState('');
   const [model, setModel] = useState('');
   const [color, setColor] = useState('');
@@ -63,7 +65,7 @@ export const EditVehicleScreen = ({ navigation, route }: Props) => {
   };
 
   const handleDelete = () => {
-    Alert.alert('Xoá xe', 'Bạn có chắc chắn muốn xoá phương tiện này không?', [
+    alert('Xoá xe', 'Bạn có chắc chắn muốn xoá phương tiện này không?', [
       { text: 'Huỷ', style: 'cancel' },
       {
         text: 'Xoá',

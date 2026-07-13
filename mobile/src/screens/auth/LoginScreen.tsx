@@ -7,7 +7,6 @@ import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -24,6 +23,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
+import { useAppAlert } from '@/contexts/AppAlertContext';
 
 import { GOOGLE_CLIENT_ID } from '../../constants/env';
 
@@ -109,6 +109,7 @@ function Field({
 
 export default function LoginScreen({ navigation }: LoginScreenProps) {
   const { login, googleLogin } = useAuth();
+  const { alert } = useAppAlert();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [passwordHidden, setPasswordHidden] = useState(true);
@@ -130,11 +131,11 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
       const message = err instanceof Error
         ? err.message
         : 'Đăng nhập Google thất bại. Vui lòng thử lại.';
-      Alert.alert('Đăng nhập Google thất bại', message);
+      alert('Đăng nhập Google thất bại', message);
     } finally {
       setGoogleLoading(false);
     }
-  }, [googleLogin]);
+  }, [alert, googleLogin]);
 
   useEffect(() => {
     if (googleResponse?.type !== 'success') return;
@@ -146,16 +147,16 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
     if (idToken) {
       void handleGoogleLogin(idToken);
     } else {
-      Alert.alert('Lỗi', 'Không lấy được Google ID token.');
+      alert('Lỗi', 'Không lấy được Google ID token.');
     }
-  }, [googleResponse, handleGoogleLogin]);
+  }, [alert, googleResponse, handleGoogleLogin]);
 
   const handleLogin = async () => {
     const trimEmail = email.trim();
     const trimPass = password.trim();
 
     if (!trimEmail || !trimPass) {
-      Alert.alert('Thiếu thông tin', 'Vui lòng nhập email và mật khẩu.');
+      alert('Thiếu thông tin', 'Vui lòng nhập email và mật khẩu.');
       return;
     }
 
@@ -166,7 +167,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
       const message = err instanceof Error
         ? err.message
         : 'Đăng nhập thất bại. Vui lòng thử lại.';
-      Alert.alert('Đăng nhập thất bại', message);
+      alert('Đăng nhập thất bại', message);
     } finally {
       setLoading(false);
     }

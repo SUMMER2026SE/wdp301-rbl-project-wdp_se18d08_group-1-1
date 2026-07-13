@@ -1,6 +1,13 @@
 import type { Vehicle } from './models';
 
-export type BookingStatus = 'confirmed' | 'active' | 'completed' | 'cancelled' | 'expired';
+export type BookingStatus =
+  | 'pending'
+  | 'confirmed'
+  | 'active'
+  | 'paused'
+  | 'completed'
+  | 'cancelled'
+  | 'expired';
 export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded' | 'partially_refunded';
 export type SlotStatus = 'available' | 'occupied' | 'reserved' | 'maintenance';
 export type SessionStatus = 'active' | 'completed' | 'cancelled';
@@ -36,11 +43,15 @@ export interface ParkingFloor {
 
 export interface Slot {
   id: string;
+  _id?: string;
   slotCode: string;
   code?: string;
+  slotNumber?: string;
   zoneName?: string;
   floorId: string;
+  floorID?: string;
   status: SlotStatus;
+  reservedFor?: string | { _id?: string } | null;
   x?: number;
   y?: number;
   width?: number;
@@ -105,8 +116,9 @@ export interface Booking {
   finalAmount: number;
   refundAmount?: number;
   totalAmount?: number;
-  paymentMethod: 'wallet';
+  paymentMethod: 'wallet' | 'vietqr';
   paymentStatus: PaymentStatus;
+  modificationCount?: number;
   services?: BookingServiceItem[];
   sessionId?: string | Session;
   createdAt: string;
@@ -114,8 +126,10 @@ export interface Booking {
 }
 
 export const bookingStatuses: BookingStatus[] = [
+  'pending',
   'confirmed',
   'active',
+  'paused',
   'completed',
   'cancelled',
   'expired',

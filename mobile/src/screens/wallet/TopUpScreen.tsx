@@ -30,6 +30,7 @@ export const TopUpScreen = ({ navigation }: Props) => {
   const [amount, setAmount] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [cancelLoading, setCancelLoading] = useState(false);
   const [payment, setPayment] = useState<{
     orderCode: string | number;
     checkoutUrl: string;
@@ -88,13 +89,39 @@ export const TopUpScreen = ({ navigation }: Props) => {
     if (!payment) return;
     try {
       const response = await walletService.getTopUpStatus(payment.orderCode);
-      const newStatus = response.data?.status || 'PENDING';
+      const newStatus = String(response.data?.status || 'PENDING');
       setStatus(newStatus);
       if (newStatus === 'COMPLETED' || newStatus === 'SUCCESS') {
         triggerSuccessRedirect();
       }
     } catch (statusError) {
       setError(statusError instanceof Error ? statusError.message : 'Không thể kiểm tra thanh toán.');
+    }
+  };
+
+  const handleCancelPayment = async () => {
+    if (!payment || cancelLoading) return;
+
+    setCancelLoading(true);
+    setError('');
+    try {
+      const response = await walletService.getTopUpStatus(payment.orderCode, true);
+      const cancelledStatus = String(response.data?.status || 'CANCELLED');
+
+      if (cancelledStatus === 'CANCELLED') {
+        setPayment(null);
+        setStatus('');
+        return;
+      }
+
+      setStatus(cancelledStatus);
+      if (cancelledStatus === 'COMPLETED' || cancelledStatus === 'SUCCESS') {
+        triggerSuccessRedirect();
+      }
+    } catch (cancelError) {
+      setError(cancelError instanceof Error ? cancelError.message : 'Không thể hủy giao dịch.');
+    } finally {
+      setCancelLoading(false);
     }
   };
 
@@ -121,7 +148,6 @@ export const TopUpScreen = ({ navigation }: Props) => {
         triggerSuccessRedirect();
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
 
   return (
@@ -223,13 +249,15 @@ export const TopUpScreen = ({ navigation }: Props) => {
                 </TouchableOpacity>
                 <TouchableOpacity
                   activeOpacity={0.8}
-                  style={styles.cancelButton}
-                  onPress={async () => {
-                    const response = await walletService.getTopUpStatus(payment.orderCode, true);
-                    setStatus(response.data?.status || 'CANCELLED');
-                  }}
+                  disabled={cancelLoading}
+                  style={[styles.cancelButton, cancelLoading && styles.disabled]}
+                  onPress={handleCancelPayment}
                 >
-                  <Text style={styles.cancelButtonText}>Hủy</Text>
+                  {cancelLoading ? (
+                    <ActivityIndicator color={COLORS.error} size="small" />
+                  ) : (
+                    <Text style={styles.cancelButtonText}>Hủy</Text>
+                  )}
                 </TouchableOpacity>
               </View>
             )}

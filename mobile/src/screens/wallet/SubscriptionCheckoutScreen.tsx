@@ -14,23 +14,27 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { EmptyState, ErrorState, ScreenHeader, SectionTitle } from '@/components/common';
+import { ParkingMap2D } from '@/components/booking/ParkingMap2D';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
 import type { WalletStackParamList } from '@/navigation/types';
 import parkingFloorService from '@/services/ParkingFloorService';
 import { subscriptionsService } from '@/services/api/subscriptions';
 import { vehiclesService } from '@/services/api/vehicles';
 import { walletService } from '@/services/api/wallet';
-import type { Slot } from '@/types/booking.types';
+import type { ParkingFloor, Slot } from '@/types/booking.types';
 import type { Wallet } from '@/types/models';
-import type { SubscriptionPackage, SubscriptionPaymentMethod, SubscriptionSlotSelection } from '@/types/subscription.types';
+import type { MembershipStatus, SubscriptionPackage, SubscriptionPaymentMethod, SubscriptionSlotSelection } from '@/types/subscription.types';
 import { formatCurrency } from '@/utils/formatters';
-import { calculateExpirationDate, validateSubscriptionSlots } from '@/utils/walletSubscription';
+import { calculateExpirationDate, getSubscriptionPackageRestriction, validateSubscriptionSlots } from '@/utils/walletSubscription';
 
 type Props = NativeStackScreenProps<WalletStackParamList, 'SubscriptionCheckout'>;
 
 export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
   const [packages, setPackages] = useState<SubscriptionPackage[]>([]);
+  const [floors, setFloors] = useState<ParkingFloor[]>([]);
+  const [selectedFloorId, setSelectedFloorId] = useState('');
   const [slots, setSlots] = useState<Slot[]>([]);
+  const [membership, setMembership] = useState<MembershipStatus | null>(null);
   const [vehicleCount, setVehicleCount] = useState(0);
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [selectedSlots, setSelectedSlots] = useState<SubscriptionSlotSelection[]>([]);
@@ -46,27 +50,25 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
 
   const maxSlots = Math.min(3, vehicleCount);
   const hasEnoughWallet = (wallet?.balance || 0) >= (pkg?.price || 0);
+  const packageRestriction = getSubscriptionPackageRestriction(membership, pkg);
+  const selectedFloor = floors.find((floor) => String(floor._id ?? floor.id) === selectedFloorId) || null;
 
   const loadData = useCallback(async () => {
     setError('');
     try {
-      const [packageResponse, vehicleResponse, walletResponse, floors] = await Promise.all([
+      const [packageResponse, vehicleResponse, walletResponse, floorResponse, membershipResponse] = await Promise.all([
         subscriptionsService.getPackages(),
         vehiclesService.getMyVehicles(),
         walletService.getWallet(),
         parkingFloorService.getParkingFloors(),
+        subscriptionsService.getMembership(),
       ]);
       setPackages(packageResponse.data || []);
       setVehicleCount((vehicleResponse.data || []).length);
       setWallet(walletResponse.data || null);
-
-      const firstFloor = floors[0];
-      if (firstFloor?._id) {
-        const floorSlots = await parkingFloorService.getSlotsByFloor(firstFloor._id);
-        setSlots(floorSlots.filter((slot) => slot.status !== 'occupied'));
-      } else {
-        setSlots([]);
-      }
+      setMembership(membershipResponse.data || null);
+      setFloors(floorResponse);
+      setSelectedFloorId((current) => current || String(floorResponse[0]?._id ?? floorResponse[0]?.id ?? ''));
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Không thể tải dữ liệu gói.');
       setSlots([]);
@@ -79,17 +81,34 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
     void loadData();
   }, [loadData]);
 
-  const toggleSlot = (slot: Slot) => {
-    const floorId = slot.floorId || '';
-    const slotCode = slot.slotCode || slot.code || '';
+  useEffect(() => {
+    let active = true;
+    if (!selectedFloorId) {
+      setSlots([]);
+      return () => { active = false; };
+    }
+    setSlots([]);
+    void parkingFloorService.getSlotsByFloor(selectedFloorId)
+      .then((floorSlots) => {
+        if (active) setSlots(floorSlots);
+      })
+      .catch((loadError) => {
+        if (active) setError(loadError instanceof Error ? loadError.message : 'Không thể tải vị trí đỗ xe.');
+      });
+    return () => { active = false; };
+  }, [selectedFloorId]);
+
+  const toggleSlot = ({ floorId, slotCode }: SubscriptionSlotSelection) => {
     setSelectedSlots((current) => {
       const exists = current.some((item) => item.floorId === floorId && item.slotCode === slotCode);
       if (exists) {
         return current.filter((item) => !(item.floorId === floorId && item.slotCode === slotCode));
       }
       if (current.length >= maxSlots) {
+        setError(`Bạn chỉ được chọn tối đa ${maxSlots} chỗ theo số xe đã đăng ký.`);
         return current;
       }
+      setError('');
       return [...current, { floorId, slotCode }];
     });
   };
@@ -97,6 +116,10 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
   const handlePurchase = async () => {
     if (!pkg) {
       setError('Không tìm thấy gói đã chọn.');
+      return;
+    }
+    if (packageRestriction) {
+      setError(packageRestriction);
       return;
     }
     if (!validateSubscriptionSlots(selectedSlots.length, vehicleCount)) {
@@ -186,37 +209,49 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
 
           <View style={styles.section}>
             <SectionTitle>Chọn chỗ giữ riêng</SectionTitle>
-            <Text style={styles.helperText}>Tối đa {maxSlots} chỗ theo số xe đã đăng ký.</Text>
-            {slots.length === 0 ? (
+            <Text style={styles.helperText}>
+              {maxSlots > 0
+                ? `Chọn 1-${maxSlots} chỗ theo số xe đã đăng ký. Ô vàng đã được giữ riêng, ô xanh dương là ô bạn chọn.`
+                : 'Bạn cần thêm ít nhất một xe trước khi mua gói.'}
+            </Text>
+            <View style={styles.floorTabs}>
+              {floors.map((floor) => {
+                const floorId = String(floor._id ?? floor.id);
+                const active = floorId === selectedFloorId;
+                return (
+                  <Pressable key={floorId} style={[styles.floorTab, active && styles.floorTabActive]} onPress={() => setSelectedFloorId(floorId)}>
+                    <Text style={[styles.floorTabText, active && styles.floorTabTextActive]}>{floor.name || `Tầng ${floor.floorNumber}`}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {!selectedFloor ? (
               <EmptyState icon="car-outline" title="Chưa có chỗ khả dụng" message="Vui lòng thử lại sau." />
             ) : (
-              <View style={styles.slotGrid}>
-                {slots.map((slot) => {
-                  const floorId = slot.floorId || '';
-                  const slotCode = slot.slotCode || slot.code || '';
-                  const selected = selectedSlots.some((item) => item.floorId === floorId && item.slotCode === slotCode);
-                  return (
-                    <Pressable
-                      key={`${floorId}-${slotCode}`}
-                      style={[styles.slot, selected && styles.slotActive]}
-                      onPress={() => toggleSlot(slot)}
-                    >
-                      <Text style={[styles.slotText, selected && styles.slotTextActive]}>{slotCode}</Text>
-                    </Pressable>
-                  );
-                })}
+              <View style={styles.mapCard}>
+                <ParkingMap2D
+                  floor={selectedFloor}
+                  floorSlots={[]}
+                  selectedSlot={null}
+                  onSelectSlot={() => undefined}
+                  dbSlots={slots}
+                  selectionMode="membership"
+                  selectedSlots={selectedSlots}
+                  onToggleSlot={toggleSlot}
+                />
               </View>
             )}
+            <Text style={styles.selectedCount}>Đã chọn: {selectedSlots.length}/{maxSlots}</Text>
           </View>
 
-          {error ? (
+          {error || packageRestriction ? (
             <View style={styles.warningBox}>
               <Ionicons name="alert-circle-outline" size={18} color={COLORS.error} />
-              <Text style={styles.warningText}>{error}</Text>
+              <Text style={styles.warningText}>{error || packageRestriction}</Text>
             </View>
           ) : null}
 
-          <TouchableOpacity activeOpacity={0.85} disabled={submitting || !pkg} style={[styles.primaryButton, (submitting || !pkg) && styles.disabled]} onPress={handlePurchase}>
+          <TouchableOpacity activeOpacity={0.85} disabled={submitting || !pkg || Boolean(packageRestriction)} style={[styles.primaryButton, (submitting || !pkg || Boolean(packageRestriction)) && styles.disabled]} onPress={handlePurchase}>
             {submitting ? (
               <ActivityIndicator color={COLORS.textInverse} size="small" />
             ) : (
@@ -311,33 +346,43 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     fontSize: FONT_SIZES.sm,
   },
-  slotGrid: {
+  floorTabs: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: SPACING.sm,
   },
-  slot: {
-    alignItems: 'center',
+  floorTab: {
     backgroundColor: COLORS.surface,
     borderColor: COLORS.border,
-    borderRadius: RADIUS.sm,
+    borderRadius: RADIUS.round,
     borderWidth: 1,
-    height: 46,
-    justifyContent: 'center',
-    minWidth: 66,
-    paddingHorizontal: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
   },
-  slotActive: {
+  floorTabActive: {
     backgroundColor: 'rgba(212,175,55,0.14)',
     borderColor: COLORS.gold,
   },
-  slotText: {
+  floorTabText: {
     color: COLORS.textSecondary,
     fontSize: FONT_SIZES.xs,
     fontWeight: '800',
   },
-  slotTextActive: {
+  floorTabTextActive: {
     color: COLORS.gold,
+  },
+  mapCard: {
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  selectedCount: {
+    color: COLORS.staffBlue,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '800',
   },
   warningBox: {
     alignItems: 'flex-start',
