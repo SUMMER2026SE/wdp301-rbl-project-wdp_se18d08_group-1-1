@@ -3,19 +3,19 @@ import { useState } from 'react';
 
 import { AppText, Button, Input } from '@/components/common';
 import { Screen } from '@/components/layout/Screen';
-import { useAuth } from '@/hooks/useAuth';
 import type { AuthStackParamList } from '@/navigation/types';
+import { authService } from '@/services/api/auth';
 import { colors } from '@/theme';
 import { isValidEmail, isValidPassword } from '@/utils/validation';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Register'>;
 
 export const RegisterScreen = ({ navigation }: Props) => {
-  const { register, isLoading } = useAuth();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const handleSubmit = async () => {
@@ -36,17 +36,23 @@ export const RegisterScreen = ({ navigation }: Props) => {
       return;
     }
 
+    setLoading(true);
     try {
-      await register({
+      const normalizedEmail = email.trim();
+      await authService.register({
         username: username.trim(),
         name: username.trim(),
-        email: email.trim(),
+        email: normalizedEmail,
         phone: phone.trim(),
         password,
         role: 'customer',
       });
+      await authService.sendOTP({ email: normalizedEmail });
+      navigation.navigate('VerifyOTP', { email: normalizedEmail, purpose: 'register' });
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Registration failed.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -58,7 +64,7 @@ export const RegisterScreen = ({ navigation }: Props) => {
       <Input keyboardType="phone-pad" label="Phone" onChangeText={setPhone} value={phone} />
       <Input label="Password" onChangeText={setPassword} secureTextEntry value={password} />
       {error ? <AppText color={colors.error.main}>{error}</AppText> : null}
-      <Button loading={isLoading} title="Register" onPress={handleSubmit} />
+      <Button loading={loading} title="Register" onPress={handleSubmit} />
       <Button title="Back to Login" variant="ghost" onPress={() => navigation.goBack()} />
     </Screen>
   );
