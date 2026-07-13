@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Tag, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, Edit2, Trash2, Tag, Loader2, AlertCircle } from 'lucide-react';
 
 
 export default function TicketPackages() {
@@ -17,10 +17,6 @@ export default function TicketPackages() {
     description: '',
     isActive: true,
   });
-
-  useEffect(() => {
-    fetchPackages();
-  }, []);
 
   const fetchPackages = async () => {
     try {
@@ -41,6 +37,14 @@ export default function TicketPackages() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      fetchPackages();
+    }, 0);
+
+    return () => window.clearTimeout(timerId);
+  }, []);
 
   const openModal = (pkg = null) => {
     setError('');

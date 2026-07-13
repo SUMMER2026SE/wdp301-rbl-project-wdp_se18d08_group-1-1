@@ -28,16 +28,35 @@ function AnimatedCounter({ target, duration = 1200, isCurrency, isTime }) {
     return () => cancelAnimationFrame(frame);
   }, [target, duration]);
 
-  if (isCurrency) return <span>${count.toFixed(2)}</span>;
-  if (isTime) return <span>{Math.round(count)} min</span>;
-  return <span>{Math.round(count)}</span>;
+  if (isCurrency) {
+    return (
+      <span className="flex items-baseline gap-1">
+        <span className="text-lg text-white/70 font-semibold">$</span>
+        <span>
+          {count.toLocaleString('en-US', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          })}
+        </span>
+      </span>
+    );
+  }
+  if (isTime) {
+    return (
+      <span className="flex items-baseline gap-1.5">
+        <span>{Math.round(count).toLocaleString('en-US')}</span>
+        <span className="text-[13px] text-white/60 font-semibold tracking-wide uppercase">min</span>
+      </span>
+    );
+  }
+  return <span>{Math.round(count).toLocaleString('en-US')}</span>;
 }
 
 // --- Stat Card ----------------------------------------------------------------
 function StatCard({ icon: Icon, label, value, gradient, glow, loading, isCurrency, isTime }) {
   return (
     <div
-      className="relative rounded-2xl p-5 overflow-hidden cursor-default group transition-all duration-500 hover:-translate-y-1 hover:scale-[1.015]"
+      className="relative rounded-2xl p-4 overflow-hidden cursor-default group transition-all duration-500 hover:-translate-y-1 hover:scale-[1.015]"
       style={{
         background: 'linear-gradient(145deg, rgba(255,255,255,0.105), rgba(255,255,255,0.035) 45%, rgba(255,213,85,0.055))',
         border: '1px solid rgba(255,255,255,0.14)',
@@ -49,19 +68,19 @@ function StatCard({ icon: Icon, label, value, gradient, glow, loading, isCurrenc
       <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
         style={{ background: 'linear-gradient(105deg, transparent 32%, rgba(255,255,255,0.12) 48%, transparent 66%)' }} />
       <div className={`absolute -top-8 -right-8 w-28 h-28 rounded-full bg-gradient-to-br ${gradient} opacity-20 group-hover:opacity-35 transition-opacity duration-300 blur-2xl`} />
-      <div className="absolute inset-x-5 top-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent" />
+      <div className="absolute inset-x-4 top-0 h-px bg-gradient-to-r from-transparent via-white/30 to-transparent" />
 
-      <div className="relative flex items-start justify-between">
-        <div>
-          <p className="text-[11px] text-white/[0.58] uppercase tracking-widest font-bold mb-2">{label}</p>
-          <p className="text-3xl font-extrabold text-white drop-shadow-[0_2px_14px_rgba(255,255,255,0.08)]">
-            {loading ? <span className="inline-block w-12 h-8 rounded bg-white/10 animate-skeleton" /> : (
+      <div className="relative flex items-center justify-between gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="text-[10px] text-white/[0.65] uppercase tracking-widest font-bold mb-1 truncate">{label}</p>
+          <div className="text-2xl xl:text-[26px] font-extrabold text-white drop-shadow-[0_2px_14px_rgba(255,255,255,0.08)] truncate leading-tight">
+            {loading ? <span className="inline-block w-12 h-6 rounded bg-white/10 animate-skeleton" /> : (
               <AnimatedCounter target={value} isCurrency={isCurrency} isTime={isTime} />
             )}
-          </p>
+          </div>
         </div>
-        <div className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${gradient} flex items-center justify-center shadow-lg shadow-black/25 ring-1 ring-white/20 transition-transform duration-500 group-hover:rotate-3 group-hover:scale-110`}>
-          <Icon size={20} className="text-white" />
+        <div className={`shrink-0 w-11 h-11 rounded-2xl bg-gradient-to-br ${gradient} flex items-center justify-center shadow-lg shadow-black/25 ring-1 ring-white/20 transition-transform duration-500 group-hover:rotate-3 group-hover:scale-110`}>
+          <Icon size={18} className="text-white" />
         </div>
       </div>
     </div>
@@ -319,7 +338,6 @@ const AdminServiceManager = () => {
   const renderServiceCard = (service) => {
     return (
       <motion.div
-        layout
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95 }}
@@ -413,7 +431,6 @@ const AdminServiceManager = () => {
   const renderServiceListItem = (service) => {
     return (
       <motion.div
-        layout
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.98 }}
@@ -634,15 +651,15 @@ const AdminServiceManager = () => {
       {/* ── Side Panel Detail View (520px) ── */}
       <AnimatePresence>
         {isViewModalOpen && viewingService && (
-          <>
+          <motion.div key="view-modal-container" className="fixed inset-0 z-[60]">
             <motion.div 
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
-              className="fixed inset-0 bg-black/70 z-[60]"
+              className="absolute inset-0 bg-black/70"
               onClick={() => setIsViewModalOpen(false)}
             />
             <motion.div 
               initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed inset-y-0 right-0 w-full max-w-[520px] bg-[#11161a]/[0.96] border-l border-[#ffd555]/[0.18] z-[70] shadow-[0_0_80px_rgba(0,0,0,0.45)] flex flex-col overflow-hidden"
+              className="absolute inset-y-0 right-0 w-full max-w-[520px] bg-[#11161a]/[0.96] border-l border-[#ffd555]/[0.18] z-[70] shadow-[0_0_80px_rgba(0,0,0,0.45)] flex flex-col overflow-hidden"
             >
               <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_10%_0%,rgba(255,213,85,0.16),transparent_25%),radial-gradient(circle_at_100%_18%,rgba(56,189,248,0.13),transparent_24%)]" />
               <div className="flex items-center justify-between px-6 py-5 border-b border-white/[0.08] bg-white/[0.035] shrink-0 relative">
@@ -727,14 +744,14 @@ const AdminServiceManager = () => {
                 </button>
               </div>
             </motion.div>
-          </>
+          </motion.div>
         )}
       </AnimatePresence>
 
       {/* ── Add/Edit Modal (Max 820px) ── */}
       <AnimatePresence>
         {isModalOpen && (
-          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <motion.div key="add-modal-container" className="fixed inset-0 z-[70] flex items-center justify-center p-4">
             <motion.div 
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
               className="absolute inset-0 bg-black/70"
@@ -894,14 +911,14 @@ const AdminServiceManager = () => {
                 </button>
               </div>
             </motion.div>
-          </div>
+          </motion.div>
         )}
       </AnimatePresence>
 
       {/* ── Compact Delete Confirmation Modal (420px max) ── */}
       <AnimatePresence>
         {isDeleteModalOpen && editingService && (
-          <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+          <motion.div key="delete-modal-container" className="fixed inset-0 z-[80] flex items-center justify-center p-4">
             <motion.div 
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} 
               className="absolute inset-0 bg-black/70"
@@ -943,7 +960,7 @@ const AdminServiceManager = () => {
                 </div>
               </div>
             </motion.div>
-          </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

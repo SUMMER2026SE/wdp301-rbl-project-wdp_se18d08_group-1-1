@@ -1,23 +1,16 @@
 const mongoose = require('mongoose');
-const { normalizeLicensePlate } = require('../utils/licensePlateUtils');
 
 const bookingSchema = new mongoose.Schema(
   {
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: true,
+      default: null,
     },
-    floorId: {
+    vehicleId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'ParkingFloor',
-      required: true,
-    },
-    slotCode: {
-      type: String,
-      required: true,
-      trim: true,
-      uppercase: true,
+      ref: 'Vehicle',
+      required: false,
     },
     licensePlate: {
       type: String,
@@ -25,69 +18,63 @@ const bookingSchema = new mongoose.Schema(
       trim: true,
       uppercase: true,
     },
-    startTime: {
+    floorId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'ParkingFloor',
+      required: true,
+    },
+    parkingSlot: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    scheduledStart: {
       type: Date,
       required: true,
     },
-    endTime: {
+    scheduledEnd: {
       type: Date,
+      required: true,
+    },
+    durationHours: {
+      type: Number,
+      required: true,
+    },
+    prepaidAmount: {
+      type: Number,
+      default: 0,
+    },
+    paymentMethod: {
+      type: String,
+      enum: ['wallet', 'vietqr'],
       required: true,
     },
     status: {
       type: String,
-      enum: ['confirmed', 'active', 'completed', 'cancelled', 'expired'],
-      default: 'confirmed',
+      enum: ['PENDING', 'PAID', 'ACTIVE', 'PAUSED', 'EXPIRED', 'COMPLETED', 'CANCELLED'],
+      default: 'PENDING',
     },
-    paidHours: {
-      type: Number,
-      required: true,
-      min: 1,
-    },
-    hourlyRate: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
-    prepaidAmount: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
-    serviceAmount: {
+    modificationCount: {
       type: Number,
       default: 0,
-      min: 0,
     },
-    finalAmount: {
+    vietqrOrderCode: {
       type: Number,
-      default: 0,
-      min: 0,
+      sparse: true,
     },
-    refundAmount: {
-      type: Number,
-      default: 0,
-      min: 0,
-    },
-    paymentMethod: {
+    vietqrPaymentLinkId: {
       type: String,
-      enum: ['wallet'],
-      default: 'wallet',
-    },
-    paymentStatus: {
-      type: String,
-      enum: ['paid', 'partially_refunded', 'refunded', 'failed'],
-      default: 'paid',
-    },
-    sessionId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Session',
       default: null,
     },
-    ticketPackageId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'TicketPackage',
-      default: null,
-    },
+    slotChangesHistory: [
+      {
+        oldSlot: { type: String, required: true },
+        newSlot: { type: String, required: true },
+        reason: { type: String, required: true },
+        changedAt: { type: Date, default: Date.now },
+        changedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      }
+    ],
     contractId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Contract',
@@ -98,18 +85,8 @@ const bookingSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-bookingSchema.pre('validate', function validateBookingTime(next) {
-  if (this.licensePlate) {
-    this.licensePlate = normalizeLicensePlate(this.licensePlate);
-  }
-  if (this.startTime && this.endTime && this.startTime >= this.endTime) {
-    return next(new Error('Booking endTime must be after startTime'));
-  }
-  return next();
-});
-
-bookingSchema.index({ floorId: 1, slotCode: 1, startTime: 1, endTime: 1, status: 1 });
-bookingSchema.index({ licensePlate: 1, status: 1, startTime: 1, endTime: 1 });
-bookingSchema.index({ userId: 1, createdAt: -1 });
+// Indexes
+bookingSchema.index({ vehicleId: 1, scheduledStart: 1, scheduledEnd: 1 });
+bookingSchema.index({ status: 1 });
 
 module.exports = mongoose.model('Booking', bookingSchema);

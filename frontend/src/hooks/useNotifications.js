@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useSocket } from '../contexts/SocketProvider';
+import { useSocket } from './useSocket';
 import * as notifApi from '../services/notificationService';
 
 /**
@@ -77,11 +77,15 @@ export function useNotifications({ autoFetch = true, limit = 20 } = {}) {
   // ── Initial fetch ──
   useEffect(() => {
     isMounted.current = true;
+    let timerId;
     if (autoFetch) {
-      fetchNotifications(1, true);
-      fetchUnreadCount();
+      timerId = window.setTimeout(() => {
+        fetchNotifications(1, true);
+        fetchUnreadCount();
+      }, 0);
     }
     return () => {
+      if (timerId) window.clearTimeout(timerId);
       isMounted.current = false;
     };
   }, [autoFetch, fetchNotifications, fetchUnreadCount]);

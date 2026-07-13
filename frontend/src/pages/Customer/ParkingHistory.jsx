@@ -22,10 +22,6 @@ export default function ParkingHistory() {
   const [error, setError] = useState(null);
   const [selectedSession, setSelectedSession] = useState(null);
 
-  useEffect(() => {
-    fetchHistory();
-  }, []);
-
   const fetchHistory = async () => {
     setLoading(true);
     const token = localStorage.getItem("accessToken");
@@ -44,12 +40,20 @@ export default function ParkingHistory() {
       } else {
         setError(data?.message || "Failed to load history.");
       }
-    } catch (err) {
+    } catch {
       setError("Network error occurred.");
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      fetchHistory();
+    }, 0);
+
+    return () => window.clearTimeout(timerId);
+  }, []);
 
   const getStatusBadge = (status) => {
     switch (status) {

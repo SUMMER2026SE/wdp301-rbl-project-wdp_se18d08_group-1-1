@@ -321,8 +321,12 @@ export default function VehicleManagement() {
   };
 
   useEffect(() => {
-    loadModels();
-    loadPending();
+    const timerId = window.setTimeout(() => {
+      loadModels();
+      loadPending();
+    }, 0);
+
+    return () => window.clearTimeout(timerId);
   }, []);
 
   // ── Approve handler ────────────────────────────────────────────────────────

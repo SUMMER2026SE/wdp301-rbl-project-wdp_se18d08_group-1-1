@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   Car, Zap, Plus, Trash2, Star, ScanLine,
   Upload, X, Check, Pencil, AlertCircle, Loader2,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, AlertTriangle,
 } from 'lucide-react';
 import {
   getMyVehicles, addVehicle, updateVehicle,
@@ -33,7 +33,6 @@ function VehicleCard({ vehicle, onDelete, onSetDefault, onEdit }) {
   const typeObj = VEHICLE_TYPES.find((t) => t.value === vehicle.vehicleType);
 
   const handleDelete = async () => {
-    if (!window.confirm(`Delete vehicle "${vehicle.licensePlate}"?`)) return;
     setLoading(true);
     await onDelete(vehicle._id);
     setLoading(false);
@@ -155,6 +154,89 @@ function VehicleCard({ vehicle, onDelete, onSetDefault, onEdit }) {
 }
 
 // ─── Vehicle Modal (Add / Edit) ───────────────────────────────────────────────
+function DeleteVehicleModal({ vehicle, deleting, onCancel, onConfirm }) {
+  if (!vehicle) return null;
+
+  const plate = formatLicensePlateDisplay(vehicle.licensePlateDisplay || vehicle.licensePlate);
+  const vehicleName = [vehicle.brand, vehicle.model].filter(Boolean).join(' ') || 'This vehicle';
+
+  return (
+    <div className="fixed inset-0 z-[180] flex items-center justify-center p-4 bg-black/75 backdrop-blur-md">
+      <div className="relative w-full max-w-md overflow-hidden rounded-2xl
+        border border-white/10 bg-[#101010]/95 text-white shadow-[0_24px_80px_rgba(0,0,0,0.55)]">
+        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-red-500 via-yellow-400 to-red-500" />
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={deleting}
+          className="absolute right-4 top-4 rounded-xl p-2 text-white/45
+            hover:bg-white/10 hover:text-white transition-all disabled:opacity-40"
+          title="Close"
+        >
+          <X size={18} />
+        </button>
+
+        <div className="px-6 pb-6 pt-7">
+          <div className="mb-5 flex items-start gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl
+              border border-red-500/30 bg-red-500/15 text-red-300 shadow-[0_0_28px_rgba(239,68,68,0.16)]">
+              <AlertTriangle size={24} />
+            </div>
+            <div className="min-w-0 pr-8">
+              <p className="text-lg font-black tracking-tight">Delete vehicle?</p>
+              <p className="mt-1 text-sm leading-6 text-white/55">
+                This vehicle will be removed from your garage. This action cannot be undone.
+              </p>
+            </div>
+          </div>
+
+          <div className="mb-6 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+            <p className="text-xs font-semibold uppercase tracking-widest text-white/35">
+              Selected vehicle
+            </p>
+            <div className="mt-2 flex items-center gap-3">
+              <div
+                className="h-9 w-9 rounded-full border-2 border-white/25 shadow-lg"
+                style={{ backgroundColor: vehicle.hexColor || '#ffffff' }}
+              />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-bold text-white/80">{vehicleName}</p>
+                <p className="text-xl font-black leading-tight tracking-[0.16em] text-white">
+                  {plate}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={onCancel}
+              disabled={deleting}
+              className="flex-1 rounded-xl border border-white/12 bg-white/[0.04] px-4 py-3
+                text-sm font-bold text-white/65 transition-all hover:bg-white/10 hover:text-white
+                disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={onConfirm}
+              disabled={deleting}
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl
+                bg-red-500 px-4 py-3 text-sm font-black text-white shadow-lg shadow-red-500/20
+                transition-all hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {deleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+              Delete
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function VehicleModal({ editVehicle, onClose, onSaved }) {
   const [form, setForm] = useState(editVehicle
     ? {
@@ -497,6 +579,7 @@ export default function MyVehicles() {
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [modalOpen, setModalOpen]     = useState(false);
   const [editVehicle, setEditVehicle] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [toast, setToast]             = useState(null);
   const [quickColor, setQuickColor]   = useState(null); // local hex while picking
@@ -515,13 +598,22 @@ export default function MyVehicles() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchVehicles(); }, []);
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      fetchVehicles();
+    }, 0);
+
+    return () => window.clearTimeout(timerId);
+  }, []);
 
   // Auto-select default vehicle whenever list reloads
   useEffect(() => {
     if (vehicles.length > 0) {
       const defIdx = vehicles.findIndex((v) => v.isDefault);
-      setSelectedIdx(defIdx >= 0 ? defIdx : 0);
+      const timerId = window.setTimeout(() => {
+        setSelectedIdx(defIdx >= 0 ? defIdx : 0);
+      }, 0);
+      return () => window.clearTimeout(timerId);
     }
   }, [vehicles]);
 
@@ -538,11 +630,16 @@ export default function MyVehicles() {
 
   const handleDelete = async () => {
     if (!selected) return;
-    if (!window.confirm(`Delete vehicle "${selected.licensePlate}"?`)) return;
+    setDeleteTarget(selected);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
     setActionLoading(true);
-    const { ok } = await deleteVehicle(selected._id);
+    const { ok } = await deleteVehicle(deleteTarget._id);
     setActionLoading(false);
     if (ok) {
+      setDeleteTarget(null);
       setSelectedIdx(0);
       await fetchVehicles();
       showToast('Vehicle deleted ✓');
@@ -590,14 +687,26 @@ export default function MyVehicles() {
   const next = () => { setQuickColor(null); setSelectedIdx((i) => (i + 1) % vehicles.length); };
 
   // Reset quickColor whenever selected vehicle changes
-  useEffect(() => { setQuickColor(null); }, [clampedIdx]);
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      setQuickColor(null);
+    }, 0);
+
+    return () => window.clearTimeout(timerId);
+  }, [clampedIdx]);
 
   // ── Keyboard arrow navigation ──
   useEffect(() => {
     if (vehicles.length <= 1) return;
     const handler = (e) => {
-      if (e.key === 'ArrowLeft') prev();
-      if (e.key === 'ArrowRight') next();
+      if (e.key === 'ArrowLeft') {
+        setQuickColor(null);
+        setSelectedIdx((i) => (i - 1 + vehicles.length) % vehicles.length);
+      }
+      if (e.key === 'ArrowRight') {
+        setQuickColor(null);
+        setSelectedIdx((i) => (i + 1) % vehicles.length);
+      }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
@@ -850,6 +959,14 @@ export default function MyVehicles() {
           )}
         </>
       )}
+
+      {/* Delete confirmation */}
+      <DeleteVehicleModal
+        vehicle={deleteTarget}
+        deleting={actionLoading}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+      />
 
       {/* Modal */}
       {modalOpen && (

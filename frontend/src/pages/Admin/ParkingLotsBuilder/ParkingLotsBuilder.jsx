@@ -1,6 +1,9 @@
-import React, { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Rnd } from "react-rnd";
-import { Save, Plus, X, Box, Type, Minus, ArrowRight, Square, AlertCircle, Zap, Accessibility, Bike, Navigation, Layers, MonitorSmartphone, TreePine, Car } from "lucide-react";
+import { Save, Box, Type, Minus, ArrowRight, Square, AlertCircle, Zap, Accessibility, Navigation, Layers, MonitorSmartphone, TreePine, Car } from "lucide-react";
+
+const createElementId = (prefix, suffix = "") =>
+  `${prefix}-${Date.now()}${suffix ? `-${suffix}` : ""}-${Math.random().toString(36).substring(7)}`;
 
 export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
   const [elements, setElements] = useState(floor?.layoutData?.elements || []);
@@ -27,7 +30,7 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
   const [guides, setGuides] = useState([]);
 
   // Undo/Redo State
-  const [historyState, setHistoryState] = useState({
+  const [, setHistoryState] = useState({
     history: [floor?.layoutData?.elements || []],
     index: 0
   });
@@ -83,7 +86,7 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
 
   const handleAddElement = (type, x = 50, y = 50) => {
     if (type === "zone-template") {
-      const zoneId = `zone-${Date.now()}`;
+      const zoneId = createElementId("zone");
       const newZone = {
         id: zoneId,
         type: "zone",
@@ -96,7 +99,7 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
         const row = Math.floor(i / 5); // 0 or 1
         const col = i % 5; // 0 to 4
         slots.push({
-          id: `slot-${Date.now()}-${i}`,
+          id: createElementId("slot", i),
           parentId: zoneId,
           type: "slot",
           x: x + 20 + (col * 60),
@@ -125,7 +128,7 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
     else if (type === "kiosk") { w = 40; h = 40; name = "PAYMENT"; }
     
     const newElement = {
-      id: `${type}-${Date.now()}`,
+      id: createElementId(type),
       type,
       x,
       y,
@@ -216,6 +219,39 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
     }));
   };
 
+  const handleAutoFillZone = (slotElement) => {
+    if (!slotElement.name || !slotElement.name.trim()) {
+      alert("Please enter a name for this slot first (e.g., 'A1').");
+      return;
+    }
+    
+    const siblings = elements.filter(el => el.parentId === slotElement.parentId && el.id !== slotElement.id && el.type.startsWith('slot'));
+    if (siblings.length === 0) return;
+    
+    // Sort siblings row by row (top to bottom, then left to right)
+    siblings.sort((a, b) => {
+      if (Math.abs(a.y - b.y) < 20) {
+        return a.x - b.x;
+      }
+      return a.y - b.y;
+    });
+    
+    setElements(prev => {
+      const nextElements = [...prev];
+      let currentName = slotElement.name.trim();
+      
+      siblings.forEach(sib => {
+        const index = nextElements.findIndex(e => e.id === sib.id);
+        if (index !== -1) {
+          const newName = generateNextName(currentName, nextElements);
+          nextElements[index] = { ...nextElements[index], name: newName };
+          currentName = newName;
+        }
+      });
+      return nextElements;
+    });
+  };
+
   // Keyboard Shortcuts (Delete, Copy, Paste, Duplicate, Undo, Redo)
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -262,7 +298,7 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
                const newName = generateNextName(el.name, currentAll);
                const newEl = { 
                  ...el, 
-                 id: `${el.type}-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+                 id: createElementId(el.type),
                  name: newName,
                  x: el.x + 20, 
                  y: el.y + 20 
@@ -286,7 +322,7 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
                const newName = generateNextName(el.name, currentAll);
                const newEl = { 
                  ...el, 
-                 id: `${el.type}-${Date.now()}-${Math.random().toString(36).substring(7)}`,
+                 id: createElementId(el.type),
                  name: newName,
                  x: el.x + 20, 
                  y: el.y + 20 
@@ -369,6 +405,28 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
   }, []);
 
   const handleSave = () => {
+    // Check for duplicate slot names
+    const slotNames = elements
+      .filter(el => el.type.startsWith('slot') && el.name && el.name.trim() !== '')
+      .map(el => el.name.trim());
+    
+    const duplicateSlot = slotNames.find((name, index) => slotNames.indexOf(name) !== index);
+    if (duplicateSlot) {
+      alert(`Cannot save map! Duplicate parking slot name "${duplicateSlot}" detected. Slot names must be unique.`);
+      return;
+    }
+
+    // Check for duplicate zone names
+    const zoneNames = elements
+      .filter(el => el.type === 'zone' && el.name && el.name.trim() !== '')
+      .map(el => el.name.trim());
+    
+    const duplicateZone = zoneNames.find((name, index) => zoneNames.indexOf(name) !== index);
+    if (duplicateZone) {
+      alert(`Cannot save map! Duplicate zone name "${duplicateZone}" detected. Zone names must be unique within a floor.`);
+      return;
+    }
+
     onSave({ width: 1000, height: 600, elements });
   };
 
@@ -693,7 +751,35 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
                   </div>
                   <div>
                     <label className="text-xs text-gray-400 uppercase font-bold tracking-wider mb-1 block">Name / Label</label>
-                    <input type="text" value={selectedElement.name || ""} onChange={(e) => handleUpdateElement(selectedElement.id, { name: e.target.value })} className="w-full bg-black/50 border border-white/10 rounded p-2 text-white focus:border-cyan-500 outline-none transition" />
+                    <input 
+                      type="text" 
+                      value={selectedElement.name || ""} 
+                      onChange={(e) => handleUpdateElement(selectedElement.id, { name: e.target.value })} 
+                      className={`w-full bg-black/50 border rounded p-2 text-white outline-none transition ${
+                        selectedElement.name && elements.some(el => el.id !== selectedElement.id && (
+                          (selectedElement.type.startsWith('slot') && el.type.startsWith('slot') && el.name === selectedElement.name) ||
+                          (selectedElement.type === 'zone' && el.type === 'zone' && el.name === selectedElement.name)
+                        ))
+                          ? 'border-red-500 focus:border-red-400' 
+                          : 'border-white/10 focus:border-cyan-500'
+                      }`} 
+                    />
+                    {selectedElement.name && elements.some(el => el.id !== selectedElement.id && (
+                      (selectedElement.type.startsWith('slot') && el.type.startsWith('slot') && el.name === selectedElement.name) ||
+                      (selectedElement.type === 'zone' && el.type === 'zone' && el.name === selectedElement.name)
+                    )) && (
+                      <div className="text-red-400 text-xs mt-1 font-medium animate-pulse">
+                        ⚠️ This {selectedElement.type === 'zone' ? 'zone' : 'slot'} name already exists!
+                      </div>
+                    )}
+                    {selectedElement.type.startsWith('slot') && selectedElement.parentId && (
+                      <button 
+                        onClick={() => handleAutoFillZone(selectedElement)}
+                        className="mt-2 w-full bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 text-xs font-bold py-2 rounded transition border border-cyan-500/30"
+                      >
+                        Auto-fill remaining slots in zone
+                      </button>
+                    )}
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>

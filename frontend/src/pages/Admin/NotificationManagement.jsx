@@ -9,7 +9,7 @@ import {
   Trash2,
   Zap,
 } from "lucide-react";
-import { useSocket } from "../../contexts/SocketProvider";
+import { useSocket } from "../../hooks/useSocket";
 import { DEFAULT_TEMPLATES } from "../../lib/notifications/types";
 import * as notifApi from "../../services/notificationService";
 
@@ -90,7 +90,7 @@ function StatCard({ label, value, icon: Icon }) {
 }
 
 export default function NotificationManagement() {
-  const { socket } = useSocket();
+  const socket = useSocket();
   const [activeTab, setActiveTab] = useState("live");
   const [liveNotifications, setLiveNotifications] = useState([]);
   const [autoRules, setAutoRules] = useState([]);

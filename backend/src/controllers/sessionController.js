@@ -1,190 +1,24 @@
 const Session = require('../models/Session');
 const UserDetail = require('../models/UserDetail');
 const User = require('../models/User');
+const Vehicle = require('../models/Vehicle');
+const Booking = require('../models/Booking');
+const BookingHold = require('../models/BookingHold');
+const ParkingFloor = require('../models/ParkingFloor');
+const mongoose = require('mongoose');
+const payos = require('../config/payos');
 const cloudinary = require('../config/cloudinary');
 const { sendKioskCheckInEmail, sendCheckoutEmail } = require('../utils/emailUtils');
 const notifTriggers = require('../services/notificationTriggers');
-const { LOW_BALANCE_THRESHOLD } = require('../services/parkingScheduler');
+const walletService = require('../services/walletService');
+const pricingEngine = require('../services/pricingEngine');
 const { normalizeLicensePlate } = require('../utils/licensePlateUtils');
-const { resolveKioskPricingPackage } = require('../utils/kioskPricing');
-const Booking = require('../models/Booking');
-const Subscription = require('../models/Subscription');
-const Slot = require('../models/Slot');
-const Vehicle = require('../models/Vehicle');
-const { emitToUser } = require('../sockets/notificationSocket');
 
-const BOOKING_EARLY_CHECKIN_MINUTES = 30;
-const BOOKING_LATE_GRACE_MINUTES = 15;
-
+const normalizeSlotCode = (slotCode = '') => String(slotCode || '').trim().toUpperCase();
 const sameObjectId = (a, b) => String(a || '') === String(b || '');
 
-const findEligiblePreBooking = async (normalizedPlate) => {
-  const now = new Date();
-  const earliestAllowedStart = new Date(now.getTime() - BOOKING_LATE_GRACE_MINUTES * 60 * 1000);
-  const latestAllowedStart = new Date(now.getTime() + BOOKING_EARLY_CHECKIN_MINUTES * 60 * 1000);
-
-  return Booking.findOne({
-    licensePlate: normalizedPlate,
-    status: 'confirmed',
-    startTime: { $gte: earliestAllowedStart, $lte: latestAllowedStart },
-    endTime: { $gt: now },
-  })
-    .populate('floorId', 'name floorNumber')
-    .populate('ticketPackageId', 'name type price')
-    .sort({ startTime: 1 });
-};
-
-const syncBookingStatusFromSession = async (session, overrides = {}) => {
-  if (!session?._id) return null;
-
-  const booking = await Booking.findOne({ sessionId: session._id });
-  if (!booking) return null;
-
-  if (overrides.status) {
-    booking.status = overrides.status;
-  }
-  if (typeof overrides.finalAmount === 'number') {
-    booking.finalAmount = overrides.finalAmount;
-  }
-  if (typeof overrides.refundAmount === 'number') {
-    booking.refundAmount = overrides.refundAmount;
-  }
-  if (overrides.paymentStatus) {
-    booking.paymentStatus = overrides.paymentStatus;
-  }
-
-  await booking.save();
-  return booking;
-};
-
-const emitBookingChanged = (app, booking, extra = {}) => {
-  if (!app || !booking?.userId) return;
-
-  const io = app.get('io');
-  if (!io) return;
-
-  emitToUser(io, booking.userId, 'booking:changed', {
-    bookingId: String(booking._id),
-    status: booking.status,
-    slotCode: booking.slotCode,
-    floorId: booking.floorId ? String(booking.floorId) : null,
-    ...extra,
-  });
-};
-
-const hasActiveVipMembership = (user) => {
-  if (!user?.membership?.isVip || !user?.membership?.packageId || !user?.membership?.expireAt) {
-    return false;
-  }
-
-  const expireAt = new Date(user.membership.expireAt);
-  return !Number.isNaN(expireAt.getTime()) && expireAt > new Date();
-};
-
-const resolveActiveSubscriptionAccess = async (userId) => {
-  if (!userId) {
-    return {
-      isSubscriptionActive: false,
-      membershipType: null,
-      assignedSlot: null,
-      assignedFloorId: null,
-      assignedFloorName: null,
-      ticketPackageId: null,
-    };
-  }
-
-  const now = new Date();
-  const subscription = await Subscription.findOne({
-    user: userId,
-    status: 'active',
-    paymentStatus: 'paid',
-    expireAt: { $gt: now },
-  })
-    .populate('ticketPackage', 'name type price')
-    .populate('slots.floorId', 'name floorNumber')
-    .sort({ expireAt: -1, createdAt: -1 });
-
-  const membershipType = subscription?.ticketPackage?.type || null;
-  const isSubscriptionActive = ['monthly', 'yearly'].includes(membershipType);
-
-  let assignedSlot = subscription?.slots?.[0] || null;
-  let assignedFloorId = assignedSlot?.floorId?._id || assignedSlot?.floorId || null;
-  let assignedFloorName = assignedSlot?.floorId?.name || null;
-
-  if (!assignedSlot) {
-    const reservedSlot = await Slot.findOne({ reservedFor: userId })
-      .populate('floorID', 'name floorNumber')
-      .sort({ updatedAt: -1, createdAt: -1 });
-
-    if (reservedSlot) {
-      assignedSlot = reservedSlot;
-      assignedFloorId = reservedSlot.floorID?._id || reservedSlot.floorID || null;
-      assignedFloorName = reservedSlot.floorID?.name || null;
-    }
-  }
-
-  return {
-    isSubscriptionActive,
-    membershipType,
-    assignedSlot: subscription?.slots?.[0]?.slotCode || assignedSlot?.slotCode || assignedSlot?.slotNumber || null,
-    assignedFloorId,
-    assignedFloorName,
-    ticketPackageId: subscription?.ticketPackage?._id || null,
-  };
-};
-
-const resolveCheckoutBilling = async (session) => {
-  const linkedBooking = await Booking.findOne({ sessionId: session._id }).select(
-    'finalAmount refundAmount paymentStatus'
-  );
-
-  if (linkedBooking) {
-    return {
-      waiveCharge: true,
-      reason: 'booking',
-      chargeAtExit: 0,
-      recordedSessionTotal: Number(linkedBooking.finalAmount || 0),
-      linkedBooking,
-    };
-  }
-
-  if (['monthly', 'yearly'].includes(session.ticketPackageId?.type)) {
-    return {
-      waiveCharge: true,
-      reason: 'membership',
-      chargeAtExit: 0,
-      recordedSessionTotal: 0,
-      linkedBooking: null,
-    };
-  }
-
-  const resolvedUser = session.userId?._id
-    ? session.userId
-    : session.userId
-      ? await User.findById(session.userId).select('membership email')
-      : null;
-
-  if (hasActiveVipMembership(resolvedUser)) {
-    return {
-      waiveCharge: true,
-      reason: 'membership',
-      chargeAtExit: 0,
-      recordedSessionTotal: 0,
-      linkedBooking: null,
-    };
-  }
-
-  return {
-    waiveCharge: false,
-    reason: 'kiosk',
-    chargeAtExit: null,
-    recordedSessionTotal: null,
-    linkedBooking: null,
-  };
-};
-
 /**
- * Verify license plate to auto-fill phone or skip steps
+ * Xác thực biển số xe khi đến Kiosk
  * POST /api/sessions/verify-plate
  */
 exports.verifyPlate = async (req, res, next) => {
@@ -194,93 +28,183 @@ exports.verifyPlate = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'License plate is required' });
     }
 
-    const normalizedPlate = normalizeLicensePlate(licensePlate);
-    if (!normalizedPlate) {
-      return res.status(400).json({ success: false, message: 'License plate is required' });
-    }
-
-    // Check if there is already an active session for this plate
-    const activeSession = await Session.findOne({ licensePlate: normalizedPlate, status: 'active' });
+    // 1. Kiểm tra xe đang có session ACTIVE trong bãi không
+    const activeSession = await Session.findOne({ licensePlate, status: 'active' });
     if (activeSession) {
       return res.status(200).json({
         success: true,
-        data: { isActive: true, phone: activeSession.phone }
+        data: { isActive: true, phone: activeSession.phone, session: activeSession }
       });
     }
 
-    // Check for registered vehicle
-    const Vehicle = require('../models/Vehicle');
-
-    const registeredVehicle = await Vehicle.findOne({ 
-      licensePlate: normalizedPlate,
-      status: 'approved' 
+    // 2. Kiểm tra xe đăng ký chính chủ
+    const registeredVehicle = await Vehicle.findOne({
+      licensePlate: licensePlate,
+      status: 'approved'
     });
 
     let isVIP = false;
     let isRegisteredVehicle = false;
     let phone = null;
-    let registeredUser = null;
+    let userId = null;
+    let isMonthly = false;
+    let subscription = null;
 
     if (registeredVehicle) {
-       isRegisteredVehicle = true;
-       const userDetail = await UserDetail.findOne({ userId: registeredVehicle.owner });
-       if (userDetail) {
-          phone = userDetail.phone;
-       }
-       
-       registeredUser = await User.findById(registeredVehicle.owner);
-       if (registeredUser && registeredUser.membership && registeredUser.membership.isVip && new Date(registeredUser.membership.expireAt) > new Date()) {
-           isVIP = true;
-       }
+      isRegisteredVehicle = true;
+      userId = registeredVehicle.owner;
+      const userDetail = await UserDetail.findOne({ userId });
+      if (userDetail) {
+        phone = userDetail.phone;
+      }
+
+      const registeredUser = await User.findById(userId);
+      if (registeredUser && registeredUser.membership && registeredUser.membership.isVip && new Date(registeredUser.membership.expireAt) > new Date()) {
+        isVIP = true;
+      }
+
+      // Check Subscription (gói tháng/năm)
+      const activeSubscription = await mongoose.model('Subscription').findOne({
+        user: userId,
+        status: 'active',
+        expireAt: { $gt: new Date() }
+      }).populate('slots.floorId');
+
+      if (activeSubscription) {
+        const subSlotCode = activeSubscription.slots?.[0]?.slotCode;
+        const subFloorId = activeSubscription.slots?.[0]?.floorId?._id || activeSubscription.slots?.[0]?.floorId;
+        let isSubSlotOccupied = false;
+        if (subSlotCode && subFloorId) {
+          isSubSlotOccupied = await Session.findOne({
+            floorId: subFloorId,
+            parkingSlot: normalizeSlotCode(subSlotCode),
+            status: 'active'
+          });
+        }
+        if (!isSubSlotOccupied) {
+          isMonthly = true;
+          subscription = activeSubscription;
+        }
+      }
     }
 
-    const membershipAccess = await resolveActiveSubscriptionAccess(registeredVehicle?.owner || null);
-
-    const pricing = await resolveKioskPricingPackage({
-      userId: registeredVehicle?.owner || null,
-      phone: phone || '',
-      licensePlate: normalizedPlate,
-    });
-
-    // Look for past sessions to auto-fill phone number
-    const pastSession = await Session.findOne({ licensePlate: normalizedPlate, phone: { $ne: null } }).sort({ checkInTime: -1 });
+    // Tìm SĐT trong các session cũ để tự điền (TC2/TC3)
+    const pastSession = await Session.findOne({ licensePlate, phone: { $ne: null } }).sort({ checkInTime: -1 });
     if (!phone && pastSession) {
       phone = pastSession.phone;
     }
 
-    const preBooking = await findEligiblePreBooking(normalizedPlate);
-    const isMonthly = membershipAccess.isSubscriptionActive;
-    const hasPreBooking = !!preBooking;
+    // 3. Kiểm tra xe có Booking đang hợp lệ (PAID / PAUSED)
+    const now = new Date();
+    
+    // Tìm Booking của hôm nay (được đến sớm tối đa 15 phút, đến muộn tối đa 15 phút nếu chưa check-in)
+    const earlyCheckinLimit = new Date(now.getTime() + 15 * 60 * 1000);
+    const lateCheckinLimit = new Date(now.getTime() - 15 * 60 * 1000);
+    const cancelCheckinLimit = new Date(now.getTime() - 30 * 60 * 1000); // Tối đa 30 phút trễ để vớt vát
+    
+    let booking = await Booking.findOne({
+      licensePlate,
+      $or: [
+        { 
+          status: 'PAID', 
+          scheduledStart: { $lte: earlyCheckinLimit, $gte: lateCheckinLimit } 
+        },
+        { 
+          status: 'PAUSED', 
+          scheduledStart: { $lte: earlyCheckinLimit } 
+        },
+        {
+          status: 'EXPIRED',
+          scheduledStart: { $gte: cancelCheckinLimit }
+        }
+      ],
+      scheduledEnd: { $gte: now }
+    }).sort({ scheduledStart: 1 }).populate('floorId');
 
-    return res.status(200).json({
+    const hasPreBooking = !!booking;
+    let requiresSlotReallocation = false;
+
+    // Ngoại lệ 2: Nếu Booking đang là EXPIRED, kiểm tra ô đỗ cũ đã bị xe khác chiếm chưa
+    if (booking && booking.status === 'EXPIRED') {
+      const isSlotOccupied = await Session.findOne({
+        floorId: booking.floorId._id,
+        parkingSlot: booking.parkingSlot,
+        status: 'active'
+      });
+      if (isSlotOccupied) {
+        requiresSlotReallocation = true;
+      }
+    }
+
+    // 4. Kiểm tra bãi đầy (Dành cho Walk-in - TC7)
+    let isFull = false;
+    if (!hasPreBooking && !isMonthly) {
+      const floors = await ParkingFloor.find();
+      let totalSlots = 0;
+      const validSlotCodesByFloor = {};
+      
+      for (const f of floors) {
+        let parsedLayout = null;
+        if (typeof f.layoutData === 'string') {
+          try {
+            parsedLayout = JSON.parse(f.layoutData);
+          } catch (e) {
+            console.error('Failed to parse layoutData', e);
+          }
+        } else {
+          parsedLayout = f.layoutData;
+        }
+        
+        if (parsedLayout && parsedLayout.elements) {
+          const slots = parsedLayout.elements.filter(el => 
+            ['slot', 'slot-ev', 'slot-handicap', 'slot-moto'].includes(el.type) && 
+            el.name && el.name.trim() !== ''
+          );
+          totalSlots += slots.length;
+          validSlotCodesByFloor[f._id.toString()] = slots.map(s => s.name);
+        }
+      }
+      
+      const Slot = require('../models/Slot');
+      const maintenanceSlots = await Slot.find({ status: 'maintenance' });
+      let validMaintenanceCount = 0;
+      for (const mSlot of maintenanceSlots) {
+        const floorIdStr = mSlot.floorID?.toString();
+        if (floorIdStr && validSlotCodesByFloor[floorIdStr]?.includes(mSlot.slotNumber)) {
+          validMaintenanceCount++;
+        }
+      }
+      const effectiveTotalSlots = totalSlots - validMaintenanceCount;
+
+      const activeSessionsCount = await Session.countDocuments({ status: 'active' });
+      const upcomingBookingsCount = await Booking.countDocuments({
+        status: { $in: ['PAID', 'PAUSED'] },
+        scheduledStart: { $lte: new Date(now.getTime() + 30 * 60 * 1000) },
+        scheduledEnd: { $gte: now }
+      });
+
+      if (activeSessionsCount + upcomingBookingsCount >= effectiveTotalSlots) {
+        isFull = true;
+      }
+    }
+
+    res.status(200).json({
       success: true,
       data: {
         isActive: false,
+        isFull,
         isMonthly,
         hasPreBooking,
+        booking: booking || null,
+        subscription: subscription || null,
         isVIP,
         isRegisteredVehicle,
-        membershipType: membershipAccess.membershipType,
-        phone: phone,
+        phone,
         isKnownGuest: !!phone || isVIP || isRegisteredVehicle,
-        bookingId: preBooking?._id || null,
-        assignedSlot: preBooking?.slotCode || membershipAccess.assignedSlot || null,
-        assignedFloorId: preBooking?.floorId?._id || membershipAccess.assignedFloorId || null,
-        assignedFloorName: preBooking?.floorId?.name || membershipAccess.assignedFloorName || null,
-        bookingStartTime: preBooking?.startTime || null,
-        bookingEndTime: preBooking?.endTime || null,
-        bookingDurationHours:
-          preBooking?.paidHours || (membershipAccess.isSubscriptionActive ? 24 : null),
-        bookingTicketPackageId:
-          preBooking?.ticketPackageId?._id || membershipAccess.ticketPackageId || null,
-        bookingMode:
-          preBooking?.ticketPackageId?.type === 'daily'
-            ? 'daily'
-            : membershipAccess.isSubscriptionActive
-              ? 'daily'
-              : 'hourly',
-        pricingPackage: pricing.package,
-        pricingSource: pricing.source,
+        assignedSlot: booking?.parkingSlot || subscription?.slots?.[0]?.slotCode || null,
+        assignedFloorId: booking?.floorId?._id || subscription?.slots?.[0]?.floorId?._id || null,
+        assignedFloorName: booking?.floorId?.name || subscription?.slots?.[0]?.floorId?.name || null,
+        requiresSlotReallocation,
       }
     });
 
@@ -291,220 +215,302 @@ exports.verifyPlate = async (req, res, next) => {
 };
 
 /**
- * Create a new parking session from Kiosk
+ * Check-in xe từ Kiosk
  * POST /api/sessions/kiosk-entry
  */
 exports.createKioskSession = async (req, res, next) => {
   try {
-    const { licensePlate, phone, vehicleType, parkingSlot, floorId, durationHours, entryImageBase64, bookingId } = req.body;
-    const normalizedPlate = normalizeLicensePlate(licensePlate);
+    const { licensePlate, phone, vehicleType, parkingSlot, floorId, durationHours, entryImageBase64, entryCamera, entryGate, bookingHoldId } = req.body;
 
-    if (!normalizedPlate) {
+    if (!licensePlate) {
       return res.status(400).json({ success: false, message: 'License plate is required' });
     }
+    const cleanPlate = normalizeLicensePlate(licensePlate);
 
-    // CHECK WHETHER THE VEHICLE IS CURRENTLY INSIDE THE LOT (In case the vehicle tailgated out and is now returning)
-    const existingSession = await Session.findOne({ licensePlate: normalizedPlate, status: 'active' });
+    // Đề phòng xe check-in trùng
+    const existingSession = await Session.findOne({ licensePlate: cleanPlate, status: 'active' });
     if (existingSession) {
       return res.status(400).json({
         success: false,
-        message: 'This vehicle is currently recorded as being in the parking lot. Please contact security to resolve system error.'
+        message: 'Phương tiện này đang có lịch sử đỗ xe hoạt động trong bãi.'
       });
     }
 
-    const registeredVehicle = await Vehicle.findOne({
-      licensePlate: normalizedPlate,
-      status: 'approved',
-    }).select('owner licensePlate').lean();
+    const now = new Date();
+    const earlyCheckinLimit = new Date(now.getTime() + 15 * 60 * 1000);
 
+    // 1. Kiểm tra Booking hợp lệ của biển số (đến sớm tối đa 15 phút, đến muộn tối đa 15 phút)
+    const lateCheckinLimit = new Date(now.getTime() - 15 * 60 * 1000);
+    const cancelCheckinLimit = new Date(now.getTime() - 30 * 60 * 1000);
+
+    const activeBooking = await Booking.findOne({
+      licensePlate: cleanPlate,
+      $or: [
+        { 
+          status: 'PAID', 
+          scheduledStart: { $lte: earlyCheckinLimit, $gte: lateCheckinLimit } 
+        },
+        { 
+          status: 'PAUSED', 
+          scheduledStart: { $lte: earlyCheckinLimit } 
+        },
+        {
+          status: 'EXPIRED',
+          scheduledStart: { $gte: cancelCheckinLimit }
+        }
+      ],
+      scheduledEnd: { $gte: now }
+    }).sort({ scheduledStart: 1 });
+
+    // 2. Kiểm tra bãi đầy (TC7)
+    const floors = await ParkingFloor.find();
+    let totalSlots = 0;
+    for (const f of floors) {
+      if (f.layoutData && f.layoutData.elements) {
+        const slots = f.layoutData.elements.filter(el => ['slot', 'slot-ev', 'slot-handicap', 'slot-moto'].includes(el.type));
+        totalSlots += slots.length;
+      }
+    }
+    const activeSessionsCount = await Session.countDocuments({ status: 'active' });
+    const upcomingBookingsCount = await Booking.countDocuments({
+      status: { $in: ['PAID', 'PAUSED'] },
+      scheduledStart: { $lte: new Date(now.getTime() + 30 * 60 * 1000) },
+      scheduledEnd: { $gte: now }
+    });
+    if (activeSessionsCount + upcomingBookingsCount >= totalSlots && !activeBooking) {
+      return res.status(400).json({ success: false, message: 'Bãi xe hiện đã đầy. Vui lòng quay lại sau.' });
+    }
+
+    // Tải ảnh biển số lên Cloudinary nếu có
     let entryImage_url = null;
-
-    // If an image was captured, upload to Cloudinary
     if (entryImageBase64) {
       try {
-        // Cloudinary can accept base64 strings directly
         const result = await cloudinary.uploader.upload(entryImageBase64, {
           folder: 'valo_parking/sessions/entry',
         });
         entryImage_url = result.secure_url;
       } catch (uploadError) {
         console.error('Cloudinary upload error:', uploadError);
-        // Continue creating session even if image upload fails, or we could return error
       }
     }
 
-    let preBooking = null;
-    if (bookingId) {
-      preBooking = await Booking.findOne({
-        _id: bookingId,
-        licensePlate: normalizedPlate,
-        status: 'confirmed',
-      }).populate('ticketPackageId', 'name type price');
-
-      if (!preBooking) {
-        return res.status(404).json({
-          success: false,
-          message: 'Pre-booking not found or is no longer valid.',
-        });
-      }
-
-      const now = new Date();
-      const earliestAllowedStart = new Date(now.getTime() - BOOKING_LATE_GRACE_MINUTES * 60 * 1000);
-      const latestAllowedStart = new Date(now.getTime() + BOOKING_EARLY_CHECKIN_MINUTES * 60 * 1000);
-
-      if (preBooking.endTime <= now || preBooking.startTime < earliestAllowedStart || preBooking.startTime > latestAllowedStart) {
-        return res.status(400).json({
-          success: false,
-          message: 'This booking is outside the kiosk check-in window.',
-        });
-      }
-
-      const existingSlotSession = await Session.findOne({
-        floorId: preBooking.floorId,
-        parkingSlot: preBooking.slotCode,
-        status: 'active',
-      });
-
-      if (existingSlotSession) {
-        return res.status(409).json({
-          success: false,
-          message: 'This booked slot is currently occupied.',
-        });
-      }
-    }
-
-    // Auto-link session if the phone number belongs to a registered user
+    // Xác định User
     let userId = null;
     let userEmail = null;
-    console.log('--- KIOSK CHECK-IN DEBUG ---');
-    console.log('Received phone:', phone);
+    let finalPhone = phone;
 
-    if (preBooking?.userId) {
-      userId = preBooking.userId;
-      const bookingUser = await User.findById(userId);
-      if (bookingUser) {
-        userEmail = bookingUser.email;
-      }
-    }
-
-    if (!userId && phone) {
-      // Fetch ALL UserDetails with this phone, sorted by newest first
-      const userDetails = await UserDetail.find({ phone }).sort({ createdAt: -1 });
-      console.log(`Found ${userDetails.length} UserDetail(s) for this phone.`);
-
-      for (const detail of userDetails) {
+    if (finalPhone) {
+      const detail = await UserDetail.findOne({ phone: finalPhone }).sort({ createdAt: -1 });
+      if (detail) {
         const user = await User.findById(detail.userId);
         if (user) {
           userId = user._id;
           userEmail = user.email;
-          console.log(`Successfully matched with valid User: ${user.email} (ID: ${user._id})`);
-          break; // Stop at the first VALID user we find
-        } else {
-          console.log(`Orphaned UserDetail found for ID: ${detail.userId} (No matching User)`);
         }
       }
     }
 
-    if (!preBooking?.userId && registeredVehicle) {
-      userId = registeredVehicle.owner;
-      const registeredOwner = await User.findById(userId);
-      if (registeredOwner) {
-        userEmail = registeredOwner.email;
-      }
+    const regVehicle = await Vehicle.findOne({ licensePlate: { $regex: new RegExp(`^${cleanPlate}$`, 'i') }, status: 'approved' });
+    if (regVehicle && !userId) {
+      userId = regVehicle.owner;
+      const user = await User.findById(userId);
+      if (user) userEmail = user.email;
+      const detail = await UserDetail.findOne({ userId });
+      if (detail) finalPhone = detail.phone;
     }
 
-    const isRegisteredPlateForResolvedUser = Boolean(
-      registeredVehicle?.owner && userId && sameObjectId(registeredVehicle.owner, userId)
-    );
-    const membershipAccess = !preBooking && isRegisteredPlateForResolvedUser
-      ? await resolveActiveSubscriptionAccess(userId)
-      : null;
-    let resolvedParkingSlot = preBooking?.slotCode || parkingSlot || null;
-    let resolvedFloorId = preBooking?.floorId || floorId || null;
-    let resolvedDurationHours = preBooking?.paidHours || (durationHours ? Number(durationHours) : 1);
-
-    if (!preBooking && membershipAccess?.isSubscriptionActive) {
-      if (!membershipAccess.assignedSlot || !membershipAccess.assignedFloorId) {
-        return res.status(409).json({
-          success: false,
-          message: 'Your active VIP membership does not have an assigned slot. Please contact staff for support.',
-        });
-      }
-
-      const activeAssignedSlotSession = await Session.findOne({
-        floorId: membershipAccess.assignedFloorId,
-        parkingSlot: membershipAccess.assignedSlot,
+    // Kiểm tra Subscription (Gói tháng/năm)
+    let activeSubscription = null;
+    if (userId) {
+      const sub = await mongoose.model('Subscription').findOne({
+        user: userId,
         status: 'active',
-      }).lean();
-
-      if (activeAssignedSlotSession) {
-        return res.status(409).json({
-          success: false,
-          message: 'Your assigned VIP slot is currently occupied. Please contact staff for support.',
-        });
+        expireAt: { $gt: now }
+      });
+      if (sub) {
+        const subSlotCode = sub.slots?.[0]?.slotCode;
+        const subFloorId = sub.slots?.[0]?.floorId;
+        let isSubSlotOccupied = false;
+        if (subSlotCode && subFloorId) {
+          isSubSlotOccupied = await Session.findOne({
+            floorId: subFloorId,
+            parkingSlot: normalizeSlotCode(subSlotCode),
+            status: 'active'
+          });
+        }
+        if (!isSubSlotOccupied) {
+          activeSubscription = sub;
+        }
       }
-
-      const assignedSlotDoc = await Slot.findOne({
-        floorID: membershipAccess.assignedFloorId,
-        slotNumber: membershipAccess.assignedSlot,
-      }).select('status').lean();
-
-      if (assignedSlotDoc?.status === 'maintenance') {
-        return res.status(409).json({
-          success: false,
-          message: 'Your assigned VIP slot is currently under maintenance. Please contact staff for support.',
-        });
-      }
-
-      resolvedParkingSlot = membershipAccess.assignedSlot;
-      resolvedFloorId = membershipAccess.assignedFloorId;
-      resolvedDurationHours = 24;
     }
 
-    const pricing = preBooking
-      ? {
-          package: preBooking.ticketPackageId || null,
-          source: 'booking',
-        }
-      : await resolveKioskPricingPackage({
-          userId,
-          phone: phone || '',
-          licensePlate: normalizedPlate,
-        });
+    // Bắt buộc nhập số điện thoại với Khách Vãng Lai (Không User, không Booking, không Sub)
+    if (!userId && !activeBooking && !activeSubscription && !finalPhone) {
+      return res.status(400).json({ success: false, message: 'Vui lòng nhập số điện thoại để Check-in' });
+    }
 
-    // Create session in database
+    // Xử lý các luồng Check-in
+    let sessionType = 'WALK_IN';
+    let bookingId = null;
+    let finalSlot = parkingSlot;
+    let finalFloorId = floorId;
+    let finalExpectedDuration = durationHours ? Number(durationHours) : 1;
+    let holdToConsume = null;
+    let requiresExpiredBookingHold = false;
+
+    if (activeBooking) {
+      const wasExpiredBooking = activeBooking.status === 'EXPIRED';
+
+      // TC8: Khách đến sớm
+      if (activeBooking.scheduledStart > now) {
+        // Kiểm tra xem ô đỗ có đang bị xe khác chiếm không
+        const slotOccupied = await Session.findOne({
+          floorId: activeBooking.floorId,
+          parkingSlot: activeBooking.parkingSlot,
+          status: 'active'
+        });
+        if (slotOccupied) {
+          return res.status(400).json({
+            success: false,
+            code: 'EARLY_OCCUPIED',
+            message: 'Ô đỗ đặt trước của bạn hiện chưa trống. Vui lòng đợi hoặc liên hệ nhân viên để đổi ô tương đương.'
+          });
+        }
+      }
+
+      bookingId = activeBooking._id;
+      sessionType = 'BOOKING';
+      
+      // Xử lý đổi ô đỗ nếu Booking bị EXPIRED và khách phải chọn ô mới
+      if (wasExpiredBooking && parkingSlot && parkingSlot !== activeBooking.parkingSlot) {
+        requiresExpiredBookingHold = true;
+        activeBooking.slotChangesHistory.push({
+          oldSlot: activeBooking.parkingSlot,
+          newSlot: parkingSlot,
+          reason: 'Khách đến trễ, ô đỗ cũ đã bị xe khác sử dụng. Chọn lại ô mới tại Kiosk.',
+          changedBy: userId || null
+        });
+        activeBooking.parkingSlot = parkingSlot;
+        activeBooking.floorId = floorId;
+      }
+
+      finalSlot = activeBooking.parkingSlot;
+      finalFloorId = activeBooking.floorId;
+      finalExpectedDuration = activeBooking.durationHours;
+
+      activeBooking.status = 'ACTIVE';
+    } else if (activeSubscription) {
+      sessionType = 'SUBSCRIPTION';
+      if (activeSubscription.slots && activeSubscription.slots.length > 0) {
+        finalSlot = activeSubscription.slots[0].slotCode;
+        finalFloorId = activeSubscription.slots[0].floorId;
+      }
+      finalExpectedDuration = 24; // Mặc định cho thuê bao
+    }
+
+    const normalizedFinalSlot = normalizeSlotCode(finalSlot);
+    const needsSlotHold =
+      Boolean(normalizedFinalSlot && finalFloorId) &&
+      (
+        (!activeBooking && !activeSubscription) ||
+        requiresExpiredBookingHold
+      );
+
+    if (needsSlotHold) {
+      if (!bookingHoldId) {
+        return res.status(400).json({
+          success: false,
+          code: 'HOLD_REQUIRED',
+          message: 'Ô đỗ cần được khóa tạm thời trước khi check-in. Vui lòng chọn lại ô đỗ.',
+        });
+      }
+
+      holdToConsume = await BookingHold.findOne({
+        _id: bookingHoldId,
+        status: 'active',
+        expiresAt: { $gt: now },
+      });
+
+      if (!holdToConsume) {
+        return res.status(400).json({
+          success: false,
+          code: 'HOLD_EXPIRED',
+          message: 'Thời gian giữ ô đã hết hạn. Vui lòng chọn lại ô đỗ.',
+        });
+      }
+
+      if (
+        !sameObjectId(holdToConsume.floorId, finalFloorId) ||
+        normalizeSlotCode(holdToConsume.slotCode) !== normalizedFinalSlot
+      ) {
+        return res.status(400).json({
+          success: false,
+          code: 'HOLD_SLOT_MISMATCH',
+          message: 'Thông tin giữ ô không khớp với ô đỗ đã chọn. Vui lòng chọn lại ô đỗ.',
+        });
+      }
+
+      if (holdToConsume.licensePlate && normalizeLicensePlate(holdToConsume.licensePlate) !== cleanPlate) {
+        return res.status(400).json({
+          success: false,
+          code: 'HOLD_PLATE_MISMATCH',
+          message: 'Giữ ô tạm thời không thuộc biển số xe này. Vui lòng chọn lại ô đỗ.',
+        });
+      }
+    }
+
+    if (normalizedFinalSlot && finalFloorId) {
+      const occupiedSlot = await Session.findOne({
+        floorId: finalFloorId,
+        parkingSlot: normalizedFinalSlot,
+        status: 'active',
+      });
+
+      if (occupiedSlot) {
+        return res.status(400).json({
+          success: false,
+          code: 'SLOT_OCCUPIED',
+          message: 'Ô đỗ này hiện đã có xe đỗ. Vui lòng chọn ô khác.',
+        });
+      }
+    }
+
+    if (activeBooking) {
+      await activeBooking.save();
+    }
+
+    // Tạo phiên đỗ xe Session
     const newSession = await Session.create({
-      licensePlate: normalizedPlate,
+      licensePlate: cleanPlate,
       userId,
-      phone: phone || null,
+      bookingId,
+      type: sessionType,
+      phone: finalPhone || null,
       vehicleType: vehicleType || 'car',
-      parkingSlot: resolvedParkingSlot,
-      floorId: resolvedFloorId,
-      expectedDurationHours: resolvedDurationHours,
-      ticketPackageId: pricing.package?._id || null,
+      parkingSlot: normalizedFinalSlot || null,
+      floorId: finalFloorId || null,
+      expectedDurationHours: finalExpectedDuration,
       entryImage_url,
-      checkInTime: new Date(),
+      checkInTime: now,
       status: 'active',
+      entryCamera: entryCamera || null,
+      entryGate: entryGate || null,
+      paymentStatus: 'unpaid'
     });
 
-    if (preBooking) {
-      preBooking.status = 'active';
-      preBooking.sessionId = newSession._id;
-      await preBooking.save();
-      emitBookingChanged(req.app, preBooking, { action: 'kiosk_checked_in' });
+    if (holdToConsume) {
+      holdToConsume.status = 'consumed';
+      await holdToConsume.save();
     }
 
-    // Send check-in notification email if user has a registered email
-    console.log('Will send check-in email?', userEmail ? 'YES (' + userEmail + ')' : 'NO');
+    // Gửi email check-in thành công
     if (userEmail) {
-      // Format time for email
       const formattedTime = new Date(newSession.checkInTime).toLocaleString('en-US', {
         timeZone: 'Asia/Ho_Chi_Minh',
         dateStyle: 'medium',
         timeStyle: 'short'
       });
 
-      // Calculate expected checkout time
       const expectedCheckoutDate = new Date(newSession.checkInTime);
       expectedCheckoutDate.setHours(expectedCheckoutDate.getHours() + newSession.expectedDurationHours);
       const formattedCheckoutTime = expectedCheckoutDate.toLocaleString('en-US', {
@@ -513,7 +519,6 @@ exports.createKioskSession = async (req, res, next) => {
         timeStyle: 'short'
       });
 
-      console.log('Sending email...');
       sendKioskCheckInEmail(userEmail, {
         sessionId: newSession._id.toString().slice(-6).toUpperCase(),
         checkInTime: formattedTime,
@@ -522,25 +527,19 @@ exports.createKioskSession = async (req, res, next) => {
         parkingSlot: newSession.parkingSlot || 'Assigned by Kiosk',
         licensePlate: newSession.licensePlate,
         vehicleType: newSession.vehicleType
-      }).then(() => console.log('Email sent successfully!'))
-        .catch(err => console.error('Failed to send Kiosk check-in email:', err));
+      }).catch(err => console.error('Failed to send check-in email:', err));
     }
 
-    // Fire-and-forget: send vehicle entry notification
     if (userId) {
       notifTriggers.notifyVehicleEntry(
-        req.app, userId, normalizedPlate, resolvedParkingSlot || 'N/A'
+        req.app, userId, cleanPlate, normalizedFinalSlot || 'N/A'
       ).catch(err => console.error('Failed to send entry notification:', err));
     }
 
     res.status(201).json({
       success: true,
-      message: preBooking ? 'Pre-booking checked in successfully' : 'Kiosk session created successfully',
-      data: {
-        ...newSession.toObject(),
-        bookingId: preBooking?._id || null,
-        preBooked: !!preBooking,
-      },
+      message: 'Check-in thành công',
+      data: newSession,
     });
   } catch (error) {
     console.error('Error creating kiosk session:', error);
@@ -549,7 +548,332 @@ exports.createKioskSession = async (req, res, next) => {
 };
 
 /**
- * Get all sessions for Staff/Manager
+ * Kiosk quét quét biển số Check-out (Tính toán phí dự kiến trước khi trả tiền)
+ * POST /api/sessions/kiosk-exit-scan
+ */
+exports.kioskExitScan = async (req, res, next) => {
+  try {
+    const { licensePlate } = req.body;
+
+    if (!licensePlate) {
+      return res.status(400).json({ success: false, message: 'License plate is required' });
+    }
+
+    const session = await Session.findOne({ licensePlate, status: 'active' });
+    if (!session) {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy phiên đỗ xe hoạt động của biển số này' });
+    }
+
+    const now = new Date();
+    const pricing = await pricingEngine.calculatePrice(session.checkInTime, now);
+
+    let walletBalance = 0;
+    let isEarlyExit = false;
+    let remainingHours = 0;
+    let bookingEnd = null;
+    let amountToPay = pricing.finalTotal;
+    let refundAmount = 0;
+
+    if (session.userId) {
+      const wallet = await walletService.getOrCreateWallet(session.userId);
+      walletBalance = wallet.balance;
+    }
+
+    // Kiểm tra Booking trả sớm / trễ / Subscription
+    if (session.type === 'BOOKING' && session.bookingId) {
+      const booking = await Booking.findById(session.bookingId);
+      if (booking) {
+        // Tìm tổng chi phí của các session đã đỗ trước đó thuộc booking này (nếu có PAUSE)
+        const prevSessions = await Session.find({ bookingId: booking._id, _id: { $ne: session._id }, status: 'completed' });
+        let previousSpent = 0;
+        for (const s of prevSessions) {
+          previousSpent += s.totalPrice || 0;
+        }
+
+        const totalIncurred = previousSpent + pricing.finalTotal;
+
+        if (totalIncurred > booking.prepaidAmount) {
+          amountToPay = totalIncurred - booking.prepaidAmount;
+          refundAmount = 0;
+        } else {
+          amountToPay = 0;
+          refundAmount = booking.prepaidAmount - totalIncurred;
+        }
+
+        if (booking.scheduledEnd > now) {
+          isEarlyExit = true;
+          bookingEnd = booking.scheduledEnd;
+          remainingHours = Math.ceil((booking.scheduledEnd - now) / (1000 * 60 * 60));
+        }
+      }
+    } else if (session.type === 'SUBSCRIPTION') {
+      let isSubActive = false;
+      if (session.userId) {
+        const sub = await mongoose.model('Subscription').findOne({
+          user: session.userId,
+          status: 'active',
+          expireAt: { $gt: now }
+        });
+        if (sub) isSubActive = true;
+      }
+
+      if (isSubActive) {
+        amountToPay = 0;
+        refundAmount = 0;
+      } else {
+        // Gói đã hết hạn => Tính phí theo lượt (tính toàn bộ thời gian đỗ)
+        amountToPay = pricing.finalTotal;
+        refundAmount = 0;
+      }
+    }
+
+    const canAutoPay = walletBalance >= amountToPay;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        session,
+        checkOutTime: now,
+        durationHours: pricing.durationHours,
+        totalPrice: pricing.finalTotal,
+        amountToPay,
+        refundAmount,
+        pricingBreakdown: pricing,
+        walletBalance,
+        canAutoPay,
+        isEarlyExit,
+        remainingHours,
+        bookingEnd,
+        isSubscriptionExpired: session.type === 'SUBSCRIPTION' && amountToPay > 0
+      }
+    });
+
+  } catch (error) {
+    console.error('Error in kioskExitScan:', error);
+    next(error);
+  }
+};
+
+/**
+ * Xử lý Checkout và thanh toán thực tế tại Kiosk
+ * POST /api/sessions/kiosk-checkout
+ */
+exports.kioskCheckout = async (req, res, next) => {
+  try {
+    const { sessionId, exitImageBase64, paymentMethod, keepPaused, exitCamera, exitGate } = req.body;
+
+    const session = await Session.findById(sessionId);
+    if (!session || session.status !== 'active') {
+      return res.status(404).json({ success: false, message: 'Không tìm thấy phiên đỗ xe hoạt động' });
+    }
+
+    const now = new Date();
+    const pricing = await pricingEngine.calculatePrice(session.checkInTime, now);
+
+    // Xử lý upload ảnh exit
+    let exitImage_url = null;
+    if (exitImageBase64) {
+      try {
+        const result = await cloudinary.uploader.upload(exitImageBase64, {
+          folder: 'valo_parking/sessions/exit',
+        });
+        exitImage_url = result.secure_url;
+      } catch (err) {
+        console.error('Cloudinary upload error on exit:', err);
+      }
+    }
+
+    let amountToPay = pricing.finalTotal;
+    let refundAmount = 0;
+    let booking = null;
+
+    if (session.type === 'BOOKING' && session.bookingId) {
+      booking = await Booking.findById(session.bookingId);
+      if (booking) {
+        const prevSessions = await Session.find({ bookingId: booking._id, _id: { $ne: session._id }, status: 'completed' });
+        let previousSpent = 0;
+        for (const s of prevSessions) {
+          previousSpent += s.totalPrice || 0;
+        }
+
+        const totalIncurred = previousSpent + pricing.finalTotal;
+        if (totalIncurred > booking.prepaidAmount) {
+          amountToPay = totalIncurred - booking.prepaidAmount;
+          refundAmount = 0;
+        } else {
+          amountToPay = 0;
+          refundAmount = booking.prepaidAmount - totalIncurred;
+        }
+      }
+    } else if (session.type === 'SUBSCRIPTION') {
+      let isSubActive = false;
+      if (session.userId) {
+        const sub = await mongoose.model('Subscription').findOne({
+          user: session.userId,
+          status: 'active',
+          expireAt: { $gt: now }
+        });
+        if (sub) isSubActive = true;
+      }
+
+      if (isSubActive) {
+        amountToPay = 0;
+      } else {
+        // Gói đã hết hạn => Tính phí theo lượt
+        amountToPay = pricing.finalTotal;
+      }
+    }
+
+    // 1. Kiểm tra tài khoản & trừ tiền
+    if (amountToPay > 0) {
+      if (paymentMethod === 'wallet') {
+        if (!session.userId) {
+          return res.status(400).json({ success: false, message: 'Khách vãng lai không có ví Wallet' });
+        }
+
+        const wallet = await walletService.getOrCreateWallet(session.userId);
+        if (wallet.balance < amountToPay) {
+          return res.status(400).json({ success: false, message: 'Số dư ví không đủ để thanh toán phí phát sinh' });
+        }
+
+        await walletService.debitWallet(
+          session.userId,
+          amountToPay,
+          `Thanh toán Check-out phát sinh - Biển số ${session.licensePlate}`,
+          { refSource: 'parking', refSourceId: session._id }
+        );
+        session.paymentStatus = 'paid';
+      } else if (paymentMethod === 'vietqr') {
+        // Thanh toán qua VietQR tại Kiosk
+        // Tạo PayOS Payment Link cho Kiosk checkout
+        const orderCode = Number(
+          `${Date.now().toString().slice(-8)}${Math.floor(Math.random() * 100).toString().padStart(2, '0')}`
+        );
+
+        const paymentData = {
+          orderCode,
+          amount: amountToPay,
+          description: `VALO Checkout`,
+          returnUrl: process.env.CLIENT_URL || 'http://localhost:5173/kiosk/checkout-success',
+          cancelUrl: process.env.CLIENT_URL || 'http://localhost:5173/kiosk/checkout-cancel',
+          items: [
+            {
+              name: `Thanh toán gửi xe biển số ${session.licensePlate}`,
+              quantity: 1,
+              price: amountToPay,
+            },
+          ],
+        };
+
+        const paymentLink = await payos.paymentRequests.create(paymentData);
+
+        // Kiosk sẽ hiển thị QR này để khách quét và thanh toán ngay
+        return res.status(200).json({
+          success: true,
+          message: 'Vui lòng thanh toán qua VietQR để mở cổng',
+          requiresPayment: true,
+          data: {
+            orderCode,
+            checkoutUrl: paymentLink.checkoutUrl,
+            qrCode: paymentLink.qrCode,
+          }
+        });
+      } else if (paymentMethod === 'qr' || paymentMethod === 'cash') {
+        // Mock payment từ Frontend Kiosk hoặc thanh toán tiền mặt qua nhân viên
+        session.paymentStatus = 'paid';
+      }
+    } else {
+      session.paymentStatus = 'paid';
+    }
+
+    // 2. Xử lý trả sớm Booking
+    if (booking) {
+        if (keepPaused === true) {
+          // Tạm dừng: Giữ ô đỗ, đổi trạng thái Booking sang PAUSED
+          booking.status = 'PAUSED';
+          await booking.save();
+          console.log(`Booking ${booking._id} set to PAUSED. Slot ${booking.parkingSlot} is retained.`);
+        } else {
+          // Kết thúc sớm hoàn toàn: Giải phóng ô đỗ và hoàn tiền dư
+          booking.status = 'COMPLETED';
+          await booking.save();
+
+          if (refundAmount > 0 && booking.userId) {
+            await walletService.creditWallet(
+              booking.userId,
+              refundAmount,
+              'REFUND',
+              `Hoàn tiền trả sớm Đặt chỗ ô ${booking.parkingSlot} - Xe ${booking.licensePlate}`,
+              { refSource: 'booking', refSourceId: booking._id }
+            );
+          }
+        }
+      }
+
+    // 3. Hoàn tất Session đỗ xe
+    session.status = 'completed';
+    session.checkOutTime = now;
+    session.totalPrice = pricing.finalTotal;
+    session.pricingBreakdown = pricing;
+    if (exitImage_url) session.exitImage_url = exitImage_url;
+    if (exitCamera) session.exitCamera = exitCamera;
+    if (exitGate) session.exitGate = exitGate;
+    await session.save();
+
+    // Gửi email checkout thành công
+    if (session.userId) {
+      try {
+        const user = await User.findById(session.userId);
+        if (user && user.email) {
+          const formattedCheckIn = new Date(session.checkInTime).toLocaleString('en-US', {
+            timeZone: 'Asia/Ho_Chi_Minh', dateStyle: 'medium', timeStyle: 'short'
+          });
+          const formattedCheckOut = new Date(session.checkOutTime).toLocaleString('en-US', {
+            timeZone: 'Asia/Ho_Chi_Minh', dateStyle: 'medium', timeStyle: 'short'
+          });
+
+          sendCheckoutEmail(user.email, {
+            sessionId: session._id.toString().slice(-6).toUpperCase(),
+            checkInTime: formattedCheckIn,
+            checkOutTime: formattedCheckOut,
+            duration: `${pricing.durationHours} giờ`,
+            parkingSlot: session.parkingSlot || 'Assigned by Kiosk',
+            licensePlate: session.licensePlate,
+            vehicleType: session.vehicleType,
+            totalPrice: session.totalPrice.toLocaleString('vi-VN') + ' VND'
+          }).catch(err => console.error('Failed to send Checkout email:', err));
+        }
+      } catch (err) {
+        console.error('Error fetching user for checkout email:', err);
+      }
+
+      // Gửi thông báo đẩy về App
+      const uid = session.userId._id || session.userId;
+      notifTriggers.notifyVehicleExit(
+        req.app, uid, session.licensePlate, pricing.finalTotal
+      ).catch(err => console.error('Failed to send exit notification:', err));
+
+      if (paymentMethod === 'wallet') {
+        notifTriggers.notifyPaymentSuccess(
+          req.app, uid, pricing.finalTotal, session._id.toString()
+        ).catch(err => console.error('Failed to send payment notification:', err));
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Checkout hoàn tất thành công, Barrier đã mở',
+      data: session
+    });
+
+  } catch (error) {
+    console.error('Error in kioskCheckout:', error);
+    next(error);
+  }
+};
+
+/**
+ * Lấy lịch sử tất cả các Session (Staff/Admin)
  * GET /api/sessions
  */
 exports.getAllSessions = async (req, res, next) => {
@@ -566,7 +890,7 @@ exports.getAllSessions = async (req, res, next) => {
 };
 
 /**
- * Get all sessions for the currently logged in customer
+ * Lấy lịch sử đỗ xe của cá nhân User
  * GET /api/sessions/my-history
  */
 exports.getMyHistory = async (req, res, next) => {
@@ -583,295 +907,8 @@ exports.getMyHistory = async (req, res, next) => {
 };
 
 /**
- * Kiosk Exit Scan
- * POST /api/sessions/kiosk-exit-scan
- */
-exports.kioskExitScan = async (req, res, next) => {
-  try {
-    const { licensePlate } = req.body;
-    const normalizedPlate = normalizeLicensePlate(licensePlate);
-
-    if (!normalizedPlate) {
-      return res.status(400).json({ success: false, message: 'License plate is required' });
-    }
-
-    const session = await Session.findOne({ licensePlate: normalizedPlate, status: 'active' })
-      .populate('userId')
-      .populate('ticketPackageId');
-    if (!session) {
-      const activeBooking = await Booking.findOne({
-        licensePlate: normalizedPlate,
-        status: 'active',
-      }).sort({ updatedAt: -1 });
-
-      if (activeBooking?.sessionId) {
-        const linkedSession = await Session.findById(activeBooking.sessionId).select(
-          'status checkOutTime totalPrice'
-        );
-
-        if (linkedSession?.status === 'completed') {
-          const repairedBooking = await syncBookingStatusFromSession(linkedSession, {
-            status: 'completed',
-            finalAmount:
-              typeof linkedSession.totalPrice === 'number'
-                ? linkedSession.totalPrice
-                : activeBooking.finalAmount,
-            refundAmount: activeBooking.refundAmount || 0,
-            paymentStatus:
-              activeBooking.paymentStatus === 'failed' ? 'paid' : activeBooking.paymentStatus,
-          });
-          emitBookingChanged(req.app, repairedBooking, { action: 'status_repaired' });
-
-          return res.status(409).json({
-            success: false,
-            message: 'This vehicle has already been checked out of the parking lot.',
-            alarm: true,
-            alarmReason: 'already_checked_out',
-          });
-        }
-      }
-
-      return res.status(404).json({
-        success: false,
-        message: 'No active session found for this license plate',
-        alarm: true,
-        alarmReason: 'no_active_checkin',
-      });
-    }
-
-    const checkOutTime = new Date();
-    const durationMs = checkOutTime - session.checkInTime;
-    const durationHours = Math.ceil(durationMs / (1000 * 60 * 60)) || 1; // At least 1 hour
-
-    // Calculate Price
-    const expectedHours = session.expectedDurationHours || 1;
-    let basePrice = 0;
-    let overtimePrice = 0;
-
-    const packageRate = session.ticketPackageId?.price || 10000;
-    const isDaily = session.ticketPackageId?.type === 'daily';
-
-    if (isDaily) {
-      // Daily package: Charge fixed price for the first 24h. Overstay adds hourly rate.
-      const expectedDays = Math.ceil(expectedHours / 24);
-      basePrice = expectedDays * packageRate;
-
-      if (durationHours > expectedDays * 24) {
-        const overtimeHours = durationHours - expectedDays * 24;
-        overtimePrice = overtimeHours * (packageRate / 24 * 1.3); // 30% penalty of hourly equivalent
-      }
-    } else {
-      // Hourly package
-      if (durationHours > expectedHours) {
-        const overtimeHours = durationHours - expectedHours;
-        overtimePrice = overtimeHours * (packageRate * 1.3); // 30% penalty
-        basePrice = expectedHours * packageRate;
-      } else {
-        basePrice = durationHours * packageRate;
-      }
-    }
-
-    const computedTotalPrice = basePrice + overtimePrice;
-    const billing = await resolveCheckoutBilling(session);
-    const totalPrice = billing.waiveCharge ? 0 : computedTotalPrice;
-
-    // Check Wallet if user exists
-    let walletBalance = 0;
-    let canAutoPay = false;
-    if (totalPrice === 0) {
-      canAutoPay = true;
-    } else if (session.userId) {
-      const { getBalance } = require('../services/walletService');
-      const walletData = await getBalance(session.userId._id);
-      walletBalance = walletData.balance;
-      // Allow up to -100k debt
-      if (walletBalance - totalPrice >= -100000) {
-        canAutoPay = true;
-      }
-    }
-
-    res.status(200).json({
-      success: true,
-      data: {
-        session,
-        checkOutTime,
-        durationHours,
-        expectedHours,
-        totalPrice,
-        walletBalance,
-        canAutoPay,
-        chargeRequired: totalPrice > 0,
-        billingReason: billing.reason,
-      }
-    });
-
-  } catch (error) {
-    console.error('Error in kioskExitScan:', error);
-    next(error);
-  }
-};
-
-/**
- * Kiosk Checkout processing
- * POST /api/sessions/kiosk-checkout
- */
-exports.kioskCheckout = async (req, res, next) => {
-  try {
-    const { sessionId, exitImageBase64, paymentMethod } = req.body;
-
-    const session = await Session.findById(sessionId)
-      .populate('ticketPackageId')
-      .populate('userId', 'email membership');
-    if (!session || session.status !== 'active') {
-      return res.status(404).json({ success: false, message: 'Active session not found' });
-    }
-
-    let exitImage_url = null;
-    if (exitImageBase64) {
-      const cloudinary = require('../config/cloudinary');
-      try {
-        const result = await cloudinary.uploader.upload(exitImageBase64, {
-          folder: 'valo_parking/sessions/exit',
-        });
-        exitImage_url = result.secure_url;
-      } catch (err) {
-        console.error('Cloudinary upload error on exit:', err);
-      }
-    }
-
-    const checkOutTime = new Date();
-    const durationMs = checkOutTime - session.checkInTime;
-    const durationHours = Math.ceil(durationMs / (1000 * 60 * 60)) || 1;
-
-    const expectedHours = session.expectedDurationHours || 1;
-    let basePrice = 0;
-    let overtimePrice = 0;
-
-    const packageRate = session.ticketPackageId?.price || 10000;
-    const isDaily = session.ticketPackageId?.type === 'daily';
-
-    if (isDaily) {
-      const expectedDays = Math.ceil(expectedHours / 24);
-      basePrice = expectedDays * packageRate;
-
-      if (durationHours > expectedDays * 24) {
-        const overtimeHours = durationHours - expectedDays * 24;
-        overtimePrice = overtimeHours * (packageRate / 24 * 1.3);
-      }
-    } else {
-      if (durationHours > expectedHours) {
-        overtimePrice = (durationHours - expectedHours) * (packageRate * 1.3);
-        basePrice = expectedHours * packageRate;
-      } else {
-        basePrice = durationHours * packageRate;
-      }
-    }
-
-    const computedTotalPrice = basePrice + overtimePrice;
-    const billing = await resolveCheckoutBilling(session);
-    const totalPrice = billing.waiveCharge ? 0 : computedTotalPrice;
-
-    if (paymentMethod === 'wallet' && totalPrice > 0) {
-      if (!session.userId) {
-        return res.status(400).json({ success: false, message: 'Guest cannot pay via wallet' });
-      }
-      const { debitWallet } = require('../services/walletService');
-      await debitWallet(
-        session.userId,
-        totalPrice,
-        `Kiosk payment - Plate ${session.licensePlate}`,
-        { allowNegative: true, refSource: 'parking', refSourceId: session._id }
-      );
-    }
-
-    session.status = 'completed';
-    session.checkOutTime = checkOutTime;
-    session.totalPrice =
-      typeof billing.recordedSessionTotal === 'number' ? billing.recordedSessionTotal : totalPrice;
-    if (exitImage_url) {
-      session.exitImage_url = exitImage_url;
-    }
-
-    await session.save();
-
-    const syncedBooking = await syncBookingStatusFromSession(session, {
-      status: 'completed',
-      finalAmount:
-        typeof billing.recordedSessionTotal === 'number' ? billing.recordedSessionTotal : totalPrice,
-      refundAmount: billing.linkedBooking?.refundAmount || 0,
-      paymentStatus: billing.linkedBooking?.paymentStatus || 'paid',
-    });
-    emitBookingChanged(req.app, syncedBooking, { action: 'kiosk_checked_out' });
-
-    // Send checkout email if linked to user
-    if (session.userId) {
-      try {
-        const user = await User.findById(session.userId);
-        if (user && user.email) {
-          const formattedCheckIn = new Date(session.checkInTime).toLocaleString('en-US', {
-            timeZone: 'Asia/Ho_Chi_Minh', dateStyle: 'medium', timeStyle: 'short'
-          });
-          const formattedCheckOut = new Date(session.checkOutTime).toLocaleString('en-US', {
-            timeZone: 'Asia/Ho_Chi_Minh', dateStyle: 'medium', timeStyle: 'short'
-          });
-
-          sendCheckoutEmail(user.email, {
-            sessionId: session._id.toString().slice(-6).toUpperCase(),
-            checkInTime: formattedCheckIn,
-            checkOutTime: formattedCheckOut,
-            duration: `${durationHours} hr(s)`,
-            parkingSlot: session.parkingSlot || 'Assigned by Kiosk',
-            licensePlate: session.licensePlate,
-            vehicleType: session.vehicleType,
-            totalPrice: Number(session.totalPrice || 0).toLocaleString('vi-VN') + ' VND'
-          }).catch(err => console.error('Failed to send Checkout email:', err));
-        }
-      } catch (err) {
-        console.error('Error fetching user for checkout email:', err);
-      }
-
-      // Fire-and-forget: send vehicle exit + payment notifications
-      const uid = session.userId._id || session.userId;
-      notifTriggers.notifyVehicleExit(
-        req.app, uid, session.licensePlate, totalPrice
-      ).catch(err => console.error('Failed to send exit notification:', err));
-
-      if (paymentMethod === 'wallet' && totalPrice > 0) {
-        notifTriggers.notifyPaymentSuccess(
-          req.app, uid, totalPrice, session._id.toString()
-        ).catch(err => console.error('Failed to send payment notification:', err));
-
-        // Check low balance after payment
-        try {
-          const { getBalance } = require('../services/walletService');
-          const walletData = await getBalance(uid);
-          if (walletData.balance < LOW_BALANCE_THRESHOLD) {
-            notifTriggers.notifyLowBalance(
-              req.app, uid, walletData.balance
-            ).catch(err => console.error('Failed to send low balance notification:', err));
-          }
-        } catch (balErr) {
-          console.error('Error checking balance after payment:', balErr);
-        }
-      }
-    }
-
-    res.status(200).json({
-      success: true,
-      message: 'Checkout completed',
-      data: session
-    });
-
-  } catch (error) {
-    console.error('Error in kioskCheckout:', error);
-    next(error);
-  }
-};
-
-/**
- * Get active parking status
+ * Trạng thái bãi đỗ xe trực tiếp (Active)
  * GET /api/sessions/active-status
- * Returns list of active sessions with floorId and parkingSlot
  */
 exports.getActiveParkingStatus = async (req, res, next) => {
   try {

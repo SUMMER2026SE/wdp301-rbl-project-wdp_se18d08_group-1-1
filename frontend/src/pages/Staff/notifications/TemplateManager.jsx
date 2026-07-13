@@ -1,15 +1,10 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { FileText, Plus, Trash2, Edit3 } from "lucide-react";
 import { PRIORITY_META, PRIORITY } from "../../../lib/notifications/types";
 
 export default function TemplateManager({ templates, onCreate, onUpdate, onDelete }) {
   const [editingId, setEditingId] = useState(null);
   const [formState, setFormState] = useState({ name: "", title: "", message: "", priority: PRIORITY.INFO });
-
-  const activeTemplate = useMemo(
-    () => templates.find((item) => item.id === editingId) || null,
-    [editingId, templates],
-  );
 
   const handleEdit = (template) => {
     setEditingId(template.id);
