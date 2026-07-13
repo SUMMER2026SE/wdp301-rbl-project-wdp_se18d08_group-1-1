@@ -160,6 +160,8 @@ export default function App() {
             />
             <Route path="/staff/live-grid" element={<LiveGridMonitor />} />
             <Route path="/staff/bookings" element={<BookingManagement />} />
+            <Route path="/staff/subscriptions" element={<SubscriptionManagement />} />
+            <Route path="/staff/tickets" element={<TicketPackages />} />
           </Route>
 
           {/* ── Customer section ── */}

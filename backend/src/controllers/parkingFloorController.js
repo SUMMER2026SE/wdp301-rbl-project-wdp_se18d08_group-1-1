@@ -203,14 +203,24 @@ exports.getFloorSlots = async (req, res) => {
     const activeSubscriptions = await Subscription.find({
       status: 'active',
       expireAt: { $gt: new Date() }
-    }).populate('ticketPackage', 'type');
+    })
+      .populate('ticketPackage', 'type name price')
+      .populate('user', 'username email phone');
 
     const slotPackageMap = {};
+    const slotSubscriptionMap = {};
     activeSubscriptions.forEach(sub => {
       if (sub.slots && sub.ticketPackage) {
         sub.slots.forEach(s => {
           if (s.floorId && s.floorId.toString() === id) {
             slotPackageMap[s.slotCode] = sub.ticketPackage.type;
+            slotSubscriptionMap[s.slotCode] = {
+              _id: sub._id,
+              status: sub.status,
+              expireAt: sub.expireAt,
+              ticketPackage: sub.ticketPackage,
+              user: sub.user
+            };
           }
         });
       }
@@ -218,7 +228,8 @@ exports.getFloorSlots = async (req, res) => {
 
     const enrichedSlots = slots.map(slot => ({
       ...slot,
-      subscriptionType: slotPackageMap[slot.slotNumber] || null
+      subscriptionType: slotPackageMap[slot.slotNumber] || null,
+      subscriptionDetail: slotSubscriptionMap[slot.slotNumber] || null
     }));
 
     res.status(200).json({ success: true, data: enrichedSlots });

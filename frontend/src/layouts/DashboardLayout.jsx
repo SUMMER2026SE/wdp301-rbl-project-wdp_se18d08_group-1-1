@@ -109,34 +109,24 @@ const NAV_CONFIG = {
     },
     { label: "Gate Control", icon: <Car size={18} />, to: "/staff/gate" },
     {
-      label: "Occupancy Reports",
-      icon: <Gauge size={18} />,
-      to: "/staff/reports",
-    },
-    {
       label: "Booking Management",
       icon: <BookOpen size={18} />,
       to: "/staff/bookings",
     },
     {
-      label: "Parking Violations",
-      icon: <FileWarning size={18} />,
-      to: "/staff/violations",
+      label: "Ticket Packages",
+      icon: <Ticket size={18} />,
+      to: "/staff/tickets",
+    },
+    {
+      label: "Subscriptions",
+      icon: <Crown size={18} />,
+      to: "/staff/subscriptions",
     },
     {
       label: "Notification Management",
       icon: <Bell size={18} />,
       to: "/staff/notifications",
-    },
-    {
-      label: "Task Status",
-      icon: <ClipboardList size={18} />,
-      to: "/staff/tasks",
-    },
-    {
-      label: "Overtime Rates",
-      icon: <SlidersHorizontal size={18} />,
-      to: "/staff/rates",
     },
   ],
   customer: [
