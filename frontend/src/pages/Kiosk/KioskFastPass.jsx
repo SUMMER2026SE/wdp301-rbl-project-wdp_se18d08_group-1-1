@@ -25,6 +25,8 @@ export default function KioskFastPass({ formData, isMonthly, onAutoCheckIn, onCo
   const [errorMessage, setErrorMessage] = useState('');
   const [floors, setFloors] = useState([]);
   const [dbSlots, setDbSlots] = useState([]);
+  const [vipRedirectInfo, setVipRedirectInfo] = useState(null);
+  const [currentSlot, setCurrentSlot] = useState(formData.selectedSlot);
   const hasStartedRef = useRef(false);
   const hasCompletedRef = useRef(false);
   const onCompleteRef = useRef(onComplete);
@@ -47,7 +49,7 @@ export default function KioskFastPass({ formData, isMonthly, onAutoCheckIn, onCo
       }
     };
 
-    const returnTimer = window.setTimeout(returnToStart, 10000);
+    const returnTimer = window.setTimeout(returnToStart, 15000); // Increased to 15s so user can read message
 
     return () => {
       window.clearTimeout(returnTimer);
@@ -62,8 +64,14 @@ export default function KioskFastPass({ formData, isMonthly, onAutoCheckIn, onCo
     const runFastPassEntry = async () => {
       try {
         setStatus('checking-in');
-        await onAutoCheckIn();
+        const resData = await onAutoCheckIn();
         if (ignore) return;
+        
+        if (resData.vipRedirected) {
+          setVipRedirectInfo({ message: resData.message });
+          setCurrentSlot(resData.newSlot);
+        }
+        
         setStatus('ready');
       } catch (error) {
         if (ignore) return;
@@ -108,13 +116,27 @@ export default function KioskFastPass({ formData, isMonthly, onAutoCheckIn, onCo
 
   const isSubscriptionFlow = Boolean(isMonthly);
   const floorRecord = floors.find((floor) => floor._id === formData.floorId);
-  const selectedSlotRecord = dbSlots.find((slot) => slot.slotNumber === formData.selectedSlot);
-  const zoneLabel = resolveZoneLabel(selectedSlotRecord, formData.selectedSlot);
+  const selectedSlotRecord = dbSlots.find((slot) => slot.slotNumber === currentSlot);
+  const zoneLabel = resolveZoneLabel(selectedSlotRecord, currentSlot);
   const floorLabel = floorRecord?.name || formData.bookingFloorName || (isSubscriptionFlow ? 'Member floor' : 'Reserved floor');
 
   return (
     <div className="flex flex-col flex-1 min-h-0 items-center overflow-hidden">
       <div className="w-full max-w-[980px] flex flex-col gap-4 flex-1 min-h-0">
+        {vipRedirectInfo && (
+          <div className="bg-amber-50 border-2 border-amber-400 text-amber-900 rounded-[20px] shadow-sm px-5 py-4 flex items-center gap-4 animate-fade-in">
+            <div className="w-12 h-12 rounded-full bg-amber-100 border border-amber-200 flex items-center justify-center shrink-0">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="font-black text-lg uppercase tracking-tight text-amber-800 mb-0.5">Sự cố ô đỗ VIP</h3>
+              <p className="font-semibold text-sm leading-tight text-amber-700">{vipRedirectInfo.message}</p>
+            </div>
+          </div>
+        )}
+        
         <div className="bg-white rounded-[26px] border border-gray-100 shadow-[0_20px_40px_rgba(15,23,42,0.08)] px-5 py-4">
           <div className="flex flex-col gap-3 min-w-0">
             <div className="text-[11px] font-bold uppercase tracking-[0.28em] text-cyan-600">
@@ -127,7 +149,7 @@ export default function KioskFastPass({ formData, isMonthly, onAutoCheckIn, onCo
                 value={formatLicensePlateDisplay(formData.licensePlate) || '--'}
                 valueClassName="text-[18px] md:text-[20px]"
               />
-              <SummaryItem label="Slot" value={formData.selectedSlot || '--'} />
+              <SummaryItem label="Slot" value={currentSlot || '--'} />
               <SummaryItem label="Zone" value={zoneLabel} />
               <SummaryItem label="Floor" value={floorLabel} />
             </div>
@@ -156,7 +178,7 @@ export default function KioskFastPass({ formData, isMonthly, onAutoCheckIn, onCo
               onFloorSelect={() => {}}
               activeSessions={[]}
               dbSlots={dbSlots}
-              selectedSlotId={formData.selectedSlot}
+              selectedSlotId={currentSlot}
               onSelectSlot={null}
               is2DMode={true}
               hideUI={true}

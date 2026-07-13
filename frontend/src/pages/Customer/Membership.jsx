@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Crown, Sparkles, Check, Loader2, ArrowRight, AlertCircle, QrCode, Wallet } from 'lucide-react';
 import { getTicketPackages, createSubscriptionPayment, verifySubscriptionPayment, paySubscriptionWithWallet } from '../../services/subscriptionService';
 import { getWalletInfo } from '../../services/walletService';
@@ -11,6 +12,7 @@ import { extractMissingPolicies, isPolicyAcceptanceRequired } from '../../utils/
 import toast, { Toaster } from 'react-hot-toast';
 
 export default function Membership() {
+  const navigate = useNavigate();
   const [packages, setPackages] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -281,6 +283,15 @@ export default function Membership() {
       toast.error("Please select at least one parking slot to reserve.");
       return;
     }
+
+    if (paymentMethod === 'wallet' && selectedPackage && walletBalance < selectedPackage.price) {
+      toast.error("Số dư ví không đủ. Hệ thống sẽ chuyển hướng bạn đến trang Nạp Tiền.");
+      setTimeout(() => {
+        setShowSlotModal(false);
+        navigate('/wallet');
+      }, 1500);
+      return;
+    }
     
     try {
       setShowSlotModal(false);
@@ -502,7 +513,7 @@ export default function Membership() {
                   dbSlots={dbSlots}
                   onFloorSelect={setCurrentFloorId}
                   onSelectSlot={(slotData) => handleSelectSlot(currentFloorId, { slotNumber: slotData.name || slotData.id })}
-                  selectedSlotId={selectedSlots.filter(s => s.floorId === currentFloorId).map(s => s.slotCode)}
+                  selectedSlotId={selectedSlots.map(s => `${s.floorId}:${s.slotCode}`)}
                   is2DMode={true}
                   hideUI={true}
                   theme="dark"
@@ -601,8 +612,7 @@ export default function Membership() {
                 
                 <button 
                   onClick={handleConfirmSlots}
-                  disabled={paymentMethod === 'wallet' && selectedPackage && walletBalance < selectedPackage.price}
-                  className={`w-full py-4 rounded-xl font-bold text-white transition flex items-center justify-center gap-2 ${paymentMethod === 'wallet' && selectedPackage && walletBalance < selectedPackage.price ? 'bg-gray-800 cursor-not-allowed opacity-50' : 'bg-gray-900 hover:bg-black'}`}
+                  className={`w-full py-4 rounded-xl font-bold text-white transition flex items-center justify-center gap-2 bg-gray-900 hover:bg-black`}
                 >
                   Pay now <ArrowRight size={18} />
                 </button>
