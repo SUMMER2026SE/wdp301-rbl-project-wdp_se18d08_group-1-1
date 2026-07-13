@@ -321,6 +321,9 @@ exports.createKioskSession = async (req, res, next) => {
 
     // Kiểm tra Subscription (Gói tháng/năm)
     let activeSubscription = null;
+    let vipRedirected = false;
+    let originalVipSlot = null;
+    
     if (userId) {
       const sub = await mongoose.model('Subscription').findOne({
         user: userId,
@@ -331,6 +334,7 @@ exports.createKioskSession = async (req, res, next) => {
         const subSlotCode = sub.slots?.[0]?.slotCode;
         const subFloorId = sub.slots?.[0]?.floorId;
         let isSubSlotOccupied = false;
+        
         if (subSlotCode && subFloorId) {
           isSubSlotOccupied = await Session.findOne({
             floorId: subFloorId,
@@ -338,7 +342,60 @@ exports.createKioskSession = async (req, res, next) => {
             status: 'active'
           });
         }
-        if (!isSubSlotOccupied) {
+        
+        if (isSubSlotOccupied) {
+          // Find alternative slot
+          const floorsData = await ParkingFloor.find();
+          let alternativeSlot = null;
+          let altFloorId = null;
+          
+          for (const floor of floorsData) {
+            if (!floor.layoutData || !floor.layoutData.elements) continue;
+            
+            const standardSlots = floor.layoutData.elements.filter(el => el.type === 'slot' || el.type === 'slot-ev');
+            
+            for (const slot of standardSlots) {
+              const slotCode = slot.name;
+              if (!slotCode || slotCode.trim() === '') continue;
+              
+              // check if occupied
+              const occupied = await Session.findOne({ floorId: floor._id, parkingSlot: normalizeSlotCode(slotCode), status: 'active' });
+              if (occupied) continue;
+              
+              // check if it's someone else's VIP slot
+              const isVIP = await mongoose.model('Subscription').findOne({
+                status: 'active',
+                expireAt: { $gt: now },
+                "slots.floorId": floor._id,
+                "slots.slotCode": slotCode
+              });
+              if (isVIP) continue;
+              
+              // check if booked
+              const isBooked = await Booking.findOne({
+                floorId: floor._id,
+                parkingSlot: normalizeSlotCode(slotCode),
+                status: { $in: ['PAID', 'PAUSED'] },
+                scheduledStart: { $lte: new Date(now.getTime() + 30 * 60 * 1000) },
+                scheduledEnd: { $gte: now }
+              });
+              if (isBooked) continue;
+              
+              alternativeSlot = slotCode;
+              altFloorId = floor._id;
+              break;
+            }
+            if (alternativeSlot) break;
+          }
+          
+          if (alternativeSlot) {
+            activeSubscription = sub;
+            vipRedirected = true;
+            originalVipSlot = subSlotCode;
+            sub.slots[0].slotCode = alternativeSlot; // Temporarily assign for this session
+            sub.slots[0].floorId = altFloorId;
+          }
+        } else {
           activeSubscription = sub;
         }
       }
@@ -538,8 +595,11 @@ exports.createKioskSession = async (req, res, next) => {
 
     res.status(201).json({
       success: true,
-      message: 'Check-in thành công',
+      message: vipRedirected ? `Ô đỗ VIP bị chiếm, đã đổi tạm sang ô ${normalizedFinalSlot}` : 'Check-in thành công',
       data: newSession,
+      vipRedirected,
+      originalVipSlot,
+      newSlot: normalizedFinalSlot,
     });
   } catch (error) {
     console.error('Error creating kiosk session:', error);

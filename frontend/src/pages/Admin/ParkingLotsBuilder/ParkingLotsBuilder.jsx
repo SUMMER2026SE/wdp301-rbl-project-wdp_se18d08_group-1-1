@@ -92,17 +92,27 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
     if (type === "zone") { 
       w = 250; h = 150; 
       
-      // Auto-generate Zone name (Zone A, Zone B, etc.)
+      // Auto-generate Zone name (ZONE A, ZONE B... ZONE AA, etc.)
       const existingZoneNames = elements.filter(el => el.type === 'zone').map(el => el.name);
-      let nextChar = 'A';
-      for (let i = 0; i < 26; i++) {
-        const char = String.fromCharCode(65 + i);
-        if (!existingZoneNames.includes(`Zone ${char}`)) {
-          nextChar = char;
+      let i = 0;
+      const getLabel = (idx) => {
+        let result = '';
+        let temp = idx;
+        while (temp >= 0) {
+          result = String.fromCharCode(65 + (temp % 26)) + result;
+          temp = Math.floor(temp / 26) - 1;
+        }
+        return result;
+      };
+      
+      while (true) {
+        const candidate = `ZONE ${getLabel(i)}`;
+        if (!existingZoneNames.includes(candidate)) {
+          name = candidate;
           break;
         }
+        i++;
       }
-      name = `Zone ${nextChar}`;
     }
     else if (type.startsWith("slot")) { 
        w = 50; 
@@ -353,17 +363,83 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
          setElements(prev => {
             const newEls = [];
             let currentAll = [...prev];
+            
+            // Helper to get new Zone name
+            const getLabel = (idx) => {
+               let result = '';
+               let temp = idx;
+               while (temp >= 0) {
+                 result = String.fromCharCode(65 + (temp % 26)) + result;
+                 temp = Math.floor(temp / 26) - 1;
+               }
+               return result;
+            };
+
             currentSelected.forEach(el => {
-               const newName = generateNextName(el.name, currentAll);
-               const newEl = { 
-                 ...el, 
-                 id: createElementId(el.type),
-                 name: newName,
-                 x: el.x + 20, 
-                 y: el.y + 20 
-               };
-               newEls.push(newEl);
-               currentAll.push(newEl);
+               if (el.type === 'zone') {
+                  // Find new zone name (case insensitive)
+                  const existingZoneNames = currentAll.filter(e => e.type === 'zone').map(e => (e.name || "").toUpperCase());
+                  let idx = 0;
+                  let newZoneName = '';
+                  let newPrefix = '';
+                  while (true) {
+                     newPrefix = getLabel(idx);
+                     newZoneName = `ZONE ${newPrefix}`;
+                     if (!existingZoneNames.includes(newZoneName)) break;
+                     idx++;
+                  }
+                  
+                  const oldPrefix = (el.name || "").replace(/ZONE\s+/i, '').trim();
+                  const newZoneId = createElementId('zone');
+                  
+                  const newZone = { 
+                     ...el, 
+                     id: newZoneId,
+                     name: newZoneName,
+                     x: el.x + 30, 
+                     y: el.y + 30 
+                  };
+                  newEls.push(newZone);
+                  currentAll.push(newZone);
+
+                  // Duplicate all children (slots)
+                  const children = currentAll.filter(c => c.parentId === el.id);
+                  children.forEach(child => {
+                     // Replace old prefix with new prefix in child name (e.g. A1 -> B1)
+                     let newChildName = child.name;
+                     if (oldPrefix && newChildName.startsWith(oldPrefix)) {
+                        newChildName = newPrefix + newChildName.substring(oldPrefix.length);
+                     }
+                     const newChild = {
+                        ...child,
+                        id: createElementId(child.type),
+                        parentId: newZoneId,
+                        name: newChildName,
+                        x: child.x + 30,
+                        y: child.y + 30
+                     };
+                     currentAll.push(newChild);
+                     newEls.push(newChild); // Push to newEls so it can be selected too
+                  });
+               } else {
+                  // If it's a child of a selected zone, it's already duplicated above!
+                  // We only duplicate it normally if it's NOT a child of a selected zone
+                  if (el.parentId && currentSelected.some(s => s.id === el.parentId && s.type === 'zone')) {
+                     return; // Skip, already handled
+                  }
+
+                  // Not a zone, just duplicate normally
+                  const newName = generateNextName(el.name, currentAll);
+                  const newEl = { 
+                    ...el, 
+                    id: createElementId(el.type),
+                    name: newName,
+                    x: el.x + 20, 
+                    y: el.y + 20 
+                  };
+                  newEls.push(newEl);
+                  currentAll.push(newEl);
+               }
             });
             setSelectedElementIds(newEls.map(el => el.id));
             return currentAll;
@@ -553,11 +629,23 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
           <div className="w-full h-full relative pointer-events-none">
             {/* Background layer with hidden overflow for asphalt texture */}
             <div className="absolute inset-0 rounded bg-[#20232a] border border-white/5 overflow-hidden">
-              <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.65%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E")' }}></div>
+              <div className="absolute inset-0 bg-white" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.65%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E")' }}></div>
             </div>
             
             {/* Zone Name Tag (floating outside the box) */}
-            <div className={`absolute -top-6 left-0 px-3 py-1 rounded-t-md bg-[#181c23] border border-b-0 shadow-md font-bold text-[10px] tracking-widest uppercase select-none ${!el.name ? 'text-red-400 border-red-500/50 z-50' : 'text-cyan-300 border-cyan-500/50 z-20'}`}>
+            <div 
+               className={`absolute -top-6 left-0 px-3 py-1 rounded-t-md bg-[#181c23] border border-b-0 shadow-md font-bold text-[10px] tracking-widest uppercase select-none pointer-events-auto cursor-pointer hover:bg-slate-800 transition-colors ${!el.name ? 'text-red-400 border-red-500/50 z-50' : 'text-cyan-300 border-cyan-500/50 z-20'}`}
+               onMouseDown={(e) => {
+                  e.stopPropagation();
+                  if (e.shiftKey) {
+                     setSelectedElementIds(prev => prev.includes(el.id) ? prev.filter(id => id !== el.id) : [...prev, el.id]);
+                  } else {
+                     if (!selectedElementIds.includes(el.id)) {
+                        setSelectedElementIds([el.id]);
+                     }
+                  }
+               }}
+            >
               {el.name || 'UNNAMED ZONE'}
             </div>
           </div>
@@ -655,7 +743,7 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
 
         {/* The Map Container (1000x600) */}
         <div 
-           className="absolute left-1/2 top-1/2 bg-black/60 border border-white/20 shadow-2xl transition-transform origin-center"
+           className="absolute left-1/2 top-1/2 bg-white/95 border-2 border-cyan-500/80 shadow-[0_0_50px_rgba(6,182,212,0.2)] rounded-[2rem] transition-transform origin-center"
            style={{ 
               width: 1000, 
               height: 600,

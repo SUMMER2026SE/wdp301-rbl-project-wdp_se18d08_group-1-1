@@ -502,7 +502,7 @@ export default function Membership() {
                   dbSlots={dbSlots}
                   onFloorSelect={setCurrentFloorId}
                   onSelectSlot={(slotData) => handleSelectSlot(currentFloorId, { slotNumber: slotData.name || slotData.id })}
-                  selectedSlotId={selectedSlots.filter(s => s.floorId === currentFloorId).map(s => s.slotCode)}
+                  selectedSlotId={selectedSlots.map(s => `${s.floorId}:${s.slotCode}`)}
                   is2DMode={true}
                   hideUI={true}
                   theme="dark"

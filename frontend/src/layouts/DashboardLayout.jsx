@@ -16,6 +16,7 @@ import {
   Wrench,
   BarChart2,
   DollarSign,
+  Crown,
   // Customer icons
   Home,
   User,
@@ -61,6 +62,11 @@ const NAV_CONFIG = {
       label: "Ticket Packages",
       icon: <Ticket size={18} />,
       to: "/admin/tickets",
+    },
+    {
+      label: "Subscriptions",
+      icon: <Crown size={18} />,
+      to: "/admin/subscriptions",
     },
     { label: "Services", icon: <Wrench size={18} />, to: "/admin/services" },
     { label: "Policies", icon: <ScrollText size={18} />, to: "/admin/policies" },

@@ -316,3 +316,24 @@ exports.getMembership = async (req, res, next) => {
 };
 
 exports.buildExpirationDate = buildExpirationDate;
+
+// Admin: Get all subscriptions
+exports.getAllSubscriptions = async (req, res, next) => {
+  try {
+    const subscriptions = await Subscription.find()
+      .populate('user', 'username email status')
+      .populate('ticketPackage', 'name type price')
+      .populate({
+        path: 'slots.floorId',
+        select: 'name floorNumber'
+      })
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      data: subscriptions
+    });
+  } catch (error) {
+    next(error);
+  }
+};

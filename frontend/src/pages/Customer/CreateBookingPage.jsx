@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import {
   AlertCircle,
   Calendar,
@@ -232,24 +232,25 @@ export default function CreateBookingPage() {
   const [dbSlots, setDbSlots] = useState([]);
   const [activeSessions, setActiveSessions] = useState([]);
 
-  useEffect(() => {
-    const fetchDbSlots = async () => {
-      if (!currentFloorId) {
-        setDbSlots([]);
-        return;
+  const fetchDbSlots = useCallback(async () => {
+    if (!currentFloorId) {
+      setDbSlots([]);
+      return;
+    }
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/parking-floors/${currentFloorId}/slots`);
+      const data = await res.json();
+      if (data.success) {
+        setDbSlots(data.data);
       }
-      try {
-        const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/parking-floors/${currentFloorId}/slots`);
-        const data = await res.json();
-        if (data.success) {
-          setDbSlots(data.data);
-        }
-      } catch (err) {
-        console.error("Failed to fetch slots", err);
-      }
-    };
-    fetchDbSlots();
+    } catch (err) {
+      console.error("Failed to fetch slots", err);
+    }
   }, [currentFloorId]);
+
+  useEffect(() => {
+    fetchDbSlots();
+  }, [fetchDbSlots]);
 
   const fetchActiveSessions = async () => {
     try {
@@ -266,6 +267,15 @@ export default function CreateBookingPage() {
       console.error('Failed to fetch active parking sessions', err);
     }
   };
+
+  useEffect(() => {
+    fetchActiveSessions();
+    const intervalId = setInterval(() => {
+      fetchActiveSessions();
+      fetchDbSlots();
+    }, 30000); // 30s
+    return () => clearInterval(intervalId);
+  }, [fetchDbSlots]);
 
   const handleStartChange = (newDate, newTime) => {
     setStartDate(newDate);
@@ -1252,7 +1262,7 @@ export default function CreateBookingPage() {
                     className="w-full rounded-2xl bg-gray-900 hover:bg-black disabled:opacity-50 text-white px-4 py-4 font-black transition flex items-center justify-center gap-2 shadow-sm active:scale-[0.98]"
                   >
                     {(submitting || topUpLoading ) ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
-                    {cartWalletShortfall > 0 ? `Top Up ${formatMoney(cartWalletShortfall)}` : hasActiveCheckoutHold ? `Pay ${formatMoney(cartGrandTotal)}` : 'Review Checkout'}
+                    {cartWalletShortfall > 0 ? `Top Up ${formatMoney(cartWalletShortfall)}` : hasActiveCheckoutHold ? `Pay ${formatMoney(cartGrandTotal)}` : 'Booking'}
                   </button>
                 </div>
               )}
@@ -1315,7 +1325,11 @@ export default function CreateBookingPage() {
                 activeSessions={activeSessions}
                 dbSlots={dbSlots}
                 availableSlots={slots}
-                selectedSlotId={selectedSlot?.slotCode}
+                selectedSlotId={
+                  cartItems.length > 0 
+                    ? [...cartItems.map(item => `${item.floorId}:${item.slotCode}`), selectedSlotKey].filter(Boolean)
+                    : (selectedSlotKey || null)
+                }
                 onSelectSlot={(slot, floorId) => setSelectedSlotKey(`${floorId}:${slot.id}`)}
                 is2DMode={true}
                 hideUI={true}

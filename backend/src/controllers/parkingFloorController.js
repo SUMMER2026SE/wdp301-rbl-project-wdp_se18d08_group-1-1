@@ -173,13 +173,20 @@ exports.updateFloorLayout = async (req, res) => {
 exports.deleteFloor = async (req, res) => {
   try {
     const { id } = req.params;
+    const Slot = require('../models/Slot');
+    const Zone = require('../models/Zone');
+
     const floor = await ParkingFloor.findByIdAndDelete(id);
 
     if (!floor) {
       return res.status(404).json({ success: false, message: "Floor not found" });
     }
 
-    res.status(200).json({ success: true, message: "Floor deleted successfully" });
+    // Đồng bộ xoá tất cả Slot và Zone thuộc về tầng này
+    await Slot.deleteMany({ floorID: id });
+    await Zone.deleteMany({ floorID: id });
+
+    res.status(200).json({ success: true, message: "Floor and its associated zones and slots deleted successfully" });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -189,8 +196,32 @@ exports.deleteFloor = async (req, res) => {
 exports.getFloorSlots = async (req, res) => {
   try {
     const { id } = req.params;
-    const slots = await Slot.find({ floorID: id }).populate('zoneID', 'zoneName zoneType');
-    res.status(200).json({ success: true, data: slots });
+    const Subscription = require('../models/Subscription');
+
+    const slots = await Slot.find({ floorID: id }).populate('zoneID', 'zoneName zoneType').lean();
+
+    const activeSubscriptions = await Subscription.find({
+      status: 'active',
+      expireAt: { $gt: new Date() }
+    }).populate('ticketPackage', 'type');
+
+    const slotPackageMap = {};
+    activeSubscriptions.forEach(sub => {
+      if (sub.slots && sub.ticketPackage) {
+        sub.slots.forEach(s => {
+          if (s.floorId && s.floorId.toString() === id) {
+            slotPackageMap[s.slotCode] = sub.ticketPackage.type;
+          }
+        });
+      }
+    });
+
+    const enrichedSlots = slots.map(slot => ({
+      ...slot,
+      subscriptionType: slotPackageMap[slot.slotNumber] || null
+    }));
+
+    res.status(200).json({ success: true, data: enrichedSlots });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
