@@ -150,6 +150,7 @@ class APIClient {
 
             return this.client(originalRequest);
           } catch (refreshError) {
+            console.error('[API] Refresh token failed or original request got 401. Logging out. URL was:', originalRequest?.url);
             this.refreshQueue = [];
             await tokenStorage.clearTokens();
             this.logoutHandler?.();

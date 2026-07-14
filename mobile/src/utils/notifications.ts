@@ -62,7 +62,7 @@ export const getNotificationNavigationTarget = (item: UserNotification) => {
   const metadata = item.metadata || {};
   if (typeof metadata.deepLink === 'string') return { deepLink: metadata.deepLink };
   if (item.type === 'BOOKING' && typeof metadata.bookingId === 'string') {
-    return { tab: 'BookingsTab', screen: 'BookingDetails', params: { bookingId: metadata.bookingId } };
+    return { tab: 'Bookings', screen: 'BookingDetail', params: { bookingId: metadata.bookingId } };
   }
   if (item.type === 'WALLET' || item.type === 'PAYMENT') return { tab: 'WalletTab', screen: 'Wallet' };
   if (item.type === 'ACCOUNT') return { tab: 'ProfileTab', screen: 'Profile' };

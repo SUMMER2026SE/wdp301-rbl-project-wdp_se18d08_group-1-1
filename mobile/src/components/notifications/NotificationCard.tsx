@@ -1,13 +1,11 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-import { AppText, Button, Card } from '@/components/common';
-import { borderRadius, colors, spacing } from '@/theme';
-import type { UserNotification } from '@/types/models';
-import {
-  formatNotificationTimestamp,
-  getNotificationColor,
-  getNotificationIcon,
-} from '@/utils/notifications';
+import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
+import type { NotificationPriority, NotificationType, UserNotification } from '@/types/models';
+import { formatNotificationTimestamp } from '@/utils/notifications';
+
+type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
 interface Props {
   notification: UserNotification;
@@ -15,51 +13,125 @@ interface Props {
   onDelete: () => void;
 }
 
-export const NotificationCard = ({ notification, onPress, onDelete }: Props) => (
-  <Card style={[styles.card, !notification.isRead && styles.unread]}>
-    <Pressable style={styles.content} onPress={onPress}>
-      <View style={[styles.icon, { backgroundColor: getNotificationColor(notification.priority) }]}>
-        <AppText color={colors.neutral.white}>{getNotificationIcon(notification.type)}</AppText>
-      </View>
-      <View style={styles.body}>
-        <AppText style={!notification.isRead && styles.bold}>{notification.title}</AppText>
-        <AppText color={colors.light.text.secondary} numberOfLines={2}>
-          {notification.content.slice(0, 100)}
-        </AppText>
-        <AppText color={colors.light.text.secondary} variant="caption">
-          {formatNotificationTimestamp(notification.createdAt)}
-        </AppText>
-      </View>
-    </Pressable>
-    <Button title="Delete" variant="ghost" onPress={onDelete} />
-  </Card>
-);
+const TYPE_ICON: Record<NotificationType, IoniconName> = {
+  SYSTEM: 'information-circle-outline',
+  PARKING: 'car-outline',
+  BOOKING: 'calendar-outline',
+  WALLET: 'wallet-outline',
+  PAYMENT: 'card-outline',
+  ACCOUNT: 'person-outline',
+  PROMOTION: 'pricetag-outline',
+  CAMERA: 'camera-outline',
+  VIOLATION: 'alert-circle-outline',
+};
+
+const PRIORITY_COLOR: Record<NotificationPriority, string> = {
+  INFO: COLORS.staffBlue,
+  SUCCESS: COLORS.success,
+  WARNING: COLORS.warning,
+  ERROR: COLORS.error,
+  SYSTEM: COLORS.gold,
+};
+
+export const NotificationCard = ({ notification, onPress, onDelete }: Props) => {
+  const accentColor = PRIORITY_COLOR[notification.priority] ?? COLORS.gold;
+
+  return (
+    <View style={[styles.card, !notification.isRead && { borderColor: `${accentColor}55` }]}>
+      <Pressable accessibilityRole="button" style={styles.content} onPress={onPress}>
+        <View style={[styles.icon, { backgroundColor: `${accentColor}18` }]}>
+          <Ionicons name={TYPE_ICON[notification.type] ?? 'notifications-outline'} size={22} color={accentColor} />
+        </View>
+        <View style={styles.body}>
+          <View style={styles.titleRow}>
+            <Text style={[styles.title, !notification.isRead && styles.titleUnread]} numberOfLines={2}>
+              {notification.title}
+            </Text>
+            {!notification.isRead ? <View style={[styles.unreadDot, { backgroundColor: accentColor }]} /> : null}
+          </View>
+          <Text style={styles.contentText} numberOfLines={2}>
+            {notification.content}
+          </Text>
+          <Text style={styles.timestamp}>{formatNotificationTimestamp(notification.createdAt)}</Text>
+        </View>
+      </Pressable>
+
+      <TouchableOpacity
+        accessibilityLabel="Delete notification"
+        accessibilityRole="button"
+        activeOpacity={0.75}
+        style={styles.deleteButton}
+        onPress={onDelete}
+      >
+        <Ionicons name="trash-outline" size={18} color={COLORS.textMuted} />
+      </TouchableOpacity>
+    </View>
+  );
+};
 
 const styles = StyleSheet.create({
   card: {
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  unread: {
-    backgroundColor: colors.primary[50],
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginBottom: SPACING.md,
+    padding: SPACING.md,
   },
   content: {
+    flex: 1,
     flexDirection: 'row',
-    gap: spacing.md,
+    gap: SPACING.md,
   },
   icon: {
     alignItems: 'center',
-    borderRadius: borderRadius.md,
-    height: 40,
+    borderRadius: RADIUS.md,
+    height: 44,
     justifyContent: 'center',
-    width: 40,
+    width: 44,
   },
   body: {
     flex: 1,
-    gap: spacing.xs,
+    gap: 4,
   },
-  bold: {
-    fontWeight: '700',
+  titleRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: SPACING.xs,
+  },
+  title: {
+    color: COLORS.textPrimary,
+    flex: 1,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '600',
+    lineHeight: 20,
+  },
+  titleUnread: {
+    color: COLORS.gold,
+    fontWeight: '800',
+  },
+  unreadDot: {
+    borderRadius: 4,
+    height: 8,
+    marginTop: 6,
+    width: 8,
+  },
+  contentText: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.xs,
+    lineHeight: 18,
+  },
+  timestamp: {
+    color: COLORS.textMuted,
+    fontSize: FONT_SIZES.xs,
+  },
+  deleteButton: {
+    alignItems: 'center',
+    borderRadius: RADIUS.round,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
   },
 });
-

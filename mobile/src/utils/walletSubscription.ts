@@ -1,5 +1,5 @@
 import type { WalletTransaction } from '@/types/models';
-import type { SubscriptionPackageType } from '@/types/subscription.types';
+import type { MembershipStatus, SubscriptionPackage, SubscriptionPackageType } from '@/types/subscription.types';
 
 export const TOP_UP_MIN_AMOUNT = 1000;
 export const SUBSCRIPTION_SLOT_LIMIT = 3;
@@ -32,6 +32,18 @@ export const calculateExpirationDate = (packageType: SubscriptionPackageType, fr
 export const validateSubscriptionSlots = (selectedCount: number, vehicleCount: number) => {
   const maxAllowed = Math.min(SUBSCRIPTION_SLOT_LIMIT, vehicleCount);
   return selectedCount > 0 && selectedCount <= maxAllowed;
+};
+
+export const getSubscriptionPackageRestriction = (
+  membership: MembershipStatus | null,
+  pkg: SubscriptionPackage | undefined,
+) => {
+  if (!membership?.isVip || !pkg || !membership.package) return null;
+  if (membership.package.id === pkg._id) return 'Bạn đang sử dụng gói này.';
+  if (membership.package.type === 'yearly' && pkg.type === 'monthly') {
+    return 'Gói tháng đã nằm trong quyền lợi của gói năm đang dùng.';
+  }
+  return null;
 };
 
 export const isVipActive = (isVip: boolean, expireAt?: string | null, now = new Date()) =>

@@ -25,7 +25,14 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-web-browser",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Cho phép VALO Parking sử dụng camera để chụp cà vẹt xe."
+        }
+      ]
     ]
   }
 }
