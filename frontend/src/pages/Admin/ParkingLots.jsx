@@ -7,6 +7,33 @@ import { startMaintenance, endMaintenance } from "../../services/maintenanceServ
 import { apiFetch, API_BASE } from "../../services/api";
 import { getAvailableBookingSlots, getActiveHolds } from "../../services/bookingService";
 
+const LiveDuration = ({ checkInTime, expectedDurationHours }) => {
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const checkIn = new Date(checkInTime).getTime();
+  const elapsed = Math.max(0, now - checkIn);
+  const expirationTime = checkIn + (expectedDurationHours || 0) * 3600000;
+  const isOverdue = now > expirationTime;
+  
+  const hours = Math.floor(elapsed / 3600000);
+  const minutes = Math.floor((elapsed % 3600000) / 60000);
+  const seconds = Math.floor((elapsed % 60000) / 1000);
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className={`font-mono text-base font-black ${isOverdue ? 'text-red-400' : 'text-emerald-400'}`}>
+        {hours}h {minutes.toString().padStart(2, '0')}m {seconds.toString().padStart(2, '0')}s
+      </span>
+      {isOverdue && <span className="bg-red-500/20 text-red-400 text-[10px] px-2 py-0.5 rounded border border-red-500/30 font-bold uppercase tracking-wider animate-pulse">Overdue</span>}
+    </div>
+  );
+};
+
 export default function ParkingLots() {
   const [floors, setFloors] = useState([]);
   const [currentFloorId, setCurrentFloorId] = useState(null);
@@ -301,6 +328,8 @@ export default function ParkingLots() {
           } else {
              setCurrentFloorId(null);
           }
+       } else {
+          alert("Failed to delete floor: " + (res.data?.message || "Forbidden or Network error"));
        }
     }
   };
@@ -491,15 +520,35 @@ export default function ParkingLots() {
                       <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Vehicle Type</span><span className="font-medium text-white uppercase">{selectedItem.session.vehicleType || 'Unknown'}</span></div>
                       <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Check-in Time</span><span className="font-medium text-white">{new Date(selectedItem.session.checkInTime).toLocaleString('vi-VN')}</span></div>
                       <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Expected Duration</span><span className="font-medium text-white">{selectedItem.session.expectedDurationHours} hr(s)</span></div>
-                      <div className="flex justify-between items-center"><span className="text-slate-400 text-sm">Expiration Time</span><span className="font-bold text-rose-400">{new Date(new Date(selectedItem.session.checkInTime).getTime() + (selectedItem.session.expectedDurationHours || 0) * 3600000).toLocaleString('vi-VN')}</span></div>
+                      <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Expiration Time</span><span className="font-bold text-rose-400">{new Date(new Date(selectedItem.session.checkInTime).getTime() + (selectedItem.session.expectedDurationHours || 0) * 3600000).toLocaleString('vi-VN')}</span></div>
+                      <div className="flex justify-between items-center mt-2 bg-slate-900/50 p-3 rounded-lg border border-slate-700/50">
+                          <span className="text-cyan-400 text-sm font-bold tracking-wide uppercase">Parked For</span>
+                          <LiveDuration checkInTime={selectedItem.session.checkInTime} expectedDurationHours={selectedItem.session.expectedDurationHours} />
+                      </div>
                   </div>
                 ) : !isZone && selectedItem.isReserved ? (
-                  <div className="flex flex-col gap-4 h-full items-center justify-center text-center py-10 opacity-90">
-                      <div className="w-16 h-16 rounded-full bg-purple-900/30 flex items-center justify-center border border-purple-500/50 mb-2">
-                          <span className="text-purple-500 font-bold text-2xl">★</span>
+                  <div className="flex flex-col gap-4">
+                      <div className="bg-purple-900/20 border border-purple-500/30 rounded-xl p-4 flex flex-col items-center justify-center mb-2">
+                          <span className="text-xs text-purple-400 uppercase tracking-widest font-bold mb-1">Status</span>
+                          <span className="text-lg text-white font-black uppercase">Reserved / VIP</span>
                       </div>
-                      <p className="text-purple-400 font-bold uppercase tracking-widest">Reserved / VIP</p>
-                      <p className="text-xs text-purple-300 max-w-[200px]">This slot is currently reserved for a VIP subscription package or an upcoming booking.</p>
+                      {dbSlotInfo?.subscriptionDetail ? (
+                        <>
+                          {dbSlotInfo.subscriptionDetail.user && (
+                            <>
+                              <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Customer Name</span><span className="font-medium text-white">{dbSlotInfo.subscriptionDetail.user.username || 'N/A'}</span></div>
+                              <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Phone</span><span className="font-medium text-white">{dbSlotInfo.subscriptionDetail.user.phone || 'N/A'}</span></div>
+                              <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Email</span><span className="font-medium text-cyan-400">{dbSlotInfo.subscriptionDetail.user.email || 'N/A'}</span></div>
+                            </>
+                          )}
+                          {dbSlotInfo.subscriptionDetail.ticketPackage && (
+                            <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Package</span><span className="font-medium text-purple-400 uppercase">{dbSlotInfo.subscriptionDetail.ticketPackage.name || dbSlotInfo.subscriptionDetail.ticketPackage.type}</span></div>
+                          )}
+                          <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Valid Until</span><span className="font-bold text-purple-400">{new Date(dbSlotInfo.subscriptionDetail.expireAt).toLocaleString('vi-VN')}</span></div>
+                        </>
+                      ) : (
+                        <p className="text-xs text-purple-300 text-center mt-4">This slot is currently reserved for a VIP subscription package or an upcoming booking.</p>
+                      )}
                   </div>
                 ) : (
                   <div className="flex flex-col gap-4 h-full items-center justify-center text-center py-10 opacity-70">

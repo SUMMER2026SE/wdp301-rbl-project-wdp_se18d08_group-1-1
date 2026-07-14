@@ -53,6 +53,15 @@ exports.createPackage = async (req, res) => {
     const { name, type, price, description, isActive } = req.body;
     const newPackage = new TicketPackage({ name, type, price, description, isActive });
     await newPackage.save();
+
+    const AdminActionLog = require('../models/AdminActionLog');
+    await AdminActionLog.create({
+      action: "Created Ticket Package",
+      target: `${name} • ${type}`,
+      type: "create",
+      adminId: req.user._id
+    });
+
     res.status(201).json({ success: true, data: newPackage });
   } catch (error) {
     console.error('Error creating ticket package:', error);
@@ -82,6 +91,15 @@ exports.deletePackage = async (req, res) => {
   try {
     const deletedPackage = await TicketPackage.findByIdAndDelete(req.params.id);
     if (!deletedPackage) return res.status(404).json({ success: false, message: 'Ticket package not found' });
+
+    const AdminActionLog = require('../models/AdminActionLog');
+    await AdminActionLog.create({
+      action: "Deleted Ticket Package",
+      target: `${deletedPackage.name} • ${deletedPackage.type}`,
+      type: "delete",
+      adminId: req.user._id
+    });
+
     res.status(200).json({ success: true, message: 'Ticket package deleted successfully' });
   } catch (error) {
     console.error('Error deleting ticket package:', error);

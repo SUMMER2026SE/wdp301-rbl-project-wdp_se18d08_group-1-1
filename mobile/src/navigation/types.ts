@@ -45,8 +45,12 @@ export type ProfileStackParamList = {
   VehicleList: undefined;
   AddVehicle: undefined;
   EditVehicle: { vehicleId: string };
+  Services: undefined;
   Policies: undefined;
   PolicyDetail: { slug: string };
+  ParkingHistory: undefined;
+  BookingList: undefined;
+  BookingDetail: { bookingId: string };
 };
 
 export type NotificationStackParamList = {

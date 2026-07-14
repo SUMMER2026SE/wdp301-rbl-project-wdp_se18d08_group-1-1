@@ -1,14 +1,73 @@
+import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useState } from 'react';
+import {
+  ActivityIndicator,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AppText, Button, Input } from '@/components/common';
-import { Screen } from '@/components/layout/Screen';
+import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import type { AuthStackParamList } from '@/navigation/types';
-import { colors } from '@/theme';
 import { isValidEmail, isValidPassword } from '@/utils/validation';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Register'>;
+type KeyboardType = 'default' | 'email-address' | 'phone-pad';
+
+const LogoImg = require('../../../assets/logo.png') as number;
+
+function Field({
+  icon,
+  placeholder,
+  value,
+  onChangeText,
+  secureTextEntry,
+  keyboardType = 'default',
+  autoCapitalize = 'sentences',
+}: {
+  icon: React.ReactNode;
+  placeholder: string;
+  value: string;
+  onChangeText: (value: string) => void;
+  secureTextEntry?: boolean;
+  keyboardType?: KeyboardType;
+  autoCapitalize?: 'none' | 'sentences';
+}) {
+  const [focused, setFocused] = useState(false);
+
+  return (
+    <View style={[styles.fieldWrap, focused ? styles.fieldFocused : styles.fieldDefault]}>
+      <View style={styles.fieldIcon}>
+        {icon}
+      </View>
+      <TextInput
+        autoCapitalize={autoCapitalize}
+        keyboardType={keyboardType}
+        placeholder={placeholder}
+        placeholderTextColor={COLORS.textMuted}
+        secureTextEntry={secureTextEntry}
+        selectionColor={COLORS.gold}
+        style={styles.fieldInput}
+        value={value}
+        onBlur={() => setFocused(false)}
+        onChangeText={onChangeText}
+        onFocus={() => setFocused(true)}
+      />
+    </View>
+  );
+}
 
 export const RegisterScreen = ({ navigation }: Props) => {
   const { register, isLoading } = useAuth();
@@ -22,17 +81,17 @@ export const RegisterScreen = ({ navigation }: Props) => {
     setError('');
 
     if (!username.trim()) {
-      setError('Name is required.');
+      setError('Vui lòng nhập họ tên.');
       return;
     }
 
     if (!isValidEmail(email)) {
-      setError('Please enter a valid email address.');
+      setError('Email không hợp lệ.');
       return;
     }
 
     if (!isValidPassword(password)) {
-      setError('Password must be at least 8 characters.');
+      setError('Mật khẩu phải có ít nhất 8 ký tự.');
       return;
     }
 
@@ -46,20 +105,268 @@ export const RegisterScreen = ({ navigation }: Props) => {
         role: 'customer',
       });
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'Registration failed.');
+      setError(submitError instanceof Error ? submitError.message : 'Đăng ký thất bại.');
     }
   };
 
   return (
-    <Screen scrollable>
-      <AppText variant="h1">Create Account</AppText>
-      <Input label="Name" onChangeText={setUsername} placeholder="Full name" value={username} />
-      <Input keyboardType="email-address" label="Email" onChangeText={setEmail} value={email} />
-      <Input keyboardType="phone-pad" label="Phone" onChangeText={setPhone} value={phone} />
-      <Input label="Password" onChangeText={setPassword} secureTextEntry value={password} />
-      {error ? <AppText color={colors.error.main}>{error}</AppText> : null}
-      <Button loading={isLoading} title="Register" onPress={handleSubmit} />
-      <Button title="Back to Login" variant="ghost" onPress={() => navigation.goBack()} />
-    </Screen>
+    <SafeAreaView edges={['top', 'bottom']} style={styles.safe}>
+      <StatusBar barStyle="light-content" backgroundColor="#080808" />
+      <LinearGradient
+        colors={['#080808', '#111111', '#161208']}
+        locations={[0, 0.6, 1]}
+        style={StyleSheet.absoluteFill}
+      />
+      <View pointerEvents="none" style={styles.cornerGlow} />
+
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.kav}
+      >
+        <ScrollView
+          bounces={false}
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.hero}>
+            <View style={styles.logoGlow}>
+              <Image resizeMode="contain" source={LogoImg} style={styles.logoImg} />
+            </View>
+            <Text style={styles.brandName}>VALO</Text>
+            <Text style={styles.brandSub}>PARKING</Text>
+          </View>
+
+          <View style={styles.card}>
+            <LinearGradient
+              colors={[COLORS.gold, 'transparent']}
+              end={{ x: 1, y: 0 }}
+              start={{ x: 0, y: 0 }}
+              style={styles.cardTopLine}
+            />
+            <Text style={styles.cardTitle}>Tạo tài khoản</Text>
+            <Text style={styles.cardSub}>Bắt đầu đặt chỗ và quản lý ví VALO</Text>
+
+            <Field
+              icon={<Ionicons color={COLORS.textMuted} name="person-outline" size={18} />}
+              placeholder="Họ tên"
+              value={username}
+              onChangeText={setUsername}
+            />
+            <Field
+              autoCapitalize="none"
+              icon={<Ionicons color={COLORS.textMuted} name="mail-outline" size={18} />}
+              keyboardType="email-address"
+              placeholder="Email"
+              value={email}
+              onChangeText={setEmail}
+            />
+            <Field
+              icon={<Ionicons color={COLORS.textMuted} name="call-outline" size={18} />}
+              keyboardType="phone-pad"
+              placeholder="Số điện thoại"
+              value={phone}
+              onChangeText={setPhone}
+            />
+            <Field
+              autoCapitalize="none"
+              icon={<Ionicons color={COLORS.textMuted} name="lock-closed-outline" size={18} />}
+              placeholder="Mật khẩu"
+              secureTextEntry
+              value={password}
+              onChangeText={setPassword}
+            />
+
+            {error ? (
+              <View style={styles.errorBox}>
+                <Ionicons color={COLORS.error} name="warning-outline" size={16} />
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            ) : null}
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              disabled={isLoading}
+              style={[styles.submitBtn, isLoading && styles.disabled]}
+              onPress={handleSubmit}
+            >
+              <LinearGradient
+                colors={[COLORS.goldLight, COLORS.gold, COLORS.goldDark]}
+                end={{ x: 1, y: 0 }}
+                start={{ x: 0, y: 0 }}
+                style={styles.submitGrad}
+              >
+                {isLoading ? (
+                  <ActivityIndicator color={COLORS.textInverse} size="small" />
+                ) : (
+                  <>
+                    <Text style={styles.submitText}>Đăng ký</Text>
+                    <Ionicons color={COLORS.textInverse} name="arrow-forward" size={18} />
+                  </>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <Pressable
+              style={({ pressed }) => [styles.loginRow, pressed && styles.pressed]}
+              onPress={() => navigation.goBack()}
+            >
+              <Text style={styles.loginText}>Đã có tài khoản? </Text>
+              <Text style={[styles.loginText, styles.loginLink]}>Đăng nhập</Text>
+            </Pressable>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
+
+const styles = StyleSheet.create({
+  safe: { flex: 1, backgroundColor: '#080808' },
+  kav: { flex: 1 },
+  scroll: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.xl,
+  },
+  cornerGlow: {
+    backgroundColor: COLORS.gold,
+    borderRadius: 130,
+    height: 260,
+    opacity: 0.05,
+    position: 'absolute',
+    right: -80,
+    top: -80,
+    width: 260,
+  },
+  hero: { alignItems: 'center', marginBottom: SPACING.xl },
+  logoGlow: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(212,175,55,0.08)',
+    borderColor: 'rgba(212,175,55,0.3)',
+    borderRadius: 48,
+    borderWidth: 1.5,
+    height: 96,
+    justifyContent: 'center',
+    marginBottom: SPACING.sm,
+    width: 96,
+  },
+  logoImg: { height: 68, width: 68 },
+  brandName: {
+    color: COLORS.gold,
+    fontSize: 34,
+    fontWeight: '900',
+    letterSpacing: 8,
+  },
+  brandSub: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '600',
+    letterSpacing: 5,
+    marginTop: -4,
+  },
+  card: {
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+    overflow: 'hidden',
+    padding: SPACING.lg,
+  },
+  cardTopLine: {
+    height: 2,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
+  cardTitle: {
+    color: COLORS.textPrimary,
+    fontSize: FONT_SIZES.xxl,
+    fontWeight: '800',
+    marginBottom: 4,
+    marginTop: SPACING.xs,
+  },
+  cardSub: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.sm,
+    marginBottom: SPACING.lg,
+  },
+  fieldWrap: {
+    alignItems: 'center',
+    borderRadius: RADIUS.lg,
+    borderWidth: 1.5,
+    flexDirection: 'row',
+    height: 52,
+    marginBottom: SPACING.sm,
+    paddingHorizontal: SPACING.sm,
+  },
+  fieldDefault: {
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderColor: COLORS.border,
+  },
+  fieldFocused: {
+    backgroundColor: 'rgba(212,175,55,0.06)',
+    borderColor: 'rgba(212,175,55,0.5)',
+  },
+  fieldIcon: {
+    alignItems: 'center',
+    width: 32,
+  },
+  fieldInput: {
+    color: COLORS.textPrimary,
+    flex: 1,
+    fontSize: FONT_SIZES.md,
+    paddingVertical: 0,
+  },
+  errorBox: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,77,77,0.1)',
+    borderColor: 'rgba(255,77,77,0.2)',
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: SPACING.xs,
+    marginBottom: SPACING.md,
+    padding: SPACING.sm,
+  },
+  errorText: {
+    color: COLORS.error,
+    flex: 1,
+    fontSize: FONT_SIZES.sm,
+  },
+  submitBtn: {
+    borderRadius: RADIUS.lg,
+    marginTop: SPACING.xs,
+    overflow: 'hidden',
+  },
+  submitGrad: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    justifyContent: 'center',
+    minHeight: 52,
+  },
+  submitText: {
+    color: COLORS.textInverse,
+    fontSize: FONT_SIZES.md,
+    fontWeight: '800',
+  },
+  disabled: { opacity: 0.6 },
+  pressed: { opacity: 0.65 },
+  loginRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: SPACING.md,
+    paddingVertical: SPACING.xs,
+  },
+  loginText: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.sm,
+  },
+  loginLink: {
+    color: COLORS.gold,
+    fontWeight: '700',
+  },
+});

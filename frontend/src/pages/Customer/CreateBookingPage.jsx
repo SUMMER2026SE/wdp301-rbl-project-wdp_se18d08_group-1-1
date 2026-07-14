@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import {
   AlertCircle,
   Calendar,
@@ -201,6 +201,7 @@ export default function CreateBookingPage() {
   const [selectedServices, setSelectedServices] = useState([]);
   const [wallet, setWallet] = useState(null);
   const [slots, setSlots] = useState([]);
+  const [bookingPolicy, setBookingPolicy] = useState(null);
   const [selectedSlotKey, setSelectedSlotKey] = useState('');
   const [cartItems, setCartItems] = useState([]);
   const [cartQuote, setCartQuote] = useState(null);
@@ -232,24 +233,25 @@ export default function CreateBookingPage() {
   const [dbSlots, setDbSlots] = useState([]);
   const [activeSessions, setActiveSessions] = useState([]);
 
-  useEffect(() => {
-    const fetchDbSlots = async () => {
-      if (!currentFloorId) {
-        setDbSlots([]);
-        return;
+  const fetchDbSlots = useCallback(async () => {
+    if (!currentFloorId) {
+      setDbSlots([]);
+      return;
+    }
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/parking-floors/${currentFloorId}/slots`);
+      const data = await res.json();
+      if (data.success) {
+        setDbSlots(data.data);
       }
-      try {
-        const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/parking-floors/${currentFloorId}/slots`);
-        const data = await res.json();
-        if (data.success) {
-          setDbSlots(data.data);
-        }
-      } catch (err) {
-        console.error("Failed to fetch slots", err);
-      }
-    };
-    fetchDbSlots();
+    } catch (err) {
+      console.error("Failed to fetch slots", err);
+    }
   }, [currentFloorId]);
+
+  useEffect(() => {
+    fetchDbSlots();
+  }, [fetchDbSlots]);
 
   const fetchActiveSessions = async () => {
     try {
@@ -266,6 +268,15 @@ export default function CreateBookingPage() {
       console.error('Failed to fetch active parking sessions', err);
     }
   };
+
+  useEffect(() => {
+    fetchActiveSessions();
+    const intervalId = setInterval(() => {
+      fetchActiveSessions();
+      fetchDbSlots();
+    }, 30000); // 30s
+    return () => clearInterval(intervalId);
+  }, [fetchDbSlots]);
 
   const handleStartChange = (newDate, newTime) => {
     setStartDate(newDate);
@@ -354,11 +365,8 @@ export default function CreateBookingPage() {
     String(selectedSlotReservedFor) === String(profile?.id)
   );
   const selectedRegisteredVehicleBlockedByVip = Boolean(
-    activeMembershipType &&
     selectedVehicle &&
-    selectedSlot &&
-    selectedDbSlot &&
-    !selectedSlotIsOwnVipSlot
+    bookingPolicy?.requiresAssignedSlotUse
   );
   const pricePreview = useMemo(
     () => calculateBookingPrice(startTime, endTime, { waiveOpeningFee: selectedSlotIsOwnVipSlot }),
@@ -511,6 +519,7 @@ export default function CreateBookingPage() {
     setError('');
     setSuccess('');
     setSlots([]);
+    setBookingPolicy(null);
     setSelectedSlotKey('');
 
     try {
@@ -526,6 +535,7 @@ export default function CreateBookingPage() {
 
       const nextSlots = res.data?.data?.slots || [];
       setSlots(nextSlots);
+      setBookingPolicy(res.data?.data?.bookingPolicy || null);
     } catch (err) {
       console.error('Error finding slots:', err);
       setError(`Network error while checking slots: ${err.message}`);
@@ -533,6 +543,34 @@ export default function CreateBookingPage() {
       setCheckingSlots(false);
     }
   };
+
+  useEffect(() => {
+    const refreshBookingPolicy = async () => {
+      const startObj = new Date(startTime);
+      const endObj = new Date(endTime);
+      if (startObj <= new Date() || endObj <= startObj) return;
+
+      try {
+        const res = await getAvailableBookingSlots({
+          startTime: startObj.toISOString(),
+          endTime: endObj.toISOString(),
+        });
+        if (res.ok) {
+          setSlots(res.data?.data?.slots || []);
+          setBookingPolicy(res.data?.data?.bookingPolicy || null);
+        }
+      } catch {
+        // Keep the last valid state when a background refresh fails.
+      }
+    };
+
+    const intervalId = setInterval(refreshBookingPolicy, 15000);
+    window.addEventListener('focus', refreshBookingPolicy);
+    return () => {
+      clearInterval(intervalId);
+      window.removeEventListener('focus', refreshBookingPolicy);
+    };
+  }, [endTime, startTime]);
 
 
   const handleAddOrUpdateCartItem = async () => {
@@ -564,7 +602,7 @@ export default function CreateBookingPage() {
     }
 
     if (selectedRegisteredVehicleBlockedByVip) {
-      setError('This registered vehicle is already covered by your active VIP membership. Please use your assigned VIP slot instead of booking another slot.');
+      setError('Your membership VIP slot is still empty. Park one vehicle in the assigned VIP slot first; then another vehicle may book a regular slot.');
       return;
     }
 
@@ -1040,7 +1078,7 @@ export default function CreateBookingPage() {
                   }`}>
                     {selectedSlotIsOwnVipSlot
                       ? 'This is your assigned VIP slot, so this registered vehicle can use it while your membership is active.'
-                      : 'This registered vehicle is covered by an active VIP membership. Please use your assigned VIP slot instead of booking another slot.'}
+                      : 'Park one vehicle in your assigned VIP slot first; then another registered vehicle may book a regular slot.'}
                   </div>
                 )}
               </div>
@@ -1252,7 +1290,7 @@ export default function CreateBookingPage() {
                     className="w-full rounded-2xl bg-gray-900 hover:bg-black disabled:opacity-50 text-white px-4 py-4 font-black transition flex items-center justify-center gap-2 shadow-sm active:scale-[0.98]"
                   >
                     {(submitting || topUpLoading ) ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
-                    {cartWalletShortfall > 0 ? `Top Up ${formatMoney(cartWalletShortfall)}` : hasActiveCheckoutHold ? `Pay ${formatMoney(cartGrandTotal)}` : 'Review Checkout'}
+                    {cartWalletShortfall > 0 ? `Top Up ${formatMoney(cartWalletShortfall)}` : hasActiveCheckoutHold ? `Pay ${formatMoney(cartGrandTotal)}` : 'Booking'}
                   </button>
                 </div>
               )}
@@ -1315,7 +1353,11 @@ export default function CreateBookingPage() {
                 activeSessions={activeSessions}
                 dbSlots={dbSlots}
                 availableSlots={slots}
-                selectedSlotId={selectedSlot?.slotCode}
+                selectedSlotId={
+                  cartItems.length > 0 
+                    ? [...cartItems.map(item => `${item.floorId}:${item.slotCode}`), selectedSlotKey].filter(Boolean)
+                    : (selectedSlotKey || null)
+                }
                 onSelectSlot={(slot, floorId) => setSelectedSlotKey(`${floorId}:${slot.id}`)}
                 is2DMode={true}
                 hideUI={true}

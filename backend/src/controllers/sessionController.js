@@ -70,18 +70,35 @@ exports.verifyPlate = async (req, res, next) => {
         expireAt: { $gt: new Date() }
       }).populate('slots.floorId');
 
-      if (activeSubscription) {
-        const subSlotCode = activeSubscription.slots?.[0]?.slotCode;
-        const subFloorId = activeSubscription.slots?.[0]?.floorId?._id || activeSubscription.slots?.[0]?.floorId;
-        let isSubSlotOccupied = false;
-        if (subSlotCode && subFloorId) {
-          isSubSlotOccupied = await Session.findOne({
-            floorId: subFloorId,
-            parkingSlot: normalizeSlotCode(subSlotCode),
-            status: 'active'
-          });
+      if (activeSubscription && activeSubscription.slots && activeSubscription.slots.length > 0) {
+        let availableSlot = null;
+        let occupiedBySelfCount = 0;
+        
+        for (const slot of activeSubscription.slots) {
+          const slotCode = slot.slotCode;
+          const floorId = slot.floorId?._id || slot.floorId;
+          if (slotCode && floorId) {
+            const occupyingSession = await Session.findOne({
+              floorId,
+              parkingSlot: normalizeSlotCode(slotCode),
+              status: 'active'
+            });
+            
+            if (!occupyingSession) {
+              availableSlot = slot;
+              break;
+            } else if (occupyingSession.userId && occupyingSession.userId.toString() === userId.toString()) {
+              occupiedBySelfCount++;
+            }
+          }
         }
-        if (!isSubSlotOccupied) {
+
+        if (availableSlot) {
+          isMonthly = true;
+          subscription = activeSubscription;
+          subscription.assignedSlot = availableSlot;
+        } else if (occupiedBySelfCount < activeSubscription.slots.length) {
+          // If all slots are occupied, but AT LEAST ONE is occupied by a stranger, we still consider them VIP for TC4
           isMonthly = true;
           subscription = activeSubscription;
         }
@@ -201,9 +218,9 @@ exports.verifyPlate = async (req, res, next) => {
         isRegisteredVehicle,
         phone,
         isKnownGuest: !!phone || isVIP || isRegisteredVehicle,
-        assignedSlot: booking?.parkingSlot || subscription?.slots?.[0]?.slotCode || null,
-        assignedFloorId: booking?.floorId?._id || subscription?.slots?.[0]?.floorId?._id || null,
-        assignedFloorName: booking?.floorId?.name || subscription?.slots?.[0]?.floorId?.name || null,
+        assignedSlot: booking?.parkingSlot || subscription?.assignedSlot?.slotCode || null,
+        assignedFloorId: booking?.floorId?._id || subscription?.assignedSlot?.floorId?._id || subscription?.assignedSlot?.floorId || null,
+        assignedFloorName: booking?.floorId?.name || subscription?.assignedSlot?.floorId?.name || null,
         requiresSlotReallocation,
       }
     });
@@ -321,25 +338,98 @@ exports.createKioskSession = async (req, res, next) => {
 
     // Kiểm tra Subscription (Gói tháng/năm)
     let activeSubscription = null;
+    let vipRedirected = false;
+    let originalVipSlot = null;
+    
     if (userId) {
       const sub = await mongoose.model('Subscription').findOne({
         user: userId,
         status: 'active',
         expireAt: { $gt: now }
       });
-      if (sub) {
-        const subSlotCode = sub.slots?.[0]?.slotCode;
-        const subFloorId = sub.slots?.[0]?.floorId;
-        let isSubSlotOccupied = false;
-        if (subSlotCode && subFloorId) {
-          isSubSlotOccupied = await Session.findOne({
-            floorId: subFloorId,
-            parkingSlot: normalizeSlotCode(subSlotCode),
+      if (sub && sub.slots && sub.slots.length > 0) {
+        let availableSlot = null;
+        let occupiedBySelfCount = 0;
+
+        for (const slot of sub.slots) {
+          const slotCode = slot.slotCode;
+          const floorId = slot.floorId?._id || slot.floorId;
+          const occupyingSession = await Session.findOne({
+            floorId,
+            parkingSlot: normalizeSlotCode(slotCode),
             status: 'active'
           });
+
+          if (!occupyingSession) {
+            availableSlot = slot;
+            break;
+          } else if (occupyingSession.userId && occupyingSession.userId.toString() === userId.toString()) {
+            occupiedBySelfCount++;
+          }
         }
-        if (!isSubSlotOccupied) {
+
+        if (availableSlot) {
           activeSubscription = sub;
+          sub.assignedSlot = availableSlot;
+        } else {
+          // All slots are occupied
+          if (occupiedBySelfCount === sub.slots.length) {
+            // The user has exhausted their quota with their own vehicles!
+            // Do NOT apply TC4. They must pay hourly as walk-in.
+            activeSubscription = null;
+          } else {
+            // At least one slot is occupied by an UNAUTHORIZED vehicle (someone else)
+            // Apply TC4: find an alternative slot for free!
+            const floorsData = await ParkingFloor.find().lean();
+            let alternativeSlot = null;
+            let altFloorId = null;
+            
+            for (const floor of floorsData) {
+              if (!floor.layoutData || !floor.layoutData.elements) continue;
+              
+              const standardSlots = floor.layoutData.elements.filter(el => el.type === 'slot' || el.type === 'slot-ev');
+              
+              for (const slot of standardSlots) {
+                const slotCode = slot.name;
+                if (!slotCode || slotCode.trim() === '') continue;
+                
+                // check if occupied
+                const occupied = await Session.findOne({ floorId: floor._id, parkingSlot: normalizeSlotCode(slotCode), status: 'active' });
+                if (occupied) continue;
+                
+                // check if it's someone else's VIP slot
+                const isVIP = await mongoose.model('Subscription').findOne({
+                  status: 'active',
+                  expireAt: { $gt: now },
+                  "slots.floorId": floor._id,
+                  "slots.slotCode": slotCode
+                });
+                if (isVIP) continue;
+                
+                // check if booked
+                const isBooked = await Booking.findOne({
+                  floorId: floor._id,
+                  parkingSlot: normalizeSlotCode(slotCode),
+                  status: { $in: ['PAID', 'PAUSED'] },
+                  scheduledStart: { $lte: new Date(now.getTime() + 30 * 60 * 1000) },
+                  scheduledEnd: { $gte: now }
+                });
+                if (isBooked) continue;
+                
+                alternativeSlot = slotCode;
+                altFloorId = floor._id;
+                break;
+              }
+              if (alternativeSlot) break;
+            }
+            
+            if (alternativeSlot) {
+              activeSubscription = sub;
+              vipRedirected = true;
+              originalVipSlot = sub.slots[0].slotCode;
+              sub.assignedSlot = { slotCode: alternativeSlot, floorId: altFloorId };
+            }
+          }
         }
       }
     }
@@ -401,7 +491,10 @@ exports.createKioskSession = async (req, res, next) => {
       activeBooking.status = 'ACTIVE';
     } else if (activeSubscription) {
       sessionType = 'SUBSCRIPTION';
-      if (activeSubscription.slots && activeSubscription.slots.length > 0) {
+      if (activeSubscription.assignedSlot) {
+        finalSlot = activeSubscription.assignedSlot.slotCode;
+        finalFloorId = activeSubscription.assignedSlot.floorId;
+      } else if (activeSubscription.slots && activeSubscription.slots.length > 0) {
         finalSlot = activeSubscription.slots[0].slotCode;
         finalFloorId = activeSubscription.slots[0].floorId;
       }
@@ -538,8 +631,11 @@ exports.createKioskSession = async (req, res, next) => {
 
     res.status(201).json({
       success: true,
-      message: 'Check-in thành công',
+      message: vipRedirected ? `Ô đỗ VIP bị chiếm, đã đổi tạm sang ô ${normalizedFinalSlot}` : 'Check-in thành công',
       data: newSession,
+      vipRedirected,
+      originalVipSlot,
+      newSlot: normalizedFinalSlot,
     });
   } catch (error) {
     console.error('Error creating kiosk session:', error);

@@ -226,7 +226,7 @@ export default function KioskFlow() {
     }
 
     clearCurrentHoldState();
-    return data.data;
+    return data;
   };
 
   return (
