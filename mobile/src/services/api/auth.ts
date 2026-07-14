@@ -7,6 +7,7 @@ import type {
   RefreshTokenResponse,
   RegisterRequest,
   ResetPasswordRequest,
+  SendOTPRequest,
   VerifyOTPRequest,
 } from '@/types/api';
 import type { MeResponse } from '@/types/models';
@@ -40,6 +41,14 @@ class AuthService {
 
   forgotPassword(data: ForgotPasswordRequest) {
     return apiClient.post<APIResponse>('/auth/forgot-password', data);
+  }
+
+  sendOTP(data: SendOTPRequest) {
+    return apiClient.post<APIResponse>('/auth/send-otp', data);
+  }
+
+  verifyOTP(data: VerifyOTPRequest) {
+    return apiClient.post<APIResponse>('/auth/verify-otp', data);
   }
 
   verifyResetOTP(data: VerifyOTPRequest) {
