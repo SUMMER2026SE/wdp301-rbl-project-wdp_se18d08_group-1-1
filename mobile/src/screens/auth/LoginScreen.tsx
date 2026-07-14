@@ -1,28 +1,27 @@
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { AppText, Button, Input } from '@/components/common';
 import { Screen } from '@/components/layout/Screen';
 import { config } from '@/config/env';
+import { useAppAlert } from '@/contexts/AppAlertContext';
 import { useAuth } from '@/hooks/useAuth';
-import { useToast } from '@/hooks/useToast';
 import type { AuthStackParamList } from '@/navigation/types';
-import { colors, spacing } from '@/theme';
-import { isValidEmail, isValidPassword } from '@/utils/validation';
-
-type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 
 WebBrowser.maybeCompleteAuthSession();
 
+type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
+
 export const LoginScreen = ({ navigation }: Props) => {
   const { login, googleLogin, isLoading } = useAuth();
-  const toast = useToast();
+  const { alert } = useAppAlert();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   const [googleSubmitting, setGoogleSubmitting] = useState(false);
 
   const [googleRequest, googleResponse, promptGoogleAsync] = Google.useIdTokenAuthRequest({
@@ -34,116 +33,125 @@ export const LoginScreen = ({ navigation }: Props) => {
     selectAccount: true,
   });
 
-  const handleSubmit = async () => {
-    setError('');
+  const handleLogin = async () => {
+    const trimEmail = email.trim();
+    const trimPass = password.trim();
 
-    if (!isValidEmail(email)) {
-      setError('Please enter a valid email address.');
+    if (!trimEmail || !trimPass) {
+      alert('Thiếu thông tin', 'Vui lòng nhập email và mật khẩu.');
       return;
     }
 
-    if (!isValidPassword(password)) {
-      setError('Password must be at least 8 characters.');
-      return;
-    }
-
+    setSubmitting(true);
     try {
-      await login({ email: email.trim(), password });
-      toast.showSuccess('Welcome back');
-    } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'Login failed.');
+      await login({ email: trimEmail, password: trimPass });
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : 'Đăng nhập thất bại. Vui lòng thử lại.';
+      alert('Đăng nhập thất bại', message);
+    } finally {
+      setSubmitting(false);
     }
   };
 
   const completeGoogleLogin = useCallback(
     async (idToken: string) => {
       setGoogleSubmitting(true);
-      setError('');
       try {
         await googleLogin({ idToken });
-        toast.showSuccess('Welcome back');
-      } catch (submitError) {
-        setError(submitError instanceof Error ? submitError.message : 'Google login failed.');
+      } catch (err: unknown) {
+        const message =
+          err instanceof Error ? err.message : 'Đăng nhập Google thất bại. Vui lòng thử lại.';
+        alert('Đăng nhập Google thất bại', message);
       } finally {
         setGoogleSubmitting(false);
       }
     },
-    [googleLogin, toast],
+    [alert, googleLogin],
   );
 
   useEffect(() => {
-    if (googleResponse?.type !== 'success') {
-      return;
+    if (googleResponse?.type !== 'success') return;
+
+    const idToken =
+      googleResponse.params?.id_token ?? googleResponse.authentication?.idToken;
+
+    if (idToken) {
+      void completeGoogleLogin(idToken);
+    } else {
+      alert('Lỗi', 'Không lấy được Google ID token.');
     }
+  }, [alert, completeGoogleLogin, googleResponse]);
 
-    const idToken = googleResponse.params.id_token || googleResponse.authentication?.idToken;
-    if (!idToken) {
-      setError('Google did not return an ID token. Check OAuth client IDs.');
-      return;
-    }
-
-    void completeGoogleLogin(idToken);
-  }, [completeGoogleLogin, googleResponse]);
-
-  const handleGoogleLogin = async () => {
-    setError('');
+  const handleGooglePress = async () => {
     if (!config.googleClientId) {
-      setError('Missing EXPO_PUBLIC_GOOGLE_CLIENT_ID.');
+      alert('Lỗi cấu hình', 'Thiếu EXPO_PUBLIC_GOOGLE_CLIENT_ID.');
       return;
     }
     await promptGoogleAsync();
   };
 
+  const loading = submitting || isLoading;
+
   return (
-    <Screen scrollable contentStyle={styles.content}>
-      <View style={styles.header}>
-        <AppText variant="h1">VALO Parking</AppText>
-        <AppText color={colors.light.text.secondary}>Sign in to manage your parking account.</AppText>
+    <Screen>
+      <View style={styles.container}>
+        <AppText style={styles.title}>Đăng nhập</AppText>
+
+        <Input
+          autoCapitalize="none"
+          keyboardType="email-address"
+          placeholder="Email"
+          value={email}
+          onChangeText={setEmail}
+        />
+
+        <Input
+          placeholder="Mật khẩu"
+          secureTextEntry
+          value={password}
+          onChangeText={setPassword}
+        />
+
+        <Button disabled={loading} loading={loading} title="Đăng nhập" onPress={handleLogin} />
+
+        <Button
+          disabled={!googleRequest || googleSubmitting}
+          loading={googleSubmitting}
+          title="Tiếp tục với Google"
+          variant="outline"
+          onPress={handleGooglePress}
+        />
+
+        <Button
+          title="Quên mật khẩu?"
+          variant="ghost"
+          onPress={() => navigation.navigate('ForgotPassword')}
+        />
+
+        <Button
+          title="Tạo tài khoản"
+          variant="outline"
+          onPress={() => navigation.navigate('Register')}
+        />
       </View>
-      <Input
-        autoComplete="email"
-        keyboardType="email-address"
-        label="Email"
-        onChangeText={setEmail}
-        placeholder="you@example.com"
-        value={email}
-      />
-      <Input
-        label="Password"
-        onChangeText={setPassword}
-        placeholder="Password"
-        secureTextEntry
-        value={password}
-      />
-      {error ? <AppText color={colors.error.main}>{error}</AppText> : null}
-      <Button loading={isLoading} title="Login" onPress={handleSubmit} />
-      <Button
-        disabled={!googleRequest || googleSubmitting}
-        loading={googleSubmitting}
-        title="Continue with Google"
-        variant="outline"
-        onPress={handleGoogleLogin}
-      />
-      <Button
-        title="Forgot Password?"
-        variant="ghost"
-        onPress={() => navigation.navigate('ForgotPassword')}
-      />
-      <Button
-        title="Create Account"
-        variant="outline"
-        onPress={() => navigation.navigate('Register')}
-      />
     </Screen>
   );
 };
 
 const styles = StyleSheet.create({
-  content: {
+  container: {
+    flex: 1,
     justifyContent: 'center',
-    minHeight: '100%',
+    padding: 24,
+    gap: 12,
   },
-  header: {
-    gap: spacing.sm,
+  title: {
+    fontSize: 28,
+    fontWeight: '800',
+    marginBottom: 8,
+    textAlign: 'center',
   },
 });
+
+export default LoginScreen;

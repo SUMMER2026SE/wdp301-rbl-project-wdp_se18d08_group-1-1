@@ -27,6 +27,17 @@ class VehiclesService {
   setDefaultVehicle(id: string) {
     return apiClient.patch<APIResponse<Vehicle>>(`/vehicles/${id}/default`);
   }
+
+  scanRegistrationCard(imageBase64: string) {
+    return apiClient.post<APIResponse<{
+      nickname: string | null;
+      brand: string | null;
+      model: string | null;
+      licensePlate: string | null;
+      colorText: string | null;
+      hexColor: string | null;
+    }>>('/ai/scan-registration-card', { image: imageBase64 });
+  }
 }
 
 export const vehiclesService = new VehiclesService();

@@ -114,7 +114,7 @@ function SkeletonRow() {
 function StatCard({ icon: Icon, label, value, gradient, glow, loading }) {
   return (
     <div
-      className="relative rounded-2xl p-5 overflow-hidden cursor-default group transition-all duration-300 hover:scale-[1.035]"
+      className="relative rounded-xl p-3 overflow-hidden cursor-default group transition-all duration-300 hover:scale-[1.02]"
       style={{
         background: 'rgba(255,255,255,0.03)',
         border: '1px solid rgba(255,255,255,0.08)',
@@ -131,13 +131,13 @@ function StatCard({ icon: Icon, label, value, gradient, glow, loading }) {
 
       <div className="relative flex items-start justify-between">
         <div>
-          <p className="text-[11px] text-white/40 uppercase tracking-widest font-semibold mb-2">{label}</p>
-          <p className="text-3xl font-bold text-white">
+          <p className="text-[10px] text-white/40 uppercase tracking-widest font-semibold mb-1">{label}</p>
+          <p className="text-2xl font-bold text-white">
             {loading ? <span className="inline-block w-12 h-8 rounded bg-white/10 animate-skeleton" /> : <AnimatedCounter target={value} />}
           </p>
         </div>
-        <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center shadow-lg`}>
-          <Icon size={20} className="text-white" />
+        <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${gradient} flex items-center justify-center shadow-md`}>
+          <Icon size={16} className="text-white" />
         </div>
       </div>
     </div>
@@ -432,7 +432,7 @@ export default function AccountManagement() {
           </div>
 
           {/* -- Stat Cards -- */}
-          <div className="grid grid-cols-4 gap-4 mt-6">
+          <div className="grid grid-cols-4 gap-3 mt-4">
             <StatCard icon={Users}   label="Total Customers"  value={totalAccounts} gradient="from-cyan-400 to-blue-500"    glow="rgba(6,182,212,0.3)"    loading={loading} />
             <StatCard icon={UserPlus} label="New This Month"  value={newThisMonth}  gradient="from-violet-400 to-purple-600" glow="rgba(167,139,250,0.3)"  loading={loading} />
             <StatCard icon={UserX}   label="Blocked Customers" value={blockedCount}  gradient="from-rose-500 to-red-600"     glow="rgba(239,68,68,0.3)"    loading={loading} />

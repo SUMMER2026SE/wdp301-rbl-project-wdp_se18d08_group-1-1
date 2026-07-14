@@ -16,6 +16,7 @@ export interface User {
   status: boolean;
   isEmailVerified: boolean;
   googleId?: string;
+  avatar?: string;
   membership?: UserMembership;
   createdAt?: string;
 }

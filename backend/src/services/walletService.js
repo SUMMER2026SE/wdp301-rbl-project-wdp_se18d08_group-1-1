@@ -35,8 +35,8 @@ const getOrCreateWallet = async (userId, options = {}) => {
  * @param {string} userId - User's ObjectId
  * @returns {Object} { balance, totalTopUp, totalSpent, totalRefunded, totalTransactions, totalParkingPayments }
  */
-const getBalance = async (userId, options = {}) => {
-  const wallet = await getOrCreateWallet(userId, options);
+const getBalance = async (userId) => {
+  const wallet = await getOrCreateWallet(userId);
   const monthStart = new Date();
   monthStart.setDate(1);
   monthStart.setHours(0, 0, 0, 0);
@@ -145,9 +145,11 @@ const creditWallet = async (userId, amount, type, description, options = {}) => 
           balanceAfter,
           status: 'COMPLETED',
           description,
-          payosOrderCode: options.payosOrderCode || undefined,
-          payosPaymentLinkId: options.payosPaymentLinkId || undefined,
-          payosReference: options.payosReference || undefined,
+          ...(options.payosOrderCode != null
+            ? { payosOrderCode: options.payosOrderCode }
+            : {}),
+          payosPaymentLinkId: options.payosPaymentLinkId || null,
+          payosReference: options.payosReference || null,
           refSource: options.refSource || null,
           refSourceId: options.refSourceId || null,
         },

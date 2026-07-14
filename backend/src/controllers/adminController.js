@@ -364,6 +364,15 @@ exports.updateUserStatus = async (req, res, next) => {
         .status(404)
         .json({ success: false, message: "User not found" });
     }
+
+    const AdminActionLog = require("../models/AdminActionLog");
+    await AdminActionLog.create({
+      action: status ? "Unblocked User Account" : "Blocked User Account",
+      target: `ID #${user._id.toString().slice(-4)} • ${user.email}`,
+      type: status ? "update" : "block",
+      adminId: req.user._id
+    });
+
     res.status(200).json({ success: true, data: user });
   } catch (err) {
     next(err);
@@ -444,6 +453,14 @@ exports.updateUser = async (req, res, next) => {
       },
     ]);
 
+    const AdminActionLog = require("../models/AdminActionLog");
+    await AdminActionLog.create({
+      action: "Updated User Privileges/Details",
+      target: `${firstName || ''} ${lastName || ''} • ${user.role}`,
+      type: "update",
+      adminId: req.user._id
+    });
+
     res.status(200).json({ success: true, data: updatedUser[0] });
   } catch (err) {
     next(err);
@@ -522,6 +539,75 @@ exports.updatePricingConfig = async (req, res, next) => {
     });
 
     res.status(200).json({ success: true, data: newConfig });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * @desc  Get Admin Dashboard Overview Stats
+ * @route GET /api/admin/overview
+ * @access Admin only
+ */
+exports.getAdminOverview = async (req, res, next) => {
+  try {
+    const User = require('../models/User');
+    const ParkingFloor = require('../models/ParkingFloor');
+    const Revenue = require('../models/Revenue');
+
+    // Stats
+    const totalStaff = await User.countDocuments({ role: 'staff' });
+    const activeUsers = await User.countDocuments({ role: 'customer', status: true });
+    const blockedUsers = await User.countDocuments({ role: 'customer', status: false });
+    const parkingLots = await ParkingFloor.countDocuments();
+    const pendingLots = 0; // Or calculate if there is a status field
+
+    // Revenue Calculation
+    const now = new Date();
+    const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    
+    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+
+    const revenueThisMonthAggr = await Revenue.aggregate([
+      { $match: { createdAt: { $gte: startOfThisMonth } } },
+      { $group: { _id: null, total: { $sum: "$amount" } } }
+    ]);
+    const totalRevenueMonth = revenueThisMonthAggr.length > 0 ? revenueThisMonthAggr[0].total : 0;
+
+    const revenueLastMonthAggr = await Revenue.aggregate([
+      { $match: { createdAt: { $gte: startOfLastMonth, $lte: endOfLastMonth } } },
+      { $group: { _id: null, total: { $sum: "$amount" } } }
+    ]);
+    const totalRevenueLastMonth = revenueLastMonthAggr.length > 0 ? revenueLastMonthAggr[0].total : 0;
+
+    let revenueIncreasePercent = 0;
+    if (totalRevenueLastMonth > 0) {
+      revenueIncreasePercent = ((totalRevenueMonth - totalRevenueLastMonth) / totalRevenueLastMonth) * 100;
+    } else if (totalRevenueMonth > 0) {
+      revenueIncreasePercent = 100; // 100% increase if last month was 0 and this month has revenue
+    }
+
+    const AdminActionLog = require("../models/AdminActionLog");
+    const recentActions = await AdminActionLog.find({})
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .lean();
+
+    res.status(200).json({
+      success: true,
+      data: {
+        totalStaff,
+        activeUsers,
+        blockedUsers,
+        parkingLots,
+        pendingLots,
+        totalRevenueMonth,
+        totalRevenueLastMonth,
+        revenueIncreasePercent: Math.round(revenueIncreasePercent),
+        recentActions
+      }
+    });
   } catch (err) {
     next(err);
   }

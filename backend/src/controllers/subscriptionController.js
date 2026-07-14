@@ -4,6 +4,81 @@ const User = require('../models/User');
 const Slot = require('../models/Slot');
 const payos = require('../config/payos');
 const walletService = require('../services/walletService');
+const Vehicle = require('../models/Vehicle');
+const mongoose = require('mongoose');
+
+const validateSubscriptionRequest = async ({ userId, ticketPackage, slots }) => {
+  if (!Array.isArray(slots) || slots.length === 0) {
+    return { error: 'Please select at least one parking slot to reserve.' };
+  }
+
+  const vehiclesCount = await Vehicle.countDocuments({ owner: userId });
+  const maxSlots = Math.min(3, vehiclesCount);
+  if (vehiclesCount === 0 || slots.length > maxSlots) {
+    return { error: `You can only select 1-${maxSlots} slots based on your registered vehicles.` };
+  }
+
+  const normalizedSlots = slots.map((slot) => ({
+    floorId: String(slot?.floorId || '').trim(),
+    slotCode: String(slot?.slotCode || '').trim(),
+  }));
+  if (normalizedSlots.some((slot) => !slot.floorId || !slot.slotCode)) {
+    return { error: 'Invalid parking slot selection.' };
+  }
+  if (normalizedSlots.some((slot) => !mongoose.isValidObjectId(slot.floorId))) {
+    return { error: 'Invalid parking floor selection.' };
+  }
+
+  const uniqueKeys = new Set(normalizedSlots.map((slot) => `${slot.floorId}:${slot.slotCode.toUpperCase()}`));
+  if (uniqueKeys.size !== normalizedSlots.length) {
+    return { error: 'Duplicate parking slots are not allowed.' };
+  }
+
+  const activeSubscription = await Subscription.findOne({
+    user: userId,
+    status: 'active',
+    paymentStatus: 'paid',
+    expireAt: { $gt: new Date() },
+  }).populate('ticketPackage', 'type');
+  const membershipUser = await User.findById(userId)
+    .select('membership')
+    .populate('membership.packageId', 'type');
+  const membershipIsActive = Boolean(
+    membershipUser?.membership?.isVip
+      && membershipUser.membership.expireAt
+      && new Date(membershipUser.membership.expireAt) > new Date(),
+  );
+  const activePackage = activeSubscription?.ticketPackage
+    || (membershipIsActive ? membershipUser.membership.packageId : null);
+  if (activePackage) {
+    if (String(activePackage._id) === String(ticketPackage._id)) {
+      return { error: 'You are already using this subscription package.' };
+    }
+    if (activePackage.type === 'yearly' && ticketPackage.type === 'monthly') {
+      return { error: 'The monthly package is already included in your active yearly package.' };
+    }
+  }
+
+  const slotDocs = await Promise.all(normalizedSlots.map((slot) => Slot.findOne({
+    floorID: slot.floorId,
+    slotNumber: { $regex: `^${slot.slotCode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' },
+  })));
+  for (let index = 0; index < normalizedSlots.length; index += 1) {
+    const selectedSlot = normalizedSlots[index];
+    const slotDoc = slotDocs[index];
+    if (!slotDoc) return { error: `Slot ${selectedSlot.slotCode} does not exist.` };
+    if (['occupied', 'booked', 'maintenance'].includes(slotDoc.status)) {
+      return { error: `Slot ${selectedSlot.slotCode} is not available.` };
+    }
+    if (slotDoc.reservedFor && String(slotDoc.reservedFor) !== String(userId)) {
+      return { error: `Slot ${selectedSlot.slotCode} is already reserved by someone else.` };
+    }
+    selectedSlot.slotCode = slotDoc.slotNumber;
+    selectedSlot.floorId = String(slotDoc.floorID);
+  }
+
+  return { normalizedSlots };
+};
 
 const buildExpirationDate = (packageType, fromDate = new Date()) => {
   const expireAt = new Date(fromDate);
@@ -26,24 +101,12 @@ exports.createSubscriptionPayment = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Invalid subscription package.' });
     }
 
-    // Validate slots limit based on vehicles
-    const Vehicle = require('../models/Vehicle');
-    const vehiclesCount = await Vehicle.countDocuments({ owner: req.user._id });
-    const maxSlots = Math.min(3, vehiclesCount); // User can choose up to their vehicle count, max 3
-    if (slots.length > maxSlots) {
-      return res.status(400).json({ success: false, message: `You can only select up to ${maxSlots} slots based on your registered vehicles.` });
-    }
+    const validation = await validateSubscriptionRequest({ userId: req.user._id, ticketPackage, slots });
+    if (validation.error) return res.status(400).json({ success: false, message: validation.error });
+    const validatedSlots = validation.normalizedSlots;
 
-    // Check if slots are already reserved
-    for (const slot of slots) {
-      const slotDoc = await Slot.findOne({ floorID: slot.floorId, slotNumber: slot.slotCode });
-      if (slotDoc && slotDoc.reservedFor && slotDoc.reservedFor.toString() !== req.user._id.toString()) {
-        return res.status(400).json({ success: false, message: `Slot ${slot.slotCode} is already reserved by someone else.` });
-      }
-    }
-
-    // Amount to pay
-    const amount = ticketPackage.price;
+    // Amount to pay (price * number of slots)
+    const amount = ticketPackage.price * Math.max(1, slots.length);
 
     // Generate Order Code for PayOS
     const orderCode = Number(String(Date.now()).slice(-6) + Math.floor(Math.random() * 100));
@@ -74,7 +137,7 @@ exports.createSubscriptionPayment = async (req, res, next) => {
     const subscription = new Subscription({
       user: req.user._id,
       ticketPackage: ticketPackage._id,
-      slots,
+      slots: validatedSlots,
       amount,
       orderCode,
       expireAt,
@@ -175,23 +238,12 @@ exports.paySubscriptionWithWallet = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Invalid subscription package.' });
     }
 
-    // Validate slots limit based on vehicles
-    const Vehicle = require('../models/Vehicle');
-    const vehiclesCount = await Vehicle.countDocuments({ owner: req.user._id });
-    const maxSlots = Math.min(3, vehiclesCount); 
-    if (slots.length > maxSlots) {
-      return res.status(400).json({ success: false, message: `You can only select up to ${maxSlots} slots based on your registered vehicles.` });
-    }
+    const validation = await validateSubscriptionRequest({ userId: req.user._id, ticketPackage, slots });
+    if (validation.error) return res.status(400).json({ success: false, message: validation.error });
+    const validatedSlots = validation.normalizedSlots;
 
-    // Check if slots are already reserved
-    for (const slot of slots) {
-      const slotDoc = await Slot.findOne({ floorID: slot.floorId, slotNumber: slot.slotCode });
-      if (slotDoc && slotDoc.reservedFor && slotDoc.reservedFor.toString() !== req.user._id.toString()) {
-        return res.status(400).json({ success: false, message: `Slot ${slot.slotCode} is already reserved by someone else.` });
-      }
-    }
-
-    const amount = ticketPackage.price;
+    // Amount to pay (price * number of slots)
+    const amount = ticketPackage.price * Math.max(1, slots.length);
 
     // Calculate expiration date
     const expireAt = buildExpirationDate(ticketPackage.type);
@@ -200,7 +252,7 @@ exports.paySubscriptionWithWallet = async (req, res, next) => {
     const subscription = new Subscription({
       user: req.user._id,
       ticketPackage: ticketPackage._id,
-      slots,
+      slots: validatedSlots,
       amount,
       orderCode: Number(String(Date.now()).slice(-6) + Math.floor(Math.random() * 100)),
       expireAt,
@@ -316,3 +368,24 @@ exports.getMembership = async (req, res, next) => {
 };
 
 exports.buildExpirationDate = buildExpirationDate;
+
+// Admin: Get all subscriptions
+exports.getAllSubscriptions = async (req, res, next) => {
+  try {
+    const subscriptions = await Subscription.find()
+      .populate('user', 'username email status')
+      .populate('ticketPackage', 'name type price')
+      .populate({
+        path: 'slots.floorId',
+        select: 'name floorNumber'
+      })
+      .sort({ createdAt: -1 });
+
+    res.status(200).json({
+      success: true,
+      data: subscriptions
+    });
+  } catch (error) {
+    next(error);
+  }
+};

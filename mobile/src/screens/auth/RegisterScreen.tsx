@@ -1,4 +1,4 @@
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useState } from 'react';
 
 import { AppText, Button, Input } from '@/components/common';
@@ -11,7 +11,7 @@ import { isValidEmail, isValidPassword } from '@/utils/validation';
 type Props = NativeStackScreenProps<AuthStackParamList, 'Register'>;
 
 export const RegisterScreen = ({ navigation }: Props) => {
-  const [username, setUsername] = useState('');
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -19,18 +19,19 @@ export const RegisterScreen = ({ navigation }: Props) => {
   const [error, setError] = useState('');
 
   const handleSubmit = async () => {
+    const normalizedName = name.trim();
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedPhone = phone.trim();
+
     setError('');
-
-    if (!username.trim()) {
-      setError('Name is required.');
+    if (!normalizedName) {
+      setError('Please enter your name.');
       return;
     }
-
-    if (!isValidEmail(email)) {
-      setError('Please enter a valid email address.');
+    if (!isValidEmail(normalizedEmail)) {
+      setError('Please enter a valid email.');
       return;
     }
-
     if (!isValidPassword(password)) {
       setError('Password must be at least 8 characters.');
       return;
@@ -38,18 +39,17 @@ export const RegisterScreen = ({ navigation }: Props) => {
 
     setLoading(true);
     try {
-      const normalizedEmail = email.trim();
       await authService.register({
-        username: username.trim(),
-        name: username.trim(),
+        username: normalizedName,
+        name: normalizedName,
         email: normalizedEmail,
-        phone: phone.trim(),
+        phone: normalizedPhone,
         password,
         role: 'customer',
       });
       await authService.sendOTP({ email: normalizedEmail });
       navigation.navigate('VerifyOTP', { email: normalizedEmail, purpose: 'register' });
-    } catch (submitError) {
+    } catch (submitError: unknown) {
       setError(submitError instanceof Error ? submitError.message : 'Registration failed.');
     } finally {
       setLoading(false);
@@ -58,14 +58,22 @@ export const RegisterScreen = ({ navigation }: Props) => {
 
   return (
     <Screen scrollable>
-      <AppText variant="h1">Create Account</AppText>
-      <Input label="Name" onChangeText={setUsername} placeholder="Full name" value={username} />
-      <Input keyboardType="email-address" label="Email" onChangeText={setEmail} value={email} />
+      <AppText variant="h1">Create account</AppText>
+      <Input label="Name" onChangeText={setName} placeholder="Full name" value={name} />
+      <Input
+        autoCapitalize="none"
+        keyboardType="email-address"
+        label="Email"
+        onChangeText={setEmail}
+        value={email}
+      />
       <Input keyboardType="phone-pad" label="Phone" onChangeText={setPhone} value={phone} />
       <Input label="Password" onChangeText={setPassword} secureTextEntry value={password} />
       {error ? <AppText color={colors.error.main}>{error}</AppText> : null}
       <Button loading={loading} title="Register" onPress={handleSubmit} />
-      <Button title="Back to Login" variant="ghost" onPress={() => navigation.goBack()} />
+      <Button title="Back to login" variant="ghost" onPress={() => navigation.goBack()} />
     </Screen>
   );
 };
+
+export default RegisterScreen;

@@ -29,7 +29,7 @@ import { clearAuthSession } from "../../services/authStorage";
 import PolicyAcceptancePrompt from "../../components/policies/PolicyAcceptancePrompt";
 import { extractMissingPolicies, isPolicyAcceptanceRequired } from "../../utils/policyErrors";
 
-const DEFAULT_TRANSACTION_LIMIT = 6;
+const DEFAULT_TRANSACTION_LIMIT = 4;
 const ALL_TRANSACTION_LIMIT = 50;
 const MIN_TOP_UP = 10000;
 const QUICK_AMOUNTS = [50000, 100000, 200000, 500000];
@@ -256,35 +256,7 @@ export default function WalletPage() {
     };
   }, [modal]);
 
-  const stats = useMemo(
-    () => [
-      {
-        icon: <WalletIcon className="h-5 w-5" />,
-        label: "Current Balance",
-        value: formatMoney(wallet?.balance),
-        note: wallet?.balance < 0 ? "Using overdraft" : "Available now",
-      },
-      {
-        icon: <TrendingDown className="h-5 w-5" />,
-        label: "Spent This Month",
-        value: formatMoney(wallet?.monthlySpent),
-        note: `${wallet?.monthlyParkingPayments || 0} parking payments`,
-      },
-      {
-        icon: <TrendingUp className="h-5 w-5" />,
-        label: "Top-up This Month",
-        value: formatMoney(wallet?.monthlyTopUp),
-        note: "Synced from completed top-ups",
-      },
-      {
-        icon: <Sparkles className="h-5 w-5" />,
-        label: "Refunds",
-        value: formatMoney(wallet?.totalRefunded),
-        note: `${formatMoney(wallet?.monthlyRefunded)} this month`,
-      },
-    ],
-    [wallet],
-  );
+
 
   const weeklyBars = useMemo(() => {
     const labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -326,7 +298,7 @@ export default function WalletPage() {
       {verifyingPayment && <VerificationOverlay />}
 
       <main className="mx-auto flex w-full max-w-[1600px] flex-col gap-6 p-4 sm:p-6 xl:p-8">
-        <section className="grid grid-cols-1 gap-6 xl:grid-cols-[1.35fr_1fr]">
+        <section className="w-full">
           <BalancePanel
             wallet={wallet}
             loading={loading}
@@ -341,12 +313,6 @@ export default function WalletPage() {
             }
             refreshing={refreshing}
           />
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {stats.map((stat) => (
-              <StatCard key={stat.label} {...stat} />
-            ))}
-          </div>
         </section>
 
         {error && (
@@ -432,7 +398,7 @@ function BalancePanel({ wallet, loading, onTopUp, onRefresh, refreshing }) {
           </div>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-end">
+        <div className="grid gap-4 lg:grid-cols-[1fr_auto_auto] lg:items-end">
           <button
             type="button"
             onClick={onTopUp}
@@ -451,6 +417,15 @@ function BalancePanel({ wallet, loading, onTopUp, onRefresh, refreshing }) {
             </span>
             <ChevronRight className="h-5 w-5 text-[#DCA11D]" />
           </button>
+
+          <div className="rounded-2xl border border-emerald-500/10 bg-emerald-500/5 px-4 py-3">
+            <p className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-400/60">
+              <Sparkles className="h-3 w-3" /> Refunds
+            </p>
+            <p className="mt-1 text-sm font-bold text-emerald-300">
+              {formatMoney(wallet?.monthlyRefunds)} <span className="text-[10px] font-medium text-emerald-400/40 normal-case tracking-normal">this month</span>
+            </p>
+          </div>
 
           <div className="rounded-2xl border border-white/10 bg-black/25 px-4 py-3">
             <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">
