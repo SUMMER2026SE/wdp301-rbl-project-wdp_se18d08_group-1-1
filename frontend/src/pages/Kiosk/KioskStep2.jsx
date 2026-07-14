@@ -112,35 +112,6 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack, i
     updateFormData({ selectedSlot: null, floorId: null });
   };
 
-  const handleModeChange = (mode) => {
-    updateFormData({
-      bookingMode: mode,
-      durationHours: mode === 'daily' ? 24 : 1,
-    });
-  };
-
-  const handleDurationChange = (delta) => {
-    const step = bookingMode === 'daily' ? 24 : 1;
-    const minHours = bookingMode === 'daily' ? 24 : 1;
-    const maxHours = bookingMode === 'daily' ? 24 * 30 : 24;
-    const currentHours = Number(formData.durationHours || minHours);
-    const nextHours = currentHours + delta * step;
-
-    if (nextHours >= minHours && nextHours <= maxHours) {
-      updateFormData({ durationHours: nextHours });
-    }
-  };
-
-  const effectiveHours = Number(formData.durationHours || (bookingMode === 'daily' ? 24 : 1));
-  const displayDuration = bookingMode === 'daily'
-    ? Math.max(1, Math.round(effectiveHours / 24))
-    : effectiveHours;
-
-  const estimatedCharge = useMemo(
-    () => Math.max(1, effectiveHours) * hourlyRate,
-    [effectiveHours, hourlyRate]
-  );
-
   return (
     <div className="flex flex-col flex-1 w-full mx-auto pb-0 relative h-full">
       <div className="flex-1 rounded-[32px] overflow-hidden relative flex flex-col w-full min-h-0 pt-0 pb-0 shadow-sm border border-[#0b0e16]">
@@ -261,109 +232,31 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack, i
                   <div className="text-right">
                     <p className="text-[10px] text-gray-400 font-medium">Rate</p>
                     <p className="font-bold text-sm text-[#FFDF00]">
-                      {bookingMode === 'daily'
-                        ? `${(hourlyRate * 24).toLocaleString('vi-VN')} VND / day`
-                        : `${hourlyRate.toLocaleString('vi-VN')} VND / hr`}
+                      {`${hourlyRate.toLocaleString('vi-VN')} VND / hr`}
                     </p>
                   </div>
-                </div>
-              </div>
-
-              <div className="mb-6">
-                <div className="flex items-center gap-2 text-gray-500 mb-2">
-                  <CreditCard size={16} />
-                  <span className="text-xs font-bold uppercase tracking-widest">Booking Type</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => handleModeChange('hourly')}
-                    className={`rounded-2xl border-2 p-4 text-left transition-all ${
-                      bookingMode === 'hourly'
-                        ? 'border-cyan-500 bg-cyan-50 shadow-sm'
-                        : 'border-gray-200 bg-white hover:border-cyan-300'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-black text-[#0f172a]">Hourly</span>
-                      <span className={`text-[10px] font-bold uppercase tracking-widest ${bookingMode === 'hourly' ? 'text-cyan-600' : 'text-gray-400'}`}>
-                        Popular
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-gray-500 mt-2">Calculated by actual hours.</p>
-                  </button>
-
-                  <button
-                    onClick={() => handleModeChange('daily')}
-                    className={`rounded-2xl border-2 p-4 text-left transition-all ${
-                      bookingMode === 'daily'
-                        ? 'border-purple-500 bg-purple-50 shadow-sm'
-                        : 'border-gray-200 bg-white hover:border-purple-300'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="font-black text-[#0f172a]">Full day</span>
-                      <span className={`text-[10px] font-bold uppercase tracking-widest ${bookingMode === 'daily' ? 'text-purple-600' : 'text-gray-400'}`}>
-                        24h
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-gray-500 mt-2">Calculated by 24-hour blocks.</p>
-                  </button>
-                </div>
-              </div>
-
-              <div className="mb-8">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2 text-gray-500">
-                    <Clock size={16} />
-                    <span className="text-xs font-bold uppercase tracking-widest">Duration</span>
-                  </div>
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-gray-400">
-                    {bookingMode === 'daily' ? 'Days' : 'Hours'}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between bg-white border border-gray-200 shadow-sm rounded-full p-2">
-                  <button
-                    onClick={() => handleDurationChange(-1)}
-                    className="w-12 h-12 flex items-center justify-center bg-gray-50 rounded-full text-gray-600 hover:bg-gray-100 hover:text-black active:scale-90 transition-all border border-gray-100"
-                  >
-                    <Minus size={20} strokeWidth={2.5} />
-                  </button>
-
-                  <div className="flex flex-col items-center justify-center min-w-[100px]">
-                    <span className="text-3xl font-black text-[#0f172a] leading-none mb-0.5">{displayDuration}</span>
-                    <span className="text-[9px] text-gray-400 font-bold uppercase tracking-wider">
-                      {bookingMode === 'daily' ? 'Days' : 'Hours'}
-                    </span>
-                  </div>
-
-                  <button
-                    onClick={() => handleDurationChange(1)}
-                    className="w-12 h-12 flex items-center justify-center bg-gray-50 rounded-full text-gray-600 hover:bg-gray-100 hover:text-black active:scale-90 transition-all border border-gray-100"
-                  >
-                    <Plus size={20} strokeWidth={2.5} />
-                  </button>
                 </div>
               </div>
 
               <div className="mt-auto">
                 <div className="border-t-2 border-dashed border-gray-200 pt-6 pb-2">
                   <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs text-gray-500 font-medium">Estimated Charge</span>
-                    <span className="text-sm font-bold text-gray-700">{estimatedCharge.toLocaleString('vi-VN')} VND</span>
+                    <span className="text-xs text-gray-500 font-medium">Standard Rate</span>
+                    <span className="text-sm font-bold text-gray-700">{hourlyRate.toLocaleString('vi-VN')} VND / hr</span>
                   </div>
                   <div className="flex justify-between items-center mb-4">
                     <span className="text-xs text-gray-500 font-medium">Taxes & Fees</span>
-                    <span className="text-sm font-bold text-gray-700">0 VND</span>
+                    <span className="text-sm font-bold text-gray-700">Included</span>
                   </div>
 
                   <div className="flex justify-between items-end bg-gray-50 p-4 rounded-2xl">
                     <div className="flex items-center gap-2 text-[#0f172a]">
                       <CreditCard size={20} />
-                      <span className="text-xs font-bold uppercase tracking-widest">Estimated Fee</span>
+                      <span className="text-xs font-bold uppercase tracking-widest">Pay at Exit</span>
                     </div>
                     <div className="flex flex-col items-end">
-                      <span className="text-3xl font-black text-[#0f172a] leading-none">{estimatedCharge.toLocaleString('vi-VN')} VND</span>
+                      <span className="text-3xl font-black text-[#0f172a] leading-none">{hourlyRate.toLocaleString('vi-VN')}</span>
+                      <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">VND / hr</span>
                     </div>
                   </div>
                   <p className="text-[10px] text-gray-500 text-center mt-3 font-medium">

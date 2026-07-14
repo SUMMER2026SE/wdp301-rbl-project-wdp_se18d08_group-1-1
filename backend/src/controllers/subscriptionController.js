@@ -328,11 +328,33 @@ exports.getAllSubscriptions = async (req, res, next) => {
         path: 'slots.floorId',
         select: 'name floorNumber'
       })
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const Vehicle = require('../models/Vehicle');
+    const userIds = [...new Set(subscriptions.map(s => s.user?._id?.toString()).filter(Boolean))];
+    const vehicles = await Vehicle.find({ owner: { $in: userIds } }).select('owner licensePlate').lean();
+    
+    const vehiclesByUserId = {};
+    for (const v of vehicles) {
+      if (!vehiclesByUserId[v.owner]) vehiclesByUserId[v.owner] = [];
+      vehiclesByUserId[v.owner].push(v.licensePlate);
+    }
+
+    const enhancedSubscriptions = subscriptions.map(sub => {
+      const userId = sub.user?._id?.toString();
+      return {
+        ...sub,
+        user: {
+          ...sub.user,
+          vehicles: vehiclesByUserId[userId] || []
+        }
+      };
+    });
 
     res.status(200).json({
       success: true,
-      data: subscriptions
+      data: enhancedSubscriptions
     });
   } catch (error) {
     next(error);

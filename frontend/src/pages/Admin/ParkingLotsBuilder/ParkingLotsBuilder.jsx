@@ -873,6 +873,12 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
                    if (!selectedElementIds.includes(el.id)) {
                       setSelectedElementIds([el.id]);
                    }
+                   // Always sync prefix when a single zone is clicked
+                   if (el.type === 'zone' && el.name) {
+                      const words = el.name.trim().split(' ');
+                      const prefix = words[words.length - 1];
+                      setGridConfig(prev => ({ ...prev, prefix }));
+                   }
                 }
               }}
             >
@@ -963,8 +969,13 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
                       onChange={(e) => {
                         let val = e.target.value.toUpperCase();
                         // Auto-prefix ZONE if user types a single letter
-                        if (selectedElement.type === 'zone' && val.length === 1 && /^[A-Z0-9]$/.test(val)) {
-                          val = `ZONE ${val}`;
+                        if (selectedElement.type === 'zone') {
+                          if (val.length === 1 && /^[A-Z0-9]$/.test(val)) {
+                            val = `ZONE ${val}`;
+                          }
+                          const words = val.trim().split(' ');
+                          const prefix = words[words.length - 1] || '';
+                          setGridConfig(prev => ({ ...prev, prefix }));
                         }
                         handleUpdateElement(selectedElement.id, { name: val });
                       }} 

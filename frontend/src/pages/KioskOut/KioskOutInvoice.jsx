@@ -58,6 +58,28 @@ export default function KioskOutInvoice({ sessionData, exitImage, onCheckoutSucc
     return () => timerIds.forEach((timerId) => clearTimeout(timerId));
   }, [handleCheckout, sessionData]);
 
+  // Polling for PayOS payment status
+  useEffect(() => {
+    let intervalId;
+    if (paymentData && paymentData.orderCode) {
+      intervalId = setInterval(async () => {
+        try {
+          const res = await fetch(`${API_BASE}/sessions/check-payos/${paymentData.orderCode}`);
+          const data = await res.json();
+          if (data.success && data.isPaid) {
+            clearInterval(intervalId);
+            handleCheckout('qr', keepPausedChoice); // Call handleCheckout to complete the session
+          }
+        } catch (err) {
+          console.error('Error polling payment status:', err);
+        }
+      }, 3000); // Check every 3 seconds
+    }
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [paymentData, handleCheckout, keepPausedChoice]);
+
   if (!sessionData) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -215,11 +237,11 @@ export default function KioskOutInvoice({ sessionData, exitImage, onCheckoutSucc
           </button>
           {paymentData ? (
             <button 
-              onClick={() => handleCheckout('qr', keepPausedChoice)}
-              disabled={isProcessing}
-              className="flex-1 bg-green-500 hover:bg-green-400 text-white font-black text-lg py-4 rounded-xl flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+              disabled={true}
+              className="flex-1 bg-green-500/50 text-white font-black text-lg py-4 rounded-xl flex items-center justify-center gap-2 transition-colors cursor-wait"
             >
-              {isProcessing ? 'Processing...' : 'I HAVE PAID'} <ChevronRight />
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              Đang chờ thanh toán...
             </button>
           ) : (
             <button 

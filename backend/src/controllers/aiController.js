@@ -30,100 +30,77 @@ exports.scanPlate = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Image is required' });
     }
 
-    if (!process.env.GEMINI_API_KEY) {
-      return res.status(500).json({
-        success: false,
-        message: 'Gemini API key is not configured',
-      });
-    }
-
     // Strip data URL prefix if present
     const base64Data = image.replace(/^data:image\/\w+;base64,/, '');
     const mimeMatch = image.match(/^data:(image\/\w+);base64,/);
     const mimeType = mimeMatch ? mimeMatch[1] : 'image/jpeg';
 
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    // -------------------------------------------------------------
+    // Use Local Python AI Service (YOLO + EasyOCR)
+    // -------------------------------------------------------------
+    try {
+      console.log('[AI Scan] Attempting Local Python AI for License Plate...');
+      const pythonRes = await axios.post('http://localhost:8000/scan', {
+        image: base64Data
+      }, {
+        timeout: 5000 // 5 seconds timeout
+      });
 
-    const prompt = `Analyze this image containing a vehicle and read the Vietnamese license plate.
-The image may be a contact sheet from the same camera frame: a large full-frame view plus zoomed crops along the bottom. Use the clearest view of the physical vehicle license plate.
-Focus on the physical vehicle plate only. Ignore text from the UI, dashboard, walls, stickers, signs, browser, or any other non-plate text.
-Return ONLY one normalized license plate string with spaces, dots, dashes, and special characters removed.
-Valid examples: 43D189750, 29A12345, 29H76919.
-If a plate-like sequence is visible, return your best reading. Return exactly NOT_FOUND only when no physical vehicle plate is visible at all.
-Do NOT include any explanation, markdown, punctuation, confidence score, or extra text.`;
-
-    const modelCandidates = ['gemini-2.5-flash-lite', 'gemini-2.5-flash'];
-    let quotaError = null;
-    let bestAttempt = null;
-
-    for (const modelName of modelCandidates) {
-      try {
-        const model = genAI.getGenerativeModel({
-          model: modelName,
-          generationConfig: {
-            temperature: 0,
-            maxOutputTokens: 20,
-          },
+      if (pythonRes.data && pythonRes.data.success) {
+        console.log('[AI Scan] Local AI Success:', pythonRes.data.plate);
+        return res.status(200).json({ 
+          success: true, 
+          plate: pythonRes.data.plate, 
+          model: 'local_yolo' 
         });
-
-        const result = await model.generateContent([
-          prompt,
-          {
-            inlineData: {
-              mimeType,
-              data: base64Data,
-            },
-          },
-        ]);
-
-        let text = result.response.text().trim();
-        console.info(`[AI Plate Scan] ${modelName} raw output:`, text);
-        text = normalizeLicensePlate(text.replace(/`/g, '').trim());
-        bestAttempt = { modelName, text };
-
-        if (text !== 'NOTFOUND' && text.length >= 5 && isLikelyVietnamesePlate(text)) {
-          return res.status(200).json({ success: true, plate: text, model: modelName });
-        }
-      } catch (error) {
-        if (isQuotaError(error)) {
-          quotaError = error;
-          console.error(`[AI Plate Scan] ${modelName} quota hit:`, error?.message || error);
-          continue;
-        }
-        throw error;
       }
-    }
-
-    if (quotaError) {
-      const detail = quotaError?.message || 'AI quota exceeded';
-      const retryAfterSeconds = extractRetryDelaySeconds(detail);
-      return res.status(429).json({
+      
+      return res.status(400).json({
         success: false,
-        message: 'AI plate scanning is temporarily rate-limited. Please retry shortly.',
-        retryAfterSeconds,
+        message: 'No license plate found in the image by Local AI',
+        model: 'local_yolo'
+      });
+
+    } catch (localErr) {
+      console.error('[AI Scan] Local Python AI failed or not running:', localErr.message);
+      return res.status(500).json({
+        success: false,
+        message: 'Local AI service is offline or failed to process the image.'
       });
     }
 
-    return res.status(400).json({
-      success: false,
-      message: 'No license plate found in the image',
-      attemptedPlate: bestAttempt?.text || null,
-      model: bestAttempt?.modelName || null,
-    });
-
   } catch (error) {
     const detail = error?.message || 'Unknown error';
-    console.error('Gemini ALPR Error:', detail);
+    console.error('ALPR Error:', detail);
     res.status(500).json({ success: false, message: 'Error analyzing the image' });
   }
 };
 
 /**
- * @desc    Scan vehicle registration card (vehicle registration card) using Gemini Vision
+ * @desc    Scan vehicle registration card (vehicle registration card) using Local Python AI or Gemini Vision
  *          Extracts: owner name, brand, model code, license plate
  * @route   POST /api/ai/scan-registration-card
  * @access  Private
  */
+const mapColorTextToHex = (colorText) => {
+  if (!colorText) return null;
+  const text = colorText.toLowerCase();
+  if (text.includes('trắng')) return '#f5f5f5';
+  if (text.includes('đen')) return '#1a1a1a';
+  if (text.includes('bạc')) return '#c0c0c0';
+  if (text.includes('xám') || text.includes('ghi')) return '#808080';
+  if (text.includes('đỏ')) return '#cc2200';
+  if (text.includes('cam')) return '#e65c00';
+  if (text.includes('vàng')) return '#f5c400';
+  if (text.includes('xanh lam') || text.includes('xanh dương')) return '#1a4fa0';
+  if (text.includes('xanh lục') || text.includes('xanh lá')) return '#2d7a2d';
+  if (text.includes('nâu')) return '#6b3a1f';
+  if (text.includes('tím')) return '#6a0dad';
+  if (text.includes('hồng')) return '#e75480';
+  if (text.includes('đồng')) return '#b8860b';
+  return null;
+};
+
 exports.scanRegistrationCard = async (req, res) => {
   try {
     const { image } = req.body;
@@ -133,15 +110,18 @@ exports.scanRegistrationCard = async (req, res) => {
         .json({ success: false, message: 'Image is required' });
     }
 
+    // Strip data URL prefix if present
+    const base64Data = image.replace(/^data:image\/\w+;base64,/, '');
+
+    // -------------------------------------------------------------
+    // ATTEMPT 1: Google Gemini API (Local AI for Registration Card not ready yet)
+    // -------------------------------------------------------------
     if (!process.env.GEMINI_API_KEY) {
       return res.status(500).json({
         success: false,
         message: 'Gemini API key is not configured',
       });
     }
-
-    // Strip data URL prefix if present
-    const base64Data = image.replace(/^data:image\/\w+;base64,/, '');
 
     // Detect mime type
     const mimeMatch = image.match(/^data:(image\/\w+);base64,/);
@@ -223,6 +203,7 @@ Do NOT include any explanation, markdown, or code blocks. Return raw JSON only.`
         colorText: extracted.colorText || null,
         hexColor: extracted.hexColor || null,
       },
+      model: 'gemini'
     });
   } catch (error) {
     const detail = error?.message || 'Unknown error';

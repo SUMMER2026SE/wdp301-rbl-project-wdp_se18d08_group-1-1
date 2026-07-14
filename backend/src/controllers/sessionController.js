@@ -28,8 +28,10 @@ exports.verifyPlate = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'License plate is required' });
     }
 
+    const cleanPlate = normalizeLicensePlate(licensePlate);
+
     // 1. Kiểm tra xe đang có session ACTIVE trong bãi không
-    const activeSession = await Session.findOne({ licensePlate, status: 'active' });
+    const activeSession = await Session.findOne({ licensePlate: cleanPlate, status: 'active' });
     if (activeSession) {
       return res.status(200).json({
         success: true,
@@ -39,7 +41,7 @@ exports.verifyPlate = async (req, res, next) => {
 
     // 2. Kiểm tra xe đăng ký chính chủ
     const registeredVehicle = await Vehicle.findOne({
-      licensePlate: licensePlate,
+      licensePlate: cleanPlate,
       status: 'approved'
     });
 
@@ -106,7 +108,7 @@ exports.verifyPlate = async (req, res, next) => {
     }
 
     // Tìm SĐT trong các session cũ để tự điền (TC2/TC3)
-    const pastSession = await Session.findOne({ licensePlate, phone: { $ne: null } }).sort({ checkInTime: -1 });
+    const pastSession = await Session.findOne({ licensePlate: cleanPlate, phone: { $ne: null } }).sort({ checkInTime: -1 });
     if (!phone && pastSession) {
       phone = pastSession.phone;
     }
@@ -120,7 +122,7 @@ exports.verifyPlate = async (req, res, next) => {
     const cancelCheckinLimit = new Date(now.getTime() - 30 * 60 * 1000); // Tối đa 30 phút trễ để vớt vát
     
     let booking = await Booking.findOne({
-      licensePlate,
+      licensePlate: cleanPlate,
       $or: [
         { 
           status: 'PAID', 
@@ -153,12 +155,17 @@ exports.verifyPlate = async (req, res, next) => {
       }
     }
 
-    // 4. Kiểm tra bãi đầy (Dành cho Walk-in - TC7)
+    // 4. Kiểm tra bãi đầy (Dành cho Walk-in - TC7) và Auto-assign slot cho VIP
     let isFull = false;
+    let vipAssignedSlot = null;
+    let vipAssignedFloorId = null;
+    let vipAssignedFloorName = null;
+
     if (!hasPreBooking && !isMonthly) {
       const floors = await ParkingFloor.find();
       let totalSlots = 0;
       const validSlotCodesByFloor = {};
+      const allSlots = [];
       
       for (const f of floors) {
         let parsedLayout = null;
@@ -179,29 +186,60 @@ exports.verifyPlate = async (req, res, next) => {
           );
           totalSlots += slots.length;
           validSlotCodesByFloor[f._id.toString()] = slots.map(s => s.name);
+          slots.forEach(s => {
+            allSlots.push({ floorId: f._id, floorName: f.name, slotCode: s.name });
+          });
         }
       }
       
       const Slot = require('../models/Slot');
-      const maintenanceSlots = await Slot.find({ status: 'maintenance' });
-      let validMaintenanceCount = 0;
-      for (const mSlot of maintenanceSlots) {
+      const unavailableKeys = new Set();
+
+      // Add maintenance and reserved slots
+      const overrideSlots = await Slot.find({
+        $or: [
+          { status: 'maintenance' },
+          { reservedFor: { $ne: null } }
+        ]
+      });
+      for (const mSlot of overrideSlots) {
         const floorIdStr = mSlot.floorID?.toString();
         if (floorIdStr && validSlotCodesByFloor[floorIdStr]?.includes(mSlot.slotNumber)) {
-          validMaintenanceCount++;
+          unavailableKeys.add(`${floorIdStr}_${mSlot.slotNumber}`);
         }
       }
-      const effectiveTotalSlots = totalSlots - validMaintenanceCount;
 
-      const activeSessionsCount = await Session.countDocuments({ status: 'active' });
-      const upcomingBookingsCount = await Booking.countDocuments({
+      // Add active sessions
+      const activeSessions = await Session.find({ status: 'active' }).select('floorId parkingSlot').lean();
+      for (const session of activeSessions) {
+        if (session.floorId && session.parkingSlot) {
+          unavailableKeys.add(`${session.floorId.toString()}_${session.parkingSlot}`);
+        }
+      }
+
+      // Add upcoming bookings
+      const upcomingBookings = await Booking.find({
         status: { $in: ['PAID', 'PAUSED'] },
         scheduledStart: { $lte: new Date(now.getTime() + 30 * 60 * 1000) },
         scheduledEnd: { $gte: now }
-      });
+      }).select('floorId parkingSlot').lean();
+      for (const booking of upcomingBookings) {
+        if (booking.floorId && booking.parkingSlot) {
+          unavailableKeys.add(`${booking.floorId.toString()}_${booking.parkingSlot}`);
+        }
+      }
 
-      if (activeSessionsCount + upcomingBookingsCount >= effectiveTotalSlots) {
+      // If the number of unique unavailable slots is >= total slots, the lot is full
+      if (unavailableKeys.size >= totalSlots) {
         isFull = true;
+      } else if (isVIP || isRegisteredVehicle) {
+        // Auto assign a slot for VIP/Registered vehicles
+        const availableSlot = allSlots.find(s => !unavailableKeys.has(`${s.floorId.toString()}_${s.slotCode}`));
+        if (availableSlot) {
+          vipAssignedSlot = availableSlot.slotCode;
+          vipAssignedFloorId = availableSlot.floorId;
+          vipAssignedFloorName = availableSlot.floorName;
+        }
       }
     }
 
@@ -218,15 +256,79 @@ exports.verifyPlate = async (req, res, next) => {
         isRegisteredVehicle,
         phone,
         isKnownGuest: !!phone || isVIP || isRegisteredVehicle,
-        assignedSlot: booking?.parkingSlot || subscription?.assignedSlot?.slotCode || null,
-        assignedFloorId: booking?.floorId?._id || subscription?.assignedSlot?.floorId?._id || subscription?.assignedSlot?.floorId || null,
-        assignedFloorName: booking?.floorId?.name || subscription?.assignedSlot?.floorId?.name || null,
+        assignedSlot: booking?.parkingSlot || subscription?.assignedSlot?.slotCode || vipAssignedSlot || null,
+        assignedFloorId: booking?.floorId?._id || subscription?.assignedSlot?.floorId?._id || subscription?.assignedSlot?.floorId || vipAssignedFloorId || null,
+        assignedFloorName: booking?.floorId?.name || subscription?.assignedSlot?.floorId?.name || vipAssignedFloorName || null,
         requiresSlotReallocation,
       }
     });
 
   } catch (error) {
     console.error('verifyPlate error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+};
+
+/**
+ * Check if the parking lot is full for walk-in guests
+ * GET /api/sessions/check-full
+ */
+exports.checkParkingFull = async (req, res, next) => {
+  try {
+    const floors = await ParkingFloor.find();
+    let totalSlots = 0;
+    const validSlotCodesByFloor = {};
+    
+    for (const f of floors) {
+      let parsedLayout = null;
+      if (typeof f.layoutData === 'string') {
+        try {
+          parsedLayout = JSON.parse(f.layoutData);
+        } catch (e) {
+          console.error('Failed to parse layoutData', e);
+        }
+      } else {
+        parsedLayout = f.layoutData;
+      }
+      
+      if (parsedLayout && parsedLayout.elements) {
+        const slots = parsedLayout.elements.filter(el => 
+          ['slot', 'slot-ev', 'slot-handicap', 'slot-moto'].includes(el.type) && 
+          el.name && el.name.trim() !== ''
+        );
+        totalSlots += slots.length;
+        validSlotCodesByFloor[f._id.toString()] = slots.map(s => s.name);
+      }
+    }
+    
+    const Slot = require('../models/Slot');
+    const maintenanceSlots = await Slot.find({ status: 'maintenance' });
+    let validMaintenanceCount = 0;
+    for (const mSlot of maintenanceSlots) {
+      const floorIdStr = mSlot.floorID?.toString();
+      if (floorIdStr && validSlotCodesByFloor[floorIdStr]?.includes(mSlot.slotNumber)) {
+        validMaintenanceCount++;
+      }
+    }
+    const effectiveTotalSlots = totalSlots - validMaintenanceCount;
+
+    const now = new Date();
+    const activeSessionsCount = await Session.countDocuments({ status: 'active' });
+    const upcomingBookingsCount = await Booking.countDocuments({
+      status: { $in: ['PAID', 'PAUSED'] },
+      scheduledStart: { $lte: new Date(now.getTime() + 30 * 60 * 1000) },
+      scheduledEnd: { $gte: now }
+    });
+
+    const isFull = (activeSessionsCount + upcomingBookingsCount) >= effectiveTotalSlots;
+
+    res.status(200).json({
+      success: true,
+      data: { isFull }
+    });
+
+  } catch (error) {
+    console.error('checkParkingFull error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
@@ -655,7 +757,9 @@ exports.kioskExitScan = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'License plate is required' });
     }
 
-    const session = await Session.findOne({ licensePlate, status: 'active' });
+    const cleanPlate = normalizeLicensePlate(licensePlate);
+    
+    const session = await Session.findOne({ licensePlate: cleanPlate, status: 'active' });
     if (!session) {
       return res.status(404).json({ success: false, message: 'Không tìm thấy phiên đỗ xe hoạt động của biển số này' });
     }
@@ -1019,5 +1123,30 @@ exports.getActiveParkingStatus = async (req, res, next) => {
   } catch (error) {
     console.error('Error getting active parking status:', error);
     next(error);
+  }
+};
+
+/**
+ * Kiểm tra trạng thái thanh toán PayOS
+ * GET /api/sessions/check-payos/:orderCode
+ */
+exports.checkPayosStatus = async (req, res, next) => {
+  try {
+    const { orderCode } = req.params;
+    if (!orderCode) {
+      return res.status(400).json({ success: false, message: 'Thiếu mã đơn hàng' });
+    }
+
+    const payosInfo = await payos.paymentRequests.get(Number(orderCode));
+    
+    if (payosInfo && payosInfo.status === 'PAID') {
+      return res.status(200).json({ success: true, isPaid: true });
+    } else {
+      return res.status(200).json({ success: true, isPaid: false });
+    }
+  } catch (error) {
+    console.error('Error checking PayOS status:', error);
+    // Return false on error to avoid breaking the polling loop
+    return res.status(200).json({ success: false, isPaid: false });
   }
 };

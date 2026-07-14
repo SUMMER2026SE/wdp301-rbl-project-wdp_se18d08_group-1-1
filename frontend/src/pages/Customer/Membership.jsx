@@ -664,7 +664,10 @@ export default function Membership() {
         open={policyPrompt.open}
         missingPolicies={policyPrompt.missingPolicies}
         onClose={() => setPolicyPrompt({ open: false, missingPolicies: [] })}
-        onAccepted={() => setPolicyPrompt({ open: false, missingPolicies: [] })}
+        onAccepted={() => {
+          setPolicyPrompt({ open: false, missingPolicies: [] });
+          handleConfirmSlots();
+        }}
       />
     </div>
   );
