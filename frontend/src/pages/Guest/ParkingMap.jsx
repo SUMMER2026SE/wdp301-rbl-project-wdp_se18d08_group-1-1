@@ -133,15 +133,15 @@ export default function ParkingMap() {
         <div className="flex gap-2 sm:gap-4 items-center">
           <div className="flex flex-col items-center bg-gray-50 border border-gray-100 rounded-lg px-3 py-1.5 min-w-[80px]">
             <span className="text-sm font-black text-gray-900">{totalSlots}</span>
-            <span className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">Tổng chỗ</span>
+            <span className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">Total Slots</span>
           </div>
           <div className="flex flex-col items-center bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-1.5 min-w-[80px]">
             <span className="text-sm font-black text-emerald-600">{availableSlotsCount}</span>
-            <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest">Đang trống</span>
+            <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest">Available</span>
           </div>
           <div className="flex flex-col items-center bg-rose-50 border border-rose-100 rounded-lg px-3 py-1.5 min-w-[80px]">
             <span className="text-sm font-black text-rose-600">{occupiedSlotsCount}</span>
-            <span className="text-[9px] font-bold text-rose-600 uppercase tracking-widest">Đã đầy</span>
+            <span className="text-[9px] font-bold text-rose-600 uppercase tracking-widest">Occupied</span>
           </div>
         </div>
       </div>
@@ -150,7 +150,7 @@ export default function ParkingMap() {
       <div className="flex-1 relative overflow-hidden bg-[#f8fafc]">
         {floors.length === 0 ? (
           <div className="absolute inset-0 flex items-center justify-center text-gray-400 font-medium">
-            Đang tải dữ liệu bản đồ...
+            Loading map data...
           </div>
         ) : (
           <>
@@ -195,6 +195,10 @@ export default function ParkingMap() {
                  <span className="text-xs font-bold text-cyan-600">Selected</span>
                </div>
                <div className="flex items-center gap-3">
+                 <div className="w-5 h-5 rounded-md bg-yellow-100 border-[2px] border-yellow-500 shadow-sm"></div>
+                 <span className="text-xs font-bold text-yellow-600">VIP Pass</span>
+               </div>
+               <div className="flex items-center gap-3">
                  <div className="w-5 h-5 rounded-md bg-red-200 border-[2px] border-red-500 shadow-sm" style={{ backgroundImage: 'repeating-linear-gradient(45deg, rgba(239, 68, 68, 0.2), rgba(239, 68, 68, 0.2) 4px, rgba(127, 29, 29, 0.3) 4px, rgba(127, 29, 29, 0.3) 8px)' }}></div>
                  <span className="text-xs font-bold text-red-700">Maintenance</span>
                </div>
@@ -222,16 +226,16 @@ export default function ParkingMap() {
             </div>
 
             <div className="p-8 pt-6 relative z-10">
-              <h3 className="text-2xl font-black text-gray-900 mb-2">Đăng nhập để đặt chỗ</h3>
+              <h3 className="text-2xl font-black text-gray-900 mb-2">Login to Book</h3>
               <p className="text-gray-600 mb-6 font-medium leading-relaxed">
-                Vị trí <span className="font-bold text-gray-900 bg-gray-100 px-2 py-0.5 rounded">{selectedSlot?.id}</span> đang trống. Vui lòng đăng nhập để tiến hành giữ chỗ và thanh toán.
+                Slot <span className="font-bold text-gray-900 bg-gray-100 px-2 py-0.5 rounded">{selectedSlot?.id}</span> is available. Please login to reserve your spot and proceed to payment.
               </p>
 
               <button
                 onClick={handleLoginRedirect}
                 className="w-full bg-gray-900 hover:bg-black text-white font-bold py-4 px-6 rounded-xl shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-0.5 flex items-center justify-center gap-2"
               >
-                Đến trang Đăng nhập
+                Go to Login
               </button>
             </div>
           </div>
