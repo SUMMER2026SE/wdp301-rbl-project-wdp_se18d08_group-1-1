@@ -486,6 +486,7 @@ export default function ParkingMapViewer({ floors, currentFloorId, onFloorSelect
           <div className="flex items-center gap-2 font-semibold"><div className="w-4 h-4 rounded-md bg-white border-2 border-slate-400"></div> Available</div>
           <div className="flex items-center gap-2 font-semibold"><div className="w-4 h-4 rounded-md bg-red-100 border-2 border-red-500"></div> Occupied</div>
           <div className="flex items-center gap-2 font-semibold"><div className="w-4 h-4 rounded-md bg-cyan-100 border-2 border-cyan-500"></div> Selected</div>
+          <div className="flex items-center gap-2 font-semibold"><div className="w-4 h-4 rounded-md bg-yellow-100 border-2 border-yellow-500"></div> VIP Pass</div>
           <div className="flex items-center gap-2 font-semibold"><div className="w-4 h-4 rounded-md bg-red-200 border-2 border-red-500" style={{ backgroundImage: 'repeating-linear-gradient(45deg, rgba(239, 68, 68, 0.2), rgba(239, 68, 68, 0.2) 4px, rgba(127, 29, 29, 0.3) 4px, rgba(127, 29, 29, 0.3) 8px)' }}></div> Maintenance</div>
         </div>
       )}

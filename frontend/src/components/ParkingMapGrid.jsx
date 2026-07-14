@@ -148,8 +148,13 @@ export default function ParkingMapGrid({
   availableSlots = null, 
   activeHolds = [],
   loading = false,
+  is2DMode = false,
 }) {
-  const [camera, setCamera] = useState({ rotX: 60, rotZ: -30, panX: 0, panY: 0, zoom: 0.7 });
+  const [camera, setCamera] = useState(
+    is2DMode 
+      ? { rotX: 0, rotZ: 0, panX: 0, panY: 0, zoom: 0.65 }
+      : { rotX: 60, rotZ: -30, panX: 0, panY: 0, zoom: 0.7 }
+  );
   const [dragStart, setDragStart] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [hoveredSlotId, setHoveredSlotId] = useState(null);
@@ -227,13 +232,13 @@ export default function ParkingMapGrid({
     const deltaX = e.clientX - dragStart.x;
     const deltaY = e.clientY - dragStart.y;
     
-    if (dragStart.action === 'orbit') {
+    if (dragStart.action === 'orbit' && !is2DMode) {
       setCamera({
         ...dragStart.startCamera,
         rotZ: dragStart.startCamera.rotZ + deltaX * 0.5,
         rotX: Math.max(0, Math.min(90, dragStart.startCamera.rotX - deltaY * 0.5))
       });
-    } else if (dragStart.action === 'pan') {
+    } else if (dragStart.action === 'pan' || (dragStart.action === 'orbit' && is2DMode)) {
       setCamera({
         ...dragStart.startCamera,
         panX: dragStart.startCamera.panX + deltaX,
@@ -426,11 +431,13 @@ export default function ParkingMapGrid({
 
   return (
     <>
-      <div className="absolute top-4 right-8 z-50 text-white/40 text-xs text-right pointer-events-none">
-        <p><strong>Left Click + Drag</strong>: Orbit 3D Space</p>
-        <p><strong>Shift + Drag / Right Click</strong>: Pan</p>
-        <p><strong>Mouse Wheel</strong>: Zoom</p>
-      </div>
+      {!is2DMode && (
+        <div className="absolute top-4 right-8 z-50 text-white/40 text-xs text-right pointer-events-none">
+          <p><strong>Left Click + Drag</strong>: Orbit 3D Space</p>
+          <p><strong>Shift + Drag / Right Click</strong>: Pan</p>
+          <p><strong>Mouse Wheel</strong>: Zoom</p>
+        </div>
+      )}
 
       <div 
         ref={containerRef}
@@ -466,17 +473,37 @@ export default function ParkingMapGrid({
                   let targetOpacity = 1;
                   let pointerEvents = 'auto';
 
-                  if (isOverview) {
-                      const centerIndex = (floors.length - 1) / 2;
-                      targetZ = (idx - centerIndex) * 200;
-                  } else {
-                      targetZ = (idx - currentFloorIndex) * 150;
-                      if (isAbove) {
-                          targetZ += 500;
+                  if (is2DMode) {
+                      if (isOverview) {
+                          targetZ = -800;
                           targetOpacity = 0;
                           pointerEvents = 'none';
-                      } else if (isBelow) {
-                          targetOpacity = 0.2;
+                      } else {
+                          if (isAbove) {
+                              targetZ = 800;
+                              targetOpacity = 0;
+                              pointerEvents = 'none';
+                          } else if (isBelow) {
+                              targetZ = -800;
+                              targetOpacity = 0;
+                              pointerEvents = 'none';
+                          } else {
+                              targetZ = 0;
+                          }
+                      }
+                  } else {
+                      if (isOverview) {
+                          const centerIndex = (floors.length - 1) / 2;
+                          targetZ = (idx - centerIndex) * 200;
+                      } else {
+                          targetZ = (idx - currentFloorIndex) * 150;
+                          if (isAbove) {
+                              targetZ += 500;
+                              targetOpacity = 0;
+                              pointerEvents = 'none';
+                          } else if (isBelow) {
+                              targetOpacity = 0.2;
+                          }
                       }
                   }
                   
@@ -507,10 +534,12 @@ export default function ParkingMapGrid({
                          }
                       }}
                     >
-                      <div className="absolute -top-12 left-10 text-cyan-400/80 font-black text-3xl tracking-widest uppercase drop-shadow-xl transition-all duration-1000 pointer-events-none" 
-                           style={{ transform: 'translateZ(20px)', opacity: isCurrent ? 1 : 0.5 }}>
-                        {floor.name} {isCurrent && <span className="text-sm bg-cyan-500/20 text-cyan-400 px-3 py-1 rounded-full ml-4">SELECTED</span>}
-                      </div>
+                      {!is2DMode && (
+                        <div className="absolute -top-12 left-10 text-cyan-400/80 font-black text-3xl tracking-widest uppercase drop-shadow-xl transition-all duration-1000 pointer-events-none" 
+                             style={{ transform: 'translateZ(20px)', opacity: isCurrent ? 1 : 0.5 }}>
+                          {floor.name} {isCurrent && <span className="text-sm bg-cyan-500/20 text-cyan-400 px-3 py-1 rounded-full ml-4">SELECTED</span>}
+                        </div>
+                      )}
                       
                       <div className="absolute inset-0 rounded-[2rem] pointer-events-none opacity-20"
                            style={{ backgroundImage: `linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)`, backgroundSize: '40px 40px' }} />
@@ -533,7 +562,7 @@ export default function ParkingMapGrid({
         </div>
 
         <div className="absolute bottom-14 right-8 flex flex-row gap-2 z-50">
-          <button onClick={() => setCamera({ rotX: 60, rotZ: -30, panX: 0, panY: 0, zoom: 0.7 })} className="p-3 bg-[#181c23]/80 hover:bg-white/10 backdrop-blur border border-white/10 rounded-xl text-white shadow-xl transition-all"><Maximize size={20} /></button>
+          <button onClick={() => setCamera(is2DMode ? { rotX: 0, rotZ: 0, panX: 0, panY: 0, zoom: 0.65 } : { rotX: 60, rotZ: -30, panX: 0, panY: 0, zoom: 0.7 })} className="p-3 bg-[#181c23]/80 hover:bg-white/10 backdrop-blur border border-white/10 rounded-xl text-white shadow-xl transition-all"><Maximize size={20} /></button>
         </div>
       </div>
     </>

@@ -42,8 +42,8 @@ exports.createSubscriptionPayment = async (req, res, next) => {
       }
     }
 
-    // Amount to pay
-    const amount = ticketPackage.price;
+    // Amount to pay (price * number of slots)
+    const amount = ticketPackage.price * Math.max(1, slots.length);
 
     // Generate Order Code for PayOS
     const orderCode = Number(String(Date.now()).slice(-6) + Math.floor(Math.random() * 100));
@@ -191,7 +191,8 @@ exports.paySubscriptionWithWallet = async (req, res, next) => {
       }
     }
 
-    const amount = ticketPackage.price;
+    // Amount to pay (price * number of slots)
+    const amount = ticketPackage.price * Math.max(1, slots.length);
 
     // Calculate expiration date
     const expireAt = buildExpirationDate(ticketPackage.type);
