@@ -1,27 +1,14 @@
-import { Ionicons } from '@expo/vector-icons';
-import * as AuthSession from 'expo-auth-session';
-import * as Google from 'expo-auth-session/providers/google';
-import { LinearGradient } from 'expo-linear-gradient';
-import * as WebBrowser from 'expo-web-browser';
-import { useCallback, useEffect, useState } from 'react';
-import type { ReactNode } from 'react';
-import {
-  ActivityIndicator,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
+import * as Google from 'expo-auth-session/providers/google';
+import * as WebBrowser from 'expo-web-browser';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useCallback, useEffect, useState } from 'react';
+import { StyleSheet, View } from 'react-native';
+
+import { AppText, Button, Input } from '@/components/common';
+import { Screen } from '@/components/layout/Screen';
+import { config } from '@/config/env';
+
 import { useAuth } from '@/hooks/useAuth';
 import { useAppAlert } from '@/contexts/AppAlertContext';
 
@@ -29,92 +16,24 @@ import { GOOGLE_CLIENT_ID } from '../../constants/env';
 
 WebBrowser.maybeCompleteAuthSession();
 
-const LogoImg = require('../../../assets/logo.png') as number;
 
-interface LoginScreenProps {
-  navigation?: {
-    navigate: (screen: string) => void;
-  };
-}
-
-function GoogleIcon() {
-  return (
-    <View style={googleIconStyles.wrap}>
-      <View style={[googleIconStyles.quad, { backgroundColor: '#4285F4' }]} />
-      <View style={[googleIconStyles.quad, { backgroundColor: '#34A853' }]} />
-      <View style={[googleIconStyles.quad, { backgroundColor: '#FBBC05' }]} />
-      <View style={[googleIconStyles.quad, { backgroundColor: '#EA4335' }]} />
-    </View>
-  );
-}
-
-function Field({
-  icon,
-  placeholder,
-  value,
-  onChangeText,
-  secureTextEntry,
-  keyboardType,
-  autoCapitalize,
-  returnKeyType,
-  onSubmitEditing,
-  rightIcon,
-  onRightIconPress,
-}: {
-  icon: ReactNode;
-  placeholder: string;
-  value: string;
-  onChangeText: (value: string) => void;
-  secureTextEntry?: boolean;
-  keyboardType?: 'default' | 'email-address';
-  autoCapitalize?: 'none' | 'sentences';
-  returnKeyType?: 'next' | 'done';
-  onSubmitEditing?: () => void;
-  rightIcon?: ReactNode;
-  onRightIconPress?: () => void;
-}) {
-  const [focused, setFocused] = useState(false);
-
-  return (
-    <View style={[styles.fieldWrap, focused ? styles.fieldFocused : styles.fieldDefault]}>
-      <View style={styles.fieldIconLeft}>{icon}</View>
-      <TextInput
-        autoCapitalize={autoCapitalize ?? 'sentences'}
-        keyboardType={keyboardType}
-        placeholder={placeholder}
-        placeholderTextColor={COLORS.textMuted}
-        returnKeyType={returnKeyType}
-        secureTextEntry={secureTextEntry}
-        selectionColor={COLORS.gold}
-        style={styles.fieldInput}
-        value={value}
-        onBlur={() => setFocused(false)}
-        onChangeText={onChangeText}
-        onFocus={() => setFocused(true)}
-        onSubmitEditing={onSubmitEditing}
-      />
-      {rightIcon ? (
-        <TouchableOpacity
-          activeOpacity={0.7}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          style={styles.fieldIconRight}
-          onPress={onRightIconPress}
-        >
-          {rightIcon}
-        </TouchableOpacity>
-      ) : null}
-    </View>
-  );
-}
-
-export default function LoginScreen({ navigation }: LoginScreenProps) {
-  const { login, googleLogin } = useAuth();
-  const { alert } = useAppAlert();
+export const LoginScreen = ({ navigation }: Props) => {
+  const { login, googleLogin, isLoading } = useAuth();
+  const toast = useToast();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [passwordHidden, setPasswordHidden] = useState(true);
-  const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [googleSubmitting, setGoogleSubmitting] = useState(false);
+
+  const [googleRequest, googleResponse, promptGoogleAsync] = Google.useIdTokenAuthRequest({
+    androidClientId: config.googleAndroidClientId || undefined,
+    clientId: config.googleClientId,
+    iosClientId: config.googleIosClientId || undefined,
+    webClientId: config.googleClientId,
+    scopes: ['openid', 'profile', 'email'],
+    selectAccount: true,
+  });
+
 
   const redirectUri = AuthSession.makeRedirectUri();
   const [googleRequest, googleResponse, googlePromptAsync] = Google.useAuthRequest({
@@ -173,6 +92,45 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
     }
   };
 
+  const completeGoogleLogin = useCallback(
+    async (idToken: string) => {
+      setGoogleSubmitting(true);
+      setError('');
+      try {
+        await googleLogin({ idToken });
+        toast.showSuccess('Welcome back');
+      } catch (submitError) {
+        setError(submitError instanceof Error ? submitError.message : 'Google login failed.');
+      } finally {
+        setGoogleSubmitting(false);
+      }
+    },
+    [googleLogin, toast],
+  );
+
+  useEffect(() => {
+    if (googleResponse?.type !== 'success') {
+      return;
+    }
+
+    const idToken = googleResponse.params.id_token || googleResponse.authentication?.idToken;
+    if (!idToken) {
+      setError('Google did not return an ID token. Check OAuth client IDs.');
+      return;
+    }
+
+    void completeGoogleLogin(idToken);
+  }, [completeGoogleLogin, googleResponse]);
+
+  const handleGoogleLogin = async () => {
+    setError('');
+    if (!config.googleClientId) {
+      setError('Missing EXPO_PUBLIC_GOOGLE_CLIENT_ID.');
+      return;
+    }
+    await promptGoogleAsync();
+  };
+
   return (
     <SafeAreaView edges={['top', 'bottom']} style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#080808" />
@@ -181,133 +139,28 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
         locations={[0, 0.6, 1]}
         style={StyleSheet.absoluteFill}
       />
-      <View pointerEvents="none" style={styles.cornerGlow} />
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.kav}
-      >
-        <ScrollView
-          bounces={false}
-          contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.hero}>
-            <View style={styles.logoGlow}>
-              <Image resizeMode="contain" source={LogoImg} style={styles.logoImg} />
-            </View>
-            <Text style={styles.brandName}>VALO</Text>
-            <Text style={styles.brandSub}>PARKING</Text>
-            <View style={styles.badge}>
-              <Ionicons name="flash" size={11} color={COLORS.gold} />
-              <Text style={styles.badgeText}>Smart Parking Platform</Text>
-            </View>
-          </View>
+      {error ? <AppText color={colors.error.main}>{error}</AppText> : null}
+      <Button loading={isLoading} title="Login" onPress={handleSubmit} />
+      <Button
+        disabled={!googleRequest || googleSubmitting}
+        loading={googleSubmitting}
+        title="Continue with Google"
+        variant="outline"
+        onPress={handleGoogleLogin}
+      />
+      <Button
+        title="Forgot Password?"
+        variant="ghost"
+        onPress={() => navigation.navigate('ForgotPassword')}
+      />
+      <Button
+        title="Create Account"
+        variant="outline"
+        onPress={() => navigation.navigate('Register')}
+      />
+    </Screen>
 
-          <View style={styles.card}>
-            <LinearGradient
-              colors={[COLORS.gold, 'transparent']}
-              end={{ x: 1, y: 0 }}
-              start={{ x: 0, y: 0 }}
-              style={styles.cardTopLine}
-            />
-            <Text style={styles.cardTitle}>Đăng nhập</Text>
-            <Text style={styles.cardSub}>Chào mừng trở lại VALO Parking</Text>
-
-            <Field
-              autoCapitalize="none"
-              icon={<Ionicons name="mail-outline" size={18} color={COLORS.textMuted} />}
-              keyboardType="email-address"
-              placeholder="Email của bạn"
-              returnKeyType="next"
-              value={email}
-              onChangeText={setEmail}
-            />
-
-            <Field
-              icon={<Ionicons name="lock-closed-outline" size={18} color={COLORS.textMuted} />}
-              placeholder="Mật khẩu"
-              returnKeyType="done"
-              rightIcon={
-                <Ionicons
-                  name={passwordHidden ? 'eye-off-outline' : 'eye-outline'}
-                  size={18}
-                  color={COLORS.textMuted}
-                />
-              }
-              secureTextEntry={passwordHidden}
-              value={password}
-              onChangeText={setPassword}
-              onRightIconPress={() => setPasswordHidden((value) => !value)}
-              onSubmitEditing={handleLogin}
-            />
-
-            <Pressable
-              style={({ pressed }) => [styles.forgotRow, pressed && styles.pressed]}
-              onPress={() => navigation?.navigate('ForgotPassword')}
-            >
-              <Text style={styles.forgotText}>Quên mật khẩu?</Text>
-            </Pressable>
-
-            <TouchableOpacity
-              activeOpacity={0.85}
-              disabled={loading}
-              style={[styles.loginBtn, loading && styles.disabled]}
-              onPress={handleLogin}
-            >
-              <LinearGradient
-                colors={[COLORS.goldLight, COLORS.gold, COLORS.goldDark]}
-                end={{ x: 1, y: 0 }}
-                start={{ x: 0, y: 0 }}
-                style={styles.loginBtnGrad}
-              >
-                {loading ? (
-                  <ActivityIndicator color={COLORS.textInverse} size="small" />
-                ) : (
-                  <>
-                    <Text style={styles.loginBtnText}>Đăng nhập</Text>
-                    <Ionicons name="arrow-forward" size={18} color={COLORS.textInverse} />
-                  </>
-                )}
-              </LinearGradient>
-            </TouchableOpacity>
-
-            <View style={styles.dividerRow}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>hoặc đăng nhập với</Text>
-              <View style={styles.dividerLine} />
-            </View>
-
-            <TouchableOpacity
-              activeOpacity={0.85}
-              disabled={!googleRequest || googleLoading}
-              style={[styles.googleBtn, (!googleRequest || googleLoading) && styles.disabled]}
-              onPress={() => googlePromptAsync()}
-            >
-              {googleLoading ? (
-                <ActivityIndicator color="#444" size="small" />
-              ) : (
-                <>
-                  <GoogleIcon />
-                  <Text style={styles.googleBtnText}>Tiếp tục với Google</Text>
-                </>
-              )}
-            </TouchableOpacity>
-
-            <Pressable
-              style={({ pressed }) => [styles.registerRow, pressed && styles.pressed]}
-              onPress={() => navigation?.navigate('Register')}
-            >
-              <Text style={styles.registerText}>Chưa có tài khoản? </Text>
-              <Text style={[styles.registerText, styles.registerLink]}>Đăng ký ngay</Text>
-            </Pressable>
-          </View>
-
-          <Text style={styles.footer}>2026 VALO Parking - All rights reserved</Text>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
   );
 }
 
