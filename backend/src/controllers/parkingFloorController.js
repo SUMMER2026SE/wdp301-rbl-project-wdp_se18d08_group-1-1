@@ -30,6 +30,14 @@ exports.createFloor = async (req, res) => {
       layoutData: initialLayout
     });
 
+    const AdminActionLog = require('../models/AdminActionLog');
+    await AdminActionLog.create({
+      action: "Created Parking Lot",
+      target: `${name || `Floor ${floorNumber}`}`,
+      type: "create",
+      adminId: req.user._id
+    });
+
     res.status(201).json({ success: true, data: newFloor });
   } catch (error) {
     if (error.code === 11000) {
