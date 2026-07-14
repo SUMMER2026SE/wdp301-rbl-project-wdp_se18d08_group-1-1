@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
-import { useState } from 'react';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as ImageManipulator from 'expo-image-manipulator';
+import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -19,8 +20,11 @@ import { useToast } from '@/hooks/useToast';
 import { vehiclesService } from '@/services/api/vehicles';
 import type { VehicleType } from '@/types/models';
 import { isValidNormalizedLicensePlate, normalizeLicensePlate } from '@/utils/profileValidation';
+import { getCenteredCropForAspect } from '@/utils/registrationCardImage';
 
 export const AddVehicleScreen = ({ navigation }: { navigation: { goBack: () => void } }) => {
+  const cameraRef = useRef<CameraView>(null);
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const toast = useToast();
   const [licensePlate, setLicensePlate] = useState('');
   const [vehicleType, setVehicleType] = useState<VehicleType>('car');
@@ -32,6 +36,9 @@ export const AddVehicleScreen = ({ navigation }: { navigation: { goBack: () => v
   const [registrationCardImage, setRegistrationCardImage] = useState<string | undefined>();
   const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  const [torchEnabled, setTorchEnabled] = useState(false);
+  const [scanCompleted, setScanCompleted] = useState(false);
   const [error, setError] = useState('');
 
   const handleSubmit = async () => {
@@ -63,46 +70,120 @@ export const AddVehicleScreen = ({ navigation }: { navigation: { goBack: () => v
     }
   };
 
-  const pickAndScanRegistrationCard = async () => {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      setError('Cần cấp quyền truy cập thư viện ảnh để tải lên cà vẹt.');
+  const openRegistrationCardCamera = async () => {
+    setError('');
+    let granted = cameraPermission?.granted || false;
+    if (!granted) {
+      const permission = await requestCameraPermission();
+      granted = permission.granted;
+    }
+    if (!granted) {
+      setError('Cần cấp quyền camera để chụp cà vẹt xe.');
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      base64: true,
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.7,
-    });
-    
-    if (!result.canceled && result.assets[0]?.base64) {
-      const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
-      setRegistrationCardImage(base64Image);
-      
-      // Auto scan
-      setScanning(true);
-      setError('');
-      try {
-        const scanRes = await vehiclesService.scanRegistrationCard(base64Image);
-        if (scanRes.data) {
-          const { nickname: scannedNick, brand: scannedBrand, model: scannedModel, licensePlate: scannedPlate, colorText, hexColor: scannedHex } = scanRes.data;
-          
-          if (scannedNick) setNickname(scannedNick);
-          if (scannedBrand) setBrand(scannedBrand);
-          if (scannedModel) setModel(scannedModel);
-          if (scannedPlate) setLicensePlate(scannedPlate);
-          if (colorText) setColor(colorText);
-          if (scannedHex) setHexColor(scannedHex);
-          
-          toast.showSuccess('Đã trích xuất thông tin từ cà vẹt xe');
-        }
-      } catch (scanErr) {
-        setError(scanErr instanceof Error ? scanErr.message : 'Lỗi khi quét thông tin bằng AI.');
-      } finally {
-        setScanning(false);
+    setCameraOpen(true);
+  };
+
+  const captureAndScanRegistrationCard = async () => {
+    if (!cameraRef.current || scanning) return;
+    setScanning(true);
+    setScanCompleted(false);
+    setError('');
+    try {
+      const photo = await cameraRef.current.takePictureAsync({ quality: 1, skipProcessing: false });
+      if (!photo?.uri || !photo.width || !photo.height) {
+        throw new Error('Không thể chụp ảnh. Vui lòng thử lại.');
       }
+
+      const crop = getCenteredCropForAspect(photo.width, photo.height);
+      const processed = await ImageManipulator.manipulateAsync(
+        photo.uri,
+        [{ crop }, { resize: { width: 1024 } }],
+        {
+          base64: true,
+          compress: 0.85,
+          format: ImageManipulator.SaveFormat.JPEG,
+        },
+      );
+      if (!processed.base64) throw new Error('Không thể xử lý ảnh cà vẹt.');
+
+      const base64Image = `data:image/jpeg;base64,${processed.base64}`;
+      setRegistrationCardImage(base64Image);
+      setCameraOpen(false);
+
+      const scanRes = await vehiclesService.scanRegistrationCard(base64Image);
+      if (!scanRes.data) throw new Error('AI không đọc được thông tin trên cà vẹt.');
+
+      const {
+        nickname: scannedNick,
+        brand: scannedBrand,
+        model: scannedModel,
+        licensePlate: scannedPlate,
+        colorText,
+        hexColor: scannedHex,
+      } = scanRes.data;
+
+      if (scannedNick) setNickname(scannedNick);
+      if (scannedBrand) setBrand(scannedBrand);
+      if (scannedModel) setModel(scannedModel);
+      if (scannedPlate) setLicensePlate(normalizeLicensePlate(scannedPlate));
+      if (colorText) setColor(colorText);
+      if (scannedHex) setHexColor(scannedHex);
+      setScanCompleted(true);
+      toast.showSuccess('Đã trích xuất thông tin từ cà vẹt xe');
+    } catch (scanErr) {
+      setError(scanErr instanceof Error ? scanErr.message : 'Lỗi khi quét thông tin bằng AI.');
+    } finally {
+      setScanning(false);
     }
   };
+
+  if (cameraOpen) {
+    return (
+      <SafeAreaView edges={['top', 'bottom']} style={styles.cameraScreen}>
+        <StatusBar barStyle="light-content" backgroundColor="#050505" />
+        <View style={styles.cameraHeader}>
+          <TouchableOpacity style={styles.cameraHeaderButton} onPress={() => setCameraOpen(false)} disabled={scanning}>
+            <Ionicons name="close" size={28} color={COLORS.textPrimary} />
+          </TouchableOpacity>
+          <Text style={styles.cameraTitle}>Chụp cà vẹt xe</Text>
+          <TouchableOpacity style={styles.cameraHeaderButton} onPress={() => setTorchEnabled((current) => !current)}>
+            <Ionicons name={torchEnabled ? 'flash' : 'flash-off'} size={23} color={torchEnabled ? COLORS.gold : COLORS.textPrimary} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.cameraBody}>
+          <Text style={styles.cameraGuide}>Đặt toàn bộ cà vẹt nằm vừa trong khung 9 × 6 cm</Text>
+          <View style={styles.cardCameraFrame}>
+            <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" enableTorch={torchEnabled} />
+            <View pointerEvents="none" style={styles.frameBorder}>
+              <View style={[styles.frameCorner, styles.frameCornerTopLeft]} />
+              <View style={[styles.frameCorner, styles.frameCornerTopRight]} />
+              <View style={[styles.frameCorner, styles.frameCornerBottomLeft]} />
+              <View style={[styles.frameCorner, styles.frameCornerBottomRight]} />
+            </View>
+          </View>
+          <View style={styles.cameraTips}>
+            <Ionicons name="sunny-outline" size={18} color={COLORS.gold} />
+            <Text style={styles.cameraTipText}>Giữ thẳng, tránh lóa sáng và bảo đảm chữ rõ nét</Text>
+          </View>
+        </View>
+
+        <View style={styles.captureControls}>
+          <TouchableOpacity
+            accessibilityLabel="Chụp cà vẹt xe"
+            activeOpacity={0.8}
+            disabled={scanning}
+            style={[styles.captureButtonOuter, scanning && styles.disabled]}
+            onPress={captureAndScanRegistrationCard}
+          >
+            {scanning ? <ActivityIndicator color={COLORS.gold} /> : <View style={styles.captureButtonInner} />}
+          </TouchableOpacity>
+          <Text style={styles.captureLabel}>{scanning ? 'Đang xử lý ảnh...' : 'Chạm để chụp'}</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
@@ -111,14 +192,14 @@ export const AddVehicleScreen = ({ navigation }: { navigation: { goBack: () => v
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         
-        <TouchableOpacity activeOpacity={0.8} style={styles.scanButton} onPress={pickAndScanRegistrationCard} disabled={scanning}>
+        <TouchableOpacity activeOpacity={0.8} style={styles.scanButton} onPress={openRegistrationCardCamera} disabled={scanning}>
           {scanning ? (
             <ActivityIndicator color={COLORS.gold} />
           ) : (
             <>
-              <Ionicons name={registrationCardImage ? "checkmark-circle" : "scan-outline"} size={24} color={registrationCardImage ? COLORS.success : COLORS.gold} />
+              <Ionicons name={scanCompleted ? "checkmark-circle" : "camera-outline"} size={24} color={scanCompleted ? COLORS.success : COLORS.gold} />
               <Text style={styles.scanButtonText}>
-                {registrationCardImage ? 'Đã tải lên cà vẹt xe (Tải lại)' : 'Quét tự động cà vẹt xe (AI)'}
+                {scanCompleted ? 'Đã quét cà vẹt xe (Chụp lại)' : 'Chụp cà vẹt xe để quét AI'}
               </Text>
             </>
           )}
@@ -239,6 +320,122 @@ export const AddVehicleScreen = ({ navigation }: { navigation: { goBack: () => v
 };
 
 const styles = StyleSheet.create({
+  cameraScreen: {
+    backgroundColor: '#050505',
+    flex: 1,
+  },
+  cameraHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    height: 64,
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.md,
+  },
+  cameraHeaderButton: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: RADIUS.round,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
+  cameraTitle: {
+    color: COLORS.textPrimary,
+    fontSize: FONT_SIZES.lg,
+    fontWeight: '800',
+  },
+  cameraBody: {
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.lg,
+  },
+  cameraGuide: {
+    color: COLORS.textPrimary,
+    fontSize: FONT_SIZES.md,
+    fontWeight: '700',
+    marginBottom: SPACING.lg,
+    textAlign: 'center',
+  },
+  cardCameraFrame: {
+    aspectRatio: 3 / 2,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.md,
+    overflow: 'hidden',
+    width: '100%',
+  },
+  frameBorder: {
+    ...StyleSheet.absoluteFillObject,
+    borderColor: 'rgba(212,175,55,0.38)',
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+  },
+  frameCorner: {
+    borderColor: COLORS.gold,
+    height: 32,
+    position: 'absolute',
+    width: 32,
+  },
+  frameCornerTopLeft: {
+    borderLeftWidth: 4,
+    borderTopWidth: 4,
+    left: 0,
+    top: 0,
+  },
+  frameCornerTopRight: {
+    borderRightWidth: 4,
+    borderTopWidth: 4,
+    right: 0,
+    top: 0,
+  },
+  frameCornerBottomLeft: {
+    borderBottomWidth: 4,
+    borderLeftWidth: 4,
+    bottom: 0,
+    left: 0,
+  },
+  frameCornerBottomRight: {
+    borderBottomWidth: 4,
+    borderRightWidth: 4,
+    bottom: 0,
+    right: 0,
+  },
+  cameraTips: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginTop: SPACING.lg,
+  },
+  cameraTipText: {
+    color: COLORS.textSecondary,
+    flexShrink: 1,
+    fontSize: FONT_SIZES.sm,
+    lineHeight: 20,
+  },
+  captureControls: {
+    alignItems: 'center',
+    paddingBottom: SPACING.xl,
+  },
+  captureButtonOuter: {
+    alignItems: 'center',
+    borderColor: COLORS.textPrimary,
+    borderRadius: 40,
+    borderWidth: 3,
+    height: 76,
+    justifyContent: 'center',
+    width: 76,
+  },
+  captureButtonInner: {
+    backgroundColor: COLORS.gold,
+    borderRadius: 31,
+    height: 62,
+    width: 62,
+  },
+  captureLabel: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.sm,
+    marginTop: SPACING.sm,
+  },
   safe: {
     backgroundColor: COLORS.background,
     flex: 1,
