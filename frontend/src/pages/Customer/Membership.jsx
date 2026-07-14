@@ -284,7 +284,9 @@ export default function Membership() {
       return;
     }
 
-    if (paymentMethod === 'wallet' && selectedPackage && walletBalance < selectedPackage.price) {
+    const totalPrice = selectedPackage ? selectedPackage.price * Math.max(1, selectedSlots.length) : 0;
+
+    if (paymentMethod === 'wallet' && selectedPackage && walletBalance < totalPrice) {
       toast.error("Số dư ví không đủ. Hệ thống sẽ chuyển hướng bạn đến trang Nạp Tiền.");
       setTimeout(() => {
         setShowSlotModal(false);
@@ -493,9 +495,15 @@ export default function Membership() {
             <div className="p-6 border-b border-gray-100 flex items-center justify-between">
               <div>
                 <h3 className="text-xl font-black text-gray-900">Choose Fixed Parking Slots</h3>
-                <p className="text-sm text-gray-500 mt-1">
-                  You currently have {vehicles.length} registered vehicles. You can select {Math.min(3, vehicles.length)} parking slots.
-                </p>
+                <p className="text-gray-500 mt-1">
+                You currently have <span className="font-bold text-gray-900">{vehicles.length}</span> registered vehicles. 
+                You can select up to <span className="font-bold text-gray-900">{Math.min(3, vehicles.length)}</span> parking slots.
+                {vehicles.length > 1 && (
+                  <span className="block mt-1 text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-md">
+                    Tip: You can select fewer slots than vehicles to share slots among your vehicles.
+                  </span>
+                )}
+              </p>
               </div>
               <button 
                 onClick={() => setShowSlotModal(false)}
@@ -585,14 +593,14 @@ export default function Membership() {
                     </button>
                   </div>
                   
-                  {paymentMethod === 'wallet' && selectedPackage && walletBalance < selectedPackage.price && (
-                    <div className="mb-3 p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium flex items-start gap-1.5">
+                  {paymentMethod === 'wallet' && selectedPackage && walletBalance < (selectedPackage.price * Math.max(1, selectedSlots.length)) && (
+                    <div className="bg-rose-50 text-rose-600 text-xs p-3 rounded-xl border border-rose-100 flex gap-2 mt-4 font-medium items-start">
                       <AlertCircle className="shrink-0 w-4 h-4" />
                       <p>Insufficient balance. Please top up or use PayOS.</p>
                     </div>
                   )}
 
-                  <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-3">
+                  <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-3 mt-4">
                     Selected ({selectedSlots.length} / {Math.min(3, vehicles.length)})
                   </label>
                   <div className="space-y-2">
@@ -610,11 +618,21 @@ export default function Membership() {
                   </div>
                 </div>
                 
-                <button 
+                <button
+                  disabled={selectedSlots.length === 0 || verifying || (paymentMethod === 'wallet' && walletBalance < (selectedPackage?.price * Math.max(1, selectedSlots.length)))}
                   onClick={handleConfirmSlots}
-                  className={`w-full py-4 rounded-xl font-bold text-white transition flex items-center justify-center gap-2 bg-gray-900 hover:bg-black`}
+                  className="w-full bg-gray-900 hover:bg-black text-white font-bold py-3.5 px-8 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transform hover:-translate-y-0.5 active:translate-y-0"
                 >
-                  Pay now <ArrowRight size={18} />
+                  {verifying ? (
+                    <span className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Processing...
+                    </span>
+                  ) : (
+                    <>
+                      Pay now {selectedPackage && selectedSlots.length > 0 ? `(${(selectedPackage.price * selectedSlots.length).toLocaleString('vi-VN')} VND)` : ''} <ArrowRight size={18} />
+                    </>
+                  )}
                 </button>
               </div>
             </div>
