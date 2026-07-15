@@ -1450,7 +1450,8 @@ exports.quoteBulkBooking = async (req, res, next) => {
       if (vehicleId) {
         vehicle = await Vehicle.findOne({ _id: vehicleId, owner: userId });
       } else if (licensePlate) {
-        vehicle = { licensePlate: licensePlate.trim().toUpperCase() }; // Just mock for quoting
+        const normalized = normalizeLicensePlate(licensePlate);
+        vehicle = { _id: null, licensePlate: normalized }; // Mock for quoting
       }
       if (!vehicle) throw new Error(`Không tìm thấy xe hợp lệ cho ô đỗ ${parkingSlot}`);
 
@@ -1458,8 +1459,12 @@ exports.quoteBulkBooking = async (req, res, next) => {
       if (durationHours <= 0) throw new Error('Thời lượng không hợp lệ');
 
       // Check overlapping for vehicle
+      const vehicleQuery = vehicle._id 
+        ? { vehicleId: vehicle._id } 
+        : { licensePlate: vehicle.licensePlate };
+        
       const overlappingBooking = await Booking.findOne({
-        licensePlate: vehicle.licensePlate,
+        ...vehicleQuery,
         status: { $in: ['PAID', 'ACTIVE', 'PAUSED'] },
         scheduledStart: { $lt: end },
         scheduledEnd: { $gt: start }
@@ -1547,6 +1552,10 @@ exports.createBulkBooking = async (req, res, next) => {
 
     let grandTotal = 0;
     const bookingsToCreate = [];
+    
+    // Cache for checking overlaps within the same bulk request
+    const internalVehicleReservations = [];
+    const internalSlotReservations = [];
 
     // Check items sequentially
     for (const item of items) {
@@ -1578,9 +1587,34 @@ exports.createBulkBooking = async (req, res, next) => {
       const durationHours = (end - start) / (1000 * 60 * 60);
       if (durationHours <= 0) throw new Error('Thời lượng không hợp lệ');
 
-      // Check overlapping for vehicle
+      // Check internal overlap for vehicle within the same request
+      const internalVehicleOverlap = internalVehicleReservations.find(res => {
+        const isSameVehicle = vehicle._id ? res.vehicleId === vehicle._id.toString() : res.licensePlate === vehicle.licensePlate;
+        return isSameVehicle && res.start < end && res.end > start;
+      });
+      if (internalVehicleOverlap) throw new Error(`Xe ${vehicle.licensePlate} bị trùng lịch đặt trong cùng giỏ hàng`);
+
+      // Check internal overlap for slot within the same request
+      const internalSlotOverlap = internalSlotReservations.find(res => {
+        return res.parkingSlot === parkingSlot && res.start < end && res.end > start;
+      });
+      if (internalSlotOverlap) throw new Error(`Ô đỗ ${parkingSlot} bị trùng lịch đặt trong cùng giỏ hàng`);
+
+      // Record internal reservations
+      internalVehicleReservations.push({ 
+        vehicleId: vehicle._id ? vehicle._id.toString() : null, 
+        licensePlate: vehicle.licensePlate, 
+        start, end 
+      });
+      internalSlotReservations.push({ parkingSlot, start, end });
+
+      // Check overlapping for vehicle in Database
+      const vehicleQuery = vehicle._id 
+        ? { vehicleId: vehicle._id } 
+        : { licensePlate: vehicle.licensePlate };
+
       const overlappingBooking = await Booking.findOne({
-        vehicleId: vehicle._id,
+        ...vehicleQuery,
         status: { $in: ['PAID', 'ACTIVE', 'PAUSED'] },
         scheduledStart: { $lt: end },
         scheduledEnd: { $gt: start }
@@ -1606,6 +1640,20 @@ exports.createBulkBooking = async (req, res, next) => {
       }).session(session);
       if (subscriptionInfo && subscriptionInfo.user.toString() !== userId.toString()) {
         throw new Error(`Ô đỗ ${parkingSlot} đã được đăng ký gói thuê bao cố định.`);
+      }
+
+      // Verify BookingHold to prevent stealing slots
+      if (!holdId) {
+        throw new Error(`Ô đỗ ${parkingSlot} không có phiên giữ chỗ hợp lệ.`);
+      }
+      const bookingHold = await BookingHold.findOne({
+        _id: holdId,
+        userId: userId,
+        slotCode: parkingSlot,
+        expiresAt: { $gt: new Date() }
+      }).session(session);
+      if (!bookingHold) {
+        throw new Error(`Phiên giữ chỗ cho ô đỗ ${parkingSlot} không hợp lệ hoặc đã hết hạn. Vui lòng thử lại.`);
       }
 
       // Pricing

@@ -521,7 +521,6 @@ export default function CreateBookingPage() {
     setError('');
     setSuccess('');
     setSlots([]);
-    setSelectedSlotKey('');
 
     try {
       const res = await getAvailableBookingSlots({
@@ -531,14 +530,25 @@ export default function CreateBookingPage() {
 
       if (!res.ok) {
         setError(res.data?.message || 'Could not check available slots.');
+        setSelectedSlotKey('');
         return;
       }
 
       const nextSlots = res.data?.data?.slots || [];
       setSlots(nextSlots);
+      
+      // Preserve selection if it's still available in the new time range
+      if (selectedSlotKey) {
+        const [fId, sCode] = selectedSlotKey.split(':');
+        const stillAvailable = nextSlots.some(s => s.floorId === fId && s.slotCode === sCode);
+        if (!stillAvailable) {
+          setSelectedSlotKey('');
+        }
+      }
     } catch (err) {
       console.error('Error finding slots:', err);
       setError(`Network error while checking slots: ${err.message}`);
+      setSelectedSlotKey('');
     } finally {
       setCheckingSlots(false);
     }
@@ -666,7 +676,6 @@ export default function CreateBookingPage() {
     setSuccess(editingClientItemId ? 'Booking item updated.' : 'Booking item added to the list.');
 
     setSelectedServices([]);
-    setSelectedSlotKey('');
     handleFindSlots();
     } finally {
       setSubmitting(false);
@@ -1493,7 +1502,10 @@ export default function CreateBookingPage() {
         open={policyPrompt.open}
         missingPolicies={policyPrompt.missingPolicies}
         onClose={() => setPolicyPrompt({ open: false, missingPolicies: [] })}
-        onAccepted={() => setPolicyPrompt({ open: false, missingPolicies: [] })}
+        onAccepted={() => {
+          setPolicyPrompt({ open: false, missingPolicies: [] });
+          handleCheckoutCart();
+        }}
       />
     </div>
   );
