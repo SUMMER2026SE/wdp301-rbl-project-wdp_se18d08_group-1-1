@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Crown, Sparkles, Check, Loader2, ArrowRight, AlertCircle, QrCode, Wallet } from 'lucide-react';
-import { getTicketPackages, createSubscriptionPayment, verifySubscriptionPayment, paySubscriptionWithWallet } from '../../services/subscriptionService';
+import { getTicketPackages, createSubscriptionPayment, verifySubscriptionPayment, paySubscriptionWithWallet, getMembership } from '../../services/subscriptionService';
 import { getWalletInfo } from '../../services/walletService';
 import { getMyVehicles } from '../../services/vehicleService';
 import { apiFetch } from '../../services/api';
@@ -17,6 +17,7 @@ export default function Membership() {
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState(null);
+  const [membershipData, setMembershipData] = useState(null);
 
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [showSlotModal, setShowSlotModal] = useState(false);
@@ -49,9 +50,10 @@ export default function Membership() {
     const token = localStorage.getItem('accessToken');
     if (!token) return;
 
-    const { ok, data } = await apiFetch('/profile', {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const [{ ok, data }, membershipRes] = await Promise.all([
+      apiFetch('/profile', { headers: { Authorization: `Bearer ${token}` } }),
+      getMembership()
+    ]);
 
     if (ok && data?.success) {
       const cached = JSON.parse(sessionStorage.getItem('valo_user') || 'null');
@@ -63,6 +65,10 @@ export default function Membership() {
       sessionStorage.setItem('valo_user', JSON.stringify(updatedUser));
       setUser(data.data);
       notifyAuthChange();
+    }
+    
+    if (membershipRes.ok && membershipRes.data?.success) {
+      setMembershipData(membershipRes.data.data);
     }
   };
 
@@ -136,14 +142,15 @@ export default function Membership() {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [pkgRes, vRes, floorRes, profileRes, walletRes] = await Promise.all([
+        const [pkgRes, vRes, floorRes, profileRes, walletRes, membershipRes] = await Promise.all([
           getTicketPackages(),
           getMyVehicles(),
           fetch(`${import.meta.env.VITE_API_BASE_URL}/parking-floors`).then(r => r.json()),
           fetch(`${import.meta.env.VITE_API_BASE_URL}/profile`, {
             headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
           }).then(r => r.json()),
-          getWalletInfo()
+          getWalletInfo(),
+          getMembership()
         ]);
         
         if (pkgRes.ok && pkgRes.data?.data) {
@@ -164,6 +171,9 @@ export default function Membership() {
         }
         if (walletRes.ok && walletRes.data?.success) {
           setWalletBalance(walletRes.data.data.balance || 0);
+        }
+        if (membershipRes.ok && membershipRes.data?.success) {
+          setMembershipData(membershipRes.data.data);
         }
       } catch (err) {
         console.error(err);
@@ -247,12 +257,19 @@ export default function Membership() {
   };
 
   const getPackageButton = (pkg) => {
-    if (isVipActive && activePackage?._id === pkg._id) {
-      return { disabled: true, label: 'In use' };
+    const totalReservedSlots = membershipData?.reservedSlots?.length || 0;
+    const maxSlots = Math.min(3, vehicles.length);
+    
+    if (totalReservedSlots >= maxSlots && maxSlots > 0) {
+      return { disabled: true, label: 'In use (Max slots)' };
     }
 
     if (isVipActive && activePackageType === 'yearly' && pkg.type === 'monthly') {
-      return { disabled: true, label: 'Included in the Yearly plan' };
+      return { disabled: true, label: 'Included in Yearly' };
+    }
+
+    if (totalReservedSlots > 0) {
+      return { disabled: false, label: 'Add slot' };
     }
 
     return { disabled: false, label: 'Upgrade now' };
@@ -266,12 +283,15 @@ export default function Membership() {
     } else {
       // Add
       const maxSlots = Math.min(3, vehicles.length);
+      const totalReservedSlots = membershipData?.reservedSlots?.length || 0;
+      const availableSlots = Math.max(0, maxSlots - totalReservedSlots);
+      
       if (vehicles.length === 0) {
         toast.error("You need to add a vehicle before buying a VIP pass.");
         return;
       }
-      if (selectedSlots.length >= maxSlots) {
-        toast.error(`You can select at most ${maxSlots} parking slots (matching your number of vehicles).`);
+      if (selectedSlots.length >= availableSlots) {
+        toast.error(`You can select at most ${availableSlots} additional slot(s) based on your vehicles.`);
         return;
       }
       setSelectedSlots(prev => [...prev, { floorId, slotCode: slotData.slotNumber }]);
@@ -651,10 +671,10 @@ export default function Membership() {
             <p className="text-gray-500 mb-8">Transaction successful. Your benefits are active and your slot has been reserved.</p>
             
             <button 
-              onClick={() => window.location.href = '/'}
+              onClick={() => navigate('/profile')}
               className="w-full py-4 rounded-xl font-bold text-white bg-gray-900 hover:bg-black transition"
             >
-              Back to home
+              Back to profile
             </button>
           </div>
         </div>

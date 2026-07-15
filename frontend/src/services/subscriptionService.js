@@ -34,3 +34,10 @@ export const paySubscriptionWithWallet = async (packageId, slots) => {
     body: JSON.stringify({ packageId, slots }),
   });
 };
+
+export const getMembership = async () => {
+  return apiFetch('/subscriptions/membership', {
+    method: 'GET',
+    headers: authHeader(),
+  });
+};

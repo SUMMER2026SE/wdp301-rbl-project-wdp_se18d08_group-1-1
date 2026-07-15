@@ -29,9 +29,21 @@ exports.createSubscriptionPayment = async (req, res, next) => {
     // Validate slots limit based on vehicles
     const Vehicle = require('../models/Vehicle');
     const vehiclesCount = await Vehicle.countDocuments({ owner: req.user._id });
+
+    // Count currently owned active slots
+    const activeSubscriptions = await Subscription.find({
+      user: req.user._id,
+      status: 'active',
+      paymentStatus: 'paid',
+      expireAt: { $gt: new Date() }
+    });
+    const currentActiveSlots = activeSubscriptions.reduce((acc, sub) => acc + (sub.slots ? sub.slots.length : 0), 0);
+
     const maxSlots = Math.min(3, vehiclesCount); // User can choose up to their vehicle count, max 3
-    if (slots.length > maxSlots) {
-      return res.status(400).json({ success: false, message: `You can only select up to ${maxSlots} slots based on your registered vehicles.` });
+    const availableSlots = Math.max(0, maxSlots - currentActiveSlots);
+
+    if (slots.length > availableSlots) {
+      return res.status(400).json({ success: false, message: `You can only select up to ${availableSlots} additional slots based on your registered vehicles.` });
     }
 
     // Check if slots are already reserved
@@ -178,9 +190,21 @@ exports.paySubscriptionWithWallet = async (req, res, next) => {
     // Validate slots limit based on vehicles
     const Vehicle = require('../models/Vehicle');
     const vehiclesCount = await Vehicle.countDocuments({ owner: req.user._id });
+
+    // Count currently owned active slots
+    const activeSubscriptions = await Subscription.find({
+      user: req.user._id,
+      status: 'active',
+      paymentStatus: 'paid',
+      expireAt: { $gt: new Date() }
+    });
+    const currentActiveSlots = activeSubscriptions.reduce((acc, sub) => acc + (sub.slots ? sub.slots.length : 0), 0);
+
     const maxSlots = Math.min(3, vehiclesCount); 
-    if (slots.length > maxSlots) {
-      return res.status(400).json({ success: false, message: `You can only select up to ${maxSlots} slots based on your registered vehicles.` });
+    const availableSlots = Math.max(0, maxSlots - currentActiveSlots);
+
+    if (slots.length > availableSlots) {
+      return res.status(400).json({ success: false, message: `You can only select up to ${availableSlots} additional slots based on your registered vehicles.` });
     }
 
     // Check if slots are already reserved
@@ -259,10 +283,11 @@ exports.getMembership = async (req, res, next) => {
       .populate('membership.packageId', 'name type price description isActive')
       .lean();
 
-    const activeSubscription = await Subscription.findOne({
+    const activeSubscriptions = await Subscription.find({
       user: req.user._id,
       status: 'active',
       paymentStatus: 'paid',
+      expireAt: { $gt: new Date() }
     })
       .sort({ expireAt: -1 })
       .populate('ticketPackage', 'name type price description isActive')
@@ -275,7 +300,19 @@ exports.getMembership = async (req, res, next) => {
     const daysUntilExpiration = expireAt
       ? Math.ceil((expireAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
       : null;
-    const pkg = activeSubscription?.ticketPackage || user?.membership?.packageId || null;
+      
+    // Use the latest subscription package for general info
+    const latestSubscription = activeSubscriptions[0];
+    const pkg = latestSubscription?.ticketPackage || user?.membership?.packageId || null;
+
+    const reservedSlots = activeSubscriptions.flatMap(sub => 
+      (sub.slots || []).map(slot => ({
+        floorId: slot.floorId?._id || slot.floorId,
+        floorName: slot.floorId?.name || '',
+        floorNumber: slot.floorId?.floorNumber || null,
+        slotCode: slot.slotCode,
+      }))
+    );
 
     res.status(200).json({
       success: true,
@@ -294,12 +331,7 @@ exports.getMembership = async (req, res, next) => {
               description: pkg.description,
             }
           : null,
-        reservedSlots: (activeSubscription?.slots || []).map((slot) => ({
-          floorId: slot.floorId?._id || slot.floorId,
-          floorName: slot.floorId?.name || '',
-          floorNumber: slot.floorId?.floorNumber || null,
-          slotCode: slot.slotCode,
-        })),
+        reservedSlots,
         benefits: isActive
           ? ['Reserved VIP parking slots', 'Priority parking access', 'Membership parking coverage']
           : [],
