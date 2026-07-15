@@ -432,6 +432,17 @@ exports.createBooking = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Phương tiện này đã có lịch đặt chỗ khác trùng thời gian' });
     }
 
+    // 3.1. Kiểm tra VIP
+    const restriction = await findVipRegisteredVehicleBookingRestriction({
+      userId,
+      licensePlate: vehicle.licensePlate,
+      floorId,
+      slotCode: parkingSlot
+    });
+    if (restriction) {
+      return res.status(400).json({ success: false, message: `Xe ${vehicle.licensePlate} đã nằm trong gói thuê bao VIP. Vui lòng sử dụng ô đỗ VIP của bạn thay vì đặt chỗ mới.` });
+    }
+
     // 3.5. Kiểm tra ô đỗ có thuộc Subscription (Gói tháng/năm) không
     const Subscription = require('../models/Subscription');
     const subscriptionInfo = await Subscription.findOne({
@@ -1481,13 +1492,32 @@ exports.quoteBulkBooking = async (req, res, next) => {
       if (vehicleId) {
         vehicle = await Vehicle.findOne({ _id: vehicleId, owner: userId });
       } else if (licensePlate) {
+        const plateRegex = /^[A-Za-z0-9]{4,12}$/;
+        if (!plateRegex.test(licensePlate)) {
+          throw new Error(`Biển số xe ${licensePlate} không hợp lệ. Phải từ 4-12 ký tự chữ và số.`);
+        }
         const normalized = normalizeLicensePlate(licensePlate);
-        vehicle = { _id: null, licensePlate: normalized }; // Mock for quoting
+        // Try to find if this plate is actually a registered vehicle
+        const foundVehicle = await Vehicle.findOne({ licensePlate: normalized, owner: userId });
+        vehicle = foundVehicle || { _id: null, licensePlate: normalized };
       }
       if (!vehicle) throw new Error(`Không tìm thấy xe hợp lệ cho ô đỗ ${parkingSlot}`);
 
       const durationHours = (end - start) / (1000 * 60 * 60);
       if (durationHours <= 0) throw new Error('Thời lượng không hợp lệ');
+
+      // Check VIP Restriction
+      if (vehicle.licensePlate) {
+        const restriction = await findVipRegisteredVehicleBookingRestriction({
+          userId,
+          licensePlate: vehicle.licensePlate,
+          floorId,
+          slotCode: parkingSlot
+        });
+        if (restriction) {
+          throw new Error(`Xe ${vehicle.licensePlate} đã nằm trong gói thuê bao VIP. Vui lòng sử dụng ô đỗ VIP của bạn thay vì đặt chỗ mới.`);
+        }
+      }
 
       // Check overlapping for vehicle
       const vehicleQuery = vehicle._id 
@@ -1606,17 +1636,31 @@ exports.createBulkBooking = async (req, res, next) => {
       if (vehicleId) {
         vehicle = await Vehicle.findOne({ _id: vehicleId, owner: userId }).session(session);
       } else if (licensePlate) {
-        const normalized = normalizeLicensePlate(licensePlate);
-        vehicle = await Vehicle.findOne({ licensePlate: normalized, owner: userId }).session(session);
-        // If no vehicle exists, just use a dummy object for the quote
-        if (!vehicle) {
-          vehicle = { _id: null, licensePlate: normalized };
+        const plateRegex = /^[A-Za-z0-9]{4,12}$/;
+        if (!plateRegex.test(licensePlate)) {
+          throw new Error(`Biển số xe ${licensePlate} không hợp lệ. Phải từ 4-12 ký tự chữ và số.`);
         }
+        const normalized = normalizeLicensePlate(licensePlate);
+        const foundVehicle = await Vehicle.findOne({ licensePlate: normalized, owner: userId }).session(session);
+        vehicle = foundVehicle || { _id: null, licensePlate: normalized };
       }
       if (!vehicle) throw new Error(`Không tìm thấy xe hợp lệ cho ô đỗ ${parkingSlot}`);
 
       const durationHours = (end - start) / (1000 * 60 * 60);
       if (durationHours <= 0) throw new Error('Thời lượng không hợp lệ');
+
+      // Check VIP Restriction
+      if (vehicle.licensePlate) {
+        const restriction = await findVipRegisteredVehicleBookingRestriction({
+          userId,
+          licensePlate: vehicle.licensePlate,
+          floorId,
+          slotCode: parkingSlot
+        });
+        if (restriction) {
+          throw new Error(`Xe ${vehicle.licensePlate} đã nằm trong gói thuê bao VIP. Vui lòng sử dụng ô đỗ VIP của bạn thay vì đặt chỗ mới.`);
+        }
+      }
 
       // Check internal overlap for vehicle within the same request
       const internalVehicleOverlap = internalVehicleReservations.find(res => {

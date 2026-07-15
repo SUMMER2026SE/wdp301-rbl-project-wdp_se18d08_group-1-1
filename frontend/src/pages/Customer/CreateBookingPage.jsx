@@ -18,6 +18,7 @@ import {
 import ParkingMapViewer from '../../components/ParkingMapViewer';
 import PolicyAcceptancePrompt from '../../components/policies/PolicyAcceptancePrompt';
 import { extractMissingPolicies, isPolicyAcceptanceRequired } from '../../utils/policyErrors';
+import { getPolicyAcceptanceStatus } from '../../services/policyService';
 import { getServices } from '../../services/extraServiceApi';
 import { getMyVehicles } from '../../services/vehicleService';
 import { getWalletInfo } from '../../services/walletService';
@@ -357,16 +358,22 @@ export default function CreateBookingPage() {
     ? dbSlots.find((slot) => slot.slotNumber === selectedSlot.slotCode)
     : null;
   const selectedSlotReservedFor = selectedDbSlot?.reservedFor?._id || selectedDbSlot?.reservedFor || null;
+  const currentLicensePlate = vehicleId ? selectedVehicle?.licensePlate : manualPlate.trim();
+  const isRegisteredPlate = vehicles.some(
+    v => v.licensePlate.toUpperCase() === currentLicensePlate?.toUpperCase()
+  );
+
   const selectedSlotIsOwnVipSlot = Boolean(
     activeMembershipType &&
-    selectedVehicle &&
+    isRegisteredPlate &&
     selectedSlot &&
     selectedSlotReservedFor &&
     String(selectedSlotReservedFor) === String(profile?.id)
   );
+
   const selectedRegisteredVehicleBlockedByVip = Boolean(
     activeMembershipType &&
-    selectedVehicle &&
+    isRegisteredPlate &&
     selectedSlot &&
     selectedDbSlot &&
     !selectedSlotIsOwnVipSlot
@@ -586,13 +593,20 @@ export default function CreateBookingPage() {
       return;
     }
 
-    if (!vehicleId && !manualPlate.trim()) {
-      setError('Please select a vehicle or enter a license plate.');
-      return;
+    if (!vehicleId) {
+      if (!manualPlate.trim()) {
+        setError('Please select a vehicle or enter a license plate.');
+        return;
+      }
+      const plateRegex = /^[A-Za-z0-9]{4,12}$/;
+      if (!plateRegex.test(manualPlate.trim())) {
+        setError('License plate must be 4-12 alphanumeric characters.');
+        return;
+      }
     }
 
     if (selectedRegisteredVehicleBlockedByVip) {
-      setError('This registered vehicle is already covered by your active VIP membership. Please use your assigned VIP slot instead of booking another slot.');
+      setError('This vehicle is already covered by your active VIP membership. Please use your assigned VIP slot instead of booking another slot.');
       return;
     }
 
@@ -832,6 +846,20 @@ export default function CreateBookingPage() {
         ...item,
         holdId: cartItems.find(c => c.clientItemId === item.clientItemId)?.holdId,
       }));
+
+      // Proactively check policy acceptance status before confirming booking
+      const statusRes = await getPolicyAcceptanceStatus();
+      if (statusRes.ok && statusRes.data?.success) {
+        const missingPolicies = statusRes.data.data?.missingPolicies || [];
+        if (missingPolicies.length > 0) {
+          setPolicyPrompt({
+            open: true,
+            missingPolicies: missingPolicies,
+          });
+          setSubmitting(false);
+          return;
+        }
+      }
 
       const res = await createBulkBooking({
         idempotencyKey: createClientItemId(),

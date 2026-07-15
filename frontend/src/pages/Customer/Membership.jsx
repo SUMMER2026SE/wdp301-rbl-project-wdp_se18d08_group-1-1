@@ -9,6 +9,7 @@ import { notifyAuthChange } from '../../services/authStorage';
 import ParkingMapViewer from '../../components/ParkingMapViewer';
 import PolicyAcceptancePrompt from '../../components/policies/PolicyAcceptancePrompt';
 import { extractMissingPolicies, isPolicyAcceptanceRequired } from '../../utils/policyErrors';
+import { getPolicyAcceptanceStatus } from '../../services/policyService';
 import toast, { Toaster } from 'react-hot-toast';
 
 export default function Membership() {
@@ -317,6 +318,20 @@ export default function Membership() {
     
     try {
       setShowSlotModal(false);
+
+      // Proactively check policy acceptance status before confirming booking
+      const statusRes = await getPolicyAcceptanceStatus();
+      if (statusRes.ok && statusRes.data?.success) {
+        const missingPolicies = statusRes.data.data?.missingPolicies || [];
+        if (missingPolicies.length > 0) {
+          setPolicyPrompt({
+            open: true,
+            missingPolicies: missingPolicies,
+          });
+          return;
+        }
+      }
+
       setVerifying(true); // Show the processing state
 
       if (paymentMethod === 'wallet') {
