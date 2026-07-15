@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import ParkingMapViewer from '../../components/ParkingMapViewer';
 import PolicyAcceptancePrompt from '../../components/policies/PolicyAcceptancePrompt';
+import BookingPolicyModal from '../../components/policies/BookingPolicyModal';
 import { extractMissingPolicies, isPolicyAcceptanceRequired } from '../../utils/policyErrors';
 import { getPolicyAcceptanceStatus } from '../../services/policyService';
 import { getServices } from '../../services/extraServiceApi';
@@ -226,6 +227,7 @@ export default function CreateBookingPage() {
     open: false,
     missingPolicies: [],
   });
+  const [showPolicyModal, setShowPolicyModal] = useState(false);
 
   // Map state
   const [floors, setFloors] = useState([]);
@@ -812,7 +814,20 @@ export default function CreateBookingPage() {
     );
   };
 
-  const handleCheckoutCart = async () => {
+  const handleCheckoutCart = () => {
+    if (cartItems.length === 0) {
+      setError('Add at least one vehicle to the booking list before checkout.');
+      return;
+    }
+    if (Object.keys(cartItemErrors).length > 0) {
+      setError('Fix highlighted booking items before checkout.');
+      return;
+    }
+    setShowPolicyModal(true);
+  };
+
+  const executeCheckoutCart = async () => {
+    setShowPolicyModal(false);
     setSubmitting(true);
     setError('');
     setSuccess('');
@@ -1531,8 +1546,14 @@ export default function CreateBookingPage() {
         onClose={() => setPolicyPrompt({ open: false, missingPolicies: [] })}
         onAccepted={() => {
           setPolicyPrompt({ open: false, missingPolicies: [] });
-          handleCheckoutCart();
+          executeCheckoutCart();
         }}
+      />
+
+      <BookingPolicyModal
+        open={showPolicyModal}
+        onClose={() => setShowPolicyModal(false)}
+        onConfirm={executeCheckoutCart}
       />
     </div>
   );

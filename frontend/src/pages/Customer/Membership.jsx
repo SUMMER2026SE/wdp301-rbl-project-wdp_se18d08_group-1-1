@@ -8,6 +8,7 @@ import { apiFetch } from '../../services/api';
 import { notifyAuthChange } from '../../services/authStorage';
 import ParkingMapViewer from '../../components/ParkingMapViewer';
 import PolicyAcceptancePrompt from '../../components/policies/PolicyAcceptancePrompt';
+import BookingPolicyModal from '../../components/policies/BookingPolicyModal';
 import { extractMissingPolicies, isPolicyAcceptanceRequired } from '../../utils/policyErrors';
 import { getPolicyAcceptanceStatus } from '../../services/policyService';
 import toast, { Toaster } from 'react-hot-toast';
@@ -35,6 +36,7 @@ export default function Membership() {
     open: false,
     missingPolicies: [],
   });
+  const [showPolicyModal, setShowPolicyModal] = useState(false);
 
   const subscriptionPackages = packages
     .filter(pkg => ['monthly', 'yearly'].includes(pkg.type))
@@ -318,6 +320,15 @@ export default function Membership() {
     
     try {
       setShowSlotModal(false);
+      setShowPolicyModal(true);
+    } catch {
+      toast.error("Network error");
+    }
+  };
+
+  const executeConfirmSlots = async () => {
+    setShowPolicyModal(false);
+    try {
 
       // Proactively check policy acceptance status before confirming booking
       const statusRes = await getPolicyAcceptanceStatus();
@@ -701,8 +712,14 @@ export default function Membership() {
         onClose={() => setPolicyPrompt({ open: false, missingPolicies: [] })}
         onAccepted={() => {
           setPolicyPrompt({ open: false, missingPolicies: [] });
-          handleConfirmSlots();
+          executeConfirmSlots();
         }}
+      />
+
+      <BookingPolicyModal
+        open={showPolicyModal}
+        onClose={() => setShowPolicyModal(false)}
+        onConfirm={executeConfirmSlots}
       />
     </div>
   );

@@ -438,6 +438,14 @@ exports.createKioskSession = async (req, res, next) => {
       if (detail) finalPhone = detail.phone;
     }
 
+    if (activeBooking && !userId && activeBooking.userId) {
+      userId = activeBooking.userId;
+      const user = await User.findById(userId);
+      if (user) userEmail = user.email;
+      const detail = await UserDetail.findOne({ userId });
+      if (detail && !finalPhone) finalPhone = detail.phone;
+    }
+
     // Kiểm tra Subscription (Gói tháng/năm)
     let activeSubscription = null;
     let vipRedirected = false;
@@ -783,12 +791,18 @@ exports.kioskExitScan = async (req, res, next) => {
     if (session.type === 'BOOKING' && session.bookingId) {
       const booking = await Booking.findById(session.bookingId);
       if (booking) {
-        // Tìm tổng chi phí của các session đã đỗ trước đó thuộc booking này (nếu có PAUSE)
+        const intervals = [{ start: booking.scheduledStart, end: booking.scheduledEnd }];
         const prevSessions = await Session.find({ bookingId: booking._id, _id: { $ne: session._id }, status: 'completed' });
         let previousSpent = 0;
         for (const s of prevSessions) {
           previousSpent += s.totalPrice || 0;
+          if (s.checkInTime && s.checkOutTime) {
+            intervals.push({ start: s.checkInTime, end: s.checkOutTime });
+          }
         }
+        intervals.push({ start: session.checkInTime, end: now });
+
+        const totalCostObj = await pricingEngine.calculateTotalForIntervals(intervals);
 
         const BookingService = require('../models/BookingService');
         const bookedServices = await BookingService.find({ bookingId: booking._id });
@@ -797,14 +811,15 @@ exports.kioskExitScan = async (req, res, next) => {
           servicesTotal += bs.price;
         }
 
-        const totalIncurred = previousSpent + pricing.finalTotal + servicesTotal;
+        const totalIncurred = totalCostObj.finalTotal + servicesTotal;
+        const totalPaidSoFar = booking.prepaidAmount + previousSpent;
 
-        if (totalIncurred > booking.prepaidAmount) {
-          amountToPay = totalIncurred - booking.prepaidAmount;
+        if (totalIncurred > totalPaidSoFar) {
+          amountToPay = totalIncurred - totalPaidSoFar;
           refundAmount = 0;
         } else {
           amountToPay = 0;
-          refundAmount = booking.prepaidAmount - totalIncurred;
+          refundAmount = totalPaidSoFar - totalIncurred;
         }
 
         if (booking.scheduledEnd > now) {
@@ -897,11 +912,18 @@ exports.kioskCheckout = async (req, res, next) => {
     if (session.type === 'BOOKING' && session.bookingId) {
       booking = await Booking.findById(session.bookingId);
       if (booking) {
+        const intervals = [{ start: booking.scheduledStart, end: booking.scheduledEnd }];
         const prevSessions = await Session.find({ bookingId: booking._id, _id: { $ne: session._id }, status: 'completed' });
         let previousSpent = 0;
         for (const s of prevSessions) {
           previousSpent += s.totalPrice || 0;
+          if (s.checkInTime && s.checkOutTime) {
+            intervals.push({ start: s.checkInTime, end: s.checkOutTime });
+          }
         }
+        intervals.push({ start: session.checkInTime, end: now });
+
+        const totalCostObj = await pricingEngine.calculateTotalForIntervals(intervals);
 
         const BookingService = require('../models/BookingService');
         const bookedServices = await BookingService.find({ bookingId: booking._id });
@@ -910,13 +932,15 @@ exports.kioskCheckout = async (req, res, next) => {
           servicesTotal += bs.price;
         }
 
-        const totalIncurred = previousSpent + pricing.finalTotal + servicesTotal;
-        if (totalIncurred > booking.prepaidAmount) {
-          amountToPay = totalIncurred - booking.prepaidAmount;
+        const totalIncurred = totalCostObj.finalTotal + servicesTotal;
+        const totalPaidSoFar = booking.prepaidAmount + previousSpent;
+
+        if (totalIncurred > totalPaidSoFar) {
+          amountToPay = totalIncurred - totalPaidSoFar;
           refundAmount = 0;
         } else {
           amountToPay = 0;
-          refundAmount = booking.prepaidAmount - totalIncurred;
+          refundAmount = totalPaidSoFar - totalIncurred;
         }
       }
     } else if (session.type === 'SUBSCRIPTION') {
@@ -1002,7 +1026,7 @@ exports.kioskCheckout = async (req, res, next) => {
 
     // 2. Xử lý trả sớm Booking
     if (booking) {
-        if (keepPaused === true) {
+        if (keepPaused === true || keepPaused === 'true') {
           // Tạm dừng: Giữ ô đỗ, đổi trạng thái Booking sang PAUSED
           booking.status = 'PAUSED';
           await booking.save();
@@ -1027,7 +1051,7 @@ exports.kioskCheckout = async (req, res, next) => {
     // 3. Hoàn tất Session đỗ xe
     session.status = 'completed';
     session.checkOutTime = now;
-    session.totalPrice = pricing.finalTotal;
+    session.totalPrice = amountToPay; // Save ONLY what they paid for this session (for BOOKING, it represents overtime paid)
     session.pricingBreakdown = pricing;
     if (exitImage_url) session.exitImage_url = exitImage_url;
     if (exitCamera) session.exitCamera = exitCamera;
