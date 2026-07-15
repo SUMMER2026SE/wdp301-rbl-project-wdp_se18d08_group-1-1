@@ -18,9 +18,13 @@ import { useAuth } from '@/hooks/useAuth';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '../../constants/theme';
 import { MenuItem } from '@/components/profile/MenuItem';
 import { useAppAlert } from '@/contexts/AppAlertContext';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { StaffProfileStackParamList, StaffTabParamList } from '@/navigation/StaffNavigator';
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
-export default function StaffProfileScreen({ navigation }: { navigation?: any }) {
+type Props = NativeStackScreenProps<StaffProfileStackParamList, 'StaffProfileHome'>;
+
+export default function StaffProfileScreen({ navigation }: Props) {
   const { user, logout } = useAuth();
   const { alert } = useAppAlert();
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -51,15 +55,16 @@ export default function StaffProfileScreen({ navigation }: { navigation?: any })
   };
 
   const handleLogout = () => {
-    alert('Đăng xuất', 'Bạn có chắc muốn đăng xuất?', [
-      { text: 'Huỷ', style: 'cancel' },
-      { text: 'Đăng xuất', style: 'destructive', onPress: logout },
+    alert('Sign out', 'Are you sure you want to sign out?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign out', style: 'destructive', onPress: logout },
     ]);
   };
 
-  const displayName = profile?.fullName || user?.username || 'Nhân viên';
+  const displayName = profile?.fullName || user?.username || 'Staff member';
   const email = profile?.email || user?.email || '';
   const initial = displayName.charAt(0).toUpperCase();
+  const goToTab = (screen: keyof StaffTabParamList) => navigation.getParent()?.navigate(screen);
 
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
@@ -79,26 +84,26 @@ export default function StaffProfileScreen({ navigation }: { navigation?: any })
       >
         {/* ── Header ──────────────────────────────────────────── */}
         <View style={styles.pageHeader}>
-          <Text style={styles.pageTitle}>Hồ sơ</Text>
+          <Text style={styles.pageTitle}>Profile</Text>
         </View>
 
         {/* ── Profile Card ────────────────────────────────────── */}
         <View style={styles.profileCard}>
           <LinearGradient
-            colors={['rgba(96,180,255,0.12)', 'rgba(96,180,255,0.03)']}
+            colors={['rgba(212,175,55,0.12)', 'rgba(212,175,55,0.03)']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={StyleSheet.absoluteFill}
           />
           <LinearGradient
-            colors={['#60B4FF', 'transparent']}
+            colors={[COLORS.gold, 'transparent']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={styles.cardTopLine}
           />
 
           {loading ? (
-            <ActivityIndicator color="#60B4FF" style={{ padding: SPACING.xl }} />
+            <ActivityIndicator color={COLORS.gold} style={{ padding: SPACING.xl }} />
           ) : (
             <View style={styles.profileCardContent}>
               <View style={styles.avatarWrap}>
@@ -114,8 +119,8 @@ export default function StaffProfileScreen({ navigation }: { navigation?: any })
                 <Text style={styles.profileName}>{displayName}</Text>
                 <Text style={styles.profileEmail} numberOfLines={1}>{email}</Text>
                 <View style={styles.rolePill}>
-                  <Ionicons name="briefcase-outline" size={11} color="#60B4FF" />
-                  <Text style={[styles.rolePillText, { color: '#60B4FF' }]}>Nhân viên vận hành</Text>
+                  <Ionicons name="briefcase-outline" size={11} color={COLORS.gold} />
+                  <Text style={[styles.rolePillText, { color: COLORS.gold }]}>Operations staff</Text>
                 </View>
               </View>
             </View>
@@ -123,62 +128,62 @@ export default function StaffProfileScreen({ navigation }: { navigation?: any })
         </View>
 
         {/* ── Work section ────────────────────────────────────── */}
-        <Text style={styles.sectionTitle}>Chức năng làm việc</Text>
+        <Text style={styles.sectionTitle}>Work tools</Text>
         <View style={styles.menuCard}>
           <MenuItem
             icon="grid-outline"
-            label="Lưới bãi xe Live"
-            sublabel="Xem real-time slots"
+            label="Live parking grid"
+            sublabel="View real-time space status"
             iconColor={COLORS.gold}
             iconBg="rgba(212,175,55,0.12)"
-            onPress={() => navigation?.navigate?.('LiveGrid')}
+            onPress={() => goToTab('LiveGrid')}
           />
           <View style={styles.menuDivider} />
           <MenuItem
             icon="car-sport-outline"
-            label="Phiên đỗ xe"
-            sublabel="Quản lý check-in/out"
-            iconColor="#60B4FF"
-            iconBg="rgba(96,180,255,0.12)"
-            onPress={() => navigation?.navigate?.('Sessions')}
+            label="Parking sessions"
+            sublabel="Manage check-in and check-out"
+            iconColor={COLORS.gold}
+            iconBg="rgba(212,175,55,0.12)"
+            onPress={() => goToTab('Sessions')}
           />
           <View style={styles.menuDivider} />
           <MenuItem
             icon="people-outline"
-            label="Tra cứu khách hàng"
-            sublabel="Tìm thông tin KH"
-            iconColor="#7EE8A2"
-            iconBg="rgba(126,232,162,0.12)"
-            onPress={() => navigation?.navigate?.('CustomerLookup')}
+            label="Customer lookup"
+            sublabel="Find customer information"
+            iconColor={COLORS.gold}
+            iconBg="rgba(212,175,55,0.12)"
+            onPress={() => goToTab('Manage')}
           />
           <View style={styles.menuDivider} />
           <MenuItem
             icon="notifications-outline"
-            label="Thông báo hệ thống"
-            sublabel="Gửi & quản lý thông báo"
-            iconColor="#E07BE0"
-            iconBg="rgba(224,123,224,0.12)"
-            onPress={() => navigation?.navigate?.('StaffNotifications')}
+            label="System notifications"
+            sublabel="Send and manage notifications"
+            iconColor={COLORS.gold}
+            iconBg="rgba(212,175,55,0.12)"
+            onPress={() => goToTab('Manage')}
           />
         </View>
 
         {/* ── Account section ─────────────────────────────────── */}
-        <Text style={styles.sectionTitle}>Tài khoản</Text>
+        <Text style={styles.sectionTitle}>Account</Text>
         <View style={styles.menuCard}>
           <MenuItem
-            icon="lock-closed-outline"
-            label="Đổi mật khẩu"
-            iconColor={COLORS.textSecondary}
-            iconBg={COLORS.surfaceElevated}
-            onPress={() => {}}
+            icon="person-outline"
+            label="Edit profile"
+            iconColor={COLORS.gold}
+            iconBg="rgba(212,175,55,0.12)"
+            onPress={() => navigation.navigate('EditProfile')}
           />
           <View style={styles.menuDivider} />
           <MenuItem
-            icon="help-circle-outline"
-            label="Hỗ trợ kỹ thuật"
+            icon="lock-closed-outline"
+            label="Change password"
             iconColor={COLORS.textSecondary}
             iconBg={COLORS.surfaceElevated}
-            onPress={() => {}}
+            onPress={() => navigation.navigate('ChangePassword')}
           />
         </View>
 
@@ -186,7 +191,7 @@ export default function StaffProfileScreen({ navigation }: { navigation?: any })
         <View style={[styles.menuCard, { marginBottom: SPACING.xl }]}>
           <MenuItem
             icon="log-out-outline"
-            label="Đăng xuất"
+            label="Sign out"
             iconColor={COLORS.error}
             iconBg="rgba(255,77,77,0.12)"
             onPress={handleLogout}
@@ -195,7 +200,6 @@ export default function StaffProfileScreen({ navigation }: { navigation?: any })
           />
         </View>
 
-        <Text style={styles.versionText}>VALO Parking Staff v1.0.0</Text>
       </ScrollView>
     </SafeAreaView>
   );
@@ -219,7 +223,7 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.xl,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(96,180,255,0.2)',
+    borderColor: 'rgba(212,175,55,0.2)',
   },
   cardTopLine: { position: 'absolute', top: 0, left: 0, right: 0, height: 2 },
   profileCardContent: {
@@ -233,13 +237,13 @@ const styles = StyleSheet.create({
     width: 70,
     height: 70,
     borderRadius: 35,
-    backgroundColor: '#1C3A5F',
+    backgroundColor: COLORS.goldDark,
     borderWidth: 2.5,
-    borderColor: '#60B4FF',
+    borderColor: COLORS.gold,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  avatarText: { fontSize: FONT_SIZES.xxl, fontWeight: '800', color: '#60B4FF' },
+  avatarText: { fontSize: FONT_SIZES.xxl, fontWeight: '800', color: COLORS.gold },
   staffBadge: {
     position: 'absolute',
     bottom: 0,
@@ -247,7 +251,7 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: '#60B4FF',
+    backgroundColor: COLORS.gold,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1.5,
@@ -260,7 +264,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(96,180,255,0.12)',
+    backgroundColor: 'rgba(212,175,55,0.12)',
     borderRadius: RADIUS.round,
     paddingHorizontal: SPACING.sm,
     paddingVertical: 3,
@@ -288,11 +292,4 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   menuDivider: { height: 1, backgroundColor: COLORS.border, marginLeft: 56 + SPACING.md },
-
-  versionText: {
-    textAlign: 'center',
-    color: COLORS.textMuted,
-    fontSize: FONT_SIZES.xs,
-    marginTop: SPACING.sm,
-  },
 });

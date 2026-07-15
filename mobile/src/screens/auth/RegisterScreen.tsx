@@ -81,17 +81,17 @@ export const RegisterScreen = ({ navigation }: Props) => {
     setError('');
 
     if (!username.trim()) {
-      setError('Vui lòng nhập họ tên.');
+      setError('Please enter your full name.');
       return;
     }
 
     if (!isValidEmail(email)) {
-      setError('Email không hợp lệ.');
+      setError('Please enter a valid email address.');
       return;
     }
 
     if (!isValidPassword(password)) {
-      setError('Mật khẩu phải có ít nhất 8 ký tự.');
+      setError('Password must be at least 8 characters.');
       return;
     }
 
@@ -105,7 +105,7 @@ export const RegisterScreen = ({ navigation }: Props) => {
         role: 'customer',
       });
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'Đăng ký thất bại.');
+      setError(submitError instanceof Error ? submitError.message : 'Registration failed.');
     }
   };
 
@@ -144,12 +144,12 @@ export const RegisterScreen = ({ navigation }: Props) => {
               start={{ x: 0, y: 0 }}
               style={styles.cardTopLine}
             />
-            <Text style={styles.cardTitle}>Tạo tài khoản</Text>
-            <Text style={styles.cardSub}>Bắt đầu đặt chỗ và quản lý ví VALO</Text>
+            <Text style={styles.cardTitle}>Create account</Text>
+            <Text style={styles.cardSub}>Book parking and manage your VALO wallet</Text>
 
             <Field
               icon={<Ionicons color={COLORS.textMuted} name="person-outline" size={18} />}
-              placeholder="Họ tên"
+              placeholder="Full name"
               value={username}
               onChangeText={setUsername}
             />
@@ -164,14 +164,14 @@ export const RegisterScreen = ({ navigation }: Props) => {
             <Field
               icon={<Ionicons color={COLORS.textMuted} name="call-outline" size={18} />}
               keyboardType="phone-pad"
-              placeholder="Số điện thoại"
+              placeholder="Phone number"
               value={phone}
               onChangeText={setPhone}
             />
             <Field
               autoCapitalize="none"
               icon={<Ionicons color={COLORS.textMuted} name="lock-closed-outline" size={18} />}
-              placeholder="Mật khẩu"
+              placeholder="Password"
               secureTextEntry
               value={password}
               onChangeText={setPassword}
@@ -200,7 +200,7 @@ export const RegisterScreen = ({ navigation }: Props) => {
                   <ActivityIndicator color={COLORS.textInverse} size="small" />
                 ) : (
                   <>
-                    <Text style={styles.submitText}>Đăng ký</Text>
+                    <Text style={styles.submitText}>Create account</Text>
                     <Ionicons color={COLORS.textInverse} name="arrow-forward" size={18} />
                   </>
                 )}
@@ -211,8 +211,8 @@ export const RegisterScreen = ({ navigation }: Props) => {
               style={({ pressed }) => [styles.loginRow, pressed && styles.pressed]}
               onPress={() => navigation.goBack()}
             >
-              <Text style={styles.loginText}>Đã có tài khoản? </Text>
-              <Text style={[styles.loginText, styles.loginLink]}>Đăng nhập</Text>
+              <Text style={styles.loginText}>Already have an account? </Text>
+              <Text style={[styles.loginText, styles.loginLink]}>Sign in</Text>
             </Pressable>
           </View>
         </ScrollView>

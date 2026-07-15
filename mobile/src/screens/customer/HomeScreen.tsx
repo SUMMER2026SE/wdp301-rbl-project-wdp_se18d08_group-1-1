@@ -4,6 +4,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import React, { useCallback, useState } from 'react';
 import {
   RefreshControl,
+  Pressable,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -27,8 +28,7 @@ import { getMembershipVisualTier, MEMBERSHIP_TIER_COLORS } from '@/utils/members
 type QuickAction = {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
-  color: string;
-  bg: string;
+  description: string;
   screen?: string;
   params?: Record<string, unknown>;
 };
@@ -36,43 +36,30 @@ type QuickAction = {
 // ─── Quick actions data ───────────────────────────────────────────────────────
 const QUICK_ACTIONS: QuickAction[] = [
   {
-    icon: 'navigate-circle-outline',
-    label: 'Tìm bãi xe',
-    color: '#D4AF37',
-    bg: 'rgba(212,175,55,0.12)',
-    screen: 'Bookings',
-    params: { screen: 'FindParking' },
-  },
-  {
-    icon: 'calendar-outline',
-    label: 'Đặt chỗ',
-    color: '#60B4FF',
-    bg: 'rgba(96,180,255,0.12)',
-    screen: 'Bookings',
-    params: { screen: 'CreateBooking' },
-  },
-  {
     icon: 'car-outline',
-    label: 'Xe của tôi',
-    color: '#7EE8A2',
-    bg: 'rgba(126,232,162,0.12)',
+    label: 'My vehicles',
+    description: 'Manage license plates',
     screen: 'ProfileTab',
     params: { screen: 'VehicleList' },
   },
-  { icon: 'wallet-outline', label: 'Ví tiền', color: '#FF9F43', bg: 'rgba(255,159,67,0.12)', screen: 'WalletTab', params: { screen: 'Wallet' } },
+  {
+    icon: 'wallet-outline',
+    label: 'VALO Wallet',
+    description: 'Top up and view balance',
+    screen: 'WalletTab',
+    params: { screen: 'Wallet' },
+  },
   {
     icon: 'receipt-outline',
-    label: 'Lịch sử',
-    color: '#E07BE0',
-    bg: 'rgba(224,123,224,0.12)',
+    label: 'History',
+    description: 'Past parking sessions',
     screen: 'ProfileTab',
     params: { screen: 'ParkingHistory' },
   },
   {
     icon: 'ribbon-outline',
     label: 'Membership',
-    color: '#FFD700',
-    bg: 'rgba(255,215,0,0.12)',
+    description: 'Member benefits',
     screen: 'WalletTab',
     params: { screen: 'Membership' },
   },
@@ -81,9 +68,9 @@ const QUICK_ACTIONS: QuickAction[] = [
 // ─── Greeting helper ──────────────────────────────────────────────────────────
 function getGreeting() {
   const hour = new Date().getHours();
-  if (hour < 12) return 'Chào buổi sáng';
-  if (hour < 18) return 'Chào buổi chiều';
-  return 'Chào buổi tối';
+  if (hour < 12) return 'Good morning';
+  if (hour < 18) return 'Good afternoon';
+  return 'Good evening';
 }
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
@@ -137,7 +124,7 @@ export default function HomeScreen({ navigation }: { navigation?: any }) {
     setRefreshing(false);
   };
 
-  const displayName = profile?.fullName || user?.username || 'Khách hàng';
+  const displayName = profile?.fullName || user?.username || 'Customer';
   const initial = displayName.charAt(0).toUpperCase();
   const avatarUri = profile?.avatar || null;
   const avatarTheme = MEMBERSHIP_TIER_COLORS[getMembershipVisualTier(membership)];
@@ -147,7 +134,7 @@ export default function HomeScreen({ navigation }: { navigation?: any }) {
 
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
-      <StatusBar barStyle="light-content" backgroundColor="#080808" />
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
 
       <ScrollView
         contentContainerStyle={styles.scroll}
@@ -165,23 +152,26 @@ export default function HomeScreen({ navigation }: { navigation?: any }) {
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <Text style={styles.greeting}>{getGreeting()},</Text>
-            <Text style={styles.userName} numberOfLines={1}>{displayName} 👋</Text>
+            <Text style={styles.userName} numberOfLines={1}>{displayName}</Text>
           </View>
 
           <View style={styles.headerRight}>
             {/* Notification bell */}
             <TouchableOpacity
               style={styles.headerIconBtn}
+              accessibilityLabel="Open notifications"
+              accessibilityRole="button"
               onPress={() => navigation?.navigate?.('NotificationsTab')}
               activeOpacity={0.7}
             >
               <Ionicons name="notifications-outline" size={22} color={COLORS.textSecondary} />
-              {/* Badge dot */}
-              <View style={styles.notifDot} />
             </TouchableOpacity>
 
-                      {/* Avatar */}
-            <View
+            <TouchableOpacity
+              accessibilityLabel="Open account"
+              accessibilityRole="button"
+              activeOpacity={0.8}
+              onPress={() => navigation?.navigate?.('ProfileTab', { screen: 'Profile' })}
               style={[
                 styles.avatar,
                 {
@@ -196,14 +186,14 @@ export default function HomeScreen({ navigation }: { navigation?: any }) {
               ) : (
                 <Text style={[styles.avatarText, { color: avatarTheme.avatarText }]}>{initial}</Text>
               )}
-            </View>
+            </TouchableOpacity>
           </View>
         </View>
 
         {/* ── Hero Banner ─────────────────────────────────────── */}
         <View style={styles.heroBanner}>
           <LinearGradient
-            colors={['#1C1A0F', '#1A1505', '#0D0D0D']}
+            colors={['#211D12', '#17150F', COLORS.background]}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={StyleSheet.absoluteFill}
@@ -217,53 +207,59 @@ export default function HomeScreen({ navigation }: { navigation?: any }) {
           />
 
           <View style={styles.bannerContent}>
-            <View style={styles.bannerLeft}>
+            <View style={styles.bannerMetaRow}>
               <View style={styles.bannerBadge}>
-                <Ionicons name="flash" size={10} color={COLORS.gold} />
-                <Text style={styles.bannerBadgeText}>Smart Parking</Text>
+                <Ionicons name="navigate-outline" size={13} color={COLORS.gold} />
+                <Text style={styles.bannerBadgeText}>Parking made effortless</Text>
               </View>
-              <Text style={styles.bannerTitle}>VALO{'\n'}PARKING</Text>
-              <Text style={styles.bannerSub}>Đặt chỗ thông minh,{'\n'}không chờ đợi</Text>
+              <View style={styles.openBadge}>
+                <Ionicons name="time-outline" size={13} color={COLORS.textSecondary} />
+                <Text style={styles.openBadgeText}>Open 24/7</Text>
+              </View>
             </View>
 
-            <View style={styles.bannerRight}>
-              <View style={styles.bannerGlowCircle}>
-                <Ionicons name="car" size={40} color={COLORS.gold} />
-              </View>
+            <Text style={styles.bannerTitle}>Your parking space, ready when you are.</Text>
+            <Text style={styles.bannerSub}>Choose a spot, book ahead, and enter without circling for parking.</Text>
+
+            <View style={styles.heroActions}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => navigation?.navigate?.('Bookings', { screen: 'FindParking' })}
+                style={({ pressed }) => [styles.primaryAction, pressed && styles.actionPressed]}
+              >
+                <Ionicons name="navigate" size={16} color={COLORS.textInverse} />
+                <Text numberOfLines={1} style={styles.primaryActionText}>Find a space</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => navigation?.navigate?.('Bookings', { screen: 'CreateBooking' })}
+                style={({ pressed }) => [styles.secondaryAction, pressed && styles.actionPressed]}
+              >
+                <Ionicons name="calendar-outline" size={16} color={COLORS.gold} />
+                <Text numberOfLines={1} style={styles.secondaryActionText}>Book ahead</Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.balanceRow}>
+              <Text style={styles.balanceLabel}>Available balance</Text>
+              <Text style={styles.balanceValue}>
+                {walletBalance !== null ? formatCurrency(walletBalance) : 'Not loaded'}
+              </Text>
             </View>
           </View>
-        </View>
-
-                {/* ── Stats Row ───────────────────────────────────────── */}
-        <View style={styles.statsRow}>
-          <StatCard
-            icon="time-outline"
-            label="Đặt chỗ đang có"
-            value="0"
-            color={COLORS.gold}
-          />
-          <StatCard
-            icon="wallet-outline"
-            label="Số dư ví"
-            value={
-              walletBalance !== null
-                ? formatCurrency(walletBalance)
-                : '--'
-            }
-            color="#60B4FF"
-          />
         </View>
 
         {/* ── Quick Actions ───────────────────────────────────── */}
         {activeMembership ? (
           <TouchableOpacity
-            accessibilityLabel="Xem chi tiết gói Membership và ô VIP được cấp"
+            accessibilityLabel="View membership details and assigned VIP spaces"
+            accessibilityRole="button"
             activeOpacity={0.82}
             onPress={() => navigation?.navigate?.('WalletTab', { screen: 'Membership' })}
             style={styles.membershipCard}
           >
             <LinearGradient
-              colors={['rgba(212,175,55,0.18)', 'rgba(212,175,55,0.05)', 'rgba(13,13,13,0.96)']}
+              colors={['rgba(226,186,75,0.18)', 'rgba(226,186,75,0.05)', 'rgba(11,12,14,0.96)']}
               end={{ x: 1, y: 1 }}
               start={{ x: 0, y: 0 }}
               style={StyleSheet.absoluteFill}
@@ -275,7 +271,7 @@ export default function HomeScreen({ navigation }: { navigation?: any }) {
                 </View>
                 <View style={styles.membershipTitleWrap}>
                   <Text style={styles.membershipEyebrow}>
-                    {activeMembership.package?.type === 'yearly' ? 'THÀNH VIÊN NĂM' : 'THÀNH VIÊN THÁNG'}
+                    {activeMembership.package?.type === 'yearly' ? 'Annual member' : 'Monthly member'}
                   </Text>
                   <Text numberOfLines={1} style={styles.membershipName}>
                     {activeMembership.package?.name ?? 'VALO Membership'}
@@ -284,16 +280,16 @@ export default function HomeScreen({ navigation }: { navigation?: any }) {
               </View>
               <View style={styles.membershipActivePill}>
                 <View style={styles.membershipActiveDot} />
-                <Text style={styles.membershipActiveText}>Đang hoạt động</Text>
+                <Text style={styles.membershipActiveText}>Active</Text>
               </View>
             </View>
 
             <View style={styles.membershipDivider} />
 
             <View style={styles.vipSlotHeader}>
-              <Text style={styles.vipSlotLabel}>Ô VIP ĐƯỢC CẤP</Text>
+              <Text style={styles.vipSlotLabel}>Assigned VIP spaces</Text>
               {activeMembership.expireAt ? (
-                <Text style={styles.membershipExpiry}>Hết hạn {formatDate(activeMembership.expireAt)}</Text>
+                <Text style={styles.membershipExpiry}>Expires {formatDate(activeMembership.expireAt)}</Text>
               ) : null}
             </View>
             {activeMembership.reservedSlots.length > 0 ? (
@@ -303,7 +299,7 @@ export default function HomeScreen({ navigation }: { navigation?: any }) {
                     <Ionicons name="location" size={15} color={COLORS.gold} />
                     <Text style={styles.vipSlotCode}>{slot.slotCode}</Text>
                     <Text numberOfLines={1} style={styles.vipSlotFloor}>
-                      · {slot.floorName || `Tầng ${slot.floorNumber ?? '--'}`}
+                      {' - '}{slot.floorName || `Floor ${slot.floorNumber ?? '--'}`}
                     </Text>
                   </View>
                 ))}
@@ -311,31 +307,36 @@ export default function HomeScreen({ navigation }: { navigation?: any }) {
             ) : (
               <View style={styles.vipSlotPending}>
                 <Ionicons name="time-outline" size={16} color={COLORS.warning} />
-                <Text style={styles.vipSlotPendingText}>Gói đang hoạt động, ô VIP đang chờ được cấp.</Text>
+                <Text style={styles.vipSlotPendingText}>Your plan is active. VIP space assignment is pending.</Text>
               </View>
             )}
 
             <View style={styles.membershipFooter}>
-              <Text style={styles.membershipFooterText}>Xem quyền lợi Membership</Text>
+              <Text style={styles.membershipFooterText}>View membership benefits</Text>
               <Ionicons name="chevron-forward" size={16} color={COLORS.gold} />
             </View>
           </TouchableOpacity>
         ) : null}
 
-        <Text style={styles.sectionTitle}>Truy cập nhanh</Text>
+        <Text style={styles.sectionTitle}>Quick access</Text>
         <View style={styles.quickGrid}>
           {QUICK_ACTIONS.map((action) => (
-            <TouchableOpacity
+            <Pressable
+              accessibilityLabel={`${action.label}. ${action.description}`}
+              accessibilityRole="button"
               key={action.label}
-              style={styles.quickItem}
+              style={({ pressed }) => [styles.quickItem, pressed && styles.quickItemPressed]}
               onPress={() => navigation?.navigate?.(action.screen ?? 'Home', action.params)}
-              activeOpacity={0.7}
             >
-              <View style={[styles.quickIconWrap, { backgroundColor: action.bg }]}>
-                <Ionicons name={action.icon} size={26} color={action.color} />
+              <View style={styles.quickIconWrap}>
+                <Ionicons name={action.icon} size={23} color={COLORS.gold} />
               </View>
-              <Text style={styles.quickLabel}>{action.label}</Text>
-            </TouchableOpacity>
+              <View style={styles.quickCopy}>
+                <Text style={styles.quickLabel}>{action.label}</Text>
+                <Text style={styles.quickDescription}>{action.description}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} />
+            </Pressable>
           ))}
         </View>
 
@@ -343,29 +344,11 @@ export default function HomeScreen({ navigation }: { navigation?: any }) {
         <View style={styles.infoBanner}>
           <Ionicons name="information-circle-outline" size={20} color={COLORS.gold} />
           <Text style={styles.infoBannerText}>
-            Bãi xe VALO mở cửa 24/7. Đặt chỗ trước để đảm bảo vị trí của bạn.
+            VALO Parking is open 24/7. Book ahead to secure your space.
           </Text>
         </View>
       </ScrollView>
     </SafeAreaView>
-  );
-}
-
-// ─── StatCard ─────────────────────────────────────────────────────────────────
-function StatCard({ icon, label, value, color }: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  value: string;
-  color: string;
-}) {
-  return (
-    <View style={[styles.statCard, { borderColor: `${color}22` }]}>
-      <View style={[styles.statIconWrap, { backgroundColor: `${color}18` }]}>
-        <Ionicons name={icon} size={20} color={color} />
-      </View>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
   );
 }
 
@@ -388,30 +371,19 @@ const styles = StyleSheet.create({
   userName: { fontSize: FONT_SIZES.xl, fontWeight: '700', color: COLORS.textPrimary, marginTop: 2 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
   headerIconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: COLORS.surface,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
     borderColor: COLORS.border,
   },
-  notifDot: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.error,
-    borderWidth: 1.5,
-    borderColor: COLORS.background,
-  },
   avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: COLORS.goldDark,
     justifyContent: 'center',
     alignItems: 'center',
@@ -427,78 +399,104 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.xl,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.2)',
-    minHeight: 140,
+    borderColor: 'rgba(226,186,75,0.2)',
+    minHeight: 276,
   },
   bannerAccentLine: { position: 'absolute', top: 0, left: 0, right: 0, height: 2 },
   bannerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     padding: SPACING.lg,
   },
-  bannerLeft: { flex: 1 },
+  bannerMetaRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
   bannerBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(212,175,55,0.15)',
+    backgroundColor: 'rgba(226,186,75,0.15)',
     borderRadius: RADIUS.round,
     paddingHorizontal: SPACING.sm,
-    paddingVertical: 3,
+    paddingVertical: 5,
     alignSelf: 'flex-start',
-    marginBottom: SPACING.sm,
   },
-  bannerBadgeText: { fontSize: FONT_SIZES.xs, color: COLORS.gold, fontWeight: '600' },
-  bannerTitle: {
-    fontSize: FONT_SIZES.xxl,
-    fontWeight: '900',
-    color: COLORS.textPrimary,
-    letterSpacing: 2,
-    lineHeight: 30,
-  },
-  bannerSub: { fontSize: FONT_SIZES.xs, color: COLORS.textSecondary, marginTop: SPACING.sm, lineHeight: 18 },
-  bannerRight: { paddingLeft: SPACING.md },
-  bannerGlowCircle: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(212,175,55,0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.3)',
-    justifyContent: 'center',
+  bannerBadgeText: { fontSize: FONT_SIZES.xs, color: COLORS.gold, fontWeight: '700' },
+  openBadge: {
     alignItems: 'center',
-  },
-
-  // Stats
-  statsRow: {
     flexDirection: 'row',
-    paddingHorizontal: SPACING.lg,
-    marginTop: SPACING.md,
-    gap: SPACING.md,
+    gap: 4,
   },
-  statCard: {
-    flex: 1,
-    backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.md,
-    borderWidth: 1,
-    alignItems: 'flex-start',
+  openBadgeText: { color: COLORS.textSecondary, fontSize: FONT_SIZES.xs, fontWeight: '600' },
+  bannerTitle: {
+    fontSize: 30,
+    fontWeight: '800',
+    color: COLORS.textPrimary,
+    letterSpacing: -0.7,
+    lineHeight: 35,
+    marginTop: SPACING.lg,
+    maxWidth: 310,
   },
-  statIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: RADIUS.sm,
-    justifyContent: 'center',
+  bannerSub: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.sm,
+    lineHeight: 20,
+    marginTop: SPACING.sm,
+    maxWidth: 310,
+  },
+  heroActions: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: SPACING.lg,
+  },
+  primaryAction: {
     alignItems: 'center',
-    marginBottom: SPACING.sm,
+    backgroundColor: COLORS.gold,
+    borderRadius: RADIUS.md,
+    flex: 1,
+    flexDirection: 'row',
+    gap: 6,
+    justifyContent: 'center',
+    minHeight: 48,
+    minWidth: 0,
+    paddingHorizontal: 10,
   },
-  statValue: { fontSize: FONT_SIZES.xl, fontWeight: '700', color: COLORS.textPrimary },
-  statLabel: { fontSize: FONT_SIZES.xs, color: COLORS.textSecondary, marginTop: 2 },
+  primaryActionText: {
+    color: COLORS.textInverse,
+    flexShrink: 1,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '800',
+  },
+  secondaryAction: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(226,186,75,0.06)',
+    borderColor: 'rgba(226,186,75,0.32)',
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 6,
+    justifyContent: 'center',
+    minHeight: 48,
+    paddingHorizontal: 10,
+    width: 96,
+  },
+  secondaryActionText: { color: COLORS.gold, flexShrink: 1, fontSize: FONT_SIZES.sm, fontWeight: '800' },
+  actionPressed: { opacity: 0.9, transform: [{ scale: 0.98 }] },
+  balanceRow: {
+    alignItems: 'center',
+    borderTopColor: 'rgba(226,186,75,0.14)',
+    borderTopWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: SPACING.lg,
+    paddingTop: SPACING.md,
+  },
+  balanceLabel: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs, fontWeight: '600' },
+  balanceValue: { color: COLORS.textPrimary, fontSize: FONT_SIZES.md, fontWeight: '800' },
 
   // Active membership identity
   membershipCard: {
-    borderColor: 'rgba(212,175,55,0.34)',
+    borderColor: 'rgba(226,186,75,0.34)',
     borderRadius: RADIUS.xl,
     borderWidth: 1,
     marginHorizontal: SPACING.lg,
@@ -520,8 +518,8 @@ const styles = StyleSheet.create({
   },
   membershipIcon: {
     alignItems: 'center',
-    backgroundColor: 'rgba(212,175,55,0.14)',
-    borderColor: 'rgba(212,175,55,0.28)',
+    backgroundColor: 'rgba(226,186,75,0.14)',
+    borderColor: 'rgba(226,186,75,0.28)',
     borderRadius: RADIUS.md,
     borderWidth: 1,
     height: 42,
@@ -531,9 +529,8 @@ const styles = StyleSheet.create({
   membershipTitleWrap: { flex: 1, minWidth: 0 },
   membershipEyebrow: {
     color: COLORS.gold,
-    fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.9,
+    fontSize: FONT_SIZES.xs,
+    fontWeight: '700',
   },
   membershipName: {
     color: COLORS.textPrimary,
@@ -559,7 +556,7 @@ const styles = StyleSheet.create({
   },
   membershipActiveText: { color: COLORS.success, fontSize: 10, fontWeight: '700' },
   membershipDivider: {
-    backgroundColor: 'rgba(212,175,55,0.15)',
+    backgroundColor: 'rgba(226,186,75,0.15)',
     height: 1,
     marginVertical: SPACING.md,
   },
@@ -569,7 +566,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: SPACING.sm,
   },
-  vipSlotLabel: { color: COLORS.gold, fontSize: 10, fontWeight: '800', letterSpacing: 0.8 },
+  vipSlotLabel: { color: COLORS.gold, fontSize: FONT_SIZES.xs, fontWeight: '700' },
   membershipExpiry: { color: COLORS.textMuted, fontSize: 10 },
   vipSlotList: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
   vipSlotPill: {
@@ -613,29 +610,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.lg,
   },
   quickGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
     paddingHorizontal: SPACING.lg,
     gap: SPACING.sm,
   },
   quickItem: {
-    width: '30%',
     alignItems: 'center',
+    flexDirection: 'row',
+    gap: SPACING.md,
     backgroundColor: COLORS.surface,
     borderRadius: RADIUS.lg,
-    padding: SPACING.md,
     borderWidth: 1,
     borderColor: COLORS.border,
+    minHeight: 72,
+    padding: SPACING.md,
   },
+  quickItemPressed: { backgroundColor: COLORS.surfaceElevated, transform: [{ scale: 0.99 }] },
   quickIconWrap: {
-    width: 52,
-    height: 52,
+    width: 44,
+    height: 44,
     borderRadius: RADIUS.md,
+    backgroundColor: 'rgba(226,186,75,0.1)',
+    borderColor: 'rgba(226,186,75,0.18)',
+    borderWidth: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: SPACING.sm,
   },
-  quickLabel: { fontSize: FONT_SIZES.xs, color: COLORS.textSecondary, textAlign: 'center' },
+  quickCopy: { flex: 1 },
+  quickLabel: { color: COLORS.textPrimary, fontSize: FONT_SIZES.sm, fontWeight: '700' },
+  quickDescription: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs, marginTop: 3 },
 
   // Info banner
   infoBanner: {
@@ -644,11 +646,11 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
     marginHorizontal: SPACING.lg,
     marginTop: SPACING.lg,
-    backgroundColor: 'rgba(212,175,55,0.07)',
+    backgroundColor: 'rgba(226,186,75,0.07)',
     borderRadius: RADIUS.md,
     padding: SPACING.md,
     borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.2)',
+    borderColor: 'rgba(226,186,75,0.2)',
   },
   infoBannerText: {
     flex: 1,

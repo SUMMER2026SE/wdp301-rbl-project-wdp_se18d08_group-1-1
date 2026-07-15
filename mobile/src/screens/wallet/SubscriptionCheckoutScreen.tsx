@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import type { NavigationProp } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -16,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { EmptyState, ErrorState, ScreenHeader, SectionTitle } from '@/components/common';
 import { ParkingMap2D } from '@/components/booking/ParkingMap2D';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
+import type { CustomerTabParamList } from '@/navigation/CustomerNavigator';
 import type { WalletStackParamList } from '@/navigation/types';
 import parkingFloorService from '@/services/ParkingFloorService';
 import { subscriptionsService } from '@/services/api/subscriptions';
@@ -25,7 +27,13 @@ import type { ParkingFloor, Slot } from '@/types/booking.types';
 import type { Wallet } from '@/types/models';
 import type { MembershipStatus, SubscriptionPackage, SubscriptionPaymentMethod, SubscriptionSlotSelection } from '@/types/subscription.types';
 import { formatCurrency } from '@/utils/formatters';
-import { calculateExpirationDate, getSubscriptionPackageRestriction, validateSubscriptionSlots } from '@/utils/walletSubscription';
+import { isPolicyAcceptanceRequired } from '@/utils/policyErrors';
+import {
+  calculateExpirationDate,
+  calculateSubscriptionTotal,
+  getSubscriptionPackageRestriction,
+  validateSubscriptionSlots,
+} from '@/utils/walletSubscription';
 
 type Props = NativeStackScreenProps<WalletStackParamList, 'SubscriptionCheckout'>;
 
@@ -42,6 +50,7 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [policyRequired, setPolicyRequired] = useState(false);
 
   const pkg = useMemo(
     () => packages.find((item) => item._id === route.params.packageId),
@@ -49,7 +58,8 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
   );
 
   const maxSlots = Math.min(3, vehicleCount);
-  const hasEnoughWallet = (wallet?.balance || 0) >= (pkg?.price || 0);
+  const subscriptionTotal = calculateSubscriptionTotal(pkg?.price || 0, selectedSlots.length);
+  const hasEnoughWallet = (wallet?.balance || 0) >= subscriptionTotal;
   const packageRestriction = getSubscriptionPackageRestriction(membership, pkg);
   const selectedFloor = floors.find((floor) => String(floor._id ?? floor.id) === selectedFloorId) || null;
 
@@ -70,7 +80,7 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
       setFloors(floorResponse);
       setSelectedFloorId((current) => current || String(floorResponse[0]?._id ?? floorResponse[0]?.id ?? ''));
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Không thể tải dữ liệu gói.');
+      setError(loadError instanceof Error ? loadError.message : 'Unable to load plan details.');
       setSlots([]);
     } finally {
       setLoading(false);
@@ -93,7 +103,7 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
         if (active) setSlots(floorSlots);
       })
       .catch((loadError) => {
-        if (active) setError(loadError instanceof Error ? loadError.message : 'Không thể tải vị trí đỗ xe.');
+        if (active) setError(loadError instanceof Error ? loadError.message : 'Unable to load parking spaces.');
       });
     return () => { active = false; };
   }, [selectedFloorId]);
@@ -105,7 +115,7 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
         return current.filter((item) => !(item.floorId === floorId && item.slotCode === slotCode));
       }
       if (current.length >= maxSlots) {
-        setError(`Bạn chỉ được chọn tối đa ${maxSlots} chỗ theo số xe đã đăng ký.`);
+        setError(`You can select up to ${maxSlots} spaces based on your registered vehicles.`);
         return current;
       }
       setError('');
@@ -115,7 +125,7 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
 
   const handlePurchase = async () => {
     if (!pkg) {
-      setError('Không tìm thấy gói đã chọn.');
+      setError('The selected plan was not found.');
       return;
     }
     if (packageRestriction) {
@@ -123,16 +133,17 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
       return;
     }
     if (!validateSubscriptionSlots(selectedSlots.length, vehicleCount)) {
-      setError(`Chọn 1-${maxSlots} chỗ theo số xe đã đăng ký.`);
+      setError(`Select 1-${maxSlots} spaces based on your registered vehicles.`);
       return;
     }
     if (method === 'wallet' && !hasEnoughWallet) {
-      setError('Số dư ví không đủ.');
+      setError('Insufficient wallet balance.');
       return;
     }
 
     setSubmitting(true);
     setError('');
+    setPolicyRequired(false);
     try {
       if (method === 'wallet') {
         await subscriptionsService.payWithWallet({ packageId: pkg._id, slots: selectedSlots });
@@ -147,7 +158,12 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
         });
       }
     } catch (purchaseError) {
-      setError(purchaseError instanceof Error ? purchaseError.message : 'Mua gói thất bại.');
+      if (isPolicyAcceptanceRequired(purchaseError)) {
+        setPolicyRequired(true);
+        setError('You must accept the latest policy before purchasing a plan.');
+      } else {
+        setError(purchaseError instanceof Error ? purchaseError.message : 'Plan purchase failed.');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -156,7 +172,7 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#080808" />
-      <ScreenHeader title="Thanh toán gói" onBack={() => navigation.goBack()} />
+      <ScreenHeader title="Plan checkout" onBack={() => navigation.goBack()} />
 
       {loading ? (
         <View style={styles.stateWrap}>
@@ -170,16 +186,17 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
             <View style={styles.packageCard}>
               <Text style={styles.packageName}>{pkg.name}</Text>
               <Text style={styles.packagePrice}>{formatCurrency(pkg.price)}</Text>
+              <Text style={styles.packageMeta}>Total for selected spaces: {formatCurrency(subscriptionTotal)}</Text>
               <Text style={styles.packageMeta}>
-                Hết hạn: {calculateExpirationDate(pkg.type).toLocaleDateString('vi-VN')}
+                Expires: {calculateExpirationDate(pkg.type).toLocaleDateString('en-GB')}
               </Text>
             </View>
           ) : (
-            <EmptyState icon="cube-outline" title="Không tìm thấy gói" message="Vui lòng quay lại chọn gói khác." />
+            <EmptyState icon="cube-outline" title="Plan not found" message="Please go back and choose another plan." />
           )}
 
           <View style={styles.section}>
-            <SectionTitle>Phương thức thanh toán</SectionTitle>
+            <SectionTitle>Payment method</SectionTitle>
             {(['wallet', 'payos'] as const).map((option) => {
               const active = method === option;
               return (
@@ -195,7 +212,7 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
                       color={active ? COLORS.gold : COLORS.textMuted}
                     />
                     <Text style={[styles.methodText, active && styles.methodTextActive]}>
-                      {option === 'wallet' ? 'Ví VALO' : 'PayOS QR'}
+                      {option === 'wallet' ? 'VALO Wallet' : 'PayOS QR'}
                     </Text>
                   </View>
                   {active ? <Ionicons name="checkmark-circle" size={20} color={COLORS.gold} /> : null}
@@ -203,16 +220,16 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
               );
             })}
             <Text style={[styles.walletBalance, { color: hasEnoughWallet ? COLORS.success : COLORS.error }]}>
-              Số dư ví: {formatCurrency(wallet?.balance || 0)}
+              Wallet balance: {formatCurrency(wallet?.balance || 0)}
             </Text>
           </View>
 
           <View style={styles.section}>
-            <SectionTitle>Chọn chỗ giữ riêng</SectionTitle>
+            <SectionTitle>Select reserved spaces</SectionTitle>
             <Text style={styles.helperText}>
               {maxSlots > 0
-                ? `Chọn 1-${maxSlots} chỗ theo số xe đã đăng ký. Ô vàng đã được giữ riêng, ô xanh dương là ô bạn chọn.`
-                : 'Bạn cần thêm ít nhất một xe trước khi mua gói.'}
+                ? `Select 1-${maxSlots} spaces based on your registered vehicles. Gold spaces are already reserved; blue spaces are your selection.`
+                : 'Add at least one vehicle before purchasing a plan.'}
             </Text>
             <View style={styles.floorTabs}>
               {floors.map((floor) => {
@@ -220,13 +237,13 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
                 const active = floorId === selectedFloorId;
                 return (
                   <Pressable key={floorId} style={[styles.floorTab, active && styles.floorTabActive]} onPress={() => setSelectedFloorId(floorId)}>
-                    <Text style={[styles.floorTabText, active && styles.floorTabTextActive]}>{floor.name || `Tầng ${floor.floorNumber}`}</Text>
+                    <Text style={[styles.floorTabText, active && styles.floorTabTextActive]}>{floor.name || `Floor ${floor.floorNumber}`}</Text>
                   </Pressable>
                 );
               })}
             </View>
             {!selectedFloor ? (
-              <EmptyState icon="car-outline" title="Chưa có chỗ khả dụng" message="Vui lòng thử lại sau." />
+              <EmptyState icon="car-outline" title="No spaces available" message="Please try again later." />
             ) : (
               <View style={styles.mapCard}>
                 <ParkingMap2D
@@ -241,7 +258,7 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
                 />
               </View>
             )}
-            <Text style={styles.selectedCount}>Đã chọn: {selectedSlots.length}/{maxSlots}</Text>
+            <Text style={styles.selectedCount}>Selected: {selectedSlots.length}/{maxSlots}</Text>
           </View>
 
           {error || packageRestriction ? (
@@ -251,13 +268,23 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
             </View>
           ) : null}
 
+          {policyRequired ? (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.policyButton}
+              onPress={() => navigation.getParent<NavigationProp<CustomerTabParamList>>()?.navigate('ProfileTab', { screen: 'Policies' })}
+            >
+              <Text style={styles.policyButtonText}>Review and accept policy</Text>
+            </TouchableOpacity>
+          ) : null}
+
           <TouchableOpacity activeOpacity={0.85} disabled={submitting || !pkg || Boolean(packageRestriction)} style={[styles.primaryButton, (submitting || !pkg || Boolean(packageRestriction)) && styles.disabled]} onPress={handlePurchase}>
             {submitting ? (
               <ActivityIndicator color={COLORS.textInverse} size="small" />
             ) : (
               <>
                 <Ionicons name="checkmark-circle-outline" size={20} color={COLORS.textInverse} />
-                <Text style={styles.primaryButtonText}>Xác nhận mua gói</Text>
+                <Text style={styles.primaryButtonText}>Confirm purchase</Text>
               </>
             )}
           </TouchableOpacity>
@@ -400,6 +427,15 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     lineHeight: 20,
   },
+  policyButton: {
+    alignItems: 'center',
+    borderColor: COLORS.gold,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 48,
+  },
+  policyButtonText: { color: COLORS.gold, fontSize: FONT_SIZES.sm, fontWeight: '800' },
   primaryButton: {
     alignItems: 'center',
     backgroundColor: COLORS.gold,

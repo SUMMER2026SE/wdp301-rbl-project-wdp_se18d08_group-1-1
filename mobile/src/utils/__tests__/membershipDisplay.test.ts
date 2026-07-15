@@ -30,9 +30,9 @@ describe('membership display tier', () => {
   });
 
   it('returns clear Vietnamese labels for each tier', () => {
-    expect(getMembershipTierLabel('standard')).toBe('Khách hàng');
-    expect(getMembershipTierLabel('monthly')).toBe('Thành viên tháng');
-    expect(getMembershipTierLabel('yearly')).toBe('Thành viên năm');
+    expect(getMembershipTierLabel('standard')).toBe('Customer');
+    expect(getMembershipTierLabel('monthly')).toBe('Monthly member');
+    expect(getMembershipTierLabel('yearly')).toBe('Annual member');
   });
 
   it('shares gray, gold and purple avatar colors across profile and home', () => {

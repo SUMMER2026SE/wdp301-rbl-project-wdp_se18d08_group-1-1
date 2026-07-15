@@ -47,7 +47,7 @@ export default function CustomerNavigator() {
         name="Home"
         component={HomeScreen}
         options={{
-          tabBarLabel: 'Trang chủ',
+          tabBarLabel: 'Home',
           tabBarIcon: ({ focused, color }) => tabIcon(focused, 'home', 'home-outline', color),
         }}
       />
@@ -55,7 +55,7 @@ export default function CustomerNavigator() {
         name="Bookings"
         component={BookingStackNavigator}
         options={{
-          tabBarLabel: 'Đặt chỗ',
+          tabBarLabel: 'Bookings',
           tabBarIcon: ({ focused, color }) => tabIcon(focused, 'calendar', 'calendar-outline', color),
         }}
       />
@@ -63,7 +63,7 @@ export default function CustomerNavigator() {
         name="WalletTab"
         component={WalletStackNavigator}
         options={{
-          tabBarLabel: 'Ví tiền',
+          tabBarLabel: 'Wallet',
           tabBarIcon: ({ focused, color }) => tabIcon(focused, 'wallet', 'wallet-outline', color),
         }}
       />
@@ -71,7 +71,7 @@ export default function CustomerNavigator() {
         name="NotificationsTab"
         component={NotificationsStackNavigator}
         options={{
-          tabBarLabel: 'Thông báo',
+          tabBarLabel: 'Alerts',
           tabBarBadge: undefined,
           tabBarIcon: ({ focused, color }) => tabIcon(focused, 'notifications', 'notifications-outline', color),
         }}
@@ -80,7 +80,7 @@ export default function CustomerNavigator() {
         name="ProfileTab"
         component={ProfileStackNavigator}
         options={{
-          tabBarLabel: 'Tài khoản',
+          tabBarLabel: 'Account',
           tabBarIcon: ({ focused, color }) => tabIcon(focused, 'person', 'person-outline', color),
         }}
         listeners={({ navigation }) => ({
@@ -96,25 +96,26 @@ export default function CustomerNavigator() {
 
 const tabStyles = StyleSheet.create({
   bar: {
-    backgroundColor: '#111111',
-    borderTopColor: 'rgba(212,175,55,0.12)',
+    backgroundColor: COLORS.surface,
+    borderTopColor: 'rgba(226,186,75,0.16)',
     borderTopWidth: 1,
-    height: Platform.OS === 'ios' ? 84 : 64,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 8,
-    paddingTop: 8,
+    height: Platform.OS === 'ios' ? 88 : 72,
+    paddingBottom: Platform.OS === 'ios' ? 24 : 10,
+    paddingTop: 10,
   },
   label: {
     fontSize: FONT_SIZES.xs,
-    fontWeight: '500',
+    fontWeight: '600',
+    marginTop: 2,
   },
   iconWrap: {
     alignItems: 'center',
-    borderRadius: RADIUS.sm,
-    height: 36,
+    borderRadius: RADIUS.md,
+    height: 40,
     justifyContent: 'center',
-    width: 36,
+    width: 44,
   },
   iconWrapActive: {
-    backgroundColor: 'rgba(212,175,55,0.12)',
+    backgroundColor: 'rgba(226,186,75,0.14)',
   },
 });

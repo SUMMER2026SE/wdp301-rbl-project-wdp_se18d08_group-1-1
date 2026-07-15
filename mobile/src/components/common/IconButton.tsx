@@ -24,7 +24,7 @@ export const IconButton = ({ icon, label, style, ...props }: IconButtonProps) =>
 const styles = StyleSheet.create({
   base: {
     alignItems: 'center',
-    backgroundColor: colors.neutral.white,
+    backgroundColor: colors.light.surface,
     borderColor: colors.light.border,
     borderRadius: borderRadius.md,
     borderWidth: 1,
@@ -37,6 +37,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   pressed: {
-    opacity: 0.75,
+    opacity: 0.9,
+    transform: [{ scale: 0.96 }],
   },
 });

@@ -364,6 +364,15 @@ exports.updateUserStatus = async (req, res, next) => {
         .status(404)
         .json({ success: false, message: "User not found" });
     }
+
+    const AdminActionLog = require("../models/AdminActionLog");
+    await AdminActionLog.create({
+      action: status ? "Unblocked User Account" : "Blocked User Account",
+      target: `ID #${user._id.toString().slice(-4)} • ${user.email}`,
+      type: status ? "update" : "block",
+      adminId: req.user._id
+    });
+
     res.status(200).json({ success: true, data: user });
   } catch (err) {
     next(err);
@@ -444,6 +453,14 @@ exports.updateUser = async (req, res, next) => {
       },
     ]);
 
+    const AdminActionLog = require("../models/AdminActionLog");
+    await AdminActionLog.create({
+      action: "Updated User Privileges/Details",
+      target: `${firstName || ''} ${lastName || ''} • ${user.role}`,
+      type: "update",
+      adminId: req.user._id
+    });
+
     res.status(200).json({ success: true, data: updatedUser[0] });
   } catch (err) {
     next(err);
@@ -483,11 +500,12 @@ exports.getPricingConfig = async (req, res, next) => {
   try {
     const config = await PricingConfig.findOne({ isActive: true }).sort({ createdAt: -1 });
     const DEFAULT_CONFIG = {
-      sessionFee: 10000,
-      dayRate: 10000,
-      nightRate: 15000,
-      cap6hDay: 50000,
-      cap6hNight: 75000,
+      timeBlocks: [
+        { startHour: 7, endHour: 12, price: 10000 },
+        { startHour: 12, endHour: 17, price: 10000 },
+        { startHour: 17, endHour: 22, price: 20000 },
+        { startHour: 22, endHour: 7, price: 25000 }
+      ],
       cap12h: 100000,
       cap24h: 180000,
     };
@@ -504,24 +522,128 @@ exports.getPricingConfig = async (req, res, next) => {
  */
 exports.updatePricingConfig = async (req, res, next) => {
   try {
-    const { sessionFee, dayRate, nightRate, cap6hDay, cap6hNight, cap12h, cap24h } = req.body;
+    const { timeBlocks, cap12h, cap24h } = req.body;
+
+    if (!Array.isArray(timeBlocks)) {
+      return res.status(400).json({ success: false, message: 'Invalid time blocks format' });
+    }
+
+    // Validate coverage of 24 hours (no gaps, no overlaps)
+    const hours = new Array(24).fill(false);
+    for (let i = 0; i < timeBlocks.length; i++) {
+      const b = timeBlocks[i];
+      const start = Number(b.startHour);
+      const end = Number(b.endHour);
+
+      if (start === end) {
+        return res.status(400).json({ success: false, message: 'A time block cannot have the same start and end time.' });
+      }
+
+      const markHour = (h) => {
+        if (hours[h]) {
+          throw new Error(`Overlap detected at hour ${h}:00`);
+        }
+        hours[h] = true;
+      };
+
+      try {
+        if (start < end) {
+          for (let h = start; h < end; h++) markHour(h);
+        } else {
+          for (let h = start; h < 24; h++) markHour(h);
+          for (let h = 0; h < end; h++) markHour(h);
+        }
+      } catch (e) {
+        return res.status(400).json({ success: false, message: e.message });
+      }
+    }
+
+    const missingHour = hours.findIndex(h => !h);
+    if (missingHour !== -1) {
+      return res.status(400).json({ success: false, message: `Gap detected in schedule. Time block missing for hour ${missingHour}:00` });
+    }
 
     // Vô hiệu hóa cấu hình cũ
     await PricingConfig.updateMany({ isActive: true }, { isActive: false });
 
     // Tạo cấu hình mới
     const newConfig = await PricingConfig.create({
-      sessionFee: Number(sessionFee),
-      dayRate: Number(dayRate),
-      nightRate: Number(nightRate),
-      cap6hDay: Number(cap6hDay),
-      cap6hNight: Number(cap6hNight),
+      timeBlocks,
       cap12h: Number(cap12h),
       cap24h: Number(cap24h),
       isActive: true
     });
 
     res.status(200).json({ success: true, data: newConfig });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * @desc  Get Admin Dashboard Overview Stats
+ * @route GET /api/admin/overview
+ * @access Admin only
+ */
+exports.getAdminOverview = async (req, res, next) => {
+  try {
+    const User = require('../models/User');
+    const ParkingFloor = require('../models/ParkingFloor');
+    const Revenue = require('../models/Revenue');
+
+    // Stats
+    const totalStaff = await User.countDocuments({ role: 'staff' });
+    const activeUsers = await User.countDocuments({ role: 'customer', status: true });
+    const blockedUsers = await User.countDocuments({ role: 'customer', status: false });
+    const parkingLots = await ParkingFloor.countDocuments();
+    const pendingLots = 0; // Or calculate if there is a status field
+
+    // Revenue Calculation
+    const now = new Date();
+    const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    
+    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+
+    const revenueThisMonthAggr = await Revenue.aggregate([
+      { $match: { createdAt: { $gte: startOfThisMonth } } },
+      { $group: { _id: null, total: { $sum: "$amount" } } }
+    ]);
+    const totalRevenueMonth = revenueThisMonthAggr.length > 0 ? revenueThisMonthAggr[0].total : 0;
+
+    const revenueLastMonthAggr = await Revenue.aggregate([
+      { $match: { createdAt: { $gte: startOfLastMonth, $lte: endOfLastMonth } } },
+      { $group: { _id: null, total: { $sum: "$amount" } } }
+    ]);
+    const totalRevenueLastMonth = revenueLastMonthAggr.length > 0 ? revenueLastMonthAggr[0].total : 0;
+
+    let revenueIncreasePercent = 0;
+    if (totalRevenueLastMonth > 0) {
+      revenueIncreasePercent = ((totalRevenueMonth - totalRevenueLastMonth) / totalRevenueLastMonth) * 100;
+    } else if (totalRevenueMonth > 0) {
+      revenueIncreasePercent = 100; // 100% increase if last month was 0 and this month has revenue
+    }
+
+    const AdminActionLog = require("../models/AdminActionLog");
+    const recentActions = await AdminActionLog.find({})
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .lean();
+
+    res.status(200).json({
+      success: true,
+      data: {
+        totalStaff,
+        activeUsers,
+        blockedUsers,
+        parkingLots,
+        pendingLots,
+        totalRevenueMonth,
+        totalRevenueLastMonth,
+        revenueIncreasePercent: Math.round(revenueIncreasePercent),
+        recentActions
+      }
+    });
   } catch (err) {
     next(err);
   }

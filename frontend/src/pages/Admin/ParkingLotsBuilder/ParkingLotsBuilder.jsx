@@ -29,6 +29,9 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
   // Smart Guides State
   const [guides, setGuides] = useState([]);
 
+  // Smart Grid State
+  const [gridConfig, setGridConfig] = useState({ rows: 2, cols: 5, angle: 0, prefix: 'A', start: 1 });
+
   // Undo/Redo State
   const [, setHistoryState] = useState({
     history: [floor?.layoutData?.elements || []],
@@ -85,38 +88,35 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
   };
 
   const handleAddElement = (type, x = 50, y = 50) => {
-    if (type === "zone-template") {
-      const zoneId = createElementId("zone");
-      const newZone = {
-        id: zoneId,
-        type: "zone",
-        x, y, w: 330, h: 220, rot: 0, name: "", color: "purple"
+    let w = 50, h = 50, name = "";
+    if (type === "zone") { 
+      w = 250; h = 150; 
+      
+      // Auto-generate Zone name (ZONE A, ZONE B... ZONE AA, etc.)
+      const existingZoneNames = elements.filter(el => el.type === 'zone').map(el => el.name);
+      let i = 0;
+      const getLabel = (idx) => {
+        let result = '';
+        let temp = idx;
+        while (temp >= 0) {
+          result = String.fromCharCode(65 + (temp % 26)) + result;
+          temp = Math.floor(temp / 26) - 1;
+        }
+        return result;
       };
       
-      const slots = [];
-
-      for (let i = 0; i < 10; i++) {
-        const row = Math.floor(i / 5); // 0 or 1
-        const col = i % 5; // 0 to 4
-        slots.push({
-          id: createElementId("slot", i),
-          parentId: zoneId,
-          type: "slot",
-          x: x + 20 + (col * 60),
-          y: y + 20 + (row * 100),
-          w: 50, h: 80, rot: 0, name: "", color: "purple"
-        });
+      while (true) {
+        const candidate = `ZONE ${getLabel(i)}`;
+        if (!existingZoneNames.includes(candidate)) {
+          name = candidate;
+          break;
+        }
+        i++;
       }
-      
-      setElements((prev) => [...prev, newZone, ...slots]);
-      return;
     }
-
-    let w = 50, h = 50, name = "";
-    if (type === "zone") { w = 200; h = 100; name = "New Zone"; }
     else if (type.startsWith("slot")) { 
        w = 50; 
-       h = 80; 
+       h = 100; // Realistic 1:2 ratio (2.5m x 5m)
        name = ""; 
     }
     else if (type === "wall") { w = 200; h = 15; name = "Wall"; }
@@ -252,6 +252,51 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
     });
   };
 
+  const handleGenerateGrid = (zone) => {
+    const rows = gridConfig.rows;
+    const cols = gridConfig.cols;
+    const angle = gridConfig.angle;
+
+    // Remove existing slots in this zone
+    const filteredElements = elements.filter(el => el.parentId !== zone.id);
+    
+    const slotW = angle === 90 ? 100 : 50;
+    const slotH = angle === 90 ? 50 : 100;
+    const spacing = 10;
+    
+    // Calculate new zone dimensions
+    const newZoneW = cols * slotW + (cols + 1) * spacing;
+    const newZoneH = rows * slotH + (rows + 1) * spacing;
+    
+    // Update zone
+    const updatedZone = { ...zone, w: newZoneW, h: newZoneH };
+    const finalElements = filteredElements.map(el => el.id === zone.id ? updatedZone : el);
+    
+    // Generate slots
+    const newSlots = [];
+    let count = 1;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const prefix = (gridConfig.prefix || '').toUpperCase();
+        newSlots.push({
+          id: createElementId("slot"),
+          parentId: zone.id,
+          type: "slot",
+          x: updatedZone.x + spacing + c * (slotW + spacing),
+          y: updatedZone.y + spacing + r * (slotH + spacing),
+          w: slotW,
+          h: slotH,
+          rot: gridConfig.angle,
+          name: `${prefix}${count + gridConfig.start - 1}`,
+          color: "purple"
+        });
+        count++;
+      }
+    }
+    
+    setElements([...finalElements, ...newSlots]);
+  };
+
   // Keyboard Shortcuts (Delete, Copy, Paste, Duplicate, Undo, Redo)
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -318,17 +363,83 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
          setElements(prev => {
             const newEls = [];
             let currentAll = [...prev];
+            
+            // Helper to get new Zone name
+            const getLabel = (idx) => {
+               let result = '';
+               let temp = idx;
+               while (temp >= 0) {
+                 result = String.fromCharCode(65 + (temp % 26)) + result;
+                 temp = Math.floor(temp / 26) - 1;
+               }
+               return result;
+            };
+
             currentSelected.forEach(el => {
-               const newName = generateNextName(el.name, currentAll);
-               const newEl = { 
-                 ...el, 
-                 id: createElementId(el.type),
-                 name: newName,
-                 x: el.x + 20, 
-                 y: el.y + 20 
-               };
-               newEls.push(newEl);
-               currentAll.push(newEl);
+               if (el.type === 'zone') {
+                  // Find new zone name (case insensitive)
+                  const existingZoneNames = currentAll.filter(e => e.type === 'zone').map(e => (e.name || "").toUpperCase());
+                  let idx = 0;
+                  let newZoneName = '';
+                  let newPrefix = '';
+                  while (true) {
+                     newPrefix = getLabel(idx);
+                     newZoneName = `ZONE ${newPrefix}`;
+                     if (!existingZoneNames.includes(newZoneName)) break;
+                     idx++;
+                  }
+                  
+                  const oldPrefix = (el.name || "").replace(/ZONE\s+/i, '').trim();
+                  const newZoneId = createElementId('zone');
+                  
+                  const newZone = { 
+                     ...el, 
+                     id: newZoneId,
+                     name: newZoneName,
+                     x: el.x + 30, 
+                     y: el.y + 30 
+                  };
+                  newEls.push(newZone);
+                  currentAll.push(newZone);
+
+                  // Duplicate all children (slots)
+                  const children = currentAll.filter(c => c.parentId === el.id);
+                  children.forEach(child => {
+                     // Replace old prefix with new prefix in child name (e.g. A1 -> B1)
+                     let newChildName = child.name;
+                     if (oldPrefix && newChildName.startsWith(oldPrefix)) {
+                        newChildName = newPrefix + newChildName.substring(oldPrefix.length);
+                     }
+                     const newChild = {
+                        ...child,
+                        id: createElementId(child.type),
+                        parentId: newZoneId,
+                        name: newChildName,
+                        x: child.x + 30,
+                        y: child.y + 30
+                     };
+                     currentAll.push(newChild);
+                     newEls.push(newChild); // Push to newEls so it can be selected too
+                  });
+               } else {
+                  // If it's a child of a selected zone, it's already duplicated above!
+                  // We only duplicate it normally if it's NOT a child of a selected zone
+                  if (el.parentId && currentSelected.some(s => s.id === el.parentId && s.type === 'zone')) {
+                     return; // Skip, already handled
+                  }
+
+                  // Not a zone, just duplicate normally
+                  const newName = generateNextName(el.name, currentAll);
+                  const newEl = { 
+                    ...el, 
+                    id: createElementId(el.type),
+                    name: newName,
+                    x: el.x + 20, 
+                    y: el.y + 20 
+                  };
+                  newEls.push(newEl);
+                  currentAll.push(newEl);
+               }
             });
             setSelectedElementIds(newEls.map(el => el.id));
             return currentAll;
@@ -405,10 +516,27 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
   }, []);
 
   const handleSave = () => {
-    // Check for duplicate slot names
-    const slotNames = elements
-      .filter(el => el.type.startsWith('slot') && el.name && el.name.trim() !== '')
-      .map(el => el.name.trim());
+    const zones = elements.filter(el => el.type === 'zone');
+    
+    // 1. Check if any Zone is unnamed
+    for (const z of zones) {
+      if (!z.name || z.name.trim() === '') {
+        alert("Cannot save map! Found a Zone without a name. All Zones must be named.");
+        return;
+      }
+    }
+
+    // 2. Check for duplicate zone names
+    const zoneNames = zones.map(el => el.name.trim());
+    const duplicateZone = zoneNames.find((name, index) => zoneNames.indexOf(name) !== index);
+    if (duplicateZone) {
+      alert(`Cannot save map! Duplicate zone name "${duplicateZone}" detected. Zone names must be unique within a floor.`);
+      return;
+    }
+
+    // 3. Check for duplicate slot names
+    const namedSlots = elements.filter(el => el.type.startsWith('slot') && el.name && el.name.trim() !== '');
+    const slotNames = namedSlots.map(el => el.name.trim());
     
     const duplicateSlot = slotNames.find((name, index) => slotNames.indexOf(name) !== index);
     if (duplicateSlot) {
@@ -416,15 +544,20 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
       return;
     }
 
-    // Check for duplicate zone names
-    const zoneNames = elements
-      .filter(el => el.type === 'zone' && el.name && el.name.trim() !== '')
-      .map(el => el.name.trim());
-    
-    const duplicateZone = zoneNames.find((name, index) => zoneNames.indexOf(name) !== index);
-    if (duplicateZone) {
-      alert(`Cannot save map! Duplicate zone name "${duplicateZone}" detected. Zone names must be unique within a floor.`);
-      return;
+    // 4. Check if every named slot falls inside a Zone's bounding box
+    for (const slot of namedSlots) {
+       const slotCenterX = slot.x + slot.w / 2;
+       const slotCenterY = slot.y + slot.h / 2;
+       
+       const insideZone = zones.find(z => 
+          slotCenterX >= z.x && slotCenterX <= (z.x + z.w) &&
+          slotCenterY >= z.y && slotCenterY <= (z.y + z.h)
+       );
+
+       if (!insideZone) {
+          alert(`Cannot save map! Parking slot "${slot.name}" is placed outside of any Zone. Please drag it into a valid Zone boundary.`);
+          return;
+       }
     }
 
     onSave({ width: 1000, height: 600, elements });
@@ -445,18 +578,45 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
 
   const renderElementContent = (el) => {
     switch (el.type) {
-      case 'slot': return <div className="flex flex-col items-center"><span className="text-[10px]">{el.name}</span><Car size={20} className="text-gray-400"/></div>;
-      case 'slot-ev': return <div className="flex flex-col items-center"><span className="text-[10px] text-emerald-400">{el.name || 'EV'}</span><Zap size={20} className="text-emerald-400"/></div>;
-      case 'slot-handicap': return <div className="flex flex-col items-center"><span className="text-[10px] text-blue-400">{el.name || '♿'}</span><Accessibility size={20} className="text-blue-400"/></div>;
+      case 'slot': 
+        return (
+          <div className="w-full h-full relative border-l-4 border-r-4 border-white/80 box-border bg-[#2c3038] group transition-colors hover:bg-[#333842]">
+            <div className="absolute top-1 left-1/2 -translate-x-1/2 w-3/4 h-2 bg-gray-500 rounded shadow-[0_2px_4px_rgba(0,0,0,0.5)]"></div>
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center opacity-70">
+              <span className="text-[16px] font-bold text-white uppercase tracking-widest">{el.name}</span>
+            </div>
+            {!el.name && <Car size={24} className="absolute bottom-4 left-1/2 -translate-x-1/2 text-gray-400 opacity-20" />}
+          </div>
+        );
+      case 'slot-ev': 
+        return (
+          <div className="w-full h-full relative border-l-4 border-r-4 border-emerald-500/80 box-border bg-[#2c3038] group transition-colors hover:bg-[#333842]">
+            <div className="absolute top-1 left-1/2 -translate-x-1/2 w-3/4 h-2 bg-emerald-600 rounded shadow-[0_2px_4px_rgba(0,0,0,0.5)]"></div>
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center opacity-80">
+              <Zap size={20} className="text-emerald-400 mb-1"/>
+              <span className="text-[14px] font-bold text-emerald-400 uppercase tracking-widest">{el.name || 'EV'}</span>
+            </div>
+          </div>
+        );
+      case 'slot-handicap': 
+        return (
+          <div className="w-full h-full relative border-l-4 border-r-4 border-blue-500/80 box-border bg-[#2c3038] group transition-colors hover:bg-[#333842]">
+            <div className="absolute top-1 left-1/2 -translate-x-1/2 w-3/4 h-2 bg-blue-600 rounded shadow-[0_2px_4px_rgba(0,0,0,0.5)]"></div>
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center opacity-80">
+              <Accessibility size={20} className="text-blue-400 mb-1"/>
+              <span className="text-[14px] font-bold text-blue-400 uppercase tracking-widest">{el.name || '♿'}</span>
+            </div>
+          </div>
+        );
       case 'gate': return <div className="text-green-400 font-bold border border-green-400 px-2 rounded-sm bg-green-400/20">{el.name || 'GATE'}</div>;
       case 'road': return <div className="flex items-center gap-1 text-yellow-400"><ArrowRight size={24}/> <span className="font-bold text-xs">{el.name}</span></div>;
       case 'bump': return <div className="w-full h-full" style={{ backgroundImage: 'repeating-linear-gradient(45deg, #fbbf24, #fbbf24 10px, rgba(0,0,0,0.5) 10px, rgba(0,0,0,0.5) 20px)' }}></div>;
       case 'wall': return <div className="w-full h-full" style={{ backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(255,255,255,0.1) 10px, rgba(255,255,255,0.1) 20px)' }}></div>;
-      case 'pillar': return <div className="bg-slate-500 w-full h-full flex items-center justify-center font-bold text-xs">{el.name}</div>;
-      case 'ramp': return <div className="flex flex-col items-center bg-slate-700/50 w-full h-full justify-center text-xs"><Navigation size={20}/><span className="mt-1">{el.name}</span></div>;
-      case 'elevator': return <div className="flex flex-col items-center bg-slate-800/80 w-full h-full justify-center text-[10px]"><Layers size={20}/><span className="mt-1">{el.name}</span></div>;
-      case 'kiosk': return <div className="flex flex-col items-center bg-sky-900/50 w-full h-full justify-center text-[10px] text-sky-300"><MonitorSmartphone size={16}/><span>{el.name}</span></div>;
-      case 'sign': return <div className="bg-red-500 rounded-full w-8 h-8 flex items-center justify-center text-[8px] font-bold text-center leading-tight">{el.name}</div>;
+      case 'pillar': return <div className="bg-slate-500 w-full h-full flex items-center justify-center font-bold text-xs shadow-xl">{el.name}</div>;
+      case 'ramp': return <div className="flex flex-col items-center bg-slate-700/50 w-full h-full justify-center text-xs border border-white/10"><Navigation size={20}/><span className="mt-1">{el.name}</span></div>;
+      case 'elevator': return <div className="flex flex-col items-center bg-slate-800/80 w-full h-full justify-center text-[10px] border border-white/10"><Layers size={20}/><span className="mt-1">{el.name}</span></div>;
+      case 'kiosk': return <div className="flex flex-col items-center bg-sky-900/50 w-full h-full justify-center text-[10px] text-sky-300 border border-sky-500/50"><MonitorSmartphone size={16}/><span>{el.name}</span></div>;
+      case 'sign': return <div className="bg-red-500 rounded-full w-8 h-8 flex items-center justify-center text-[8px] font-bold text-center leading-tight shadow-md border-2 border-white">{el.name}</div>;
       case 'planter': return <div className="flex gap-1 text-emerald-500"><TreePine size={20}/><TreePine size={20}/></div>;
       case 'zone': 
         if (el.shape === 'circle') {
@@ -466,9 +626,27 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
           return <div className="w-full h-full flex items-center justify-center bg-black/50 text-xs font-bold text-cyan-200" style={{ clipPath: 'polygon(50% 0%, 0% 100%, 100% 100%)', paddingTop: '20%' }}>{el.name || el.type}</div>;
         }
         return (
-          <div className="w-full h-full rounded border-2 border-dashed border-cyan-500/30 bg-black/20 pointer-events-none">
-            <div className="absolute -top-3 left-4 bg-[#181c23] border border-cyan-500/50 rounded-full px-3 shadow-md">
-              <span className="text-[10px] font-bold text-cyan-300 uppercase tracking-widest">{el.name || el.type}</span>
+          <div className="w-full h-full relative pointer-events-none">
+            {/* Background layer with hidden overflow for asphalt texture */}
+            <div className="absolute inset-0 rounded bg-[#20232a] border border-white/5 overflow-hidden">
+              <div className="absolute inset-0 bg-white" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=%220 0 200 200%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noiseFilter%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.65%22 numOctaves=%223%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noiseFilter)%22/%3E%3C/svg%3E")' }}></div>
+            </div>
+            
+            {/* Zone Name Tag (floating outside the box) */}
+            <div 
+               className={`absolute -top-6 left-0 px-3 py-1 rounded-t-md bg-[#181c23] border border-b-0 shadow-md font-bold text-[10px] tracking-widest uppercase select-none pointer-events-auto cursor-pointer hover:bg-slate-800 transition-colors ${!el.name ? 'text-red-400 border-red-500/50 z-50' : 'text-cyan-300 border-cyan-500/50 z-20'}`}
+               onMouseDown={(e) => {
+                  e.stopPropagation();
+                  if (e.shiftKey) {
+                     setSelectedElementIds(prev => prev.includes(el.id) ? prev.filter(id => id !== el.id) : [...prev, el.id]);
+                  } else {
+                     if (!selectedElementIds.includes(el.id)) {
+                        setSelectedElementIds([el.id]);
+                     }
+                  }
+               }}
+            >
+              {el.name || 'UNNAMED ZONE'}
             </div>
           </div>
         );
@@ -501,7 +679,6 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
           {activeCategory === "spaces" && (
             <>
               {renderToolButton(<Box size={16}/>, "Zone Area", "zone")}
-              {renderToolButton(<Box size={16} className="text-cyan-400"/>, "Zone (10 Slots)", "zone-template")}
               {renderToolButton(<div className="w-4 h-4 border border-dashed border-current"></div>, "Standard Slot", "slot")}
               {renderToolButton(<Zap size={16}/>, "EV Charging Slot", "slot-ev")}
               {renderToolButton(<Accessibility size={16}/>, "Handicap Slot", "slot-handicap")}
@@ -566,7 +743,7 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
 
         {/* The Map Container (1000x600) */}
         <div 
-           className="absolute left-1/2 top-1/2 bg-black/60 border border-white/20 shadow-2xl transition-transform origin-center"
+           className="absolute left-1/2 top-1/2 bg-white/95 border-2 border-cyan-500/80 shadow-[0_0_50px_rgba(6,182,212,0.2)] rounded-[2rem] transition-transform origin-center"
            style={{ 
               width: 1000, 
               height: 600,
@@ -647,11 +824,35 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
                     const dx = d.x - el.x;
                     const dy = d.y - el.y;
                     if (dx !== 0 || dy !== 0) {
-                      setElements(prev => prev.map(item => {
-                        if (item.id === el.id) return { ...item, x: d.x, y: d.y };
-                        if (item.parentId === el.id) return { ...item, x: item.x + dx, y: item.y + dy };
-                        return item;
-                      }));
+                      setElements(prev => {
+                        let nextElements = prev.map(item => {
+                          if (item.id === el.id) return { ...item, x: d.x, y: d.y };
+                          if (item.parentId === el.id) return { ...item, x: item.x + dx, y: item.y + dy };
+                          return item;
+                        });
+
+                        // Auto-parenting logic for slots dropped into zones
+                        if (el.type.startsWith('slot')) {
+                           const slotCenterX = d.x + el.w / 2;
+                           const slotCenterY = d.y + el.h / 2;
+                           
+                           // Find if the center of the slot is inside any zone
+                           // Note: we use 'prev' to find the zone, as zone hasn't moved
+                           const targetZone = prev.find(z => z.type === 'zone' && 
+                             slotCenterX >= z.x && slotCenterX <= (z.x + z.w) &&
+                             slotCenterY >= z.y && slotCenterY <= (z.y + z.h)
+                           );
+
+                           if (targetZone && el.parentId !== targetZone.id) {
+                             nextElements = nextElements.map(item => item.id === el.id ? { ...item, parentId: targetZone.id } : item);
+                           } else if (!targetZone && el.parentId) {
+                             // Dropped outside any zone, detach parent
+                             nextElements = nextElements.map(item => item.id === el.id ? { ...item, parentId: null } : item);
+                           }
+                        }
+
+                        return nextElements;
+                      });
                     }
                  }
               }}
@@ -662,9 +863,8 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
                   ...position,
                 });
               }}
-              disableDragging={!!el.parentId}
               bounds="parent"
-              className={`border ${selectedElementIds.includes(el.id) ? 'border-cyan-400 z-50' : 'border-white/30 z-10'} bg-white/10 backdrop-blur-sm cursor-move`}
+              className={`transition-all ${selectedElementIds.includes(el.id) ? 'shadow-[0_0_0_2px_#06b6d4,0_8px_16px_rgba(0,0,0,0.5)] z-50 brightness-110' : 'shadow-sm z-10'} ${el.type === 'zone' ? '' : 'backdrop-blur-sm'} cursor-move`}
               onClick={(e) => { 
                 e.stopPropagation(); 
                 if (e.shiftKey) {
@@ -673,11 +873,17 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
                    if (!selectedElementIds.includes(el.id)) {
                       setSelectedElementIds([el.id]);
                    }
+                   // Always sync prefix when a single zone is clicked
+                   if (el.type === 'zone' && el.name) {
+                      const words = el.name.trim().split(' ');
+                      const prefix = words[words.length - 1];
+                      setGridConfig(prev => ({ ...prev, prefix }));
+                   }
                 }
               }}
             >
               <div 
-                className={`w-full h-full flex items-center justify-center pointer-events-none ${el.type === 'zone' ? '' : 'overflow-hidden'}`}
+                className={`w-full h-full flex items-center justify-center pointer-events-none`}
                 style={{ transform: `rotate(${el.rot || 0}deg)` }}
               >
                 {renderElementContent(el)}
@@ -735,6 +941,12 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
             {(() => {
               const selectedElement = elements.find(el => el.id === selectedElementIds[0]);
               if (!selectedElement) return null;
+
+              // Realtime Validation Checks
+              const isZoneNameConflict = selectedElement.type === 'zone' && selectedElement.name && elements.some(el => el.type === 'zone' && el.id !== selectedElement.id && el.name && el.name.trim() === selectedElement.name.trim());
+              const isSlotNameConflict = selectedElement.type.startsWith('slot') && selectedElement.name && elements.some(el => el.type.startsWith('slot') && el.id !== selectedElement.id && el.name && el.name.trim() === selectedElement.name.trim());
+              const isNameConflict = isZoneNameConflict || isSlotNameConflict;
+
               return (
                 <>
                   <div>
@@ -749,28 +961,30 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
                       <input type="text" value={selectedElement.type} disabled className="w-full bg-black/30 border border-white/10 rounded p-2 text-white opacity-50" />
                     )}
                   </div>
-                  <div>
+                  <div className="mb-4">
                     <label className="text-xs text-gray-400 uppercase font-bold tracking-wider mb-1 block">Name / Label</label>
                     <input 
                       type="text" 
                       value={selectedElement.name || ""} 
-                      onChange={(e) => handleUpdateElement(selectedElement.id, { name: e.target.value })} 
-                      className={`w-full bg-black/50 border rounded p-2 text-white outline-none transition ${
-                        selectedElement.name && elements.some(el => el.id !== selectedElement.id && (
-                          (selectedElement.type.startsWith('slot') && el.type.startsWith('slot') && el.name === selectedElement.name) ||
-                          (selectedElement.type === 'zone' && el.type === 'zone' && el.name === selectedElement.name)
-                        ))
-                          ? 'border-red-500 focus:border-red-400' 
-                          : 'border-white/10 focus:border-cyan-500'
-                      }`} 
+                      onChange={(e) => {
+                        let val = e.target.value.toUpperCase();
+                        // Auto-prefix ZONE if user types a single letter
+                        if (selectedElement.type === 'zone') {
+                          if (val.length === 1 && /^[A-Z0-9]$/.test(val)) {
+                            val = `ZONE ${val}`;
+                          }
+                          const words = val.trim().split(' ');
+                          const prefix = words[words.length - 1] || '';
+                          setGridConfig(prev => ({ ...prev, prefix }));
+                        }
+                        handleUpdateElement(selectedElement.id, { name: val });
+                      }} 
+                      className={`w-full bg-black/50 border ${isNameConflict ? 'border-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]' : 'border-white/10'} rounded p-2 text-white font-bold focus:border-cyan-500 transition`} 
                     />
-                    {selectedElement.name && elements.some(el => el.id !== selectedElement.id && (
-                      (selectedElement.type.startsWith('slot') && el.type.startsWith('slot') && el.name === selectedElement.name) ||
-                      (selectedElement.type === 'zone' && el.type === 'zone' && el.name === selectedElement.name)
-                    )) && (
-                      <div className="text-red-400 text-xs mt-1 font-medium animate-pulse">
-                        ⚠️ This {selectedElement.type === 'zone' ? 'zone' : 'slot'} name already exists!
-                      </div>
+                    {isNameConflict && (
+                      <p className="text-red-500 text-[10px] mt-1 font-bold">
+                        ⚠️ Duplicate {selectedElement.type === 'zone' ? 'Zone' : 'Slot'} name detected!
+                      </p>
                     )}
                     {selectedElement.type.startsWith('slot') && selectedElement.parentId && (
                       <button 
@@ -801,6 +1015,48 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
                       <input type="number" value={selectedElement.h} onChange={(e) => handleUpdateElement(selectedElement.id, { h: Number(e.target.value) })} className="w-full bg-black/50 border border-white/10 rounded p-2 text-white" />
                     </div>
                   </div>
+                  
+                  {/* Smart Grid Generator for Zones */}
+                  {selectedElement.type === 'zone' && (
+                    <div className="mt-4 border-t border-white/10 pt-4">
+                      <h3 className="text-sm font-bold text-cyan-400 mb-3 flex items-center gap-2">
+                        <Box size={16} /> Smart Grid Generator
+                      </h3>
+                      <div className="grid grid-cols-2 gap-2 mb-3">
+                        <div>
+                          <label className="text-[10px] text-gray-400 uppercase font-bold block mb-1">Prefix</label>
+                          <input type="text" value={gridConfig.prefix} onChange={(e) => setGridConfig({...gridConfig, prefix: e.target.value.toUpperCase()})} className="w-full bg-black/50 border border-white/10 rounded p-2 text-white text-sm" placeholder="e.g. A" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-gray-400 uppercase font-bold block mb-1">Start #</label>
+                          <input type="number" min="1" value={gridConfig.start} onChange={(e) => setGridConfig({...gridConfig, start: Number(e.target.value)})} className="w-full bg-black/50 border border-white/10 rounded p-2 text-white text-sm" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-gray-400 uppercase font-bold block mb-1">Rows</label>
+                          <input type="number" min="1" max="20" value={gridConfig.rows} onChange={(e) => setGridConfig({...gridConfig, rows: Number(e.target.value)})} className="w-full bg-black/50 border border-white/10 rounded p-2 text-white text-sm" />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-gray-400 uppercase font-bold block mb-1">Cols</label>
+                          <input type="number" min="1" max="50" value={gridConfig.cols} onChange={(e) => setGridConfig({...gridConfig, cols: Number(e.target.value)})} className="w-full bg-black/50 border border-white/10 rounded p-2 text-white text-sm" />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="text-[10px] text-gray-400 uppercase font-bold block mb-1">Orientation</label>
+                          <select value={gridConfig.angle} onChange={(e) => setGridConfig({...gridConfig, angle: Number(e.target.value)})} className="w-full bg-black/50 border border-white/10 rounded p-2 text-white text-sm">
+                            <option value={0}>Vertical Parking (| |)</option>
+                            <option value={90}>Horizontal Parking (=)</option>
+                          </select>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => handleGenerateGrid(selectedElement)}
+                        className="w-full bg-cyan-500 hover:bg-cyan-400 text-black font-bold py-2 rounded transition flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(6,182,212,0.3)]"
+                      >
+                        <Car size={18}/> Generate {gridConfig.rows * gridConfig.cols} Slots
+                      </button>
+                      <p className="text-[10px] text-gray-500 mt-2 text-center leading-tight">This will resize the zone and replace any existing slots inside it.</p>
+                    </div>
+                  )}
+
                   <div>
                     <label className="text-xs text-gray-400 uppercase font-bold tracking-wider mb-1 flex justify-between">
                       <span>Rotation</span>

@@ -35,8 +35,11 @@ import bookingService from '@/services/BookingService';
 import parkingFloorService from '@/services/ParkingFloorService';
 import type { AvailableSlot, ParkingFloor } from '@/types/booking.types';
 import type { Vehicle } from '@/types/models';
+import type { MembershipStatus } from '@/types/subscription.types';
 import { formatCurrency } from '@/utils/formatters';
 import { subscriptionsService } from '@/services/api/subscriptions';
+import { walletService } from '@/services/api/wallet';
+import { isPolicyAcceptanceRequired } from '@/utils/policyErrors';
 
 type Props = NativeStackScreenProps<BookingStackParamList, 'CreateBooking'>;
 
@@ -116,7 +119,7 @@ function TimePickerModal({ visible, title, initialDate, minDate, onConfirm, onCl
           </View>
 
           {/* Date selection */}
-          <Text style={mpStyles.label}>Ngày</Text>
+          <Text style={mpStyles.label}>Date</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={mpStyles.dateRow}>
             {DATE_OPTIONS.map((date) => {
               const dateStr = format(date, 'yyyy-MM-dd');
@@ -141,7 +144,7 @@ function TimePickerModal({ visible, title, initialDate, minDate, onConfirm, onCl
           </ScrollView>
 
           {/* Time selection */}
-          <Text style={mpStyles.label}>Giờ</Text>
+          <Text style={mpStyles.label}>Time</Text>
           <ScrollView style={mpStyles.timeList} showsVerticalScrollIndicator={false}>
             <View style={mpStyles.timeGrid}>
               {TIME_OPTIONS.map((time) => {
@@ -170,7 +173,7 @@ function TimePickerModal({ visible, title, initialDate, minDate, onConfirm, onCl
               end={{ x: 1, y: 0 }}
               style={mpStyles.confirmGrad}
             >
-              <Text style={mpStyles.confirmText}>Xác nhận</Text>
+              <Text style={mpStyles.confirmText}>Confirm</Text>
             </LinearGradient>
           </TouchableOpacity>
         </View>
@@ -235,17 +238,16 @@ const mpStyles = StyleSheet.create({
 export const CreateBookingScreen = ({ navigation, route }: Props) => {
   const {
     availableSlots,
-    bookingPolicy,
     parkingFloors,
     services,
     walletBalance,
     isLoading,
     error,
     fetchWalletBalance,
+    fetchBookings,
     fetchParkingFloors,
     fetchServices,
     getAvailableSlots,
-    createBooking,
   } = useBooking();
 
   // ── Time state ────────────────────────────────────────────────────────────
@@ -270,6 +272,9 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
   const [activeSessions, setActiveSessions] = useState<any[]>([]);
   const [activeHolds, setActiveHolds] = useState<any[]>([]);
   const [selectedFloor, setSelectedFloor] = useState<ParkingFloor | null>(null);
+  const [serverQuoteTotal, setServerQuoteTotal] = useState<number | null>(null);
+  const [confirmedTotal, setConfirmedTotal] = useState<number | null>(null);
+  const [membership, setMembership] = useState<MembershipStatus | null>(null);
 
   const selectedFloorId = route.params?.selectedFloorId;
   const selectedSlotCode = route.params?.selectedSlotCode;
@@ -281,8 +286,8 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
         bookingService.getActiveSessions(),
         bookingService.getActiveHolds(),
       ]);
-      setActiveSessions(sessionsRes.data?.data || []);
-      setActiveHolds(holdsRes.data?.data || []);
+      setActiveSessions(sessionsRes.data || []);
+      setActiveHolds(holdsRes.data || []);
     } catch (err) {
       console.warn('Failed to fetch extra map data:', err);
     }
@@ -318,7 +323,7 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
       const defaultVehicle = approved.find((v) => v.isDefault) ?? approved[0];
       setSelectedVehicleId(defaultVehicle?.id ?? defaultVehicle?._id ?? '');
     } catch (e: unknown) {
-      setVehicleError(e instanceof Error ? e.message : 'Không thể tải danh sách xe.');
+      setVehicleError(e instanceof Error ? e.message : 'Unable to load vehicles.');
     }
   }, []);
 
@@ -333,13 +338,23 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
     }
   }, []);
 
+  const loadMembership = useCallback(async () => {
+    try {
+      const response = await subscriptionsService.getMembership();
+      setMembership(response.data || null);
+    } catch {
+      setMembership(null);
+    }
+  }, []);
+
   useEffect(() => {
     void fetchWalletBalance().catch(() => undefined);
     void fetchParkingFloors();
     void fetchServices();
     void loadVehicles();
     void loadHourlyRate();
-  }, [fetchWalletBalance, fetchParkingFloors, fetchServices, loadVehicles, loadHourlyRate]);
+    void loadMembership();
+  }, [fetchWalletBalance, fetchParkingFloors, fetchServices, loadVehicles, loadHourlyRate, loadMembership]);
 
   useEffect(() => {
     const now = new Date();
@@ -401,7 +416,7 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
   const durationMs = Math.max(endTime.getTime() - startTime.getTime(), 0);
   const durationHours = Math.ceil(durationMs / 3_600_000);
   const paidHours = Math.max(durationHours, 1);
-  const parkingCost = paidHours * hourlyRate;
+  const estimatedParkingCost = paidHours * hourlyRate;
 
   const serviceTotal = useMemo(
     () =>
@@ -411,11 +426,26 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
     [services, selectedServiceIds],
   );
 
-  const grandTotal = parkingCost + serviceTotal;
+  const localGrandTotal = estimatedParkingCost + serviceTotal;
+  const grandTotal = serverQuoteTotal ?? localGrandTotal;
+  const parkingCost = Math.max(grandTotal - serviceTotal, 0);
   const hasEnoughBalance = walletBalance >= grandTotal;
   const selectedVehicle = vehicles.find((v) => (v.id ?? v._id ?? '') === selectedVehicleId);
+  const activeVipMembership = Boolean(
+    membership?.isVip &&
+    membership.status === 'active' &&
+    membership.expireAt &&
+    new Date(membership.expireAt).getTime() > Date.now() &&
+    (membership.package?.type === 'monthly' || membership.package?.type === 'yearly'),
+  );
+  const selectedSlotIsOwnVipSlot = Boolean(
+    selectedSlot && membership?.reservedSlots.some((slot) => (
+      String(slot.floorId) === String(selectedSlot.floorId) &&
+      slot.slotCode.toUpperCase() === selectedSlot.slotCode.toUpperCase()
+    )),
+  );
   const membershipBlocksRegisteredVehicle = Boolean(
-    selectedVehicle && bookingPolicy?.requiresAssignedSlotUse,
+    activeVipMembership && selectedVehicle && selectedSlot && !selectedSlotIsOwnVipSlot,
   );
   const canBook = Boolean(
     selectedSlot &&
@@ -428,6 +458,44 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
   );
   const selectedRouteSlotUnavailable =
     Boolean(selectedFloorId && selectedSlotCode) && !selectedSlot && !isLoading && availableSlots.length > 0;
+
+  useEffect(() => {
+    if (!selectedSlot || !selectedVehicleId || startTime <= new Date() || endTime <= startTime) {
+      setServerQuoteTotal(null);
+      return;
+    }
+
+    const licensePlate = selectedVehicleId === 'manual'
+      ? manualPlate.trim()
+      : selectedVehicle?.licensePlate;
+    if (!licensePlate) {
+      setServerQuoteTotal(null);
+      return;
+    }
+
+    let active = true;
+    const timeoutId = setTimeout(() => {
+      void bookingService.quoteBulkBooking([{
+        clientItemId: 'mobile-preview',
+        vehicleId: selectedVehicleId === 'manual' ? undefined : selectedVehicleId,
+        licensePlate: selectedVehicleId === 'manual' ? licensePlate : undefined,
+        floorId: selectedSlot.floorId,
+        slotCode: selectedSlot.slotCode,
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString(),
+        serviceIds: selectedServiceIds,
+      }]).then((response) => {
+        if (active) setServerQuoteTotal(Number(response.data?.grandTotal || 0));
+      }).catch(() => {
+        if (active) setServerQuoteTotal(null);
+      });
+    }, 250);
+
+    return () => {
+      active = false;
+      clearTimeout(timeoutId);
+    };
+  }, [endTime, manualPlate, selectedServiceIds, selectedSlot, selectedVehicle, selectedVehicleId, startTime]);
 
   // ── Toggle service ────────────────────────────────────────────────────────
   const toggleService = (serviceId: string) => {
@@ -460,85 +528,111 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
     if (!selectedSlot || !selectedVehicleId) return;
     const now = new Date();
     if (startTime < now) {
-      showFeedback('error', 'Thời gian không hợp lệ', 'Thời gian bắt đầu không thể ở quá khứ.');
+      showFeedback('error', 'Invalid time', 'The start time cannot be in the past.');
       return;
     }
     if (durationMs < 30 * 60 * 1000) {
-      showFeedback('warning', 'Thời lượng quá ngắn', 'Thời gian đặt chỗ tối thiểu là 30 phút.');
+      showFeedback('warning', 'Duration too short', 'The minimum booking duration is 30 minutes.');
       return;
     }
     if (durationMs > 24 * 60 * 60 * 1000) {
-      showFeedback('warning', 'Thời lượng quá dài', 'Thời gian đặt chỗ tối đa là 24 giờ.');
+      showFeedback('warning', 'Duration too long', 'The maximum booking duration is 24 hours.');
       return;
     }
     if (membershipBlocksRegisteredVehicle) {
       showFeedback(
         'warning',
-        'Hãy sử dụng ô VIP trước',
-        'Gói membership của bạn đang có ô VIP trống. Hãy cho một xe vào ô VIP trước; sau đó xe còn lại mới có thể đặt ô thường.',
+        'Use your VIP space first',
+        'Your membership includes an available VIP space. Assign a vehicle to it before booking a regular space for another vehicle.',
       );
       return;
     }
-    if (!hasEnoughBalance) {
+    if (!hasEnoughBalance && serverQuoteTotal !== null) {
       showFeedback(
         'warning',
-        'Không đủ số dư',
-        `Bạn cần ${formatCurrency(grandTotal)} nhưng ví chỉ còn ${formatCurrency(walletBalance)}. Hãy nạp thêm tiền vào ví.`,
+        'Insufficient balance',
+        `You need ${formatCurrency(grandTotal)}, but your wallet only has ${formatCurrency(walletBalance)}. Please top up your wallet.`,
       );
       return;
     }
     setSubmitting(true);
+    let holdId: string | null = null;
+    let holdConsumed = false;
     try {
-      let bookingId: string | undefined;
-      if (selectedVehicleId === 'manual') {
-        if (!manualPlate.trim()) throw new Error('Vui lòng nhập biển số xe.');
-        const response = await bookingService.createBulkBooking({
-          idempotencyKey: Date.now().toString(),
-          items: [{
-            licensePlate: manualPlate.trim(),
-            floorId: selectedSlot.floorId,
-            slotCode: selectedSlot.slotCode,
-            startTime: startTime.toISOString(),
-            endTime: endTime.toISOString(),
-            serviceIds: selectedServiceIds,
-          }],
-          paymentMethod: 'wallet',
-        });
+      const licensePlate = selectedVehicleId === 'manual'
+        ? manualPlate.trim()
+        : selectedVehicle?.licensePlate;
+      if (!licensePlate) throw new Error('Please select a vehicle or enter a license plate.');
 
-        const responseData = response.data?.data ?? response.data;
-        const rawBooking = responseData?.bookings?.[0] ?? responseData?.items?.[0] ?? responseData?.booking;
-        bookingId = bookingService.normalizeBooking(rawBooking)?._id;
+      const item = {
+        clientItemId: `mobile-${Date.now()}`,
+        vehicleId: selectedVehicleId === 'manual' ? undefined : selectedVehicleId,
+        licensePlate: selectedVehicleId === 'manual' ? licensePlate : undefined,
+        floorId: selectedSlot.floorId,
+        slotCode: selectedSlot.slotCode,
+        startTime: startTime.toISOString(),
+        endTime: endTime.toISOString(),
+        serviceIds: selectedServiceIds,
+      };
 
-        if (responseData?.checkoutUrl) {
-          setFeedback({
-            variant: 'info',
-            title: 'Thanh toán VietQR',
-            message: 'Vui lòng hoàn tất thanh toán để giữ chỗ.',
-            primaryLabel: 'Đã hiểu',
-            onPrimary: () => navigation.goBack(),
-          });
-          return;
-        }
-      } else {
-        const booking = await createBooking({
-          vehicleId: selectedVehicleId,
-          floorId: selectedSlot.floorId,
-          slotCode: selectedSlot.slotCode,
-          startTime: startTime.toISOString(),
-          endTime: endTime.toISOString(),
-          serviceIds: selectedServiceIds,
-          paymentMethod: 'wallet',
-        });
-        bookingId = booking._id;
+      const [quoteResponse, walletResponse] = await Promise.all([
+        bookingService.quoteBulkBooking([item]),
+        walletService.getWallet(),
+      ]);
+      const authoritativeTotal = Number(quoteResponse.data?.grandTotal || 0);
+      const latestBalance = Number(walletResponse.data?.balance || 0);
+      setServerQuoteTotal(authoritativeTotal);
+
+      if (latestBalance < authoritativeTotal) {
+        showFeedback(
+          'warning',
+          'Insufficient balance',
+          `You need ${formatCurrency(authoritativeTotal)}, but your wallet only has ${formatCurrency(latestBalance)}.`,
+        );
+        return;
       }
 
+      const holdResponse = await bookingService.createBookingHold({
+        floorId: item.floorId,
+        slotCode: item.slotCode,
+        licensePlate,
+        startTime: item.startTime,
+        endTime: item.endTime,
+      });
+      holdId = holdResponse.data?._id || null;
+      if (!holdId) throw new Error('Unable to create a parking hold.');
+
+      const response = await bookingService.createBulkBooking({
+        idempotencyKey: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+        items: [{ ...item, holdId }],
+      });
+      holdConsumed = true;
+      const booking = bookingService.normalizeBooking(response.data?.bookings?.[0]);
+      const bookingId = booking?._id;
+      setConfirmedTotal(authoritativeTotal);
+      await Promise.all([fetchBookings(), fetchWalletBalance(), fetchExtraData()]);
       setCreatedBookingId(bookingId ?? null);
       setShowSuccessModal(true);
     } catch (submitError) {
+      if (holdId && !holdConsumed) {
+        await bookingService.releaseBookingHold(holdId).catch(() => undefined);
+      }
+      if (isPolicyAcceptanceRequired(submitError)) {
+        setFeedback({
+          variant: 'warning',
+          title: 'Policy acceptance required',
+          message: 'Please read and accept the latest policy before booking.',
+          primaryLabel: 'View policy',
+          onPrimary: () => navigation
+            .getParent<BottomTabNavigationProp<CustomerTabParamList>>()
+            ?.navigate('ProfileTab', { screen: 'Policies' }),
+        });
+        return;
+      }
       showFeedback(
         'error',
-        'Đặt chỗ thất bại',
-        submitError instanceof Error ? submitError.message : 'Vui lòng thử lại.',
+        'Booking failed',
+        submitError instanceof Error ? submitError.message : 'Please try again.',
       );
     } finally {
       setSubmitting(false);
@@ -548,86 +642,70 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <SafeAreaView edges={['top', 'bottom']} style={styles.safe}>
-      <StatusBar barStyle="light-content" backgroundColor="#080808" />
-      <ScreenHeader title="Đặt chỗ mới" onBack={() => navigation.goBack()} />
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
+      <ScreenHeader
+        title="New booking"
+        subtitle="Choose a time, vehicle, and parking space"
+        onBack={() => navigation.goBack()}
+      />
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
-          {/* ── Time Summary Card ─────────────────────────────── */}
-          <View style={styles.timeSummary}>
-            <LinearGradient
-              colors={[COLORS.gold, 'transparent']}
-              end={{ x: 1, y: 0 }}
-              start={{ x: 0, y: 0 }}
-              style={styles.cardTopLine}
-            />
-            <View style={styles.timeRow}>
-              <View style={styles.timeBlock}>
-                <Text style={styles.timeLabel}>Vào</Text>
-                <Text style={styles.timeValue}>{format(startTime, 'HH:mm')}</Text>
-                <Text style={styles.timeDate}>{format(startTime, 'dd/MM/yyyy')}</Text>
-              </View>
-              <View style={styles.timeSep}>
-                <Ionicons name="arrow-forward" size={16} color={COLORS.textMuted} />
-                <Text style={styles.timeDur}>{durationHours}h</Text>
-              </View>
-              <View style={[styles.timeBlock, styles.timeBlockRight]}>
-                <Text style={styles.timeLabel}>Ra</Text>
-                <Text style={styles.timeValue}>{format(endTime, 'HH:mm')}</Text>
-                <Text style={styles.timeDate}>{format(endTime, 'dd/MM/yyyy')}</Text>
-              </View>
-            </View>
-          </View>
-
           {/* ── Time Pickers ──────────────────────────────────── */}
           <View style={styles.section}>
-            <SectionTitle>Thời gian</SectionTitle>
+            <SectionTitle>Time</SectionTitle>
             <View style={styles.timePickerRow}>
               <TouchableOpacity
                 style={styles.timePickerCard}
                 onPress={() => setShowStartPicker(true)}
                 activeOpacity={0.7}
+                accessibilityLabel={`Select arrival time, currently ${format(startTime, 'HH:mm dd/MM/yyyy')}`}
+                accessibilityRole="button"
               >
-                <View style={styles.timePickerIcon}>
-                  <Ionicons name="log-in-outline" size={18} color={COLORS.gold} />
+                <View style={styles.timeCardTop}>
+                  <View style={styles.timePickerIcon}>
+                    <Ionicons name="log-in-outline" size={18} color={COLORS.gold} />
+                  </View>
+                  <Text style={styles.timePickerLabel}>Arrival</Text>
                 </View>
-                <View>
-                  <Text style={styles.timePickerLabel}>Vào</Text>
-                  <Text style={styles.timePickerValue}>{format(startTime, 'HH:mm')}</Text>
-                  <Text style={styles.timePickerDate}>{format(startTime, 'dd/MM/yyyy')}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} style={{ marginLeft: 'auto' }} />
+                <Text style={styles.timePickerValue}>{format(startTime, 'HH:mm')}</Text>
+                <Text style={styles.timePickerDate}>{format(startTime, 'dd/MM/yyyy')}</Text>
               </TouchableOpacity>
 
               <TouchableOpacity
                 style={styles.timePickerCard}
                 onPress={() => setShowEndPicker(true)}
                 activeOpacity={0.7}
+                accessibilityLabel={`Select departure time, currently ${format(endTime, 'HH:mm dd/MM/yyyy')}`}
+                accessibilityRole="button"
               >
-                <View style={styles.timePickerIcon}>
-                  <Ionicons name="log-out-outline" size={18} color={COLORS.staffBlue} />
+                <View style={styles.timeCardTop}>
+                  <View style={[styles.timePickerIcon, styles.timePickerIconExit]}>
+                    <Ionicons name="log-out-outline" size={18} color={COLORS.staffBlue} />
+                  </View>
+                  <Text style={styles.timePickerLabel}>Departure</Text>
                 </View>
-                <View>
-                  <Text style={styles.timePickerLabel}>Ra</Text>
-                  <Text style={styles.timePickerValue}>{format(endTime, 'HH:mm')}</Text>
-                  <Text style={styles.timePickerDate}>{format(endTime, 'dd/MM/yyyy')}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} style={{ marginLeft: 'auto' }} />
+                <Text style={styles.timePickerValue}>{format(endTime, 'HH:mm')}</Text>
+                <Text style={styles.timePickerDate}>{format(endTime, 'dd/MM/yyyy')}</Text>
               </TouchableOpacity>
+            </View>
+            <View style={styles.durationNote}>
+              <Ionicons name="time-outline" size={15} color={COLORS.gold} />
+              <Text style={styles.durationText}>Estimated duration: {durationHours} hours</Text>
             </View>
           </View>
 
           {/* ── Vehicle ───────────────────────────────────────── */}
           <View style={styles.section}>
-            <SectionTitle>Xe của bạn</SectionTitle>
+            <SectionTitle>Your vehicle</SectionTitle>
             {vehicleError ? (
               <ErrorState message={vehicleError} onRetry={loadVehicles} />
             ) : vehicles.length === 0 ? (
               <EmptyState
                 icon="car-outline"
-                title="Chưa có xe đã duyệt"
-                message="Thêm hoặc chờ duyệt xe trong Hồ sơ trước khi đặt chỗ."
+                title="No approved vehicles"
+                message="Add a vehicle or wait for approval in your profile before booking."
               />
             ) : (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow}>
@@ -639,6 +717,9 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
                       key={vehicleId}
                       style={[styles.vehiclePill, active && styles.vehiclePillActive]}
                       onPress={() => setSelectedVehicleId(vehicleId)}
+                      accessibilityLabel={`Select vehicle ${vehicle.licensePlate}`}
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: active }}
                     >
                       <Ionicons name="car-outline" size={16} color={active ? COLORS.gold : COLORS.textMuted} />
                       <Text style={[styles.vehicleText, active && styles.vehicleTextActive]}>
@@ -651,20 +732,23 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
                 <Pressable
                   style={[styles.vehiclePill, selectedVehicleId === 'manual' && styles.vehiclePillActive]}
                   onPress={() => setSelectedVehicleId('manual')}
+                  accessibilityLabel="Use another license plate"
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: selectedVehicleId === 'manual' }}
                 >
                   <Ionicons name="create-outline" size={16} color={selectedVehicleId === 'manual' ? COLORS.gold : COLORS.textMuted} />
                   <Text style={[styles.vehicleText, selectedVehicleId === 'manual' && styles.vehicleTextActive]}>
-                    Biển số ngoài
+                    Other plate
                   </Text>
                 </Pressable>
               </ScrollView>
             )}
 
             {selectedVehicleId === 'manual' && (
-              <View style={{ marginTop: 12 }}>
+              <View style={styles.manualInputWrap}>
                 <TextInput
-                  style={[styles.input, { borderWidth: 1, borderColor: COLORS.border, padding: 12, borderRadius: 8, color: COLORS.textPrimary }]}
-                  placeholder="Nhập biển số xe (VD: 30A-12345)"
+                  style={styles.manualInput}
+                  placeholder="Enter license plate (e.g. 30A-12345)"
                   placeholderTextColor={COLORS.textMuted}
                   value={manualPlate}
                   onChangeText={setManualPlate}
@@ -676,7 +760,7 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
               <View style={styles.warningBox}>
                 <Ionicons name="alert-circle-outline" size={18} color={COLORS.warning} />
                 <Text style={styles.warningText}>
-                  Membership đang có ô VIP trống. Hãy cho một xe vào ô VIP trước, rồi mới đặt ô thường cho xe còn lại.
+                  Your membership has an available VIP space. Assign a vehicle to it before booking a regular space.
                 </Text>
               </View>
             ) : null}
@@ -684,12 +768,12 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
 
           {/* ── Slot Map ──────────────────────────────────────── */}
           <View style={styles.section}>
-            <SectionTitle>Vị trí đỗ</SectionTitle>
+            <SectionTitle>Parking space</SectionTitle>
 
             {selectedSlot ? (
               <View style={styles.selectedSlotCard}>
                 <View style={styles.selectedSlotIcon}>
-                  <Ionicons name="location" size={20} color={COLORS.staffBlue} />
+                  <Ionicons name="location" size={20} color={COLORS.gold} />
                 </View>
                 <View style={styles.selectedSlotInfo}>
                   <Text style={styles.selectedSlotCode}>{selectedSlot.slotCode}</Text>
@@ -698,7 +782,12 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
                     {selectedVehicle ? ` • ${selectedVehicle.licensePlate}` : ''}
                   </Text>
                 </View>
-                <TouchableOpacity onPress={() => setSelectedSlot(null)} style={styles.clearSlotBtn}>
+                <TouchableOpacity
+                  onPress={() => setSelectedSlot(null)}
+                  style={styles.clearSlotBtn}
+                  accessibilityLabel="Clear selected space"
+                  accessibilityRole="button"
+                >
                   <Ionicons name="close-circle" size={20} color={COLORS.textMuted} />
                 </TouchableOpacity>
               </View>
@@ -706,7 +795,7 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
               <View style={styles.warningBox}>
                 <Ionicons name="alert-circle-outline" size={18} color={COLORS.warning} />
                 <Text style={styles.warningText}>
-                  Vị trí {selectedSlotCode} không còn trống. Vui lòng chọn vị trí khác.
+                  Space {selectedSlotCode} is no longer available. Please choose another space.
                 </Text>
               </View>
             ) : null}
@@ -738,35 +827,34 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
               </ScrollView>
             )}
 
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, paddingHorizontal: 16, marginBottom: 8, justifyContent: 'center' }}>
-              <View style={{ alignItems: 'center', flexDirection: 'row', gap: 6 }}>
-                <View style={{ borderRadius: 5, height: 10, width: 10, backgroundColor: '#7EE8A2' }} />
-                <Text style={{ color: COLORS.textSecondary, fontSize: 11 }}>Trống</Text>
+            <View style={styles.legend}>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: '#7EE8A2' }]} />
+                <Text style={styles.legendText}>Available</Text>
               </View>
-              <View style={{ alignItems: 'center', flexDirection: 'row', gap: 6 }}>
-                <View style={{ borderRadius: 5, height: 10, width: 10, backgroundColor: '#FF6B6B' }} />
-                <Text style={{ color: COLORS.textSecondary, fontSize: 11 }}>Có xe</Text>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: '#FF6B6B' }]} />
+                <Text style={styles.legendText}>Occupied</Text>
               </View>
-              <View style={{ alignItems: 'center', flexDirection: 'row', gap: 6 }}>
-                <View style={{ borderRadius: 5, height: 10, width: 10, backgroundColor: '#FFD700' }} />
-                <Text style={{ color: COLORS.textSecondary, fontSize: 11 }}>VIP</Text>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: '#FFD700' }]} />
+                <Text style={styles.legendText}>VIP</Text>
               </View>
-              <View style={{ alignItems: 'center', flexDirection: 'row', gap: 6 }}>
-                <View style={{ borderRadius: 5, height: 10, width: 10, backgroundColor: '#FFA500' }} />
-                <Text style={{ color: COLORS.textSecondary, fontSize: 11 }}>Giữ chỗ</Text>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: '#FFA500' }]} />
+                <Text style={styles.legendText}>Reserved</Text>
               </View>
-              <View style={{ alignItems: 'center', flexDirection: 'row', gap: 6 }}>
-                <View style={{ borderRadius: 5, height: 10, width: 10, backgroundColor: '#A0A0A0' }} />
-                <Text style={{ color: COLORS.textSecondary, fontSize: 11 }}>Bảo trì</Text>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, { backgroundColor: '#A0A0A0' }]} />
+                <Text style={styles.legendText}>Maintenance</Text>
               </View>
             </View>
 
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={styles.mapCanvas}>
+            <View style={styles.mapCanvas}>
                 {isLoading || dbSlots === null ? (
                   <View style={styles.mapState}>
                     <ActivityIndicator color={COLORS.gold} size="large" />
-                    <Text style={styles.mapStateText}>Đang tải sơ đồ...</Text>
+                    <Text style={styles.mapStateText}>Loading parking map...</Text>
                   </View>
                 ) : error ? (
                   <View style={styles.mapState}>
@@ -780,7 +868,7 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
                   </View>
                 ) : !selectedFloor ? (
                   <View style={styles.mapState}>
-                    <EmptyState icon="layers-outline" title="Chưa có tầng" message="Không tìm thấy tầng bãi xe." />
+                    <EmptyState icon="layers-outline" title="No floors available" message="No parking floors were found." />
                   </View>
                 ) : (
                   <ParkingMap2D
@@ -795,14 +883,13 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
                     activeHolds={activeHolds}
                   />
                 )}
-              </View>
-            </ScrollView>
+            </View>
           </View>
 
           {/* ── Extra Services ────────────────────────────────── */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <SectionTitle>Dịch vụ thêm</SectionTitle>
+              <SectionTitle>Additional services</SectionTitle>
               {serviceTotal > 0 && (
                 <Text style={styles.serviceTotalBadge}>+{formatCurrency(serviceTotal)}</Text>
               )}
@@ -810,7 +897,7 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
 
             {services.length === 0 ? (
               <View style={styles.emptyServices}>
-                <Text style={styles.emptyServicesText}>Không có dịch vụ khả dụng.</Text>
+                <Text style={styles.emptyServicesText}>No services are currently available.</Text>
               </View>
             ) : (
               <View style={styles.serviceList}>
@@ -822,6 +909,9 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
                       style={[styles.serviceItem, selected && styles.serviceItemActive]}
                       onPress={() => toggleService(service._id)}
                       activeOpacity={0.7}
+                      accessibilityLabel={`${service.name}, ${formatCurrency(service.price)}`}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: selected }}
                     >
                       <View style={[styles.serviceCheckbox, selected && styles.serviceCheckboxActive]}>
                         {selected && <Ionicons name="checkmark" size={12} color={COLORS.textInverse} />}
@@ -830,7 +920,7 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
                         <Text style={styles.serviceName}>{service.name}</Text>
                         {(service.estimatedTime || service.estimatedTimeMinutes) ? (
                           <Text style={styles.serviceDuration}>
-                            {service.estimatedTime ?? service.estimatedTimeMinutes} phút
+                            {service.estimatedTime ?? service.estimatedTimeMinutes} min
                           </Text>
                         ) : null}
                       </View>
@@ -844,26 +934,35 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
 
           {/* ── Price Summary ─────────────────────────────────── */}
           <View style={styles.priceSummary}>
+            <View style={styles.summaryHeader}>
+              <View style={styles.summaryIcon}>
+                <Ionicons name="receipt-outline" size={19} color={COLORS.gold} />
+              </View>
+              <View style={styles.summaryCopy}>
+                <Text style={styles.summaryTitle}>Payment summary</Text>
+                <Text style={styles.summarySubtitle}>Review the cost before reserving your space</Text>
+              </View>
+            </View>
             <View style={styles.priceRow}>
-              <Text style={styles.priceLabel}>Đơn giá / giờ</Text>
+              <Text style={styles.priceLabel}>Hourly rate</Text>
               <Text style={styles.priceValue}>{formatCurrency(hourlyRate)}</Text>
             </View>
             <View style={styles.priceRow}>
-              <Text style={styles.priceLabel}>Thời gian tính phí</Text>
-              <Text style={styles.priceValue}>{paidHours} giờ</Text>
+              <Text style={styles.priceLabel}>Billable time</Text>
+              <Text style={styles.priceValue}>{paidHours} hours</Text>
             </View>
             <View style={styles.priceRow}>
-              <Text style={styles.priceLabel}>Phí đỗ xe</Text>
+              <Text style={styles.priceLabel}>Parking fee</Text>
               <Text style={styles.priceValue}>{formatCurrency(parkingCost)}</Text>
             </View>
             {serviceTotal > 0 && (
               <View style={styles.priceRow}>
-                <Text style={styles.priceLabel}>Dịch vụ thêm</Text>
+                <Text style={styles.priceLabel}>Additional services</Text>
                 <Text style={styles.priceValue}>{formatCurrency(serviceTotal)}</Text>
               </View>
             )}
             <View style={[styles.priceRow, styles.priceTotal]}>
-              <Text style={styles.totalLabel}>Tổng cộng</Text>
+              <Text style={styles.totalLabel}>Total</Text>
               <Text style={styles.totalValue}>{formatCurrency(grandTotal)}</Text>
             </View>
             <View style={styles.walletRow}>
@@ -873,8 +972,8 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
                 color={hasEnoughBalance ? COLORS.success : COLORS.error}
               />
               <Text style={[styles.walletText, { color: hasEnoughBalance ? COLORS.success : COLORS.error }]}>
-                Số dư ví: {formatCurrency(walletBalance)}
-                {hasEnoughBalance ? '' : ' — không đủ'}
+                Wallet balance: {formatCurrency(walletBalance)}
+                {hasEnoughBalance ? '' : ' · insufficient'}
               </Text>
             </View>
           </View>
@@ -885,6 +984,9 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
             disabled={!canBook}
             style={[styles.submitBtn, !canBook && styles.submitDisabled]}
             onPress={handleSubmit}
+            accessibilityLabel="Confirm booking"
+            accessibilityRole="button"
+            accessibilityState={{ disabled: !canBook, busy: submitting }}
           >
             <LinearGradient
               colors={[COLORS.goldLight, COLORS.gold, COLORS.goldDark]}
@@ -897,7 +999,7 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
               ) : (
                 <>
                   <Ionicons name="checkmark-circle-outline" size={20} color={COLORS.textInverse} />
-                  <Text style={styles.submitText}>Xác nhận đặt chỗ</Text>
+                  <Text style={styles.submitText}>Confirm booking</Text>
                 </>
               )}
             </LinearGradient>
@@ -906,10 +1008,10 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
       </KeyboardAvoidingView>
 
       <BookingActionModal
-        message={`Vị trí ${selectedSlot?.slotCode ?? '--'} đã được giữ.\nSố tiền đã thanh toán: ${formatCurrency(grandTotal)}`}
-        primaryLabel="Xem chi tiết đặt chỗ"
-        secondaryLabel="Danh sách đặt chỗ"
-        title="Đặt chỗ thành công! 🎉"
+        message={`Space ${selectedSlot?.slotCode ?? '--'} has been reserved.\nAmount paid: ${formatCurrency(confirmedTotal ?? grandTotal)}`}
+        primaryLabel="View booking details"
+        secondaryLabel="View all bookings"
+        title="Booking confirmed"
         variant="success"
         visible={showSuccessModal}
         onClose={() => setShowSuccessModal(false)}
@@ -935,7 +1037,7 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
 
       <BookingActionModal
         message={feedback?.message}
-        primaryLabel={feedback?.primaryLabel ?? 'Đóng'}
+        primaryLabel={feedback?.primaryLabel ?? 'Close'}
         title={feedback?.title ?? ''}
         variant={feedback?.variant ?? 'info'}
         visible={Boolean(feedback)}
@@ -950,7 +1052,7 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
       {/* ── Time Picker Modals ─────────────────────────────────── */}
       <TimePickerModal
         visible={showStartPicker}
-        title="Chọn thời gian vào"
+        title="Select arrival time"
         initialDate={startTime}
         minDate={new Date()}
         onConfirm={handleStartConfirm}
@@ -958,7 +1060,7 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
       />
       <TimePickerModal
         visible={showEndPicker}
-        title="Chọn thời gian ra"
+        title="Select departure time"
         initialDate={endTime}
         minDate={addMinutes(startTime, 30)}
         onConfirm={handleEndConfirm}
@@ -972,52 +1074,46 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
   flex: { flex: 1 },
-  scroll: { gap: SPACING.lg, padding: SPACING.lg, paddingBottom: SPACING.xxl },
-
-  timeSummary: {
-    backgroundColor: COLORS.surface,
-    borderColor: 'rgba(212,175,55,0.2)',
-    borderRadius: RADIUS.xl,
-    borderWidth: 1,
-    overflow: 'hidden',
-    padding: SPACING.lg,
-  },
-  cardTopLine: { height: 2, left: 0, position: 'absolute', right: 0, top: 0 },
-  timeRow: { alignItems: 'center', flexDirection: 'row' },
-  timeBlock: { flex: 1 },
-  timeBlockRight: { alignItems: 'flex-end' },
-  timeLabel: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs },
-  timeValue: { color: COLORS.textPrimary, fontSize: FONT_SIZES.xl, fontWeight: '700' },
-  timeDate: { color: COLORS.textSecondary, fontSize: FONT_SIZES.xs },
-  timeSep: { alignItems: 'center', paddingHorizontal: SPACING.sm },
-  timeDur: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs },
+  scroll: { gap: SPACING.xl, padding: SPACING.lg, paddingBottom: 40 },
 
   section: { gap: SPACING.sm },
   sectionHeader: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
 
   // Time picker cards
-  timePickerRow: { gap: SPACING.sm },
+  timePickerRow: { flexDirection: 'row', gap: SPACING.sm },
   timePickerCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.md,
     backgroundColor: COLORS.surface,
     borderColor: COLORS.border,
-    borderRadius: RADIUS.lg,
+    borderRadius: RADIUS.xl,
     borderWidth: 1,
+    flex: 1,
+    minHeight: 132,
     padding: SPACING.md,
   },
+  timeCardTop: { alignItems: 'center', flexDirection: 'row', gap: SPACING.sm, marginBottom: SPACING.sm },
   timePickerIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: RADIUS.md,
-    backgroundColor: 'rgba(212,175,55,0.1)',
     alignItems: 'center',
+    backgroundColor: 'rgba(226,186,75,0.12)',
+    borderRadius: RADIUS.md,
+    height: 36,
     justifyContent: 'center',
+    width: 36,
   },
+  timePickerIconExit: { backgroundColor: 'rgba(96,180,255,0.12)' },
   timePickerLabel: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs, fontWeight: '600' },
-  timePickerValue: { color: COLORS.textPrimary, fontSize: FONT_SIZES.lg, fontWeight: '700' },
-  timePickerDate: { color: COLORS.textSecondary, fontSize: FONT_SIZES.xs },
+  timePickerValue: { color: COLORS.textPrimary, fontSize: FONT_SIZES.xl, fontWeight: '800', letterSpacing: 0.2 },
+  timePickerDate: { color: COLORS.textSecondary, fontSize: FONT_SIZES.xs, marginTop: 2 },
+  durationNote: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(226,186,75,0.08)',
+    borderRadius: RADIUS.round,
+    flexDirection: 'row',
+    gap: 6,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 7,
+  },
+  durationText: { color: COLORS.textSecondary, fontSize: FONT_SIZES.xs, fontWeight: '600' },
 
   // Vehicle
   pillRow: { alignItems: 'center', gap: SPACING.sm, paddingVertical: SPACING.xs },
@@ -1032,16 +1128,26 @@ const styles = StyleSheet.create({
     minHeight: 44,
     paddingHorizontal: SPACING.md,
   },
-  vehiclePillActive: { backgroundColor: 'rgba(212,175,55,0.1)', borderColor: COLORS.gold },
+  vehiclePillActive: { backgroundColor: 'rgba(226,186,75,0.1)', borderColor: COLORS.gold },
   vehicleText: { color: COLORS.textMuted, fontSize: FONT_SIZES.sm, fontWeight: '600' },
   vehicleTextActive: { color: COLORS.gold },
   defaultDot: { backgroundColor: COLORS.gold, borderRadius: 3, height: 6, marginLeft: 2, width: 6 },
+  manualInputWrap: { marginTop: SPACING.xs },
+  manualInput: {
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    color: COLORS.textPrimary,
+    minHeight: 48,
+    paddingHorizontal: SPACING.md,
+  },
 
   // Slot
   selectedSlotCard: {
     alignItems: 'center',
     backgroundColor: COLORS.surface,
-    borderColor: 'rgba(96,180,255,0.35)',
+    borderColor: 'rgba(226,186,75,0.35)',
     borderRadius: RADIUS.lg,
     borderWidth: 1,
     flexDirection: 'row',
@@ -1050,16 +1156,16 @@ const styles = StyleSheet.create({
   },
   selectedSlotIcon: {
     alignItems: 'center',
-    backgroundColor: 'rgba(96,180,255,0.12)',
+    backgroundColor: 'rgba(226,186,75,0.12)',
     borderRadius: RADIUS.md,
     height: 44,
     justifyContent: 'center',
     width: 44,
   },
   selectedSlotInfo: { flex: 1 },
-  selectedSlotCode: { color: COLORS.staffBlue, fontSize: FONT_SIZES.lg, fontWeight: '800' },
+  selectedSlotCode: { color: COLORS.gold, fontSize: FONT_SIZES.lg, fontWeight: '800' },
   selectedSlotMeta: { color: COLORS.textSecondary, fontSize: FONT_SIZES.xs, marginTop: 2 },
-  clearSlotBtn: { padding: 4 },
+  clearSlotBtn: { alignItems: 'center', height: 44, justifyContent: 'center', width: 44 },
   warningBox: {
     alignItems: 'flex-start',
     backgroundColor: 'rgba(255,159,67,0.1)',
@@ -1086,7 +1192,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md,
     paddingVertical: 7,
   },
-  floorTabActive: { backgroundColor: 'rgba(212,175,55,0.12)', borderColor: COLORS.gold },
+  floorTabActive: { backgroundColor: 'rgba(226,186,75,0.12)', borderColor: COLORS.gold },
   floorTabText: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs, fontWeight: '600' },
   floorTabTextActive: { color: COLORS.gold },
   floorCount: {
@@ -1099,6 +1205,16 @@ const styles = StyleSheet.create({
   floorCountActive: { backgroundColor: COLORS.gold },
   floorCountText: { color: COLORS.textMuted, fontSize: 10, fontWeight: '700' },
   floorCountTextActive: { color: COLORS.textInverse },
+  legend: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.md,
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.sm,
+  },
+  legendItem: { alignItems: 'center', flexDirection: 'row', gap: 6 },
+  legendDot: { borderRadius: 5, height: 10, width: 10 },
+  legendText: { color: COLORS.textSecondary, fontSize: 11 },
 
   // Map
   mapCanvas: {
@@ -1106,7 +1222,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     borderRadius: RADIUS.lg,
     borderWidth: 1,
-    marginVertical: SPACING.md,
+    marginTop: SPACING.sm,
     minHeight: 300,
     position: 'relative',
     overflow: 'hidden',
@@ -1145,7 +1261,7 @@ const styles = StyleSheet.create({
     gap: SPACING.sm,
     padding: SPACING.md,
   },
-  serviceItemActive: { backgroundColor: 'rgba(212,175,55,0.08)', borderColor: COLORS.gold },
+  serviceItemActive: { backgroundColor: 'rgba(226,186,75,0.08)', borderColor: COLORS.gold },
   serviceCheckbox: {
     width: 20,
     height: 20,
@@ -1165,12 +1281,32 @@ const styles = StyleSheet.create({
   // Price summary
   priceSummary: {
     backgroundColor: COLORS.surface,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.lg,
+    borderColor: 'rgba(226,186,75,0.25)',
+    borderRadius: RADIUS.xl,
     borderWidth: 1,
     gap: SPACING.xs,
-    padding: SPACING.md,
+    padding: SPACING.lg,
   },
+  summaryHeader: {
+    alignItems: 'center',
+    borderBottomColor: COLORS.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginBottom: SPACING.sm,
+    paddingBottom: SPACING.md,
+  },
+  summaryIcon: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(226,186,75,0.12)',
+    borderRadius: RADIUS.md,
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
+  },
+  summaryCopy: { flex: 1 },
+  summaryTitle: { color: COLORS.textPrimary, fontSize: FONT_SIZES.md, fontWeight: '700' },
+  summarySubtitle: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs, marginTop: 2 },
   priceRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 3 },
   priceLabel: { color: COLORS.textSecondary, fontSize: FONT_SIZES.sm },
   priceValue: { color: COLORS.textPrimary, fontSize: FONT_SIZES.sm, fontWeight: '500' },
@@ -1194,7 +1330,7 @@ const styles = StyleSheet.create({
   walletText: { fontSize: FONT_SIZES.xs },
 
   // Submit
-  submitBtn: { borderRadius: RADIUS.md, overflow: 'hidden' },
+  submitBtn: { borderRadius: RADIUS.lg, overflow: 'hidden' },
   submitDisabled: { opacity: 0.5 },
   submitGrad: {
     alignItems: 'center',
@@ -1204,5 +1340,4 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   submitText: { color: COLORS.textInverse, fontSize: FONT_SIZES.md, fontWeight: '700' },
-  input: { backgroundColor: COLORS.surfaceElevated },
 });

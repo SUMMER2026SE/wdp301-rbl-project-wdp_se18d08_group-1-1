@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useCallback, useEffect, useMemo } from 'react';
-import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { LayoutChangeEvent, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 
-import { COLORS } from '@/constants/theme';
+import { COLORS, SPACING } from '@/constants/theme';
 import type { AvailableSlot, ParkingFloor } from '@/types/booking.types';
 import type { SubscriptionSlotSelection } from '@/types/subscription.types';
 import {
@@ -10,8 +10,6 @@ import {
   isVipParkingSlotLayoutName,
   resolveParkingSlotStatus,
 } from '@/utils/parkingSlotStatus';
-
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface ParkingMap2DProps {
   floor: ParkingFloor;
@@ -47,6 +45,9 @@ export const ParkingMap2D = ({
   selectedSlots = [],
   onToggleSlot,
 }: ParkingMap2DProps) => {
+  const { width: windowWidth } = useWindowDimensions();
+  const [viewportWidth, setViewportWidth] = useState(0);
+
   // Parse layout data safely
   const layout = useMemo(() => {
     let parsedLayout = { width: 1000, height: 600, elements: [] as any[] };
@@ -61,6 +62,7 @@ export const ParkingMap2D = ({
     } catch (e) {
       console.warn('Failed to parse layout data', e);
     }
+    parsedLayout.elements = Array.isArray(parsedLayout.elements) ? parsedLayout.elements : [];
     return parsedLayout;
   }, [floor.layout, floor.layoutData]);
 
@@ -76,12 +78,31 @@ export const ParkingMap2D = ({
     return lookup;
   }, [floorSlots]);
 
-  const mapWidth = layout.width || 1000;
-  const mapHeight = layout.height || 600;
+  const mapWidth = useMemo(
+    () => Math.max(
+      Number(layout.width) || 1000,
+      ...layout.elements.map((element: any) => (Number(element.x) || 0) + (Number(element.w) || 0)),
+    ),
+    [layout.elements, layout.width],
+  );
+  const mapHeight = useMemo(
+    () => Math.max(
+      Number(layout.height) || 600,
+      ...layout.elements.map((element: any) => (Number(element.y) || 0) + (Number(element.h) || 0)),
+    ),
+    [layout.elements, layout.height],
+  );
+  const availableWidth = viewportWidth || Math.max(1, windowWidth - SPACING.lg * 2);
+  const scale = Math.min(1, availableWidth / mapWidth);
+  const renderedWidth = mapWidth * scale;
+  const renderedHeight = mapHeight * scale;
+  const mapLeft = (availableWidth - renderedWidth) / 2 - (mapWidth - renderedWidth) / 2;
+  const mapTop = -(mapHeight - renderedHeight) / 2;
 
-  // Calculate scale to fit screen
-  const containerWidth = SCREEN_WIDTH - 32; // 16px margin on each side
-  const scale = Math.min(1, containerWidth / mapWidth);
+  const handleViewportLayout = useCallback((event: LayoutChangeEvent) => {
+    const nextWidth = Math.round(event.nativeEvent.layout.width);
+    if (nextWidth > 0) setViewportWidth((current) => current === nextWidth ? current : nextWidth);
+  }, []);
 
   const floorId = String(floor._id ?? floor.id ?? floor.floorNumber);
   const getSlotInteractionState = useCallback((slotName: string) => {
@@ -301,18 +322,19 @@ export const ParkingMap2D = ({
   };
 
   return (
-    <View style={{ width: mapWidth * scale, height: mapHeight * scale, overflow: 'hidden' }}>
+    <View
+      onLayout={handleViewportLayout}
+      style={[styles.viewport, { height: renderedHeight }]}
+    >
       <View
         style={[
           styles.container,
           {
+            left: mapLeft,
+            top: mapTop,
             width: mapWidth,
             height: mapHeight,
-            transform: [
-              { scale },
-              { translateX: -mapWidth * (1 - scale) / 2 },
-              { translateY: -mapHeight * (1 - scale) / 2 }
-            ]
+            transform: [{ scale }],
           }
         ]}
       >
@@ -330,8 +352,13 @@ export const ParkingMap2D = ({
 
 const styles = StyleSheet.create({
   container: {
-    position: 'relative',
+    position: 'absolute',
     backgroundColor: COLORS.surface,
+  },
+  viewport: {
+    alignSelf: 'stretch',
+    overflow: 'hidden',
+    width: '100%',
   },
   slotBox: {
     borderRadius: 4,

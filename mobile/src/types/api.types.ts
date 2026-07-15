@@ -33,8 +33,44 @@ export interface CreateBookingRequest {
   slotCode: string;
   vehicleId: string;
   serviceIds?: string[];
+  services?: Service[];
   paymentMethod?: 'wallet' | 'vietqr';
 }
+
+export interface BulkBookingItem {
+  clientItemId?: string;
+  vehicleId?: string;
+  licensePlate?: string;
+  floorId: string;
+  slotCode: string;
+  startTime: string;
+  endTime: string;
+  serviceIds?: string[];
+  holdId?: string;
+}
+
+export interface BulkBookingQuoteResponse extends APIResponse<{
+  grandTotal: number;
+  items: Array<{
+    clientItemId?: string;
+    parkingSlot: string;
+    vehicleId?: string;
+    totalAmount: number;
+    servicesTotal: number;
+  }>;
+}> {}
+
+export interface BookingHoldResponse extends APIResponse<{
+  _id: string;
+  floorId: string;
+  slotCode: string;
+  expiresAt: string;
+}> {}
+
+export interface BulkBookingResponse extends APIResponse<{
+  transaction: unknown;
+  bookings: Booking[];
+}> {}
 
 export interface CreateBookingData {
   booking: Booking;

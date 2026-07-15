@@ -38,12 +38,12 @@ export const fetchProfile = async (): Promise<Profile> => {
   const d = response.data;
 
   if (!d) {
-    throw new Error('Dữ liệu hồ sơ không hợp lệ.');
+    throw new Error('Invalid profile data.');
   }
 
   const id = d.id || d._id;
   if (!id) {
-    throw new Error('Hồ sơ không có mã người dùng.');
+    throw new Error('The profile does not contain a user ID.');
   }
 
   const firstName = d.profile?.firstName?.trim() || '';

@@ -1,4 +1,3 @@
-import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -51,7 +50,7 @@ export default function LiveGridScreen() {
       setFloors(floorsData);
       setSessions((sessionsRes as { data?: ActiveSession[] }).data ?? []);
     } catch (loadError: unknown) {
-      setError(loadError instanceof Error ? loadError.message : 'Không thể tải lưới bãi xe.');
+      setError(loadError instanceof Error ? loadError.message : 'Unable to load the parking grid.');
     } finally {
       setLoading(false);
     }
@@ -74,7 +73,7 @@ export default function LiveGridScreen() {
   };
 
   const selectedFloorId = selectedFloor ? getFloorId(selectedFloor) : '';
-  const activeSessions = useMemo(() => sessions.filter((session) => session.status === 'active'), [sessions]);
+  const activeSessions = useMemo(() => sessions.filter((session) => !session.status || session.status.toLowerCase() === 'active'), [sessions]);
   const floorSessions = useMemo(
     () => activeSessions.filter((session) => !selectedFloorId || session.floorId === selectedFloorId),
     [activeSessions, selectedFloorId],
@@ -87,12 +86,12 @@ export default function LiveGridScreen() {
 
       <View style={styles.header}>
         <View>
-          <Text style={styles.title}>Lưới bãi xe</Text>
-          <Text style={styles.subtitle}>Giám sát theo thời gian thực</Text>
+          <Text style={styles.title}>Parking grid</Text>
+          <Text style={styles.subtitle}>Real-time monitoring</Text>
         </View>
         <View style={styles.statChip}>
           <View style={styles.onlineDot} />
-          <Text style={styles.statChipText}>{totalActive} xe đang đỗ</Text>
+          <Text style={styles.statChipText}>{totalActive} parked vehicles</Text>
         </View>
       </View>
 
@@ -128,8 +127,8 @@ export default function LiveGridScreen() {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            tintColor={COLORS.staffBlue}
-            colors={[COLORS.staffBlue]}
+            tintColor={COLORS.gold}
+            colors={[COLORS.gold]}
             onRefresh={onRefresh}
           />
         }
@@ -137,21 +136,21 @@ export default function LiveGridScreen() {
       >
         {loading ? (
           <View style={styles.loadingWrap}>
-            <ActivityIndicator color={COLORS.staffBlue} size="large" />
-            <Text style={styles.loadingText}>Đang tải dữ liệu...</Text>
+            <ActivityIndicator color={COLORS.gold} size="large" />
+            <Text style={styles.loadingText}>Loading data...</Text>
           </View>
         ) : error ? (
           <ErrorState message={error} onRetry={load} />
         ) : floorSessions.length === 0 ? (
           <EmptyState
             icon="checkmark-circle-outline"
-            title="Tầng này đang trống"
-            message="Không có xe nào đỗ hiện tại."
+            title="This floor is clear"
+            message="No vehicles are currently parked here."
             accentColor={COLORS.success}
           />
         ) : (
           <>
-            <Text style={styles.sectionTitle}>Xe đang đỗ - {selectedFloor?.name}</Text>
+            <Text style={styles.sectionTitle}>Parked vehicles - {selectedFloor?.name}</Text>
             <View style={styles.sessionGrid}>
               {floorSessions.map((session) => (
                 <SessionSlotCard key={session._id} session={session} />
@@ -162,13 +161,12 @@ export default function LiveGridScreen() {
 
         {!loading && !error ? (
           <>
-            <Text style={styles.sectionTitle}>Tổng hợp tất cả tầng</Text>
+            <Text style={styles.sectionTitle}>All floors overview</Text>
             <View style={styles.summaryList}>
               {floors.map((floor) => {
                 const floorId = getFloorId(floor);
                 const count = activeSessions.filter((session) => session.floorId === floorId).length;
-                const pct = count > 0 ? Math.min(count / 20, 1) : 0;
-                const fillColor = pct > 0.8 ? COLORS.error : pct > 0.5 ? COLORS.warning : COLORS.success;
+                const capacity = floor.slots?.length ?? floor.layout?.elements?.filter((element) => element.type === 'slot').length ?? floor.layoutData?.elements?.filter((element: { type?: string }) => element.type === 'slot').length ?? 0;
 
                 return (
                   <TouchableOpacity
@@ -178,10 +176,8 @@ export default function LiveGridScreen() {
                     onPress={() => setSelectedFloor(floor)}
                   >
                     <Text style={styles.summaryFloor}>{floor.name}</Text>
-                    <View style={styles.summaryBar}>
-                      <View style={[styles.summaryBarFill, { backgroundColor: fillColor, width: `${pct * 100}%` }]} />
-                    </View>
-                    <Text style={styles.summaryCount}>{count} xe</Text>
+                    <Text style={styles.summaryStatus}>{count === 0 ? 'Clear' : count >= capacity && capacity > 0 ? 'Full' : 'In use'}</Text>
+                    <Text style={styles.summaryCount}>{count} / {capacity}</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -200,18 +196,13 @@ function SessionSlotCard({ session }: { session: ActiveSession }) {
 
   return (
     <View style={styles.slotCard}>
-      <LinearGradient
-        colors={[COLORS.staffBlue, 'transparent']}
-        end={{ x: 1, y: 0 }}
-        start={{ x: 0, y: 0 }}
-        style={styles.slotCardTopLine}
-      />
+      <View style={styles.slotCardTopLine} />
       <View style={styles.slotCardHeader}>
         <Text style={styles.slotCardCode}>{session.parkingSlot ?? '---'}</Text>
         <View style={styles.activeDot} />
       </View>
       <Text style={styles.slotCardPlate}>{session.licensePlate}</Text>
-      <Text style={styles.slotCardTime}>{hours > 0 ? `${hours}g ` : ''}{mins}ph</Text>
+      <Text style={styles.slotCardTime}>{hours > 0 ? `${hours}h ` : ''}{mins}m</Text>
     </View>
   );
 }
@@ -259,12 +250,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: SPACING.md,
     paddingVertical: 7,
   },
-  floorTabActive: { backgroundColor: 'rgba(96,180,255,0.1)', borderColor: COLORS.staffBlue },
+  floorTabActive: { backgroundColor: 'rgba(212,175,55,0.1)', borderColor: COLORS.gold },
   floorTabText: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs, fontWeight: '600' },
-  floorTabTextActive: { color: COLORS.staffBlue },
+  floorTabTextActive: { color: COLORS.gold },
   floorBadge: {
     alignItems: 'center',
-    backgroundColor: COLORS.staffBlue,
+    backgroundColor: COLORS.gold,
     borderRadius: 9,
     height: 18,
     justifyContent: 'center',
@@ -287,7 +278,7 @@ const styles = StyleSheet.create({
   sessionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm, paddingHorizontal: SPACING.md },
   slotCard: {
     backgroundColor: COLORS.surface,
-    borderColor: 'rgba(96,180,255,0.2)',
+    borderColor: 'rgba(212,175,55,0.2)',
     borderRadius: RADIUS.lg,
     borderWidth: 1,
     gap: 4,
@@ -295,9 +286,9 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
     width: '47%',
   },
-  slotCardTopLine: { height: 2, left: 0, position: 'absolute', right: 0, top: 0 },
+  slotCardTopLine: { backgroundColor: COLORS.gold, height: 2, left: 0, position: 'absolute', right: 0, top: 0 },
   slotCardHeader: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  slotCardCode: { color: COLORS.staffBlue, fontSize: FONT_SIZES.lg, fontWeight: '700' },
+  slotCardCode: { color: COLORS.gold, fontSize: FONT_SIZES.lg, fontWeight: '700' },
   activeDot: { backgroundColor: COLORS.success, borderRadius: 4, height: 8, width: 8 },
   slotCardPlate: {
     color: COLORS.textPrimary,
@@ -318,13 +309,6 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
   },
   summaryFloor: { color: COLORS.textSecondary, fontSize: FONT_SIZES.sm, width: 60 },
-  summaryBar: {
-    backgroundColor: COLORS.surfaceElevated,
-    borderRadius: 3,
-    flex: 1,
-    height: 6,
-    overflow: 'hidden',
-  },
-  summaryBarFill: { borderRadius: 3, height: '100%' },
-  summaryCount: { color: COLORS.textSecondary, fontSize: FONT_SIZES.xs, textAlign: 'right', width: 40 },
+  summaryStatus: { color: COLORS.textMuted, flex: 1, fontSize: FONT_SIZES.xs, textAlign: 'right' },
+  summaryCount: { color: COLORS.gold, fontSize: FONT_SIZES.xs, fontWeight: '700', textAlign: 'right', width: 48 },
 });

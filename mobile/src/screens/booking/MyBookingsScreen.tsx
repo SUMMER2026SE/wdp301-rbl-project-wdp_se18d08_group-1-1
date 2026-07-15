@@ -45,7 +45,7 @@ export const MyBookingsScreen = ({ navigation }: Props) => {
             onPress={() => setFilterStatus(filter)}
             style={[styles.filter, filterStatus === filter && styles.filterActive]}
           >
-            <AppText color={filterStatus === filter ? colors.neutral.white : colors.light.text.primary} variant="caption">
+            <AppText color={filterStatus === filter ? colors.light.text.inverse : colors.light.text.primary} variant="caption">
               {filter} ({countFor(filter)})
             </AppText>
           </Pressable>

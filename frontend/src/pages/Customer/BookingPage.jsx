@@ -62,7 +62,7 @@ const getBookingTiming = (booking) => {
   return {
     canEditBeforeCheckIn: status === 'PAID' && now < start,
     canExtend: ['PAID', 'ACTIVE', 'PAUSED'].includes(status),
-    canComplete: status === 'ACTIVE',
+    canComplete: false, // Customers cannot complete/check-out remotely. Must use Kiosk.
     isNearExpiry: status === 'ACTIVE' && minutesToEnd > 0 && minutesToEnd <= 30,
     minutesToStart,
     minutesToEnd,
@@ -407,18 +407,7 @@ export default function BookingPage() {
                         Cancel
                       </button>
                     )}
-                    {timing.canComplete && (
-                      <button
-                        type="button"
-                        disabled={isBusy}
-                        onClick={() => handleComplete(booking)}
-                        className="rounded-xl border border-emerald-400/30 bg-emerald-400/10 px-3 py-2 text-xs font-bold text-emerald-200 hover:bg-emerald-400/20 transition flex items-center gap-2 disabled:opacity-50"
-                      >
-                        <CheckCircle2 size={14} />
-                        Complete
-                      </button>
-                    )}
-                    {!timing.canExtend && !timing.canEditBeforeCheckIn && !timing.canComplete && (
+                    {!timing.canExtend && !timing.canEditBeforeCheckIn && (
                       <button
                         type="button"
                         onClick={() => { window.location.href = '/booking'; }}

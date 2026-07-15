@@ -18,6 +18,8 @@ export const getBookingActionAvailability = (booking: BookingActionInput, now = 
 
   return {
     canCancel: booking.status === 'confirmed' && validRange && start > now,
+    canChangeVehicle:
+      modificationAllowed && booking.status === 'confirmed' && validRange && start > now,
     canCheckIn:
       booking.status === 'confirmed' &&
       validRange &&

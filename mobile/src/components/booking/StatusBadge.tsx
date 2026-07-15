@@ -15,8 +15,13 @@ const statusColor: Record<BookingStatus, string> = {
 };
 
 export const StatusBadge = ({ status }: { status: BookingStatus }) => (
-  <View style={[styles.badge, { backgroundColor: statusColor[status] }]}>
-    <AppText color={colors.neutral.white} style={styles.text} variant="caption">
+  <View
+    style={[
+      styles.badge,
+      { backgroundColor: `${statusColor[status]}18`, borderColor: `${statusColor[status]}55` },
+    ]}
+  >
+    <AppText color={statusColor[status]} style={styles.text} variant="caption">
       {status.toUpperCase()}
     </AppText>
   </View>
@@ -26,6 +31,7 @@ const styles = StyleSheet.create({
   badge: {
     alignSelf: 'flex-start',
     borderRadius: borderRadius.pill,
+    borderWidth: 1,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
   },

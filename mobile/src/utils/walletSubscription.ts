@@ -34,14 +34,17 @@ export const validateSubscriptionSlots = (selectedCount: number, vehicleCount: n
   return selectedCount > 0 && selectedCount <= maxAllowed;
 };
 
+export const calculateSubscriptionTotal = (packagePrice: number, selectedSlotCount: number) =>
+  Math.max(Number(packagePrice) || 0, 0) * Math.max(1, selectedSlotCount);
+
 export const getSubscriptionPackageRestriction = (
   membership: MembershipStatus | null,
   pkg: SubscriptionPackage | undefined,
 ) => {
   if (!membership?.isVip || !pkg || !membership.package) return null;
-  if (membership.package.id === pkg._id) return 'Bạn đang sử dụng gói này.';
+  if (membership.package.id === pkg._id) return 'This is your current plan.';
   if (membership.package.type === 'yearly' && pkg.type === 'monthly') {
-    return 'Gói tháng đã nằm trong quyền lợi của gói năm đang dùng.';
+    return 'The monthly plan is already included in your annual plan.';
   }
   return null;
 };

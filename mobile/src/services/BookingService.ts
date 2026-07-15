@@ -1,7 +1,12 @@
 import { apiClient } from '@/services/api/client';
+import type { APIResponse } from '@/types/api';
 import type {
   AvailableSlotsData,
+  BookingHoldResponse,
   BookingMutationResponse,
+  BulkBookingItem,
+  BulkBookingQuoteResponse,
+  BulkBookingResponse,
   CheckInBookingResponse,
   CheckOutBookingResponse,
   CreateBookingRequest,
@@ -114,12 +119,30 @@ class BookingService {
       scheduledStart: data.startTime,
       scheduledEnd: data.endTime,
       paymentMethod: data.paymentMethod ?? 'wallet',
-      serviceIds: data.serviceIds ?? [],
+      services: data.services ?? [],
     });
   }
 
-  createBulkBooking(data: any) {
-    return apiClient.post<any>('/bookings/bulk', data);
+  quoteBulkBooking(items: BulkBookingItem[]) {
+    return apiClient.post<BulkBookingQuoteResponse>('/bookings/bulk/quote', { items });
+  }
+
+  createBookingHold(data: {
+    floorId: string;
+    slotCode: string;
+    licensePlate: string;
+    startTime: string;
+    endTime: string;
+  }) {
+    return apiClient.post<BookingHoldResponse>('/bookings/hold', data);
+  }
+
+  releaseBookingHold(holdId: string) {
+    return apiClient.delete<APIResponse>(`/bookings/holds/${holdId}`);
+  }
+
+  createBulkBooking(data: { idempotencyKey: string; items: BulkBookingItem[] }) {
+    return apiClient.post<BulkBookingResponse>('/bookings/bulk', data);
   }
 
   getActiveSessions() {
@@ -148,6 +171,10 @@ class BookingService {
 
   extendBooking(bookingId: string, data: ModifyBookingTimeRequest) {
     return apiClient.put<BookingMutationResponse>(`/bookings/${bookingId}/time`, data);
+  }
+
+  updateBookingVehicle(bookingId: string, vehicleId: string) {
+    return apiClient.put<BookingMutationResponse>(`/bookings/${bookingId}/vehicle`, { vehicleId });
   }
 
   normalizeBooking(raw: unknown, responseServices?: unknown): Booking | undefined {

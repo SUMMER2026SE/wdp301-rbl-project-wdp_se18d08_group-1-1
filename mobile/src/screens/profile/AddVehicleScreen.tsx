@@ -44,7 +44,7 @@ export const AddVehicleScreen = ({ navigation }: { navigation: { goBack: () => v
   const handleSubmit = async () => {
     const normalizedPlate = normalizeLicensePlate(licensePlate);
     if (!isValidNormalizedLicensePlate(normalizedPlate)) {
-      setError('Vui lòng nhập biển số xe hợp lệ.');
+      setError('Please enter a valid license plate.');
       return;
     }
 
@@ -61,10 +61,10 @@ export const AddVehicleScreen = ({ navigation }: { navigation: { goBack: () => v
         hexColor,
         registrationCardImage,
       });
-      toast.showSuccess('Thêm xe thành công');
+      toast.showSuccess('Vehicle added successfully');
       navigation.goBack();
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'Không thể thêm xe.');
+      setError(submitError instanceof Error ? submitError.message : 'Unable to add the vehicle.');
     } finally {
       setLoading(false);
     }
@@ -78,7 +78,7 @@ export const AddVehicleScreen = ({ navigation }: { navigation: { goBack: () => v
       granted = permission.granted;
     }
     if (!granted) {
-      setError('Cần cấp quyền camera để chụp cà vẹt xe.');
+      setError('Camera permission is required to photograph the vehicle registration.');
       return;
     }
     setCameraOpen(true);
@@ -92,7 +92,7 @@ export const AddVehicleScreen = ({ navigation }: { navigation: { goBack: () => v
     try {
       const photo = await cameraRef.current.takePictureAsync({ quality: 1, skipProcessing: false });
       if (!photo?.uri || !photo.width || !photo.height) {
-        throw new Error('Không thể chụp ảnh. Vui lòng thử lại.');
+        throw new Error('Unable to capture the photo. Please try again.');
       }
 
       const crop = getCenteredCropForAspect(photo.width, photo.height);
@@ -105,14 +105,14 @@ export const AddVehicleScreen = ({ navigation }: { navigation: { goBack: () => v
           format: ImageManipulator.SaveFormat.JPEG,
         },
       );
-      if (!processed.base64) throw new Error('Không thể xử lý ảnh cà vẹt.');
+      if (!processed.base64) throw new Error('Unable to process the registration photo.');
 
       const base64Image = `data:image/jpeg;base64,${processed.base64}`;
       setRegistrationCardImage(base64Image);
       setCameraOpen(false);
 
       const scanRes = await vehiclesService.scanRegistrationCard(base64Image);
-      if (!scanRes.data) throw new Error('AI không đọc được thông tin trên cà vẹt.');
+      if (!scanRes.data) throw new Error('The registration details could not be read.');
 
       const {
         nickname: scannedNick,
@@ -130,9 +130,9 @@ export const AddVehicleScreen = ({ navigation }: { navigation: { goBack: () => v
       if (colorText) setColor(colorText);
       if (scannedHex) setHexColor(scannedHex);
       setScanCompleted(true);
-      toast.showSuccess('Đã trích xuất thông tin từ cà vẹt xe');
+      toast.showSuccess('Vehicle registration details extracted');
     } catch (scanErr) {
-      setError(scanErr instanceof Error ? scanErr.message : 'Lỗi khi quét thông tin bằng AI.');
+      setError(scanErr instanceof Error ? scanErr.message : 'Unable to scan the registration details.');
     } finally {
       setScanning(false);
     }
@@ -146,14 +146,14 @@ export const AddVehicleScreen = ({ navigation }: { navigation: { goBack: () => v
           <TouchableOpacity style={styles.cameraHeaderButton} onPress={() => setCameraOpen(false)} disabled={scanning}>
             <Ionicons name="close" size={28} color={COLORS.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.cameraTitle}>Chụp cà vẹt xe</Text>
+          <Text style={styles.cameraTitle}>Photograph vehicle registration</Text>
           <TouchableOpacity style={styles.cameraHeaderButton} onPress={() => setTorchEnabled((current) => !current)}>
             <Ionicons name={torchEnabled ? 'flash' : 'flash-off'} size={23} color={torchEnabled ? COLORS.gold : COLORS.textPrimary} />
           </TouchableOpacity>
         </View>
 
         <View style={styles.cameraBody}>
-          <Text style={styles.cameraGuide}>Đặt toàn bộ cà vẹt nằm vừa trong khung 9 × 6 cm</Text>
+          <Text style={styles.cameraGuide}>Fit the entire registration card inside the 9 × 6 cm frame</Text>
           <View style={styles.cardCameraFrame}>
             <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" enableTorch={torchEnabled} />
             <View pointerEvents="none" style={styles.frameBorder}>
@@ -165,13 +165,13 @@ export const AddVehicleScreen = ({ navigation }: { navigation: { goBack: () => v
           </View>
           <View style={styles.cameraTips}>
             <Ionicons name="sunny-outline" size={18} color={COLORS.gold} />
-            <Text style={styles.cameraTipText}>Giữ thẳng, tránh lóa sáng và bảo đảm chữ rõ nét</Text>
+            <Text style={styles.cameraTipText}>Keep it straight, avoid glare, and make sure all text is clear</Text>
           </View>
         </View>
 
         <View style={styles.captureControls}>
           <TouchableOpacity
-            accessibilityLabel="Chụp cà vẹt xe"
+            accessibilityLabel="Photograph vehicle registration"
             activeOpacity={0.8}
             disabled={scanning}
             style={[styles.captureButtonOuter, scanning && styles.disabled]}
@@ -179,7 +179,7 @@ export const AddVehicleScreen = ({ navigation }: { navigation: { goBack: () => v
           >
             {scanning ? <ActivityIndicator color={COLORS.gold} /> : <View style={styles.captureButtonInner} />}
           </TouchableOpacity>
-          <Text style={styles.captureLabel}>{scanning ? 'Đang xử lý ảnh...' : 'Chạm để chụp'}</Text>
+          <Text style={styles.captureLabel}>{scanning ? 'Processing photo...' : 'Tap to capture'}</Text>
         </View>
       </SafeAreaView>
     );
@@ -188,7 +188,7 @@ export const AddVehicleScreen = ({ navigation }: { navigation: { goBack: () => v
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#080808" />
-      <ScreenHeader title="Thêm xe mới" onBack={() => navigation.goBack()} />
+      <ScreenHeader title="Add vehicle" onBack={() => navigation.goBack()} />
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         
@@ -199,7 +199,7 @@ export const AddVehicleScreen = ({ navigation }: { navigation: { goBack: () => v
             <>
               <Ionicons name={scanCompleted ? "checkmark-circle" : "camera-outline"} size={24} color={scanCompleted ? COLORS.success : COLORS.gold} />
               <Text style={styles.scanButtonText}>
-                {scanCompleted ? 'Đã quét cà vẹt xe (Chụp lại)' : 'Chụp cà vẹt xe để quét AI'}
+                {scanCompleted ? 'Registration scanned (Retake)' : 'Scan vehicle registration'}
               </Text>
             </>
           )}
@@ -207,7 +207,7 @@ export const AddVehicleScreen = ({ navigation }: { navigation: { goBack: () => v
 
         <View style={styles.formCard}>
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Biển số xe</Text>
+            <Text style={styles.label}>License plate</Text>
             <View style={styles.inputWrap}>
               <TextInput
                 style={styles.input}
@@ -221,11 +221,11 @@ export const AddVehicleScreen = ({ navigation }: { navigation: { goBack: () => v
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Loại xe</Text>
+            <Text style={styles.label}>Vehicle type</Text>
             <View style={styles.inputWrap}>
               <TextInput
                 style={styles.input}
-                placeholder="car hoặc electric_car"
+                placeholder="car or electric_car"
                 placeholderTextColor={COLORS.textMuted}
                 value={vehicleType}
                 onChangeText={(val) => setVehicleType(val as VehicleType)}
@@ -234,7 +234,7 @@ export const AddVehicleScreen = ({ navigation }: { navigation: { goBack: () => v
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Hãng xe</Text>
+            <Text style={styles.label}>Make</Text>
             <View style={styles.inputWrap}>
               <TextInput
                 style={styles.input}
@@ -247,7 +247,7 @@ export const AddVehicleScreen = ({ navigation }: { navigation: { goBack: () => v
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Dòng xe</Text>
+            <Text style={styles.label}>Model</Text>
             <View style={styles.inputWrap}>
               <TextInput
                 style={styles.input}
@@ -260,11 +260,11 @@ export const AddVehicleScreen = ({ navigation }: { navigation: { goBack: () => v
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Màu sắc</Text>
+            <Text style={styles.label}>Color</Text>
             <View style={styles.inputWrap}>
               <TextInput
                 style={styles.input}
-                placeholder="VD: Trắng"
+                placeholder="e.g. White"
                 placeholderTextColor={COLORS.textMuted}
                 value={color}
                 onChangeText={setColor}
@@ -273,11 +273,11 @@ export const AddVehicleScreen = ({ navigation }: { navigation: { goBack: () => v
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Chủ xe (Nickname)</Text>
+            <Text style={styles.label}>Vehicle nickname</Text>
             <View style={styles.inputWrap}>
               <TextInput
                 style={styles.input}
-                placeholder="Tên hoặc biệt danh"
+                placeholder="Name or nickname"
                 placeholderTextColor={COLORS.textMuted}
                 value={nickname}
                 onChangeText={setNickname}
@@ -286,7 +286,7 @@ export const AddVehicleScreen = ({ navigation }: { navigation: { goBack: () => v
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Mã màu Hex</Text>
+            <Text style={styles.label}>Hex color code</Text>
             <View style={styles.inputWrap}>
               <View style={[styles.colorPreview, { backgroundColor: hexColor }]} />
               <TextInput
@@ -311,7 +311,7 @@ export const AddVehicleScreen = ({ navigation }: { navigation: { goBack: () => v
           {loading ? (
             <ActivityIndicator color={COLORS.textInverse} size="small" />
           ) : (
-            <Text style={styles.primaryButtonText}>Thêm Xe</Text>
+            <Text style={styles.primaryButtonText}>Add vehicle</Text>
           )}
         </TouchableOpacity>
       </ScrollView>

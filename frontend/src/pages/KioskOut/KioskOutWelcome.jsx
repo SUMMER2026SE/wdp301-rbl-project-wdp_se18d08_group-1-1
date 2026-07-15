@@ -85,7 +85,7 @@ export default function KioskOutWelcome({ onScanSuccess }) {
       if (isMotorbike) return `${province}-${series} ${formattedNumbers}`;
       else return `${province}${series} - ${formattedNumbers}`;
     }
-    return null;
+    return clean; // Fallback to raw string
   };
 
   // Fetch AI API from Backend to analyze plate
@@ -93,11 +93,13 @@ export default function KioskOutWelcome({ onScanSuccess }) {
     if (!videoRef.current) return null;
     try {
       const canvas = canvasRef.current;
-      canvas.width = videoRef.current.videoWidth;
-      canvas.height = videoRef.current.videoHeight;
+      // Scale down image to 50% to prevent UI stuttering on toDataURL
+      const scale = 0.5;
+      canvas.width = videoRef.current.videoWidth * scale;
+      canvas.height = videoRef.current.videoHeight * scale;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-      const imageBase64 = canvas.toDataURL('image/jpeg', 0.8);
+      const imageBase64 = canvas.toDataURL('image/jpeg', 0.6);
 
       const response = await fetch(`${API_BASE}/ai/scan-plate`, {
         method: 'POST',
@@ -115,6 +117,8 @@ export default function KioskOutWelcome({ onScanSuccess }) {
     return null;
   };
 
+  const lastScannedPlateRef = useRef(null);
+
   // Camera Scanning Loop
   useEffect(() => {
     let interval;
@@ -129,12 +133,20 @@ export default function KioskOutWelcome({ onScanSuccess }) {
           try {
             const result = await captureAndAnalyze();
             if (result && result.plate) {
-              const formatted = formatVietnamesePlate(result.plate.replace(/[^A-Z0-9]/g, ''));
+              const cleaned = result.plate.replace(/[^A-Z0-9]/g, '');
+              const formatted = formatVietnamesePlate(cleaned) || cleaned; // Fallback to raw string if format fails
+              
               if (formatted) {
                 setRecognizedText(formatted);
-                clearInterval(interval);
-                handlePlateDetected(formatted, result.imageBase64);
+                // Only process if it's a NEW plate to avoid spamming the backend
+                if (formatted !== lastScannedPlateRef.current) {
+                  lastScannedPlateRef.current = formatted;
+                  handlePlateDetected(formatted, result.imageBase64);
+                }
               }
+            } else {
+              // Reset if no plate is seen, so it can scan the same car again later if needed
+              lastScannedPlateRef.current = null;
             }
           } catch (err) {
             console.error("OCR Error:", err);
@@ -143,7 +155,7 @@ export default function KioskOutWelcome({ onScanSuccess }) {
             setIsScanning(false);
           }
         }
-      }, 2000); // Scan every 2 seconds to avoid spamming API
+      }, 1000); // Scan every 1 second to prevent UI stuttering
     }
 
     return () => {
@@ -209,8 +221,8 @@ export default function KioskOutWelcome({ onScanSuccess }) {
           </p>
         </div>
 
-        {/* Scanner Crosshair Box */}
-        <div className="relative w-72 h-40 md:w-96 md:h-56 border-2 border-yellow-400/50 rounded-2xl flex items-center justify-center overflow-hidden">
+        {/* Scanner UI */}
+        <div className="relative w-80 h-48 md:w-[32rem] md:h-64 rounded-3xl flex items-center justify-center overflow-hidden mb-4">
           {/* Scanning Line Animation */}
           <div className="absolute top-0 left-0 w-full h-1 bg-yellow-400 shadow-[0_0_15px_3px_rgba(250,204,21,0.6)] animate-scan" />
 

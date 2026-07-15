@@ -130,8 +130,8 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
     } catch (err: unknown) {
       const message = err instanceof Error
         ? err.message
-        : 'Đăng nhập Google thất bại. Vui lòng thử lại.';
-      alert('Đăng nhập Google thất bại', message);
+        : 'Google sign-in failed. Please try again.';
+      alert('Google sign-in failed', message);
     } finally {
       setGoogleLoading(false);
     }
@@ -147,7 +147,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
     if (idToken) {
       void handleGoogleLogin(idToken);
     } else {
-      alert('Lỗi', 'Không lấy được Google ID token.');
+      alert('Error', 'Unable to retrieve the Google ID token.');
     }
   }, [alert, googleResponse, handleGoogleLogin]);
 
@@ -156,7 +156,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
     const trimPass = password.trim();
 
     if (!trimEmail || !trimPass) {
-      alert('Thiếu thông tin', 'Vui lòng nhập email và mật khẩu.');
+      alert('Missing information', 'Please enter your email and password.');
       return;
     }
 
@@ -166,8 +166,8 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
     } catch (err: unknown) {
       const message = err instanceof Error
         ? err.message
-        : 'Đăng nhập thất bại. Vui lòng thử lại.';
-      alert('Đăng nhập thất bại', message);
+        : 'Sign-in failed. Please try again.';
+      alert('Sign-in failed', message);
     } finally {
       setLoading(false);
     }
@@ -212,14 +212,14 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
               start={{ x: 0, y: 0 }}
               style={styles.cardTopLine}
             />
-            <Text style={styles.cardTitle}>Đăng nhập</Text>
-            <Text style={styles.cardSub}>Chào mừng trở lại VALO Parking</Text>
+            <Text style={styles.cardTitle}>Sign in</Text>
+            <Text style={styles.cardSub}>Welcome back to VALO Parking</Text>
 
             <Field
               autoCapitalize="none"
               icon={<Ionicons name="mail-outline" size={18} color={COLORS.textMuted} />}
               keyboardType="email-address"
-              placeholder="Email của bạn"
+              placeholder="Your email"
               returnKeyType="next"
               value={email}
               onChangeText={setEmail}
@@ -227,7 +227,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
 
             <Field
               icon={<Ionicons name="lock-closed-outline" size={18} color={COLORS.textMuted} />}
-              placeholder="Mật khẩu"
+              placeholder="Password"
               returnKeyType="done"
               rightIcon={
                 <Ionicons
@@ -247,7 +247,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
               style={({ pressed }) => [styles.forgotRow, pressed && styles.pressed]}
               onPress={() => navigation?.navigate('ForgotPassword')}
             >
-              <Text style={styles.forgotText}>Quên mật khẩu?</Text>
+              <Text style={styles.forgotText}>Forgot password?</Text>
             </Pressable>
 
             <TouchableOpacity
@@ -266,7 +266,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
                   <ActivityIndicator color={COLORS.textInverse} size="small" />
                 ) : (
                   <>
-                    <Text style={styles.loginBtnText}>Đăng nhập</Text>
+                    <Text style={styles.loginBtnText}>Sign in</Text>
                     <Ionicons name="arrow-forward" size={18} color={COLORS.textInverse} />
                   </>
                 )}
@@ -275,7 +275,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
 
             <View style={styles.dividerRow}>
               <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>hoặc đăng nhập với</Text>
+              <Text style={styles.dividerText}>or continue with</Text>
               <View style={styles.dividerLine} />
             </View>
 
@@ -290,7 +290,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
               ) : (
                 <>
                   <GoogleIcon />
-                  <Text style={styles.googleBtnText}>Tiếp tục với Google</Text>
+                  <Text style={styles.googleBtnText}>Continue with Google</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -299,8 +299,8 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
               style={({ pressed }) => [styles.registerRow, pressed && styles.pressed]}
               onPress={() => navigation?.navigate('Register')}
             >
-              <Text style={styles.registerText}>Chưa có tài khoản? </Text>
-              <Text style={[styles.registerText, styles.registerLink]}>Đăng ký ngay</Text>
+              <Text style={styles.registerText}>New to VALO? </Text>
+              <Text style={[styles.registerText, styles.registerLink]}>Create account</Text>
             </Pressable>
           </View>
 

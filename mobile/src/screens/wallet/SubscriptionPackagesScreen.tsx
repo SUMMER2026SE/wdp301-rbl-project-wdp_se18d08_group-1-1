@@ -32,7 +32,7 @@ export const SubscriptionPackagesScreen = ({ navigation }: Props) => {
       const response = await subscriptionsService.getPackages();
       setPackages((response.data || []).filter((pkg) => pkg.isActive && ['monthly', 'yearly'].includes(pkg.type)));
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Không thể tải gói Membership.');
+      setError(loadError instanceof Error ? loadError.message : 'Unable to load membership plans.');
       setPackages([]);
     } finally {
       setLoading(false);
@@ -55,7 +55,7 @@ export const SubscriptionPackagesScreen = ({ navigation }: Props) => {
         {yearly ? (
           <View style={styles.featuredBadge}>
             <Ionicons name="star" size={12} color={COLORS.textInverse} />
-            <Text style={styles.featuredText}>Tiết kiệm</Text>
+            <Text style={styles.featuredText}>Best value</Text>
           </View>
         ) : null}
         <View style={styles.packageTop}>
@@ -64,7 +64,7 @@ export const SubscriptionPackagesScreen = ({ navigation }: Props) => {
           </View>
           <View style={styles.packageTitleWrap}>
             <Text style={styles.packageName}>{item.name}</Text>
-            <Text style={styles.packageDuration}>{yearly ? '12 tháng' : '1 tháng'}</Text>
+            <Text style={styles.packageDuration}>{yearly ? '12 months' : '1 month'}</Text>
           </View>
         </View>
         <Text style={styles.price}>{formatCurrency(item.price)}</Text>
@@ -77,11 +77,11 @@ export const SubscriptionPackagesScreen = ({ navigation }: Props) => {
         ))}
         {yearly ? (
           <View style={styles.yearlyNote}>
-            <Text style={styles.yearlyNoteText}>Bao gồm 12 dịch vụ miễn phí</Text>
+            <Text style={styles.yearlyNoteText}>Includes 12 complimentary services</Text>
           </View>
         ) : null}
         <View style={styles.selectRow}>
-          <Text style={styles.selectText}>Chọn gói</Text>
+          <Text style={styles.selectText}>Choose plan</Text>
           <Ionicons name="chevron-forward" size={18} color={COLORS.gold} />
         </View>
       </Pressable>
@@ -91,7 +91,7 @@ export const SubscriptionPackagesScreen = ({ navigation }: Props) => {
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#080808" />
-      <ScreenHeader title="Gói Membership" onBack={() => navigation.goBack()} />
+      <ScreenHeader title="Membership plans" onBack={() => navigation.goBack()} />
 
       {loading ? (
         <View style={styles.stateWrap}>
@@ -107,8 +107,8 @@ export const SubscriptionPackagesScreen = ({ navigation }: Props) => {
           ListEmptyComponent={
             <EmptyState
               icon="cube-outline"
-              title="Chưa có gói đang bán"
-              message="Các gói Membership mới sẽ được cập nhật tại đây."
+              title="No plans available"
+              message="New membership plans will appear here."
             />
           }
           renderItem={renderPackage}

@@ -42,7 +42,10 @@ export const ParkingSlot = ({ slot, onPress, isSelected }: ParkingSlotProps) => 
       isSelected && styles.selected,
     ]}
   >
-    <AppText color={colors.neutral.white} variant="caption">
+    <AppText
+      color={slot.status === 'occupied' ? colors.neutral.white : colors.light.text.inverse}
+      variant="caption"
+    >
       {slot.slotCode}
     </AppText>
   </Pressable>

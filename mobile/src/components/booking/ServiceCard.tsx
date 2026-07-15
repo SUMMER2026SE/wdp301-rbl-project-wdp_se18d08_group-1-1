@@ -35,7 +35,7 @@ export const ServiceCard = ({ service, selected, onToggle, isFree = false }: Ser
         </View>
       </View>
       <View style={[styles.checkbox, selected && styles.checkboxSelected]}>
-        {selected ? <AppText color={colors.neutral.white}>✓</AppText> : null}
+        {selected ? <AppText color={colors.light.text.inverse}>✓</AppText> : null}
       </View>
     </Card>
   </Pressable>

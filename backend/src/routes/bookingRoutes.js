@@ -11,6 +11,7 @@ router.post('/webhook', bookingController.handleBookingWebhook);
 router.get('/suggest-slot', bookingController.suggestSmartSlot);
 
 // Khóa ô đỗ tạm thời (Guest & User)
+router.get('/pricing-config', softProtect, bookingController.getPricingConfig);
 router.get('/active-holds', softProtect, bookingController.getActiveHolds);
 router.post('/hold', softProtect, bookingController.createBookingHold);
 router.delete('/holds/:holdId', softProtect, bookingController.releaseBookingHold);

@@ -1,5 +1,5 @@
 export const formatCurrency = (value: number) =>
-  new Intl.NumberFormat('vi-VN', {
+  new Intl.NumberFormat('en-US', {
     currency: 'VND',
     maximumFractionDigits: 0,
     style: 'currency',
@@ -10,5 +10,5 @@ export const formatDate = (value?: string) => {
     return '';
   }
 
-  return new Intl.DateTimeFormat('vi-VN').format(new Date(value));
+  return new Intl.DateTimeFormat('en-GB').format(new Date(value));
 };

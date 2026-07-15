@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -14,30 +15,52 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { EmptyState, ErrorState, ScreenHeader, SectionTitle } from '@/components/common';
+import { EmptyState, ErrorState, ScreenHeader } from '@/components/common';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
 import { useToast } from '@/hooks/useToast';
 import type { ProfileStackParamList } from '@/navigation/types';
 import { policiesService } from '@/services/api/policies';
-import type { PolicyDetail } from '@/types/models';
+import type { PolicyCategory, PolicyDetail } from '@/types/models';
+import { hasReviewedPolicy } from '@/utils/policyReview';
 
 type Props = NativeStackScreenProps<ProfileStackParamList, 'PolicyDetail'>;
+
+const CATEGORY_LABELS: Record<PolicyCategory, string> = {
+  terms: 'Terms of use',
+  privacy: 'Privacy policy',
+  refund: 'Refund policy',
+  parking_rules: 'Parking rules',
+  safety: 'Safety policy',
+  other: 'VALO policy',
+};
+
+const formatDate = (value?: string) => {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toLocaleDateString('en-GB');
+};
 
 export const PolicyDetailScreen = ({ navigation, route }: Props) => {
   const toast = useToast();
   const [policy, setPolicy] = useState<PolicyDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [atEnd, setAtEnd] = useState(false);
   const [accepting, setAccepting] = useState(false);
+  const [contentHeight, setContentHeight] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const [scrollOffset, setScrollOffset] = useState(0);
 
   const load = useCallback(async () => {
+    setLoading(true);
     setError('');
+    setContentHeight(0);
+    setViewportHeight(0);
+    setScrollOffset(0);
     try {
       const response = await policiesService.getPolicyBySlug(route.params.slug);
       setPolicy(response.data || null);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Không thể tải chi tiết chính sách.');
+      setError(loadError instanceof Error ? loadError.message : 'Unable to load policy details.');
       setPolicy(null);
     } finally {
       setLoading(false);
@@ -48,97 +71,175 @@ export const PolicyDetailScreen = ({ navigation, route }: Props) => {
     void load();
   }, [load]);
 
+  const accepted = Boolean(policy?.isAccepted || policy?.acceptedAt);
+  const requiresAcceptance = Boolean(policy?.requiresAcceptance && !accepted);
+  const reviewed = hasReviewedPolicy({ contentHeight, viewportHeight, scrollOffset });
+
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-    setAtEnd(contentOffset.y + layoutMeasurement.height >= contentSize.height * 0.9);
+    setScrollOffset(event.nativeEvent.contentOffset.y);
   };
 
   const accept = async () => {
-    if (!policy) return;
-    const id = policy._id || policy.id || '';
+    if (!policy || !reviewed || accepting) return;
+    const id = policy._id || policy.id;
+    if (!id) {
+      toast.showError('The policy ID is missing.');
+      return;
+    }
+
     setAccepting(true);
     try {
       await policiesService.acceptPolicy(id);
-      setPolicy({ ...policy, isAccepted: true, acceptedAt: new Date().toISOString() });
-      toast.showSuccess('Đã xác nhận chính sách');
+      const acceptedAt = new Date().toISOString();
+      setPolicy({ ...policy, isAccepted: true, acceptedAt });
+      toast.showSuccess('Policy accepted');
     } catch (acceptError) {
-      toast.showError(acceptError instanceof Error ? acceptError.message : 'Không thể xác nhận chính sách.');
+      toast.showError(acceptError instanceof Error ? acceptError.message : 'Unable to accept the policy.');
     } finally {
       setAccepting(false);
     }
   };
 
-  const accepted = Boolean(policy?.isAccepted || policy?.acceptedAt);
-  const requiresAcceptance = Boolean(policy?.requiresAcceptance && !accepted);
+  const version = policy?.currentVersionNumber || policy?.versionNumber || 'current';
+  const publishedDate = formatDate(policy?.currentVersion?.effectiveDate || policy?.publishedAt);
+  const categoryLabel = policy ? CATEGORY_LABELS[policy.category] || CATEGORY_LABELS.other : '';
 
   return (
     <SafeAreaView edges={['top', 'bottom']} style={styles.safe}>
-      <StatusBar barStyle="light-content" backgroundColor="#080808" />
-      <ScreenHeader title="Chi tiết chính sách" onBack={() => navigation.goBack()} />
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
+      <ScreenHeader title="Policy details" onBack={() => navigation.goBack()} />
 
       {loading ? (
         <View style={styles.stateWrap}>
           <ActivityIndicator color={COLORS.gold} size="large" />
+          <Text style={styles.loadingText}>Loading document...</Text>
         </View>
       ) : error ? (
         <ErrorState message={error} onRetry={load} />
       ) : !policy ? (
         <EmptyState
           icon="document-text-outline"
-          title="Không tìm thấy chính sách"
-          message="Tài liệu này có thể đã được thay đổi hoặc ngừng công bố."
+          title="Policy not found"
+          message="This document may have changed or is no longer published."
         />
       ) : (
         <>
           <ScrollView
-            contentContainerStyle={styles.scroll}
-            scrollEventThrottle={80}
+            style={styles.scrollView}
+            contentContainerStyle={styles.scrollContent}
+            scrollEventThrottle={32}
             showsVerticalScrollIndicator={false}
+            onContentSizeChange={(_, height) => setContentHeight(height)}
+            onLayout={(event) => setViewportHeight(event.nativeEvent.layout.height)}
             onScroll={handleScroll}
           >
-            <View style={styles.heroCard}>
-              <View style={styles.heroIcon}>
-                <Ionicons name="document-text-outline" size={28} color={COLORS.gold} />
+            <View style={styles.documentHeader}>
+              <LinearGradient
+                colors={['rgba(212,175,55,0.20)', 'rgba(212,175,55,0.02)']}
+                end={{ x: 1, y: 1 }}
+                start={{ x: 0, y: 0 }}
+                style={StyleSheet.absoluteFill}
+              />
+              <View style={styles.headerTopRow}>
+                <View style={styles.documentIcon}>
+                  <Ionicons name="document-text-outline" size={25} color={COLORS.goldLight} />
+                </View>
+                <View
+                  style={[
+                    styles.statusPill,
+                    accepted ? styles.statusAccepted : styles.statusRequired,
+                  ]}
+                >
+                  <Ionicons
+                    name={accepted ? 'checkmark-circle' : 'alert-circle'}
+                    size={14}
+                    color={accepted ? COLORS.success : COLORS.warning}
+                  />
+                  <Text style={[styles.statusText, { color: accepted ? COLORS.success : COLORS.warning }]}>
+                    {accepted ? 'Accepted' : policy.requiresAcceptance ? 'Acceptance required' : 'For reference'}
+                  </Text>
+                </View>
               </View>
+
+              <Text style={styles.eyebrow}>{categoryLabel}</Text>
               <Text style={styles.title}>{policy.title}</Text>
+              {policy.description ? <Text style={styles.summary}>{policy.description}</Text> : null}
+
               <View style={styles.metaRow}>
-                <Text style={styles.metaText}>Phiên bản {policy.currentVersion || policy.versionNumber || 'hiện tại'}</Text>
-                {accepted ? (
-                  <View style={[styles.statusPill, { backgroundColor: 'rgba(126,232,162,0.12)' }]}>
-                    <Text style={[styles.statusText, { color: COLORS.success }]}>Đã đồng ý</Text>
-                  </View>
-                ) : policy.requiresAcceptance ? (
-                  <View style={[styles.statusPill, { backgroundColor: 'rgba(255,159,67,0.12)' }]}>
-                    <Text style={[styles.statusText, { color: COLORS.warning }]}>Cần xác nhận</Text>
+                <View style={styles.metaChip}>
+                  <Ionicons name="layers-outline" size={14} color={COLORS.textSecondary} />
+                  <Text style={styles.metaText}>Version {version}</Text>
+                </View>
+                {publishedDate ? (
+                  <View style={styles.metaChip}>
+                    <Ionicons name="calendar-outline" size={14} color={COLORS.textSecondary} />
+                    <Text style={styles.metaText}>Effective {publishedDate}</Text>
                   </View>
                 ) : null}
               </View>
             </View>
 
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionIcon}>
+                <Ionicons name="reader-outline" size={18} color={COLORS.gold} />
+              </View>
+              <View style={styles.sectionHeadingText}>
+                <Text style={styles.sectionTitle}>Policy content</Text>
+                <Text style={styles.sectionSubtitle}>Please read carefully before accepting</Text>
+              </View>
+            </View>
+
             <View style={styles.contentCard}>
-              <Text style={styles.contentText}>{policy.content}</Text>
+              <Text selectable style={styles.contentText}>{policy.content || 'Content is being updated.'}</Text>
             </View>
 
             {policy.versionHistory?.length ? (
-              <View style={styles.section}>
-                <SectionTitle>Lịch sử phiên bản</SectionTitle>
-                {policy.versionHistory.map((version) => (
-                  <View key={version.versionNumber} style={styles.versionRow}>
-                    <View style={styles.versionDot} />
+              <View style={styles.historySection}>
+                <Text style={styles.historyTitle}>Version history</Text>
+                {policy.versionHistory.map((item, index) => (
+                  <View key={`${item.versionNumber}-${index}`} style={styles.versionRow}>
+                    <View style={styles.timelineColumn}>
+                      <View style={styles.versionDot} />
+                      {index < policy.versionHistory!.length - 1 ? <View style={styles.timelineLine} /> : null}
+                    </View>
                     <View style={styles.versionBody}>
-                      <Text style={styles.versionTitle}>Phiên bản {version.versionNumber}</Text>
-                      <Text style={styles.versionMeta}>{version.changeSummary || 'Đã công bố'}</Text>
+                      <View style={styles.versionTopRow}>
+                        <Text style={styles.versionTitle}>Version {item.versionNumber}</Text>
+                        {index === 0 ? <Text style={styles.latestLabel}>LATEST</Text> : null}
+                      </View>
+                      <Text style={styles.versionMeta}>{item.changeSummary || 'Published'}</Text>
+                      {formatDate(item.publishedAt) ? (
+                        <Text style={styles.versionDate}>{formatDate(item.publishedAt)}</Text>
+                      ) : null}
                     </View>
                   </View>
                 ))}
               </View>
             ) : null}
 
-            {accepted && policy.acceptedAt ? (
+            {accepted ? (
               <View style={styles.acceptedBox}>
-                <Ionicons name="checkmark-circle-outline" size={18} color={COLORS.success} />
-                <Text style={styles.acceptedText}>
-                  Đã đồng ý ngày {new Date(policy.acceptedAt).toLocaleDateString('vi-VN')}
+                <View style={styles.acceptedIcon}>
+                  <Ionicons name="checkmark" size={20} color={COLORS.success} />
+                </View>
+                <View style={styles.acceptedBody}>
+                  <Text style={styles.acceptedTitle}>You accepted this policy</Text>
+                  {policy.acceptedAt ? (
+                    <Text style={styles.acceptedText}>Accepted on {formatDate(policy.acceptedAt)}</Text>
+                  ) : null}
+                </View>
+              </View>
+            ) : requiresAcceptance ? (
+              <View style={[styles.reviewHint, reviewed && styles.reviewHintReady]}>
+                <Ionicons
+                  name={reviewed ? 'checkmark-circle-outline' : 'arrow-down-circle-outline'}
+                  size={20}
+                  color={reviewed ? COLORS.success : COLORS.gold}
+                />
+                <Text style={[styles.reviewHintText, reviewed && styles.reviewHintTextReady]}>
+                  {reviewed
+                    ? 'You have reviewed the full document and can now accept it.'
+                    : 'Scroll to the end of the document to enable acceptance.'}
                 </Text>
               </View>
             ) : null}
@@ -146,19 +247,28 @@ export const PolicyDetailScreen = ({ navigation, route }: Props) => {
 
           {requiresAcceptance ? (
             <View style={styles.footer}>
+              <Text style={styles.footerHint}>
+                {reviewed ? 'By accepting, you confirm that you have read this policy.' : 'Read the full document to continue'}
+              </Text>
               <TouchableOpacity
+                accessibilityRole="button"
+                accessibilityState={{ disabled: !reviewed || accepting }}
                 activeOpacity={0.85}
-                disabled={!atEnd || accepting}
-                style={[styles.acceptButton, (!atEnd || accepting) && styles.acceptButtonDisabled]}
-                onPress={accept}
+                disabled={!reviewed || accepting}
+                style={[styles.acceptButton, (!reviewed || accepting) && styles.acceptButtonDisabled]}
+                onPress={() => void accept()}
               >
                 {accepting ? (
                   <ActivityIndicator color={COLORS.textInverse} size="small" />
                 ) : (
                   <>
-                    <Ionicons name="checkmark-circle-outline" size={20} color={COLORS.textInverse} />
-                    <Text style={styles.acceptButtonText}>
-                      {atEnd ? 'Đồng ý chính sách' : 'Cuộn hết để đồng ý'}
+                    <Ionicons
+                      name={reviewed ? 'checkmark-circle' : 'lock-closed'}
+                      size={20}
+                      color={reviewed ? COLORS.textInverse : COLORS.textMuted}
+                    />
+                    <Text style={[styles.acceptButtonText, !reviewed && styles.acceptButtonTextDisabled]}>
+                      {reviewed ? 'I accept this policy' : 'Finish reading to continue'}
                     </Text>
                   </>
                 )}
@@ -172,145 +282,75 @@ export const PolicyDetailScreen = ({ navigation, route }: Props) => {
 };
 
 const styles = StyleSheet.create({
-  safe: {
-    backgroundColor: COLORS.background,
-    flex: 1,
-  },
-  stateWrap: {
-    alignItems: 'center',
-    flex: 1,
-    justifyContent: 'center',
-  },
-  scroll: {
+  safe: { backgroundColor: COLORS.background, flex: 1 },
+  stateWrap: { alignItems: 'center', flex: 1, gap: SPACING.md, justifyContent: 'center' },
+  loadingText: { color: COLORS.textSecondary, fontSize: FONT_SIZES.sm },
+  scrollView: { flex: 1 },
+  scrollContent: {
     gap: SPACING.lg,
-    padding: SPACING.lg,
+    paddingBottom: SPACING.xl,
+    paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.sm,
-    paddingBottom: SPACING.xxl,
   },
-  heroCard: {
-    backgroundColor: COLORS.surface,
-    borderColor: 'rgba(212,175,55,0.22)',
+  documentHeader: {
+    borderColor: 'rgba(212,175,55,0.28)',
     borderRadius: RADIUS.xl,
     borderWidth: 1,
-    gap: SPACING.md,
+    gap: SPACING.sm,
+    overflow: 'hidden',
     padding: SPACING.lg,
   },
-  heroIcon: {
+  headerTopRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', marginBottom: SPACING.sm },
+  documentIcon: {
     alignItems: 'center',
-    backgroundColor: 'rgba(212,175,55,0.12)',
-    borderRadius: RADIUS.lg,
-    height: 58,
+    backgroundColor: 'rgba(212,175,55,0.14)',
+    borderRadius: RADIUS.md,
+    height: 48,
     justifyContent: 'center',
-    width: 58,
+    width: 48,
   },
-  title: {
-    color: COLORS.textPrimary,
-    fontSize: FONT_SIZES.xl,
-    fontWeight: '900',
-    lineHeight: 30,
-  },
-  metaRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: SPACING.sm,
-    justifyContent: 'space-between',
-  },
-  metaText: {
-    color: COLORS.textMuted,
-    fontSize: FONT_SIZES.xs,
-    fontWeight: '700',
-  },
-  statusPill: {
-    borderRadius: RADIUS.round,
-    paddingHorizontal: SPACING.sm,
-    paddingVertical: 4,
-  },
-  statusText: {
-    fontSize: FONT_SIZES.xs,
-    fontWeight: '800',
-  },
-  contentCard: {
-    backgroundColor: COLORS.surface,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.lg,
-    borderWidth: 1,
-    padding: SPACING.lg,
-  },
-  contentText: {
-    color: COLORS.textSecondary,
-    fontSize: FONT_SIZES.sm,
-    lineHeight: 24,
-  },
-  section: {
-    gap: SPACING.sm,
-  },
-  versionRow: {
-    backgroundColor: COLORS.surface,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.md,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: SPACING.sm,
-    padding: SPACING.md,
-  },
-  versionDot: {
-    backgroundColor: COLORS.gold,
-    borderRadius: 4,
-    height: 8,
-    marginTop: 6,
-    width: 8,
-  },
-  versionBody: {
-    flex: 1,
-  },
-  versionTitle: {
-    color: COLORS.textPrimary,
-    fontSize: FONT_SIZES.sm,
-    fontWeight: '800',
-  },
-  versionMeta: {
-    color: COLORS.textMuted,
-    fontSize: FONT_SIZES.xs,
-    marginTop: 3,
-  },
-  acceptedBox: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(126,232,162,0.1)',
-    borderColor: 'rgba(126,232,162,0.24)',
-    borderRadius: RADIUS.md,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: SPACING.sm,
-    padding: SPACING.md,
-  },
-  acceptedText: {
-    color: COLORS.success,
-    flex: 1,
-    fontSize: FONT_SIZES.sm,
-    fontWeight: '700',
-  },
-  footer: {
-    backgroundColor: COLORS.background,
-    borderTopColor: COLORS.border,
-    borderTopWidth: 1,
-    padding: SPACING.lg,
-  },
-  acceptButton: {
-    alignItems: 'center',
-    backgroundColor: COLORS.gold,
-    borderRadius: RADIUS.md,
-    flexDirection: 'row',
-    gap: SPACING.sm,
-    height: 54,
-    justifyContent: 'center',
-  },
-  acceptButtonDisabled: {
-    opacity: 0.55,
-  },
-  acceptButtonText: {
-    color: COLORS.textInverse,
-    fontSize: FONT_SIZES.md,
-    fontWeight: '800',
-  },
+  statusPill: { alignItems: 'center', borderRadius: RADIUS.round, flexDirection: 'row', gap: 5, paddingHorizontal: 10, paddingVertical: 6 },
+  statusAccepted: { backgroundColor: 'rgba(76,175,80,0.12)' },
+  statusRequired: { backgroundColor: 'rgba(255,159,67,0.12)' },
+  statusText: { fontSize: FONT_SIZES.xs, fontWeight: '800' },
+  eyebrow: { color: COLORS.gold, fontSize: FONT_SIZES.xs, fontWeight: '800', letterSpacing: 1, textTransform: 'uppercase' },
+  title: { color: COLORS.textPrimary, fontSize: FONT_SIZES.xxl, fontWeight: '900', lineHeight: 34 },
+  summary: { color: COLORS.textSecondary, fontSize: FONT_SIZES.sm, lineHeight: 21 },
+  metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm, marginTop: SPACING.sm },
+  metaChip: { alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: RADIUS.round, flexDirection: 'row', gap: 6, paddingHorizontal: 10, paddingVertical: 7 },
+  metaText: { color: COLORS.textSecondary, fontSize: FONT_SIZES.xs, fontWeight: '700' },
+  sectionHeader: { alignItems: 'center', flexDirection: 'row', gap: SPACING.sm },
+  sectionIcon: { alignItems: 'center', backgroundColor: 'rgba(212,175,55,0.10)', borderRadius: RADIUS.sm, height: 38, justifyContent: 'center', width: 38 },
+  sectionHeadingText: { flex: 1 },
+  sectionTitle: { color: COLORS.textPrimary, fontSize: FONT_SIZES.lg, fontWeight: '800' },
+  sectionSubtitle: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs, marginTop: 2 },
+  contentCard: { backgroundColor: COLORS.surface, borderColor: COLORS.border, borderRadius: RADIUS.lg, borderWidth: 1, padding: SPACING.lg },
+  contentText: { color: '#D0D0D0', fontSize: FONT_SIZES.md, lineHeight: 25 },
+  historySection: { gap: 0 },
+  historyTitle: { color: COLORS.textSecondary, fontSize: FONT_SIZES.xs, fontWeight: '800', letterSpacing: 1, marginBottom: SPACING.md, textTransform: 'uppercase' },
+  versionRow: { flexDirection: 'row', gap: SPACING.md, minHeight: 64 },
+  timelineColumn: { alignItems: 'center', width: 12 },
+  versionDot: { backgroundColor: COLORS.gold, borderRadius: 5, height: 10, marginTop: 5, width: 10 },
+  timelineLine: { backgroundColor: COLORS.borderLight, flex: 1, marginVertical: 4, width: 1 },
+  versionBody: { flex: 1, paddingBottom: SPACING.md },
+  versionTopRow: { alignItems: 'center', flexDirection: 'row', gap: SPACING.sm },
+  versionTitle: { color: COLORS.textPrimary, fontSize: FONT_SIZES.sm, fontWeight: '800' },
+  latestLabel: { color: COLORS.gold, fontSize: 9, fontWeight: '900', letterSpacing: 0.7 },
+  versionMeta: { color: COLORS.textSecondary, fontSize: FONT_SIZES.xs, lineHeight: 18, marginTop: 4 },
+  versionDate: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs, marginTop: 3 },
+  reviewHint: { alignItems: 'center', backgroundColor: 'rgba(212,175,55,0.08)', borderColor: 'rgba(212,175,55,0.20)', borderRadius: RADIUS.md, borderWidth: 1, flexDirection: 'row', gap: SPACING.sm, padding: SPACING.md },
+  reviewHintReady: { backgroundColor: 'rgba(76,175,80,0.08)', borderColor: 'rgba(76,175,80,0.22)' },
+  reviewHintText: { color: COLORS.textSecondary, flex: 1, fontSize: FONT_SIZES.sm, lineHeight: 20 },
+  reviewHintTextReady: { color: COLORS.success },
+  acceptedBox: { alignItems: 'center', backgroundColor: 'rgba(76,175,80,0.08)', borderColor: 'rgba(76,175,80,0.24)', borderRadius: RADIUS.md, borderWidth: 1, flexDirection: 'row', gap: SPACING.md, padding: SPACING.md },
+  acceptedIcon: { alignItems: 'center', backgroundColor: 'rgba(76,175,80,0.14)', borderRadius: RADIUS.round, height: 38, justifyContent: 'center', width: 38 },
+  acceptedBody: { flex: 1 },
+  acceptedTitle: { color: COLORS.success, fontSize: FONT_SIZES.sm, fontWeight: '800' },
+  acceptedText: { color: COLORS.textSecondary, fontSize: FONT_SIZES.xs, marginTop: 3 },
+  footer: { backgroundColor: COLORS.surface, borderTopColor: COLORS.border, borderTopWidth: 1, gap: SPACING.sm, paddingHorizontal: SPACING.lg, paddingTop: SPACING.md },
+  footerHint: { color: COLORS.textSecondary, fontSize: FONT_SIZES.xs, textAlign: 'center' },
+  acceptButton: { alignItems: 'center', backgroundColor: COLORS.gold, borderRadius: RADIUS.md, flexDirection: 'row', gap: SPACING.sm, height: 54, justifyContent: 'center' },
+  acceptButtonDisabled: { backgroundColor: COLORS.surfaceElevated, borderColor: COLORS.border, borderWidth: 1 },
+  acceptButtonText: { color: COLORS.textInverse, fontSize: FONT_SIZES.md, fontWeight: '900' },
+  acceptButtonTextDisabled: { color: COLORS.textMuted },
 });

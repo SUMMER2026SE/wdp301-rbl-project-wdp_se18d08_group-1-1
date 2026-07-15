@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -20,11 +19,10 @@ import { useAuth } from '@/hooks/useAuth';
 import { useImageUpload } from '@/hooks/useImageUpload';
 import { useProfileData } from '@/hooks/useProfileData';
 import { useToast } from '@/hooks/useToast';
-import type { ProfileStackParamList } from '@/navigation/types';
 import { profileService } from '@/services/api/profile';
 import { validateDateOfBirth, validateVietnamesePhone } from '@/utils/profileValidation';
 
-type Props = NativeStackScreenProps<ProfileStackParamList, 'EditProfile'>;
+type Props = { navigation: { goBack: () => void } };
 
 export const EditProfileScreen = ({ navigation }: Props) => {
   const toast = useToast();
@@ -54,10 +52,10 @@ export const EditProfileScreen = ({ navigation }: Props) => {
 
   const errors = useMemo(() => {
     const next: Record<string, string> = {};
-    if (phone && !validateVietnamesePhone(phone)) next.phone = 'Số điện thoại không hợp lệ.';
+    if (phone && !validateVietnamesePhone(phone)) next.phone = 'Please enter a valid phone number.';
     const dobResult = validateDateOfBirth(dob);
     if (!dobResult.valid && dobResult.error) next.dob = dobResult.error;
-    if (gender && !['male', 'female', 'other'].includes(gender)) next.gender = 'Chọn male, female, hoặc other.';
+    if (gender && !['male', 'female', 'other'].includes(gender)) next.gender = 'Choose male, female, or other.';
     return next;
   }, [dob, gender, phone]);
 
@@ -84,9 +82,9 @@ export const EditProfileScreen = ({ navigation }: Props) => {
       });
       setAvatar(response.data.avatarUrl);
       await refreshUser();
-      toast.showSuccess('Cập nhật ảnh đại diện thành công');
+      toast.showSuccess('Profile photo updated');
     } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : 'Tải ảnh lên thất bại.');
+      setError(uploadError instanceof Error ? uploadError.message : 'Unable to upload the photo.');
     } finally {
       setUploadingAvatar(false);
     }
@@ -104,10 +102,10 @@ export const EditProfileScreen = ({ navigation }: Props) => {
         dob: dob.trim() || undefined,
         gender: gender.trim() as 'male' | 'female' | 'other' | undefined,
       });
-      toast.showSuccess('Cập nhật hồ sơ thành công');
+      toast.showSuccess('Profile updated successfully');
       navigation.goBack();
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'Cập nhật thất bại.');
+      setError(submitError instanceof Error ? submitError.message : 'Unable to update the profile.');
     } finally {
       setLoading(false);
     }
@@ -119,7 +117,7 @@ export const EditProfileScreen = ({ navigation }: Props) => {
     return (
       <SafeAreaView edges={['top']} style={styles.safe}>
         <StatusBar barStyle="light-content" backgroundColor="#080808" />
-        <ScreenHeader title="Sửa hồ sơ" onBack={() => navigation.goBack()} />
+        <ScreenHeader title="Edit profile" onBack={() => navigation.goBack()} />
         <View style={styles.center}>
           <ActivityIndicator color={COLORS.gold} size="large" />
         </View>
@@ -130,7 +128,7 @@ export const EditProfileScreen = ({ navigation }: Props) => {
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#080808" />
-      <ScreenHeader title="Sửa hồ sơ" onBack={() => navigation.goBack()} />
+      <ScreenHeader title="Edit profile" onBack={() => navigation.goBack()} />
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {/* Avatar Section */}
@@ -156,11 +154,11 @@ export const EditProfileScreen = ({ navigation }: Props) => {
         <View style={styles.formCard}>
           <View style={styles.row}>
             <View style={[styles.inputGroup, { flex: 1 }]}>
-              <Text style={styles.label}>Họ</Text>
+              <Text style={styles.label}>Last name</Text>
               <View style={styles.inputWrap}>
                 <TextInput
                   style={styles.input}
-                  placeholder="VD: Nguyễn"
+                  placeholder="e.g. Nguyen"
                   placeholderTextColor={COLORS.textMuted}
                   value={lastName}
                   onChangeText={setLastName}
@@ -169,11 +167,11 @@ export const EditProfileScreen = ({ navigation }: Props) => {
             </View>
 
             <View style={[styles.inputGroup, { flex: 1 }]}>
-              <Text style={styles.label}>Tên</Text>
+              <Text style={styles.label}>First name</Text>
               <View style={styles.inputWrap}>
                 <TextInput
                   style={styles.input}
-                  placeholder="VD: Văn A"
+                  placeholder="e.g. Van A"
                   placeholderTextColor={COLORS.textMuted}
                   value={firstName}
                   onChangeText={setFirstName}
@@ -183,7 +181,7 @@ export const EditProfileScreen = ({ navigation }: Props) => {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Số điện thoại</Text>
+            <Text style={styles.label}>Phone number</Text>
             <View style={[styles.inputWrap, errors.phone && styles.inputError]}>
               <TextInput
                 style={styles.input}
@@ -198,7 +196,7 @@ export const EditProfileScreen = ({ navigation }: Props) => {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Ngày sinh (YYYY-MM-DD)</Text>
+            <Text style={styles.label}>Date of birth (YYYY-MM-DD)</Text>
             <View style={[styles.inputWrap, errors.dob && styles.inputError]}>
               <TextInput
                 style={styles.input}
@@ -212,11 +210,11 @@ export const EditProfileScreen = ({ navigation }: Props) => {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Giới tính</Text>
+            <Text style={styles.label}>Gender</Text>
             <View style={[styles.inputWrap, errors.gender && styles.inputError]}>
               <TextInput
                 style={styles.input}
-                placeholder="male, female, hoặc other"
+                placeholder="male, female, or other"
                 placeholderTextColor={COLORS.textMuted}
                 value={gender}
                 onChangeText={setGender}
@@ -237,7 +235,7 @@ export const EditProfileScreen = ({ navigation }: Props) => {
           {loading ? (
             <ActivityIndicator color={COLORS.textInverse} size="small" />
           ) : (
-            <Text style={styles.primaryButtonText}>Lưu Thay Đổi</Text>
+            <Text style={styles.primaryButtonText}>Save changes</Text>
           )}
         </TouchableOpacity>
       </ScrollView>

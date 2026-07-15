@@ -11,9 +11,9 @@ export interface ErrorStateProps {
 }
 
 export function ErrorState({
-  title = 'Không thể tải dữ liệu',
+  title = 'Unable to load data',
   message,
-  retryLabel = 'Thử lại',
+  retryLabel = 'Try again',
   onRetry,
 }: ErrorStateProps) {
   return (

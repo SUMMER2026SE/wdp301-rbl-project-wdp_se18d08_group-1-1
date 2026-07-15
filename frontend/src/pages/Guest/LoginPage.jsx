@@ -1,30 +1,44 @@
 import { useState, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Lock, Eye, EyeOff, User, ArrowRight, Zap, ShieldCheck, CheckCircle, XCircle, Scan, MapPin } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, User, ArrowRight, Zap, ShieldCheck, Car, CheckCircle, XCircle } from 'lucide-react';
 import Logo from '../../assets/images/logo.png';
-import GarageBg from '../../assets/images/garage-bg.png';
 import { loginUser, registerUser, loginWithGoogle, sendOTP, verifyOTP, forgotPassword, verifyResetPasswordOTP, resetPassword } from '../../services/authService';
 
 // ─── Google Icon SVG ───────────────────────────────────────────────────────────
 const GoogleIcon = () => (
   <svg viewBox="0 0 24 24" className="w-5 h-5" aria-hidden="true">
-    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05" />
-    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+    <path
+      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+      fill="#4285F4"
+    />
+    <path
+      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+      fill="#34A853"
+    />
+    <path
+      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"
+      fill="#FBBC05"
+    />
+    <path
+      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+      fill="#EA4335"
+    />
   </svg>
 );
 
-// ─── Feature Badge ─────────────────────────────────────────────────────────────
-const FeatureBadge = ({ icon, title, desc }) => (
-  <div className="flex items-center gap-3 p-3 rounded-xl bg-black/30 border border-white/10 backdrop-blur-sm">
-    <div className="w-9 h-9 rounded-lg bg-gold/20 border border-gold/30 flex items-center justify-center text-gold shrink-0">
-      {icon}
-    </div>
-    <div>
-      <p className="text-white text-xs font-bold">{title}</p>
-      <p className="text-gray-400 text-xs">{desc}</p>
-    </div>
+// ─── Floating Particle ─────────────────────────────────────────────────────────
+const Particle = ({ style }) => (
+  <div
+    className="absolute w-1 h-1 rounded-full bg-gold opacity-30 animate-pulse"
+    style={style}
+  />
+);
+
+// ─── Feature Pill ──────────────────────────────────────────────────────────────
+const FeaturePill = ({ icon, text }) => (
+  <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-full px-4 py-2 text-sm text-gray-300">
+    <span className="text-gold">{icon}</span>
+    {text}
   </div>
 );
 
@@ -380,12 +394,10 @@ export default function LoginPage() {
       {/* ── Toast notification ── */}
       {toast && (
         <div
-          className={`fixed top-6 left-1/2 -translate-x-1/2 z-[999] flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-2xl text-sm font-semibold transition-all duration-300 animate-[fadeInDown_0.3s_ease] ${
-            toast.type === 'success'
-              ? 'bg-green-950/95 border border-green-500/40 text-green-200'
-              : 'bg-red-950/95 border border-red-500/40 text-red-200'
-          }`}
-          style={{ backdropFilter: 'blur(12px)' }}
+          className={`fixed top-6 left-1/2 -translate-x-1/2 z-[999] flex items-center gap-3 px-5 py-3.5 rounded-2xl shadow-2xl text-sm font-semibold transition-all duration-300 ${toast.type === 'success'
+              ? 'bg-green-900/90 border border-green-500/40 text-green-200'
+              : 'bg-red-900/90 border border-red-500/40 text-red-200'
+            }`}
         >
           {toast.type === 'success'
             ? <CheckCircle size={18} className="text-green-400 shrink-0" />
@@ -394,81 +406,70 @@ export default function LoginPage() {
         </div>
       )}
 
+      {/* ── Decorative particles ── */}
+      {[
+        { top: '10%', left: '8%', animationDelay: '0s', animationDuration: '3s' },
+        { top: '25%', left: '15%', animationDelay: '0.8s', animationDuration: '4s' },
+        { top: '70%', left: '5%', animationDelay: '1.5s', animationDuration: '2.5s' },
+        { top: '85%', left: '20%', animationDelay: '0.3s', animationDuration: '3.5s' },
+        { top: '40%', left: '3%', animationDelay: '2s', animationDuration: '5s' },
+      ].map((s, i) => <Particle key={i} style={s} />)}
+
       {/* ════════════════════════════════════════════
           LEFT PANEL – Branding / Visual
       ════════════════════════════════════════════ */}
-      <div className="hidden lg:flex lg:w-[52%] relative flex-col justify-between overflow-hidden">
+      <div className="hidden lg:flex lg:w-1/2 relative flex-col justify-between p-12 overflow-hidden">
 
-        {/* Garage background image */}
+        {/* Radial gold glow background */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_50%,rgba(212,175,55,0.18)_0%,transparent_70%)] pointer-events-none" />
+        <div className="absolute top-0 right-0 w-px h-full bg-gradient-to-b from-transparent via-gold/20 to-transparent" />
+
+        {/* Grid lines decoration */}
         <div
-          className="absolute inset-0 bg-cover bg-center"
-          style={{ backgroundImage: `url(${GarageBg})` }}
-        />
-
-        {/* Multi-layer gradient overlay for depth */}
-        <div className="absolute inset-0 bg-gradient-to-br from-black/85 via-black/60 to-black/80" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_20%_50%,rgba(212,175,55,0.15)_0%,transparent_65%)]" />
-
-        {/* Subtle gold grid lines */}
-        <div
-          className="absolute inset-0 opacity-[0.04]"
+          className="absolute inset-0 opacity-5"
           style={{
-            backgroundImage: `linear-gradient(rgba(212,175,55,1) 1px, transparent 1px),
-                              linear-gradient(90deg, rgba(212,175,55,1) 1px, transparent 1px)`,
-            backgroundSize: '64px 64px',
+            backgroundImage: `linear-gradient(rgba(212,175,55,0.5) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(212,175,55,0.5) 1px, transparent 1px)`,
+            backgroundSize: '60px 60px',
           }}
         />
 
-        {/* Right edge separator */}
-        <div className="absolute top-0 right-0 w-px h-full bg-gradient-to-b from-transparent via-gold/25 to-transparent" />
-
-        {/* ── TOP: Logo bar ── */}
-        <div className="relative z-10 flex items-center gap-3 p-10 pb-0">
-          <div className="flex items-center gap-3 py-2 px-4 rounded-full bg-black/40 border border-white/10 backdrop-blur-md">
-            <img src={Logo} alt="VALO" className="h-8 w-8 object-contain" />
-            <div>
-              <span className="text-white font-extrabold text-sm tracking-wide">VALO</span>
-              <span className="text-gold text-xs font-semibold ml-1.5">Parking</span>
-            </div>
-          </div>
+        {/* Logo */}
+        <div className="relative z-10 flex items-center gap-3">
+          <img src={Logo} alt="VALO Logo" className="h-10 object-contain" />
+          <span className="text-xs font-bold tracking-widest text-gray-400 uppercase">Valo Parking</span>
         </div>
 
-        {/* ── CENTRE: Hero content ── */}
-        <div className="relative z-10 flex-1 flex flex-col justify-center px-10">
-
-          {/* Badge */}
-          <div className="inline-flex items-center gap-2 py-1.5 px-4 rounded-full bg-gold/15 border border-gold/30 text-gold text-xs font-bold tracking-widest mb-7 uppercase w-fit backdrop-blur-sm">
-            <Zap size={12} /> Smart Parking Platform
+        {/* Centre hero text */}
+        <div className="relative z-10 flex-1 flex flex-col justify-center">
+          <div className="inline-flex items-center gap-2 py-1.5 px-4 rounded-full bg-gold/10 border border-gold/20 text-gold text-xs font-bold tracking-wider mb-8 uppercase w-fit">
+            <Zap size={13} /> Smart Parking System
           </div>
 
-          {/* Big headline */}
-          <h2 className="text-5xl xl:text-6xl font-extrabold text-white leading-[1.1] mb-5 drop-shadow-2xl">
+          <h2 className="text-5xl font-extrabold text-white leading-tight mb-6">
             Park Smarter.<br />
-            <span className="bg-gradient-to-r from-yellow-400 via-amber-400 to-yellow-600 bg-clip-text text-transparent">
-              Drive Faster.
-            </span>
+            <span className="text-gold-gradient">Drive Faster.</span>
           </h2>
 
-          <p className="text-gray-300/80 text-base leading-relaxed max-w-xs mb-8">
-            Nhận diện biển số AI tức thì. Quản lý chỗ đỗ thời gian thực. Thanh toán một chạm.
+          <p className="text-gray-400 text-lg leading-relaxed max-w-sm mb-10">
+            AI-powered license plate recognition. Real-time slot availability. One-touch payment.
           </p>
 
-          {/* Feature badges */}
-          <div className="flex flex-col gap-2.5 max-w-xs">
-            <FeatureBadge icon={<Scan size={15} />} title="AI Gate Recognition" desc="Nhận diện biển số dưới 1 giây" />
-            <FeatureBadge icon={<MapPin size={15} />} title="Real-time Parking Map" desc="Bản đồ chỗ đỗ trực tiếp" />
-            <FeatureBadge icon={<ShieldCheck size={15} />} title="Secure Touchless Entry" desc="Cổng vào không chạm tay" />
+          <div className="flex flex-col gap-3">
+            <FeaturePill icon={<ShieldCheck size={14} />} text="Touchless AI Gate Check-in" />
+            <FeaturePill icon={<Car size={14} />} text="Real-time Parking Grid Map" />
+            <FeaturePill icon={<Zap size={14} />} text="Sub-second Plate Recognition" />
           </div>
         </div>
 
-        {/* ── BOTTOM: Brand card ── */}
-        <div className="relative z-10 p-10 pt-0">
-          <div className="flex items-center gap-4 p-4 rounded-2xl bg-black/40 border border-white/10 backdrop-blur-md w-fit">
-            <img src={Logo} alt="VALO" className="h-11 w-11 object-contain drop-shadow-[0_0_12px_rgba(212,175,55,0.5)]" />
-            <div>
-              <p className="text-white font-bold text-sm">VALO Enterprise</p>
-              <p className="text-gray-400 text-xs">Next-gen parking infrastructure</p>
-            </div>
+        {/* Decorative corner badge */}
+        <div className="relative z-10 flex items-center gap-4 p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm w-fit">
+          <div className="w-10 h-10 rounded-full bg-gold-gradient flex items-center justify-center text-black font-extrabold text-lg shadow-lg shadow-gold/30">
+            V
+          </div>
+          <div>
+            <p className="text-white font-bold text-sm">VALO Enterprise</p>
+            <p className="text-gray-500 text-xs">Next-gen parking infrastructure</p>
           </div>
         </div>
       </div>
@@ -476,57 +477,49 @@ export default function LoginPage() {
       {/* ════════════════════════════════════════════
           RIGHT PANEL – Auth Form
       ════════════════════════════════════════════ */}
-      <div className="w-full lg:w-[48%] flex flex-col items-center justify-center px-6 py-12 relative overflow-y-auto">
+      <div className="w-full lg:w-1/2 flex flex-col items-center justify-center px-6 py-12 relative">
 
-        {/* Subtle bg glow */}
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_60%_20%,rgba(212,175,55,0.07)_0%,transparent_65%)] pointer-events-none" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_80%_80%,rgba(212,175,55,0.04)_0%,transparent_50%)] pointer-events-none" />
+        {/* Subtle bg glow for right panel */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_70%_30%,rgba(212,175,55,0.06)_0%,transparent_60%)] pointer-events-none" />
 
-        <div className="w-full max-w-[420px] relative z-10">
+        <div className="w-full max-w-md relative z-10">
 
-          {/* ── Mobile logo ── */}
+          {/* Mobile logo */}
           <div className="flex lg:hidden items-center gap-3 mb-8 justify-center">
-            <img src={Logo} alt="VALO" className="h-10 object-contain" />
-            <div>
-              <span className="text-white font-extrabold text-base tracking-wide">VALO</span>
-              <span className="text-gold text-sm font-semibold ml-1.5">Parking</span>
-            </div>
+            <img src={Logo} alt="VALO Logo" className="h-8 object-contain" />
+            <span className="text-xs font-bold tracking-widest text-gray-400 uppercase">Valo Parking</span>
           </div>
 
-          {/* ── Greeting ── */}
-          {!(isLogin && forgotStep) && mode === 'login' && (
-            <div className="mb-7">
-              <p className="text-gold text-xs font-bold tracking-widest uppercase mb-2">Chào mừng trở lại</p>
-              <h1 className="text-3xl font-extrabold text-white">Đăng nhập tài khoản</h1>
-              <p className="text-gray-500 text-sm mt-1.5">Truy cập hệ thống quản lý bãi đỗ xe VALO</p>
-            </div>
-          )}
-          {!(isLogin && forgotStep) && mode === 'signup' && (
-            <div className="mb-7">
-              <p className="text-gold text-xs font-bold tracking-widest uppercase mb-2">Bắt đầu miễn phí</p>
-              <h1 className="text-3xl font-extrabold text-white">Tạo tài khoản</h1>
-              <p className="text-gray-500 text-sm mt-1.5">Tham gia VALO và trải nghiệm đỗ xe thông minh</p>
-            </div>
-          )}
-
           {/* ── Mode Toggle ── */}
-          {!(isLogin && forgotStep) && (
-            <div className="flex bg-white/[0.04] border border-white/10 rounded-xl p-1 mb-7">
-              {['login', 'signup'].map((m) => (
-                <button
-                  key={m}
-                  id={`tab-${m}`}
-                  onClick={() => { setMode(m); setShowPassword(false); setShowConfirm(false); setSignupStep('form'); setOtpDigits(Array(6).fill('')); resetForgot(); }}
-                  className={`flex-1 py-2.5 rounded-lg text-sm font-semibold transition-all duration-300 ${
+          <div className="flex bg-white/5 border border-white/10 rounded-xl p-1 mb-8">
+            {['login', 'signup'].map((m) => (
+              <button
+                key={m}
+                id={`tab-${m}`}
+                onClick={() => { setMode(m); setShowPassword(false); setShowConfirm(false); setSignupStep('form'); setOtpDigits(Array(6).fill('')); resetForgot(); }}
+                className={`flex-1 py-2.5 rounded-lg text-sm font-bold transition-all duration-300 ${
                   mode === m
                     ? 'bg-gold text-charcoal shadow-lg shadow-gold/20'
                     : 'text-gray-400 hover:text-white'
                   }`}
               >
-                {m === 'login' ? 'Đăng nhập' : 'Đăng ký'}
+                {m === 'login' ? 'Log In' : 'Sign Up'}
               </button>
             ))}
           </div>
+
+          {/* ── Heading ── */}
+          {!(isLogin && forgotStep) && (
+            <div className="mb-8">
+              <h1 className="text-3xl font-extrabold text-white mb-2">
+                {isLogin ? 'Welcome back' : 'Create account'}
+              </h1>
+              <p className="text-gray-500 text-sm">
+                {isLogin
+                  ? 'Sign in to access your VALO dashboard'
+                  : 'Join VALO and experience smart parking'}
+              </p>
+            </div>
           )}
 
           {isLogin && !forgotStep && (
@@ -535,17 +528,17 @@ export default function LoginPage() {
               <button
                 id="btn-google-auth"
                 onClick={handleGoogleAuth}
-                className="w-full flex items-center justify-center gap-3 bg-white hover:bg-gray-50 text-gray-800 font-semibold py-3.5 rounded-xl transition-all duration-200 hover:shadow-lg hover:shadow-black/20 hover:-translate-y-0.5 active:scale-95 border border-gray-100 mb-5 text-sm"
+                className="w-full flex items-center justify-center gap-3 bg-white hover:bg-gray-50 text-gray-800 font-bold py-3.5 rounded-xl transition-all duration-200 hover:shadow-xl hover:shadow-black/20 hover:-translate-y-0.5 active:scale-95 border border-gray-200 mb-6"
               >
                 <GoogleIcon />
-                <span>Tiếp tục với Google</span>
+                <span>{isLogin ? 'Continue with Google' : 'Sign up with Google'}</span>
               </button>
 
               {/* ── Divider ── */}
-              <div className="flex items-center gap-3 mb-5">
-                <div className="flex-1 h-px bg-white/8" />
-                <span className="text-gray-600 text-xs font-medium tracking-wider">hoặc dùng email</span>
-                <div className="flex-1 h-px bg-white/8" />
+              <div className="flex items-center gap-4 mb-6">
+                <div className="flex-1 h-px bg-white/10" />
+                <span className="text-gray-600 text-xs font-semibold uppercase tracking-wider">or continue with email</span>
+                <div className="flex-1 h-px bg-white/10" />
               </div>
             </>
           )}
@@ -557,34 +550,34 @@ export default function LoginPage() {
                 <div className="w-16 h-16 rounded-full bg-gold/10 border border-gold/20 flex items-center justify-center mx-auto mb-4">
                   <Lock size={28} className="text-gold" />
                 </div>
-                <h2 className="text-xl font-bold text-white mb-2">Quên mật khẩu?</h2>
-                <p className="text-gray-400 text-sm">Nhập email tài khoản để nhận mã OTP đặt lại mật khẩu.</p>
+                <h2 className="text-xl font-bold text-white mb-2">Forgot password?</h2>
+                <p className="text-gray-400 text-sm">Enter your account email to receive a password reset OTP.</p>
               </div>
               <div className="group">
-                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Email</label>
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Email</label>
                 <div className="relative">
                   <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 group-focus-within:text-gold transition-colors" />
                   <input
                     type="email"
                     required
-                    placeholder="ban@example.com"
+                    placeholder="you@example.com"
                     value={forgotEmail}
                     onChange={(e) => setForgotEmail(e.target.value)}
-                    className="w-full bg-white/[0.06] border border-white/[0.12] focus:border-gold/50 rounded-xl pl-11 pr-4 py-3.5 text-white placeholder-gray-600 text-sm outline-none transition-all duration-200 focus:bg-white/[0.08] focus:shadow-[0_0_0_3px_rgba(212,175,55,0.08)]"
+                    className="w-full bg-white/5 border border-white/10 focus:border-gold/60 rounded-xl pl-11 pr-4 py-3.5 text-white placeholder-gray-600 text-sm outline-none transition-all duration-200 focus:shadow-[0_0_0_3px_rgba(212,175,55,0.1)]"
                   />
                 </div>
               </div>
               <button
                 type="submit"
                 disabled={forgotLoading}
-                className="w-full flex items-center justify-center gap-2 bg-gold hover:bg-gold-dark text-charcoal font-bold py-4 rounded-xl transition-all duration-200 hover:shadow-xl hover:shadow-gold/25 hover:-translate-y-0.5 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed text-sm"
+                className="w-full flex items-center justify-center gap-2 bg-gold hover:bg-gold-dark text-charcoal font-extrabold py-4 rounded-xl transition-all duration-200 hover:shadow-xl hover:shadow-gold/25 hover:-translate-y-0.5 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed text-sm tracking-wide"
               >
                 {forgotLoading ? (
-                  <><svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Đang gửi...</>
-                ) : (<>Gửi mã OTP <ArrowRight size={16} /></>)}
+                  <><svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Sending...</>
+                ) : (<>Send OTP <ArrowRight size={16} /></>)}
               </button>
               <button type="button" onClick={resetForgot} className="w-full text-sm text-gray-500 hover:text-gray-300 transition-colors text-center">
-                ← Quay lại đăng nhập
+                ← Back to login
               </button>
             </form>
           ) : isLogin && forgotStep === 'otp' ? (
@@ -593,9 +586,9 @@ export default function LoginPage() {
                 <div className="w-16 h-16 rounded-full bg-gold/10 border border-gold/20 flex items-center justify-center mx-auto mb-4">
                   <Mail size={28} className="text-gold" />
                 </div>
-                <h2 className="text-xl font-bold text-white mb-2">Nhập mã OTP</h2>
+                <h2 className="text-xl font-bold text-white mb-2">Enter OTP</h2>
                 <p className="text-gray-400 text-sm leading-relaxed">
-                  Mã xác nhận đã gửi đến<br /><span className="text-gold font-semibold">{forgotEmail}</span>
+                  Code sent to<br /><span className="text-gold font-semibold">{forgotEmail}</span>
                 </p>
               </div>
               <div className="flex gap-2 justify-center">
@@ -609,25 +602,25 @@ export default function LoginPage() {
                     value={digit}
                     onChange={(e) => handleForgotOtpChange(i, e.target.value)}
                     onKeyDown={(e) => handleForgotOtpKeyDown(i, e)}
-                    className="w-11 h-14 text-center text-xl font-bold bg-white/[0.06] border border-white/[0.12] focus:border-gold/50 rounded-xl text-white outline-none transition-all duration-200 focus:shadow-[0_0_0_3px_rgba(212,175,55,0.1)]"
+                    className="w-11 h-14 text-center text-xl font-bold bg-white/5 border border-white/10 focus:border-gold/60 rounded-xl text-white outline-none transition-all duration-200 focus:shadow-[0_0_0_3px_rgba(212,175,55,0.1)]"
                   />
                 ))}
               </div>
               <button
                 type="submit"
                 disabled={forgotLoading || forgotOtpDigits.join('').length !== 6}
-                className="w-full flex items-center justify-center gap-2 bg-gold hover:bg-gold-dark text-charcoal font-bold py-4 rounded-xl transition-all duration-200 hover:shadow-xl hover:shadow-gold/25 hover:-translate-y-0.5 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed text-sm"
+                className="w-full flex items-center justify-center gap-2 bg-gold hover:bg-gold-dark text-charcoal font-extrabold py-4 rounded-xl transition-all duration-200 hover:shadow-xl hover:shadow-gold/25 hover:-translate-y-0.5 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed text-sm tracking-wide"
               >
                 {forgotLoading ? (
-                  <><svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Đang xác minh...</>
-                ) : (<>Xác minh OTP <ArrowRight size={16} /></>)}
+                  <><svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Verifying...</>
+                ) : (<>Verify OTP <ArrowRight size={16} /></>)}
               </button>
               <div className="flex items-center justify-between text-sm">
                 <button type="button" onClick={() => setForgotStep('email')} className="text-gray-500 hover:text-gray-300 transition-colors">
-                  ← Quay lại
+                  ← Back
                 </button>
                 <button type="button" onClick={handleForgotResendOTP} disabled={forgotLoading} className="text-gold hover:text-gold-light font-semibold transition-colors disabled:opacity-50">
-                  Gửi lại mã
+                  Resend code
                 </button>
               </div>
             </form>
@@ -637,11 +630,11 @@ export default function LoginPage() {
                 <div className="w-16 h-16 rounded-full bg-gold/10 border border-gold/20 flex items-center justify-center mx-auto mb-4">
                   <Lock size={28} className="text-gold" />
                 </div>
-                <h2 className="text-xl font-bold text-white mb-2">Tạo mật khẩu mới</h2>
-                <p className="text-gray-400 text-sm">OTP đã xác minh. Nhập mật khẩu mới cho tài khoản của bạn.</p>
+                <h2 className="text-xl font-bold text-white mb-2">Create a new password</h2>
+                <p className="text-gray-400 text-sm">OTP verified. Enter a new password for your account.</p>
               </div>
               <div className="group">
-                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Mật khẩu mới</label>
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">New password</label>
                 <div className="relative">
                   <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 group-focus-within:text-gold transition-colors" />
                   <input
@@ -650,7 +643,7 @@ export default function LoginPage() {
                     placeholder="••••••••"
                     value={forgotNewPass}
                     onChange={(e) => setForgotNewPass(e.target.value)}
-                    className="w-full bg-white/[0.06] border border-white/[0.12] focus:border-gold/50 rounded-xl pl-11 pr-12 py-3.5 text-white placeholder-gray-600 text-sm outline-none transition-all duration-200 focus:bg-white/[0.08] focus:shadow-[0_0_0_3px_rgba(212,175,55,0.08)]"
+                    className="w-full bg-white/5 border border-white/10 focus:border-gold/60 rounded-xl pl-11 pr-12 py-3.5 text-white placeholder-gray-600 text-sm outline-none transition-all duration-200 focus:shadow-[0_0_0_3px_rgba(212,175,55,0.1)]"
                   />
                   <button type="button" onClick={() => setShowForgotNewPass(!showForgotNewPass)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-300 transition-colors">
                     {showForgotNewPass ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -658,7 +651,7 @@ export default function LoginPage() {
                 </div>
               </div>
               <div className="group">
-                <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Xác nhận mật khẩu</label>
+                <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Confirm password</label>
                 <div className="relative">
                   <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 group-focus-within:text-gold transition-colors" />
                   <input
@@ -667,7 +660,7 @@ export default function LoginPage() {
                     placeholder="••••••••"
                     value={forgotConfirmPass}
                     onChange={(e) => setForgotConfirmPass(e.target.value)}
-                    className="w-full bg-white/[0.06] border border-white/[0.12] focus:border-gold/50 rounded-xl pl-11 pr-12 py-3.5 text-white placeholder-gray-600 text-sm outline-none transition-all duration-200 focus:bg-white/[0.08] focus:shadow-[0_0_0_3px_rgba(212,175,55,0.08)]"
+                    className="w-full bg-white/5 border border-white/10 focus:border-gold/60 rounded-xl pl-11 pr-12 py-3.5 text-white placeholder-gray-600 text-sm outline-none transition-all duration-200 focus:shadow-[0_0_0_3px_rgba(212,175,55,0.1)]"
                   />
                   <button type="button" onClick={() => setShowForgotConfirmPass(!showForgotConfirmPass)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-300 transition-colors">
                     {showForgotConfirmPass ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -677,15 +670,15 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={forgotLoading}
-                className="w-full flex items-center justify-center gap-2 bg-gold hover:bg-gold-dark text-charcoal font-bold py-4 rounded-xl transition-all duration-200 hover:shadow-xl hover:shadow-gold/25 hover:-translate-y-0.5 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed text-sm"
+                className="w-full flex items-center justify-center gap-2 bg-gold hover:bg-gold-dark text-charcoal font-extrabold py-4 rounded-xl transition-all duration-200 hover:shadow-xl hover:shadow-gold/25 hover:-translate-y-0.5 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed text-sm tracking-wide"
               >
                 {forgotLoading ? (
-                  <><svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Đang cập nhật...</>
-                ) : (<>Đặt lại mật khẩu <ArrowRight size={16} /></>)}
+                  <><svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Resetting...</>
+                ) : (<>Reset password <ArrowRight size={16} /></>)}
               </button>
               <div className="flex items-center justify-between text-sm">
                 <button type="button" onClick={() => { setForgotStep('otp'); setForgotVerifiedOTP(''); }} className="text-gray-500 hover:text-gray-300 transition-colors">
-                  ← Quay lại
+                  ← Back
                 </button>
               </div>
             </form>
@@ -713,7 +706,7 @@ export default function LoginPage() {
                     value={digit}
                     onChange={(e) => handleOtpChange(i, e.target.value)}
                     onKeyDown={(e) => handleOtpKeyDown(i, e)}
-                    className="w-11 h-14 text-center text-xl font-bold bg-white/[0.06] border border-white/[0.12] focus:border-gold/50 rounded-xl text-white outline-none transition-all duration-200 focus:shadow-[0_0_0_3px_rgba(212,175,55,0.1)]"
+                    className="w-11 h-14 text-center text-xl font-bold bg-white/5 border border-white/10 focus:border-gold/60 rounded-xl text-white outline-none transition-all duration-200 focus:shadow-[0_0_0_3px_rgba(212,175,55,0.1)]"
                   />
                 ))}
               </div>
@@ -721,7 +714,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={otpLoading || otpDigits.join('').length !== 6}
-                className="w-full flex items-center justify-center gap-2 bg-gold hover:bg-gold-dark text-charcoal font-bold py-4 rounded-xl transition-all duration-200 hover:shadow-xl hover:shadow-gold/25 hover:-translate-y-0.5 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed text-sm"
+                className="w-full flex items-center justify-center gap-2 bg-gold hover:bg-gold-dark text-charcoal font-extrabold py-4 rounded-xl transition-all duration-200 hover:shadow-xl hover:shadow-gold/25 hover:-translate-y-0.5 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed text-sm tracking-wide"
               >
                 {otpLoading ? (
                   <>
@@ -729,10 +722,10 @@ export default function LoginPage() {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                     </svg>
-                    Đang xác minh...
+                    Verifying...
                   </>
                 ) : (
-                  <>Xác minh Email <ArrowRight size={16} /></>
+                  <>Verify Email <ArrowRight size={16} /></>
                 )}
               </button>
 
@@ -742,7 +735,7 @@ export default function LoginPage() {
                   onClick={() => { setSignupStep('form'); setOtpDigits(Array(6).fill('')); }}
                   className="text-gray-500 hover:text-gray-300 transition-colors"
                 >
-                  ← Quay lại
+                  ← Back
                 </button>
                 <button
                   type="button"
@@ -750,7 +743,7 @@ export default function LoginPage() {
                   disabled={otpLoading}
                   className="text-gold hover:text-gold-light font-semibold transition-colors disabled:opacity-50"
                 >
-                  Gửi lại mã
+                  Resend code
                 </button>
               </div>
             </form>
@@ -760,8 +753,8 @@ export default function LoginPage() {
             {/* Full Name (signup only) */}
             {!isLogin && (
               <div className="group">
-                <label htmlFor="name" className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-                  Họ và tên
+                <label htmlFor="name" className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
+                  Full Name
                 </label>
                 <div className="relative">
                   <User size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 group-focus-within:text-gold transition-colors" />
@@ -770,10 +763,10 @@ export default function LoginPage() {
                     name="name"
                     type="text"
                     required={!isLogin}
-                    placeholder="Nguyễn Văn A"
+                    placeholder="Nguyen Van A"
                     value={form.name}
                     onChange={handleChange}
-                    className="w-full bg-white/[0.06] border border-white/[0.12] focus:border-gold/50 focus:bg-white/[0.08] rounded-xl pl-11 pr-4 py-3.5 text-white placeholder-gray-600 text-sm outline-none transition-all duration-200 focus:shadow-[0_0_0_3px_rgba(212,175,55,0.08)]"
+                    className="w-full bg-white/5 border border-white/10 focus:border-gold/60 focus:bg-white/8 rounded-xl pl-11 pr-4 py-3.5 text-white placeholder-gray-600 text-sm outline-none transition-all duration-200 focus:shadow-[0_0_0_3px_rgba(212,175,55,0.1)]"
                   />
                 </div>
               </div>
@@ -781,7 +774,7 @@ export default function LoginPage() {
 
             {/* Email */}
             <div className="group">
-              <label htmlFor="email" className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+              <label htmlFor="email" className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
                 Email
               </label>
               <div className="relative">
@@ -791,18 +784,18 @@ export default function LoginPage() {
                   name="email"
                   type="email"
                   required
-                  placeholder="ban@example.com"
+                  placeholder="you@example.com"
                   value={form.email}
                   onChange={handleChange}
-                  className="w-full bg-white/[0.06] border border-white/[0.12] focus:border-gold/50 focus:bg-white/[0.08] rounded-xl pl-11 pr-4 py-3.5 text-white placeholder-gray-600 text-sm outline-none transition-all duration-200 focus:shadow-[0_0_0_3px_rgba(212,175,55,0.08)]"
+                  className="w-full bg-white/5 border border-white/10 focus:border-gold/60 focus:bg-white/8 rounded-xl pl-11 pr-4 py-3.5 text-white placeholder-gray-600 text-sm outline-none transition-all duration-200 focus:shadow-[0_0_0_3px_rgba(212,175,55,0.1)]"
                 />
               </div>
             </div>
 
             {/* Password */}
             <div className="group">
-              <label htmlFor="password" className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-                Mật khẩu
+              <label htmlFor="password" className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
+                Password
               </label>
               <div className="relative">
                 <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 group-focus-within:text-gold transition-colors" />
@@ -814,7 +807,7 @@ export default function LoginPage() {
                   placeholder="••••••••"
                   value={form.password}
                   onChange={handleChange}
-                  className="w-full bg-white/[0.06] border border-white/[0.12] focus:border-gold/50 rounded-xl pl-11 pr-12 py-3.5 text-white placeholder-gray-600 text-sm outline-none transition-all duration-200 focus:bg-white/[0.08] focus:shadow-[0_0_0_3px_rgba(212,175,55,0.08)]"
+                  className="w-full bg-white/5 border border-white/10 focus:border-gold/60 rounded-xl pl-11 pr-12 py-3.5 text-white placeholder-gray-600 text-sm outline-none transition-all duration-200 focus:shadow-[0_0_0_3px_rgba(212,175,55,0.1)]"
                 />
                 <button
                   type="button"
@@ -830,8 +823,8 @@ export default function LoginPage() {
             {/* Confirm Password (signup only) */}
             {!isLogin && (
               <div className="group">
-                <label htmlFor="confirm" className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-                  Xác nhận mật khẩu
+                <label htmlFor="confirm" className="block text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">
+                  Confirm Password
                 </label>
                 <div className="relative">
                   <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 group-focus-within:text-gold transition-colors" />
@@ -843,7 +836,7 @@ export default function LoginPage() {
                     placeholder="••••••••"
                     value={form.confirm}
                     onChange={handleChange}
-                    className="w-full bg-white/[0.06] border border-white/[0.12] focus:border-gold/50 rounded-xl pl-11 pr-12 py-3.5 text-white placeholder-gray-600 text-sm outline-none transition-all duration-200 focus:bg-white/[0.08] focus:shadow-[0_0_0_3px_rgba(212,175,55,0.08)]"
+                    className="w-full bg-white/5 border border-white/10 focus:border-gold/60 rounded-xl pl-11 pr-12 py-3.5 text-white placeholder-gray-600 text-sm outline-none transition-all duration-200 focus:shadow-[0_0_0_3px_rgba(212,175,55,0.1)]"
                   />
                   <button
                     type="button"
@@ -865,7 +858,7 @@ export default function LoginPage() {
                   onClick={() => { setForgotStep('email'); setForgotEmail(form.email); }}
                   className="text-xs text-gray-500 hover:text-gold transition-colors font-medium"
                 >
-                  Quên mật khẩu?
+                  Forgot password?
                 </button>
               </div>
             )}
@@ -875,7 +868,7 @@ export default function LoginPage() {
               id="btn-submit-auth"
               type="submit"
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2 bg-gold hover:bg-gold-dark text-charcoal font-bold py-4 rounded-xl transition-all duration-200 hover:shadow-xl hover:shadow-gold/30 hover:-translate-y-0.5 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed mt-2 text-sm"
+              className="w-full flex items-center justify-center gap-2 bg-gold hover:bg-gold-dark text-charcoal font-extrabold py-4 rounded-xl transition-all duration-200 hover:shadow-xl hover:shadow-gold/25 hover:-translate-y-0.5 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed mt-2 text-sm tracking-wide"
             >
               {loading ? (
                 <>
@@ -883,11 +876,11 @@ export default function LoginPage() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
-                  {isLogin ? 'Đang đăng nhập…' : 'Đang tạo tài khoản…'}
+                  {isLogin ? 'Signing in…' : 'Creating account…'}
                 </>
               ) : (
                 <>
-                  {isLogin ? 'Đăng nhập' : 'Tạo tài khoản'}
+                  {isLogin ? 'Sign In' : 'Create Account'}
                   <ArrowRight size={16} />
                 </>
               )}
@@ -898,28 +891,28 @@ export default function LoginPage() {
           {/* ── Terms (signup only) ── */}
           {!isLogin && signupStep === 'form' && (
             <p className="text-center text-xs text-gray-600 mt-4 leading-relaxed">
-              Bằng cách tạo tài khoản, bạn đồng ý với{' '}
-              <button className="text-gold hover:underline">Điều khoản dịch vụ</button>{' '}
-              và{' '}
-              <button className="text-gold hover:underline">Chính sách bảo mật</button>.
+              By creating an account you agree to our{' '}
+              <button className="text-gold hover:underline">Terms of Service</button>{' '}
+              and{' '}
+              <button className="text-gold hover:underline">Privacy Policy</button>.
             </p>
           )}
 
           {/* ── Switch mode ── */}
-          <p className="text-center text-sm text-gray-500 mt-5">
-            {isLogin ? 'Chưa có tài khoản? ' : 'Đã có tài khoản? '}
+          <p className="text-center text-sm text-gray-500 mt-6">
+            {isLogin ? "Don't have an account? " : 'Already have an account? '}
             <button
               onClick={() => { setMode(isLogin ? 'signup' : 'login'); setShowPassword(false); setShowConfirm(false); setSignupStep('form'); setOtpDigits(Array(6).fill('')); }}
               className="text-gold hover:text-gold-light font-bold transition-colors"
             >
-              {isLogin ? 'Đăng ký ngay' : 'Đăng nhập'}
+              {isLogin ? 'Sign up' : 'Log in'}
             </button>
           </p>
 
           {/* ── Back to home ── */}
-          <div className="flex justify-center mt-6">
-            <Link to="/" className="text-xs text-gray-600 hover:text-gold transition-colors flex items-center gap-1.5 group">
-              <span className="group-hover:-translate-x-0.5 transition-transform">←</span> Về trang chủ VALO
+          <div className="flex justify-center mt-8">
+            <Link to="/" className="text-xs text-gray-600 hover:text-gray-400 transition-colors flex items-center gap-1.5">
+              ← Back to VALO Home
             </Link>
           </div>
         </div>

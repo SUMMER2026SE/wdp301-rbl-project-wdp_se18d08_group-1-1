@@ -36,7 +36,7 @@ export const ServiceListScreen = ({ navigation }: Props) => {
       const response = await serviceService.getActiveServices();
       setServices(response);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Không thể tải danh sách dịch vụ.');
+      setError(loadError instanceof Error ? loadError.message : 'Unable to load services.');
       setServices([]);
     } finally {
       setLoading(false);
@@ -81,11 +81,11 @@ export const ServiceListScreen = ({ navigation }: Props) => {
           <View style={styles.metaRow}>
             <View style={styles.metaPill}>
               <Ionicons name="time-outline" size={13} color={COLORS.textMuted} />
-              <Text style={styles.metaText}>{duration > 0 ? `${duration} phút` : 'Theo lịch'}</Text>
+              <Text style={styles.metaText}>{duration > 0 ? `${duration} min` : 'By appointment'}</Text>
             </View>
             <View style={styles.metaPill}>
               <View style={styles.statusDot} />
-              <Text style={styles.metaText}>Đang cung cấp</Text>
+              <Text style={styles.metaText}>Available</Text>
             </View>
           </View>
         </View>
@@ -97,8 +97,8 @@ export const ServiceListScreen = ({ navigation }: Props) => {
     <SafeAreaView edges={['top']} style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#080808" />
       <ScreenHeader
-        title="Dịch vụ"
-        subtitle={`${services.length} dịch vụ`}
+        title="Services"
+        subtitle={`${services.length} services`}
         onBack={() => navigation.goBack()}
       />
 
@@ -116,8 +116,8 @@ export const ServiceListScreen = ({ navigation }: Props) => {
           ListEmptyComponent={
             <EmptyState
               icon="sparkles-outline"
-              title="Chưa có dịch vụ"
-              message="Danh sách dịch vụ sẽ được cập nhật khi bãi xe mở thêm tiện ích."
+              title="No services available"
+              message="New services will appear here as they become available."
             />
           }
           refreshControl={

@@ -19,13 +19,13 @@ export default function ComingSoonScreen() {
         <View style={styles.iconRing}>
           <Ionicons name="construct-outline" size={40} color={COLORS.gold} />
         </View>
-        <Text style={styles.title}>Sắp ra mắt</Text>
+        <Text style={styles.title}>Coming soon</Text>
         <Text style={styles.subtitle}>
-          Tính năng này đang được phát triển và sẽ sớm có mặt trong phiên bản tiếp theo.
+          This feature is in development and will be available in a future release.
         </Text>
         <View style={styles.badge}>
           <Ionicons name="flash-outline" size={12} color={COLORS.gold} />
-          <Text style={styles.badgeText}>Phase 2 — Đang phát triển</Text>
+          <Text style={styles.badgeText}>Phase 2 — In development</Text>
         </View>
       </View>
     </SafeAreaView>

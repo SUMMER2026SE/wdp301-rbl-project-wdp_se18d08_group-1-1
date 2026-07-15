@@ -22,7 +22,7 @@ export const getMembershipVisualTier = (
 };
 
 export const getMembershipTierLabel = (tier: MembershipVisualTier) => {
-  if (tier === 'yearly') return 'Thành viên năm';
-  if (tier === 'monthly') return 'Thành viên tháng';
-  return 'Khách hàng';
+  if (tier === 'yearly') return 'Annual member';
+  if (tier === 'monthly') return 'Monthly member';
+  return 'Customer';
 };

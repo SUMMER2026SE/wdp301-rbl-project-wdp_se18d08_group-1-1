@@ -10,6 +10,9 @@ router.get('/active-status', sessionController.getActiveParkingStatus);
 // POST /api/sessions/verify-plate
 router.post('/verify-plate', sessionController.verifyPlate);
 
+// GET /api/sessions/check-full
+router.get('/check-full', sessionController.checkParkingFull);
+
 // POST /api/sessions/kiosk-entry
 router.post('/kiosk-entry', sessionController.createKioskSession);
 
@@ -24,5 +27,8 @@ router.post('/kiosk-exit-scan', sessionController.kioskExitScan);
 
 // POST /api/sessions/kiosk-checkout
 router.post('/kiosk-checkout', sessionController.kioskCheckout);
+
+// GET /api/sessions/check-payos/:orderCode
+router.get('/check-payos/:orderCode', sessionController.checkPayosStatus);
 
 module.exports = router;

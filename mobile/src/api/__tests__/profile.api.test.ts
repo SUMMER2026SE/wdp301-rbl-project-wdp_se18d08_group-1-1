@@ -34,6 +34,6 @@ describe('profile API', () => {
   it('rejects a successful response without profile data', async () => {
     jest.spyOn(apiClient, 'get').mockResolvedValue({ success: true });
 
-    await expect(fetchProfile()).rejects.toThrow('Dữ liệu hồ sơ không hợp lệ.');
+    await expect(fetchProfile()).rejects.toThrow('Invalid profile data.');
   });
 });

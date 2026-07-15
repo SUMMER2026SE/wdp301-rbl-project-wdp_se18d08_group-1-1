@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import {
   ActivityIndicator,
@@ -28,17 +27,17 @@ export const ChangePasswordScreen = ({ navigation }: { navigation: { goBack: () 
 
   const handleSubmit = async () => {
     if (newPassword.length < 6) {
-      setError('Mật khẩu mới phải có ít nhất 6 ký tự.');
+      setError('The new password must be at least 6 characters.');
       return;
     }
 
     if (newPassword === currentPassword) {
-      setError('Mật khẩu mới phải khác với mật khẩu hiện tại.');
+      setError('The new password must differ from your current password.');
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      setError('Mật khẩu xác nhận không khớp.');
+      setError('The password confirmation does not match.');
       return;
     }
 
@@ -46,13 +45,13 @@ export const ChangePasswordScreen = ({ navigation }: { navigation: { goBack: () 
     setError('');
     try {
       await profileService.changePassword({ currentPassword, newPassword, confirmPassword });
-      toast.showSuccess('Đổi mật khẩu thành công');
+      toast.showSuccess('Password changed successfully');
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
       navigation.goBack();
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'Đổi mật khẩu thất bại.');
+      setError(submitError instanceof Error ? submitError.message : 'Unable to change password.');
     } finally {
       setLoading(false);
     }
@@ -71,26 +70,26 @@ export const ChangePasswordScreen = ({ navigation }: { navigation: { goBack: () 
 
   const getStrengthText = () => {
     switch (strength) {
-      case 'strong': return 'Mạnh';
-      case 'medium': return 'Trung bình';
-      case 'weak': return 'Yếu';
-      default: return 'Chưa nhập';
+      case 'strong': return 'Strong';
+      case 'medium': return 'Medium';
+      case 'weak': return 'Weak';
+      default: return 'Not entered';
     }
   };
 
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#080808" />
-      <ScreenHeader title="Đổi mật khẩu" onBack={() => navigation.goBack()} />
+      <ScreenHeader title="Change password" onBack={() => navigation.goBack()} />
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={styles.formCard}>
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Mật khẩu hiện tại</Text>
+            <Text style={styles.label}>Current password</Text>
             <View style={styles.inputWrap}>
               <TextInput
                 style={styles.input}
-                placeholder="Nhập mật khẩu hiện tại"
+                placeholder="Enter current password"
                 placeholderTextColor={COLORS.textMuted}
                 secureTextEntry
                 value={currentPassword}
@@ -101,7 +100,7 @@ export const ChangePasswordScreen = ({ navigation }: { navigation: { goBack: () 
 
           <View style={styles.inputGroup}>
             <View style={styles.labelRow}>
-              <Text style={styles.label}>Mật khẩu mới</Text>
+              <Text style={styles.label}>New password</Text>
               {newPassword.length > 0 ? (
                 <Text style={[styles.strengthText, { color: getStrengthColor() }]}>
                   {getStrengthText()}
@@ -111,7 +110,7 @@ export const ChangePasswordScreen = ({ navigation }: { navigation: { goBack: () 
             <View style={styles.inputWrap}>
               <TextInput
                 style={styles.input}
-                placeholder="Nhập mật khẩu mới"
+                placeholder="Enter new password"
                 placeholderTextColor={COLORS.textMuted}
                 secureTextEntry
                 value={newPassword}
@@ -121,11 +120,11 @@ export const ChangePasswordScreen = ({ navigation }: { navigation: { goBack: () 
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Xác nhận mật khẩu</Text>
+            <Text style={styles.label}>Confirm password</Text>
             <View style={styles.inputWrap}>
               <TextInput
                 style={styles.input}
-                placeholder="Nhập lại mật khẩu mới"
+                placeholder="Re-enter new password"
                 placeholderTextColor={COLORS.textMuted}
                 secureTextEntry
                 value={confirmPassword}
@@ -146,7 +145,7 @@ export const ChangePasswordScreen = ({ navigation }: { navigation: { goBack: () 
           {loading ? (
             <ActivityIndicator color={COLORS.textInverse} size="small" />
           ) : (
-            <Text style={styles.primaryButtonText}>Đổi Mật Khẩu</Text>
+            <Text style={styles.primaryButtonText}>Change password</Text>
           )}
         </TouchableOpacity>
       </ScrollView>

@@ -13,6 +13,7 @@ describe('booking action availability', () => {
   it('allows cancellation and extension before the backend 30-minute cutoff', () => {
     expect(getBookingActionAvailability(booking, NOW)).toMatchObject({
       canCancel: true,
+      canChangeVehicle: true,
       canCheckIn: false,
       canExtend: true,
     });
@@ -27,6 +28,11 @@ describe('booking action availability', () => {
 
   it('blocks extension after three modifications', () => {
     expect(getBookingActionAvailability({ ...booking, modificationCount: 3 }, NOW).canExtend).toBe(false);
+    expect(getBookingActionAvailability({ ...booking, modificationCount: 3 }, NOW).canChangeVehicle).toBe(false);
+  });
+
+  it('blocks changing vehicle after the booking starts', () => {
+    expect(getBookingActionAvailability(booking, new Date(booking.startTime).getTime()).canChangeVehicle).toBe(false);
   });
 
   it('allows active bookings to extend and check out', () => {

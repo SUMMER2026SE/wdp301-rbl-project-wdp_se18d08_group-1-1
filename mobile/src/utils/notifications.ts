@@ -1,5 +1,5 @@
 import { format, formatDistanceToNow } from 'date-fns';
-import { vi } from 'date-fns/locale';
+import { enGB } from 'date-fns/locale';
 
 import { colors } from '@/theme';
 import type { NotificationPriority, NotificationType, UserNotification } from '@/types/models';
@@ -44,9 +44,9 @@ export const formatNotificationTimestamp = (createdAt: string, now = new Date())
   const date = new Date(createdAt);
   const diff = now.getTime() - date.getTime();
   if (diff < 24 * 60 * 60 * 1000) {
-    return formatDistanceToNow(date, { addSuffix: true, locale: vi });
+    return formatDistanceToNow(date, { addSuffix: true, locale: enGB });
   }
-  return format(date, 'HH:mm dd/MM/yyyy', { locale: vi });
+  return format(date, 'HH:mm dd/MM/yyyy', { locale: enGB });
 };
 
 export const getNotificationId = (item: UserNotification) => item.id || item._id || item.notificationId || '';

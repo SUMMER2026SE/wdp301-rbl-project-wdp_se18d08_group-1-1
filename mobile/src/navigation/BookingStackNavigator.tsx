@@ -2,6 +2,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { CreateBookingScreen } from '../screens/booking/CreateBookingScreen';
 import { FindParkingScreen } from '../screens/booking/FindParkingScreen';
+import { BookingListScreen } from '../screens/booking/BookingListScreen';
+import { BookingDetailScreen } from '../screens/booking/BookingDetailScreen';
 
 export type BookingStackParamList = {
   BookingList: undefined;
@@ -27,6 +29,8 @@ export const BookingStackNavigator = () => (
       contentStyle: { backgroundColor: '#0D0D0D' },
     }}
   >
+    <Stack.Screen name="BookingList" component={BookingListScreen} />
+    <Stack.Screen name="BookingDetail" component={BookingDetailScreen} />
     <Stack.Screen name="CreateBooking" component={CreateBookingScreen} />
     <Stack.Screen name="FindParking" component={FindParkingScreen} />
   </Stack.Navigator>
