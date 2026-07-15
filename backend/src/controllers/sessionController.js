@@ -117,8 +117,8 @@ exports.verifyPlate = async (req, res, next) => {
     const now = new Date();
     
     // Tìm Booking của hôm nay (được đến sớm tối đa 15 phút, đến muộn tối đa 15 phút nếu chưa check-in)
-    const earlyCheckinLimit = new Date(now.getTime() + 15 * 60 * 1000);
-    const lateCheckinLimit = new Date(now.getTime() - 15 * 60 * 1000);
+    const earlyCheckinLimit = new Date(now.getTime() + 30 * 60 * 1000);
+    const lateCheckinLimit = new Date(now.getTime() - 30 * 60 * 1000);
     const cancelCheckinLimit = new Date(now.getTime() - 30 * 60 * 1000); // Tối đa 30 phút trễ để vớt vát
     
     let booking = await Booking.findOne({
@@ -356,10 +356,10 @@ exports.createKioskSession = async (req, res, next) => {
     }
 
     const now = new Date();
-    const earlyCheckinLimit = new Date(now.getTime() + 15 * 60 * 1000);
+    const earlyCheckinLimit = new Date(now.getTime() + 30 * 60 * 1000);
 
-    // 1. Kiểm tra Booking hợp lệ của biển số (đến sớm tối đa 15 phút, đến muộn tối đa 15 phút)
-    const lateCheckinLimit = new Date(now.getTime() - 15 * 60 * 1000);
+    // 1. Kiểm tra Booking hợp lệ của biển số (đến sớm tối đa 30 phút, đến muộn tối đa 30 phút)
+    const lateCheckinLimit = new Date(now.getTime() - 30 * 60 * 1000);
     const cancelCheckinLimit = new Date(now.getTime() - 30 * 60 * 1000);
 
     const activeBooking = await Booking.findOne({
@@ -790,7 +790,14 @@ exports.kioskExitScan = async (req, res, next) => {
           previousSpent += s.totalPrice || 0;
         }
 
-        const totalIncurred = previousSpent + pricing.finalTotal;
+        const BookingService = require('../models/BookingService');
+        const bookedServices = await BookingService.find({ bookingId: booking._id });
+        let servicesTotal = 0;
+        for (const bs of bookedServices) {
+          servicesTotal += bs.price;
+        }
+
+        const totalIncurred = previousSpent + pricing.finalTotal + servicesTotal;
 
         if (totalIncurred > booking.prepaidAmount) {
           amountToPay = totalIncurred - booking.prepaidAmount;
@@ -896,7 +903,14 @@ exports.kioskCheckout = async (req, res, next) => {
           previousSpent += s.totalPrice || 0;
         }
 
-        const totalIncurred = previousSpent + pricing.finalTotal;
+        const BookingService = require('../models/BookingService');
+        const bookedServices = await BookingService.find({ bookingId: booking._id });
+        let servicesTotal = 0;
+        for (const bs of bookedServices) {
+          servicesTotal += bs.price;
+        }
+
+        const totalIncurred = previousSpent + pricing.finalTotal + servicesTotal;
         if (totalIncurred > booking.prepaidAmount) {
           amountToPay = totalIncurred - booking.prepaidAmount;
           refundAmount = 0;

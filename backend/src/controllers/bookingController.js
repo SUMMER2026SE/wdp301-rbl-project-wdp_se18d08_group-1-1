@@ -22,6 +22,15 @@ const buildSlotKey = (floorId, slotCode) => `${String(floorId)}:${normalizeSlotC
 
 const sameObjectId = (a, b) => String(a || '') === String(b || '');
 
+exports.getPricingConfig = async (req, res, next) => {
+  try {
+    const config = await pricingEngine.getActivePricingConfig();
+    res.status(200).json({ success: true, data: config });
+  } catch (err) {
+    next(err);
+  }
+};
+
 const parseBookingTimeRange = (startTime, endTime) => {
   const start = new Date(startTime);
   const end = new Date(endTime);
@@ -85,10 +94,18 @@ const getAllBookableSlots = async () => {
 };
 
 const getUnavailableSlotKeys = async (start, end, userId = null) => {
+  const now = new Date();
   const overlappingBookingsPromise = Booking.find({
     status: { $in: BOOKING_STATUSES_THAT_BLOCK_SLOT },
     scheduledStart: { $lt: end },
     scheduledEnd: { $gt: start },
+    $or: [
+      { status: { $in: ['ACTIVE', 'PAUSED'] } },
+      {
+        status: 'PAID',
+        scheduledStart: { $gt: new Date(now.getTime() - 15 * 60 * 1000) }
+      }
+    ]
   })
     .select('floorId parkingSlot')
     .lean();
@@ -689,13 +706,27 @@ exports.cancelBooking = async (req, res, next) => {
 
     // Hoàn tiền đặt chỗ vào Wallet (kể cả thanh toán trước đó bằng VietQR)
     if (booking.prepaidAmount > 0) {
-      await walletService.creditWallet(
-        req.user._id,
-        booking.prepaidAmount,
-        'REFUND',
-        `Hoàn tiền hủy đặt chỗ ô ${booking.parkingSlot} - Xe ${booking.licensePlate}`,
-        { refSource: 'booking', refSourceId: booking._id }
-      );
+      const timeBeforeStart = booking.scheduledStart.getTime() - now.getTime();
+      let refundPercentage = 0;
+      if (timeBeforeStart >= 60 * 60 * 1000) {
+        refundPercentage = 1;
+      } else if (timeBeforeStart >= 30 * 60 * 1000) {
+        refundPercentage = 0.5;
+      } else {
+        refundPercentage = 0;
+      }
+
+      const refundAmount = booking.prepaidAmount * refundPercentage;
+
+      if (refundAmount > 0) {
+        await walletService.creditWallet(
+          req.user._id,
+          refundAmount,
+          'REFUND',
+          `Hoàn tiền hủy đặt chỗ ô ${booking.parkingSlot} - Xe ${booking.licensePlate} (${refundPercentage * 100}%)`,
+          { refSource: 'booking', refSourceId: booking._id }
+        );
+      }
     }
 
     booking.status = 'CANCELLED';
@@ -1630,6 +1661,27 @@ exports.createBulkBooking = async (req, res, next) => {
         scheduledEnd: { $gt: start }
       }).session(session);
       if (slotOverlapBooking) throw new Error(`Ô đỗ ${parkingSlot} đã có người đặt trong khung giờ bạn chọn.`);
+
+      // Check if vehicle is currently inside the parking lot (active Session)
+      const Session = require('../models/Session');
+      const activeSession = await Session.findOne({
+        licensePlate: vehicle.licensePlate,
+        status: 'active'
+      }).session(session);
+      
+      if (activeSession) {
+        let expectedCheckoutTime = new Date(activeSession.checkInTime);
+        expectedCheckoutTime.setHours(expectedCheckoutTime.getHours() + (activeSession.expectedDurationHours || 1));
+        
+        // Cập nhật: Nếu xe đã overstay (expectedCheckoutTime nằm trong quá khứ), nhưng vẫn chưa checkout,
+        // thì vẫn tính là đang chiếm dụng đến thời điểm hiện tại.
+        const effectiveCheckoutTime = new Date(Math.max(expectedCheckoutTime.getTime(), Date.now()));
+        
+        // Block nếu thời gian bắt đầu booking nằm trước lúc xe rời đi (bao gồm cả hiện tại)
+        if (start < effectiveCheckoutTime) {
+          throw new Error(`Xe ${vehicle.licensePlate} hiện đang đỗ trong bãi và chưa checkout. Không thể đặt chỗ mới cho khung giờ này.`);
+        }
+      }
 
       // Check subscription
       const Subscription = require('../models/Subscription');

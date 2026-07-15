@@ -228,6 +228,7 @@ export default function CreateBookingPage() {
 
   // Map state
   const [floors, setFloors] = useState([]);
+  const [pricingConfig, setPricingConfig] = useState(null);
   const [currentFloorId, setCurrentFloorId] = useState(null);
   const [dbSlots, setDbSlots] = useState([]);
   const [activeSessions, setActiveSessions] = useState([]);
@@ -371,8 +372,11 @@ export default function CreateBookingPage() {
     !selectedSlotIsOwnVipSlot
   );
   const pricePreview = useMemo(
-    () => calculateBookingPrice(startTime, endTime, { waiveOpeningFee: selectedSlotIsOwnVipSlot }),
-    [endTime, selectedSlotIsOwnVipSlot, startTime]
+    () => calculateBookingPrice(startTime, endTime, { 
+      waiveOpeningFee: selectedSlotIsOwnVipSlot,
+      config: pricingConfig
+    }),
+    [endTime, selectedSlotIsOwnVipSlot, startTime, pricingConfig]
   );
   const parkingTotal = selectedSlotIsOwnVipSlot ? 0 : pricePreview.totalAmount;
   const grandTotal = parkingTotal + serviceTotal;
@@ -407,7 +411,8 @@ export default function CreateBookingPage() {
       }).then(res => res.ok ? res.data?.data : null).catch(() => null),
       getServices().then(res => res.ok ? res.data?.data : []).catch(() => []),
       fetch(`${import.meta.env.VITE_API_BASE_URL}/parking-floors`).then(res => res.json().catch(() => ({}))),
-    ]).then(([walletData, vehiclesData, profileData, servicesData, floorsData]) => {
+      fetch(`${import.meta.env.VITE_API_BASE_URL}/pricing-config`).then(res => res.json().catch(() => ({}))),
+    ]).then(([walletData, vehiclesData, profileData, servicesData, floorsData, pricingData]) => {
       if (walletData) setWallet(walletData);
       if (profileData) setProfile(profileData);
       if (vehiclesData) {
@@ -419,6 +424,9 @@ export default function CreateBookingPage() {
         const fls = floorsData.data || [];
         setFloors(fls);
         if (fls.length > 0) setCurrentFloorId(fls[0]._id);
+      }
+      if (pricingData && pricingData.success) {
+        setPricingConfig(pricingData.data);
       }
     }).finally(() => {
       setLoading(false);
@@ -1109,16 +1117,7 @@ export default function CreateBookingPage() {
                   <span className="text-gray-500 font-medium flex items-center gap-2"><Clock size={15} /> Duration</span>
                   <span className="font-bold text-gray-900">{pricePreview.durationMinutes || 0} mins ({pricePreview.paidHours || 0} billable h)</span>
                 </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-500 font-medium">Opening fee</span>
-                  <span className="font-bold text-gray-900">{selectedSlotIsOwnVipSlot ? 'Waived' : formatMoney(pricePreview.openingFee)}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-500 font-medium">Day / Night usage</span>
-                  <span className="font-bold text-gray-900 text-right">
-                    {Math.round((pricePreview.dayMinutes || 0) / 60 * 10) / 10}h / {Math.round((pricePreview.nightMinutes || 0) / 60 * 10) / 10}h
-                  </span>
-                </div>
+
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-gray-500 font-medium flex items-center gap-2"><CreditCard size={15} /> Parking</span>
                   <span className="font-bold text-gray-900 text-right">
