@@ -35,6 +35,7 @@ export default function KioskWelcome({ onStart, updateFormData }) {
   const isParkingFullRef = useRef(false);
   const [, setScanMessage] = useState('Scanning Plate...');
   const [showFullModal, setShowFullModal] = useState(false);
+  const [showAlreadyInsideModal, setShowAlreadyInsideModal] = useState(false);
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
@@ -239,7 +240,7 @@ export default function KioskWelcome({ onStart, updateFormData }) {
     }
 
     if (verifyData.isActive) {
-      alert('This vehicle is already inside the parking lot!');
+      setShowAlreadyInsideModal(true);
       updateFormData({ licensePlate: formatted, entryImageBase64: imageBase64 });
       return true;
     }
@@ -458,6 +459,16 @@ export default function KioskWelcome({ onStart, updateFormData }) {
         isOpen={showFullModal} 
         onClose={() => {
           setShowFullModal(false);
+          window.location.replace('/kiosk');
+        }} 
+      />
+
+      <ParkingFullModal 
+        isOpen={showAlreadyInsideModal} 
+        title="ALREADY INSIDE"
+        message="This vehicle is already inside the parking lot!"
+        onClose={() => {
+          setShowAlreadyInsideModal(false);
           window.location.replace('/kiosk');
         }} 
       />

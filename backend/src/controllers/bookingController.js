@@ -1333,7 +1333,6 @@ exports.createBookingHold = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Ô đỗ này hiện đã có xe đỗ' });
     }
 
-    // Kiểm tra xem ô đỗ có booking nào sắp diễn ra không
     const overlappingBooking = await Booking.findOne({
       floorId,
       parkingSlot: slotCode,
@@ -1344,6 +1343,18 @@ exports.createBookingHold = async (req, res, next) => {
 
     if (overlappingBooking) {
       return res.status(400).json({ success: false, message: 'Ô đỗ này đã có lịch đặt trước. Vui lòng chọn ô khác.' });
+    }
+
+    if (licensePlate) {
+      const vehicleOverlap = await Booking.findOne({
+        licensePlate,
+        status: { $in: ['PAID', 'PAUSED'] },
+        scheduledStart: { $lt: end },
+        scheduledEnd: { $gt: start }
+      });
+      if (vehicleOverlap) {
+        return res.status(400).json({ success: false, message: `Vehicle ${licensePlate} already has another booking overlapping with this time period` });
+      }
     }
 
     // Cho phép người dùng giữ nhiều ô đỗ cùng lúc (tối đa 5 ô) để hỗ trợ Bulk Booking

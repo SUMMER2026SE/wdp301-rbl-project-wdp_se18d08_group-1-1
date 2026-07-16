@@ -232,8 +232,8 @@ exports.verifyPlate = async (req, res, next) => {
       // If the number of unique unavailable slots is >= total slots, the lot is full
       if (unavailableKeys.size >= totalSlots) {
         isFull = true;
-      } else if (isVIP || isRegisteredVehicle) {
-        // Auto assign a slot for VIP/Registered vehicles
+      } else if (isVIP) {
+        // Auto assign a slot for VIP vehicles
         const availableSlot = allSlots.find(s => !unavailableKeys.has(`${s.floorId.toString()}_${s.slotCode}`));
         if (availableSlot) {
           vipAssignedSlot = availableSlot.slotCode;

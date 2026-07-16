@@ -145,11 +145,14 @@ export default function WalletPage() {
 
         const walletData = walletRes.data?.data || {};
         setWallet(walletData);
-        setTransactions(
-          Array.isArray(transactionsRes.data?.data)
-            ? transactionsRes.data.data
-            : [],
-        );
+        const txData = Array.isArray(transactionsRes.data?.data) ? transactionsRes.data.data : [];
+        setTransactions(txData);
+        
+        // Auto-sync pending topups if webhook was missed locally
+        const pendingTopUp = txData.find(tx => tx.status === 'PENDING' && tx.type === 'TOP_UP' && tx.payosOrderCode);
+        if (pendingTopUp) {
+          setPollingOrderCode(pendingTopUp.payosOrderCode);
+        }
         window.dispatchEvent(
           new CustomEvent("valo_balance_change", {
             detail: walletData.balance || 0,
