@@ -23,9 +23,9 @@ import type { Vehicle } from '@/types/models';
 type Props = NativeStackScreenProps<ProfileStackParamList, 'VehicleList'>;
 
 const STATUS_LABELS: Record<string, string> = {
-  approved: 'Đã duyệt',
-  pending: 'Chờ duyệt',
-  rejected: 'Từ chối',
+  approved: 'Approved',
+  pending: 'Pending',
+  rejected: 'Rejected',
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -48,7 +48,7 @@ export const VehicleListScreen = ({ navigation }: Props) => {
       const response = await vehiclesService.getMyVehicles();
       setVehicles(response.data || []);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Không thể tải danh sách xe.');
+      setError(loadError instanceof Error ? loadError.message : 'Unable to load vehicles.');
       setVehicles([]);
     } finally {
       setLoading(false);
@@ -69,7 +69,7 @@ export const VehicleListScreen = ({ navigation }: Props) => {
     const vehicleId = getVehicleId(item);
     const status = item.status || 'pending';
     const statusColor = STATUS_COLORS[status] ?? COLORS.textMuted;
-    const description = [item.brand, item.model].filter(Boolean).join(' ') || item.vehicleType || 'Phương tiện';
+    const description = [item.brand, item.model].filter(Boolean).join(' ') || item.vehicleType || 'Vehicle';
 
     return (
       <Pressable
@@ -83,7 +83,7 @@ export const VehicleListScreen = ({ navigation }: Props) => {
         <View style={styles.vehicleBody}>
           <View style={styles.vehicleTop}>
             <Text style={styles.plate}>{item.licensePlate}</Text>
-            {item.isDefault ? <Text style={styles.defaultBadge}>Mặc định</Text> : null}
+            {item.isDefault ? <Text style={styles.defaultBadge}>Default</Text> : null}
           </View>
           <Text style={styles.vehicleMeta} numberOfLines={1}>
             {description}{item.color ? ` - ${item.color}` : ''}
@@ -107,8 +107,8 @@ export const VehicleListScreen = ({ navigation }: Props) => {
     <SafeAreaView edges={['top']} style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#080808" />
       <ScreenHeader
-        title="Xe của tôi"
-        subtitle={`${vehicles.length} phương tiện`}
+        title="My vehicles"
+        subtitle={`${vehicles.length} vehicles`}
         onBack={() => navigation.goBack()}
         right={
           <TouchableOpacity
@@ -136,9 +136,9 @@ export const VehicleListScreen = ({ navigation }: Props) => {
           ListEmptyComponent={
             <EmptyState
               icon="car-outline"
-              title="Chưa có xe"
-              message="Thêm xe để đặt chỗ nhanh hơn và dùng check-in tự động."
-              actionLabel="Thêm xe"
+              title="No vehicles yet"
+              message="Add a vehicle for faster booking and automatic check-in."
+              actionLabel="Add vehicle"
               onAction={() => navigation.navigate('AddVehicle')}
             />
           }

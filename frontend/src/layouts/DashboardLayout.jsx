@@ -59,6 +59,11 @@ const NAV_CONFIG = {
       to: "/admin/parking-lots",
     },
     {
+      label: "Pricing Config",
+      icon: <DollarSign size={18} />,
+      to: "/admin/pricing",
+    },
+    {
       label: "Ticket Packages",
       icon: <Ticket size={18} />,
       to: "/admin/tickets",

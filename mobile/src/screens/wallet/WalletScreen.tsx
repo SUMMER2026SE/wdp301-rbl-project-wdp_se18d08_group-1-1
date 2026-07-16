@@ -35,7 +35,7 @@ export const WalletScreen = ({ navigation }: Props) => {
       const res = await walletService.getWallet();
       setWallet(res.data || null);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Không thể tải ví.');
+      setError(loadError instanceof Error ? loadError.message : 'Unable to load wallet.');
       setWallet(null);
     } finally {
       setLoading(false);
@@ -43,18 +43,10 @@ export const WalletScreen = ({ navigation }: Props) => {
   }, []);
   useEffect(() => { void load(); }, [load]);
   const onRefresh = async () => { setRefreshing(true); await load(); setRefreshing(false); };
-  const isFrozen = wallet?.status === 'frozen';
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#080808" />
       <ScrollView showsVerticalScrollIndicator={false} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.gold} colors={[COLORS.gold]} />}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Ví VALO</Text>
-          {wallet && <View style={[styles.statusPill, { backgroundColor: isFrozen ? 'rgba(255,77,77,0.12)' : 'rgba(126,232,162,0.12)' }]}>
-            <View style={[styles.statusDot, { backgroundColor: isFrozen ? COLORS.error : '#7EE8A2' }]} />
-            <Text style={[styles.statusText, { color: isFrozen ? COLORS.error : '#7EE8A2' }]}>{isFrozen ? 'Bị khoá' : 'Hoạt động'}</Text>
-          </View>}
-        </View>
         {error ? (
           <View style={styles.errorWrap}>
             <ErrorState message={error} onRetry={load} />
@@ -64,22 +56,22 @@ export const WalletScreen = ({ navigation }: Props) => {
             <View style={styles.balanceCard}>
               <LinearGradient colors={['#1C1A0F','#0D0D0D']} style={StyleSheet.absoluteFill} />
               <LinearGradient colors={[COLORS.gold,'transparent']} start={{x:0,y:0}} end={{x:1,y:0}} style={styles.topLine} />
-              <Text style={styles.balanceLabel}>Số dư khả dụng</Text>
+              <Text style={styles.balanceLabel}>Available balance</Text>
               {loading ? <ActivityIndicator color={COLORS.gold} size="large" style={{marginVertical:SPACING.lg}} /> : <Text style={styles.balanceValue}>{formatCurrency(wallet?.balance ?? 0)}</Text>}
-              {wallet?.overdraftLimit !== undefined && wallet.overdraftLimit < 0 && <Text style={styles.overdraftText}>Thấu chi: {formatCurrency(wallet.overdraftLimit)}</Text>}
+              {wallet?.overdraftLimit !== undefined && wallet.overdraftLimit < 0 && <Text style={styles.overdraftText}>Overdraft: {formatCurrency(wallet.overdraftLimit)}</Text>}
             </View>
             <View style={styles.actionsRow}>
-              <ActionBtn icon="add-circle-outline" label="Nạp tiền" color={COLORS.gold} bg="rgba(212,175,55,0.12)" onPress={() => navigation.navigate('TopUp')} />
-              <ActionBtn icon="time-outline" label="Lịch sử" color="#60B4FF" bg="rgba(96,180,255,0.12)" onPress={() => navigation.navigate('TransactionHistory')} />
+              <ActionBtn icon="add-circle-outline" label="Top up" color={COLORS.gold} bg="rgba(212,175,55,0.12)" onPress={() => navigation.navigate('TopUp')} />
+              <ActionBtn icon="time-outline" label="History" color="#60B4FF" bg="rgba(96,180,255,0.12)" onPress={() => navigation.navigate('TransactionHistory')} />
               <ActionBtn icon="ribbon-outline" label="Membership" color="#FFD700" bg="rgba(255,215,0,0.12)" onPress={() => navigation.navigate('Membership')} />
-              <ActionBtn icon="cube-outline" label="Gói đăng ký" color="#E07BE0" bg="rgba(224,123,224,0.12)" onPress={() => navigation.navigate('SubscriptionPackages')} />
+              <ActionBtn icon="cube-outline" label="Plans" color="#E07BE0" bg="rgba(224,123,224,0.12)" onPress={() => navigation.navigate('SubscriptionPackages')} />
             </View>
             {wallet && <>
-              <Text style={styles.sectionTitle}>Tháng này</Text>
+              <Text style={styles.sectionTitle}>This month</Text>
               <View style={styles.statsRow}>
-                <View style={styles.statCard}><Ionicons name="arrow-down-circle-outline" size={20} color="#7EE8A2" /><Text style={[styles.statValue,{color:'#7EE8A2'}]}>{formatCurrency(wallet.monthlyTopUp??0)}</Text><Text style={styles.statLabel}>Đã nạp</Text></View>
-                <View style={styles.statCard}><Ionicons name="arrow-up-circle-outline" size={20} color="#FF9F43" /><Text style={[styles.statValue,{color:'#FF9F43'}]}>{formatCurrency(wallet.monthlySpent??0)}</Text><Text style={styles.statLabel}>Đã dùng</Text></View>
-                <View style={styles.statCard}><Ionicons name="refresh-circle-outline" size={20} color="#60B4FF" /><Text style={[styles.statValue,{color:'#60B4FF'}]}>{formatCurrency(wallet.monthlyRefunded??0)}</Text><Text style={styles.statLabel}>Hoàn tiền</Text></View>
+                <View style={styles.statCard}><Ionicons name="arrow-down-circle-outline" size={20} color="#7EE8A2" /><Text style={[styles.statValue,{color:'#7EE8A2'}]}>{formatCurrency(wallet.monthlyTopUp??0)}</Text><Text style={styles.statLabel}>Added</Text></View>
+                <View style={styles.statCard}><Ionicons name="arrow-up-circle-outline" size={20} color="#FF9F43" /><Text style={[styles.statValue,{color:'#FF9F43'}]}>{formatCurrency(wallet.monthlySpent??0)}</Text><Text style={styles.statLabel}>Spent</Text></View>
+                <View style={styles.statCard}><Ionicons name="refresh-circle-outline" size={20} color="#60B4FF" /><Text style={[styles.statValue,{color:'#60B4FF'}]}>{formatCurrency(wallet.monthlyRefunded??0)}</Text><Text style={styles.statLabel}>Refunded</Text></View>
               </View>
             </>}
           </>
@@ -91,12 +83,7 @@ export const WalletScreen = ({ navigation }: Props) => {
 
 const styles = StyleSheet.create({
   safe:{flex:1,backgroundColor:COLORS.background},
-  header:{flexDirection:'row',alignItems:'center',justifyContent:'space-between',paddingHorizontal:SPACING.lg,paddingTop:SPACING.md,paddingBottom:SPACING.sm},
-  title:{fontSize:FONT_SIZES.xxl,fontWeight:'700',color:COLORS.textPrimary},
-  statusPill:{flexDirection:'row',alignItems:'center',gap:5,paddingHorizontal:SPACING.sm,paddingVertical:4,borderRadius:RADIUS.round},
-  statusDot:{width:6,height:6,borderRadius:3},
-  statusText:{fontSize:FONT_SIZES.xs,fontWeight:'600'},
-  balanceCard:{marginHorizontal:SPACING.lg,marginBottom:SPACING.md,borderRadius:RADIUS.xl,padding:SPACING.xl,borderWidth:1,borderColor:'rgba(212,175,55,0.25)',overflow:'hidden',alignItems:'center'},
+  balanceCard:{marginHorizontal:SPACING.lg,marginTop:SPACING.md,marginBottom:SPACING.md,borderRadius:RADIUS.xl,padding:SPACING.xl,borderWidth:1,borderColor:'rgba(212,175,55,0.25)',overflow:'hidden',alignItems:'center'},
   topLine:{position:'absolute',top:0,left:0,right:0,height:2},
   balanceLabel:{fontSize:FONT_SIZES.sm,color:COLORS.textSecondary,marginBottom:SPACING.sm},
   balanceValue:{fontSize:36,fontWeight:'800',color:COLORS.gold,letterSpacing:1},

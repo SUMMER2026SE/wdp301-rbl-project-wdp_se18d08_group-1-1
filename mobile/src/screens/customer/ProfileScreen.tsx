@@ -96,16 +96,16 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
   };
 
   const handleLogout = () => {
-    alert('Đăng xuất', 'Bạn có chắc muốn đăng xuất?', [
-      { text: 'Huỷ', style: 'cancel' },
-      { text: 'Đăng xuất', style: 'destructive', onPress: logout },
+    alert('Sign out', 'Are you sure you want to sign out?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Sign out', style: 'destructive', onPress: logout },
     ]);
   };
 
-  const displayName = profile?.fullName || user?.username || 'Người dùng';
+  const displayName = profile?.fullName || user?.username || 'User';
   const email = profile?.email || user?.email || '';
   const initial = displayName.charAt(0).toUpperCase();
-  const roleBadge = user?.role === 'customer' ? 'Khách hàng' : user?.role ?? '';
+  const roleBadge = user?.role === 'customer' ? 'Customer' : user?.role ?? '';
   const membershipTier = getMembershipVisualTier(membership);
   const membershipTheme = MEMBERSHIP_THEMES[membershipTier];
   const accountBadge = user?.role === 'customer'
@@ -130,7 +130,7 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
       >
         {/* ── Header ──────────────────────────────────────────── */}
         <View style={styles.pageHeader}>
-          <Text style={styles.pageTitle}>Tài khoản</Text>
+          <Text style={styles.pageTitle}>Account</Text>
         </View>
 
         {/* ── Profile Card ────────────────────────────────────── */}
@@ -197,12 +197,12 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
         </View>
 
         {/* ── Account section ─────────────────────────────────── */}
-        <Text style={styles.sectionTitle}>Tài khoản của tôi</Text>
+        <Text style={styles.sectionTitle}>My account</Text>
         <View style={styles.menuCard}>
           <MenuItem
             icon="person-outline"
-            label="Hồ sơ cá nhân"
-            sublabel="Thông tin cá nhân"
+            label="Personal profile"
+            sublabel="Personal information"
             iconColor="#4ECDC4"
             iconBg="rgba(78,205,196,0.12)"
             onPress={() => navigation?.navigate?.('EditProfile')}
@@ -210,8 +210,8 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
           <View style={styles.menuDivider} />
           <MenuItem
             icon="car-outline"
-            label="Xe của tôi"
-            sublabel="Quản lý phương tiện"
+            label="My vehicles"
+            sublabel="Manage vehicles"
             iconColor="#7EE8A2"
             iconBg="rgba(126,232,162,0.12)"
             onPress={() => navigation?.navigate?.('VehicleList')}
@@ -219,8 +219,8 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
           <View style={styles.menuDivider} />
           <MenuItem
             icon="calendar-outline"
-            label="Danh sách Đặt chỗ"
-            sublabel="Quản lý lịch hẹn trước"
+            label="My bookings"
+            sublabel="Manage upcoming reservations"
             iconColor="#4ECDC4"
             iconBg="rgba(78,205,196,0.12)"
             onPress={() => navigation?.navigate?.('BookingList')}
@@ -228,8 +228,8 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
           <View style={styles.menuDivider} />
           <MenuItem
             icon="ribbon-outline"
-            label="Gói Membership"
-            sublabel="VIP & ưu đãi"
+            label="Membership plans"
+            sublabel="VIP access and benefits"
             iconColor="#FFD700"
             iconBg="rgba(255,215,0,0.12)"
             onPress={() => navigation?.navigate?.('WalletTab', { screen: 'Membership' })}
@@ -237,8 +237,8 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
           <View style={styles.menuDivider} />
           <MenuItem
             icon="receipt-outline"
-            label="Lịch sử đỗ xe"
-            sublabel="Xem lịch sử & hóa đơn"
+            label="Parking history"
+            sublabel="View sessions and receipts"
             iconColor="#E07BE0"
             iconBg="rgba(224,123,224,0.12)"
             onPress={() => navigation?.navigate?.('ParkingHistory')}
@@ -246,11 +246,11 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
           <View style={styles.menuDivider} />
           <MenuItem
             icon="wallet-outline"
-            label="Ví VALO"
+            label="VALO Wallet"
             sublabel={
               profile?.wallet?.balance !== undefined
-                ? `Số dư: ${profile.wallet.balance.toLocaleString('vi-VN')}đ`
-                : 'Quản lý số dư'
+                ? `Balance: ${profile.wallet.balance.toLocaleString('en-US')} VND`
+                : 'Manage your balance'
             }
             iconColor="#FF9F43"
             iconBg="rgba(255,159,67,0.12)"
@@ -259,11 +259,11 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
         </View>
 
         {/* ── Settings section ────────────────────────────────── */}
-        <Text style={styles.sectionTitle}>Cài đặt</Text>
+        <Text style={styles.sectionTitle}>Settings</Text>
         <View style={styles.menuCard}>
           <MenuItem
             icon="notifications-outline"
-            label="Thông báo"
+            label="Notifications"
             iconColor="#60B4FF"
             iconBg="rgba(96,180,255,0.12)"
             onPress={() => navigation?.navigate?.('NotificationsTab')}
@@ -271,7 +271,7 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
           <View style={styles.menuDivider} />
           <MenuItem
             icon="lock-closed-outline"
-            label="Đổi mật khẩu"
+            label="Change password"
             iconColor={COLORS.textSecondary}
             iconBg={COLORS.surfaceElevated}
             onPress={() => navigation?.navigate?.('ChangePassword')}
@@ -279,8 +279,8 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
           <View style={styles.menuDivider} />
           <MenuItem
             icon="sparkles-outline"
-            label="Dịch vụ"
-            sublabel="Bảng giá và thời gian xử lý"
+            label="Services"
+            sublabel="Pricing and turnaround times"
             iconColor="#7EE8A2"
             iconBg="rgba(126,232,162,0.12)"
             onPress={() => navigation?.navigate?.('Services')}
@@ -288,7 +288,7 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
           <View style={styles.menuDivider} />
           <MenuItem
             icon="document-text-outline"
-            label="Chính sách & Điều khoản"
+            label="Policies and terms"
             iconColor={COLORS.textSecondary}
             iconBg={COLORS.surfaceElevated}
             onPress={() => navigation?.navigate?.('Policies')}
@@ -299,7 +299,7 @@ export default function ProfileScreen({ navigation }: { navigation?: any }) {
         <View style={[styles.menuCard, { marginBottom: SPACING.xl }]}>
           <MenuItem
             icon="log-out-outline"
-            label="Đăng xuất"
+            label="Sign out"
             iconColor={COLORS.error}
             iconBg="rgba(255,77,77,0.12)"
             onPress={handleLogout}

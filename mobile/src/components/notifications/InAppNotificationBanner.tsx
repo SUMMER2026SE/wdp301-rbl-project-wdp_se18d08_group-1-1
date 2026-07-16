@@ -24,7 +24,9 @@ export const InAppNotificationBanner = ({ notification, onDismiss, onPress }: Pr
   return (
     <Pressable style={styles.overlay} onPress={onPress}>
       <View style={[styles.icon, { backgroundColor: getNotificationColor(notification.priority) }]}>
-        <AppText color={colors.neutral.white}>{getNotificationIcon(notification.type)}</AppText>
+        <AppText color={notification.priority === 'ERROR' ? colors.neutral.white : colors.light.text.inverse}>
+          {getNotificationIcon(notification.type)}
+        </AppText>
       </View>
       <View style={styles.body}>
         <AppText style={styles.title}>{notification.title}</AppText>
@@ -42,7 +44,7 @@ export const InAppNotificationBanner = ({ notification, onDismiss, onPress }: Pr
 const styles = StyleSheet.create({
   overlay: {
     alignItems: 'center',
-    backgroundColor: colors.neutral.white,
+    backgroundColor: colors.light.surface,
     borderColor: colors.light.border,
     borderRadius: borderRadius.md,
     borderWidth: 1,

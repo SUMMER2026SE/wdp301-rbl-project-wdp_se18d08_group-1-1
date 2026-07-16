@@ -64,8 +64,8 @@ export const FindParkingScreen = ({ navigation, route }: Props) => {
           bookingService.getActiveSessions(),
           bookingService.getActiveHolds()
         ]);
-        setActiveSessions(sessionsRes.data?.data || []);
-        setActiveHolds(holdsRes.data?.data || []);
+        setActiveSessions(sessionsRes.data || []);
+        setActiveHolds(holdsRes.data || []);
       } catch (err) {
         console.warn('Failed to fetch extra map data:', err);
       }
@@ -105,16 +105,16 @@ export const FindParkingScreen = ({ navigation, route }: Props) => {
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#080808" />
-      <ScreenHeader title="Sơ đồ bãi xe" onBack={() => navigation.goBack()} />
+      <ScreenHeader title="Parking map" onBack={() => navigation.goBack()} />
 
       <View style={styles.statsBar}>
         <View style={styles.statItem}>
           <View style={[styles.statDot, { backgroundColor: '#7EE8A2' }]} />
-          <Text style={styles.statText}>Trống</Text>
+          <Text style={styles.statText}>Available</Text>
         </View>
         <View style={styles.statItem}>
           <View style={[styles.statDot, { backgroundColor: '#FF6B6B' }]} />
-          <Text style={styles.statText}>Có xe</Text>
+          <Text style={styles.statText}>Occupied</Text>
         </View>
         <View style={styles.statItem}>
           <View style={[styles.statDot, { backgroundColor: '#FFD700' }]} />
@@ -122,11 +122,11 @@ export const FindParkingScreen = ({ navigation, route }: Props) => {
         </View>
         <View style={styles.statItem}>
           <View style={[styles.statDot, { backgroundColor: '#FFA500' }]} />
-          <Text style={styles.statText}>Giữ chỗ</Text>
+          <Text style={styles.statText}>Reserved</Text>
         </View>
         <View style={styles.statItem}>
           <View style={[styles.statDot, { backgroundColor: '#A0A0A0' }]} />
-          <Text style={styles.statText}>Bảo trì</Text>
+          <Text style={styles.statText}>Maintenance</Text>
         </View>
       </View>
 
@@ -163,12 +163,11 @@ export const FindParkingScreen = ({ navigation, route }: Props) => {
       ) : null}
 
       <ScrollView style={styles.mapScroll}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View style={styles.mapCanvas}>
+        <View style={styles.mapCanvas}>
             {isLoading ? (
               <View style={styles.mapState}>
                 <ActivityIndicator color={COLORS.gold} size="large" />
-                <Text style={styles.mapStateText}>Đang tải sơ đồ...</Text>
+                <Text style={styles.mapStateText}>Loading parking map...</Text>
               </View>
             ) : error ? (
               <View style={styles.mapState}>
@@ -184,8 +183,8 @@ export const FindParkingScreen = ({ navigation, route }: Props) => {
               <View style={styles.mapState}>
                 <EmptyState
                   icon="layers-outline"
-                  title="Chưa có tầng"
-                  message="Không tìm thấy tầng bãi xe để hiển thị."
+                  title="No floors available"
+                  message="No parking floors are available to display."
                 />
               </View>
             ) : (
@@ -199,8 +198,7 @@ export const FindParkingScreen = ({ navigation, route }: Props) => {
                 activeHolds={activeHolds}
               />
             )}
-          </View>
-        </ScrollView>
+        </View>
       </ScrollView>
 
       {selectedSlot ? (
@@ -213,7 +211,7 @@ export const FindParkingScreen = ({ navigation, route }: Props) => {
             </Text>
           </View>
           <TouchableOpacity activeOpacity={0.85} style={styles.selectBtn} onPress={handleConfirmSlot}>
-            <Text style={styles.selectBtnText}>Chọn vị trí này</Text>
+            <Text style={styles.selectBtnText}>Select this space</Text>
           </TouchableOpacity>
         </View>
       ) : null}

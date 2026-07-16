@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -22,12 +23,12 @@ import type { Policy, PolicyCategory } from '@/types/models';
 type Props = NativeStackScreenProps<ProfileStackParamList, 'Policies'>;
 
 const CATEGORY_LABELS: Record<PolicyCategory, string> = {
-  terms: 'Điều khoản',
-  privacy: 'Bảo mật',
-  refund: 'Hoàn tiền',
-  parking_rules: 'Quy định bãi xe',
-  safety: 'An toàn',
-  other: 'Khác',
+  terms: 'Terms',
+  privacy: 'Privacy',
+  refund: 'Refunds',
+  parking_rules: 'Parking rules',
+  safety: 'Safety',
+  other: 'Other',
 };
 
 const CATEGORY_ICON: Record<PolicyCategory, React.ComponentProps<typeof Ionicons>['name']> = {
@@ -51,7 +52,7 @@ export const PoliciesListScreen = ({ navigation }: Props) => {
       const response = await policiesService.listPublishedPolicies();
       setPolicies(response.data || []);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Không thể tải chính sách.');
+      setError(loadError instanceof Error ? loadError.message : 'Unable to load policies.');
       setPolicies([]);
     } finally {
       setLoading(false);
@@ -59,9 +60,11 @@ export const PoliciesListScreen = ({ navigation }: Props) => {
     }
   }, []);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  useFocusEffect(
+    useCallback(() => {
+      void load();
+    }, [load]),
+  );
 
   const grouped = useMemo(
     () =>
@@ -82,8 +85,8 @@ export const PoliciesListScreen = ({ navigation }: Props) => {
     <SafeAreaView edges={['top']} style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#080808" />
       <ScreenHeader
-        title="Chính sách"
-        subtitle={`${policies.length} tài liệu`}
+        title="Policies"
+        subtitle={`${policies.length} documents`}
         onBack={() => navigation.goBack()}
       />
 
@@ -96,8 +99,8 @@ export const PoliciesListScreen = ({ navigation }: Props) => {
       ) : policies.length === 0 ? (
         <EmptyState
           icon="document-text-outline"
-          title="Chưa có chính sách"
-          message="Các chính sách mới sẽ được cập nhật tại đây."
+          title="No policies available"
+          message="New policies will appear here."
         />
       ) : (
         <ScrollView
@@ -137,15 +140,15 @@ export const PoliciesListScreen = ({ navigation }: Props) => {
                         ) : null}
                         <View style={styles.policyMeta}>
                           <Text style={styles.versionText}>
-                            Phiên bản {policy.currentVersion || policy.versionNumber || 'hiện tại'}
+                            Version {policy.currentVersionNumber || policy.versionNumber || 'current'}
                           </Text>
                           {accepted ? (
                             <View style={[styles.statusPill, styles.statusAccepted]}>
-                              <Text style={[styles.statusText, { color: COLORS.success }]}>Đã đồng ý</Text>
+                              <Text style={[styles.statusText, { color: COLORS.success }]}>Accepted</Text>
                             </View>
                           ) : required ? (
                             <View style={[styles.statusPill, styles.statusRequired]}>
-                              <Text style={[styles.statusText, { color: COLORS.warning }]}>Cần đọc</Text>
+                              <Text style={[styles.statusText, { color: COLORS.warning }]}>Review required</Text>
                             </View>
                           ) : null}
                         </View>

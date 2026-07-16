@@ -18,7 +18,11 @@ export default function TicketPackages() {
     isActive: true,
   });
 
-  const isAdmin = localStorage.getItem('role') === 'admin';
+  let isAdmin = false;
+  try {
+    const user = JSON.parse(sessionStorage.getItem('valo_user'));
+    if (user && user.role === 'admin') isAdmin = true;
+  } catch(e) {}
 
   const fetchPackages = async () => {
     try {

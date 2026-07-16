@@ -61,12 +61,12 @@ describe('BookingService normalization', () => {
       success: true,
       data: {
         booking: { ...backendBooking, prepaidAmount: 70_000 } as never,
-        services: [{ serviceId: 'service-1', name: 'Rửa xe', price: 50_000 }],
+        services: [{ serviceId: 'service-1', name: 'Car wash', price: 50_000 }],
       },
     });
 
     expect(booking?.services).toEqual([
-      { _id: undefined, serviceId: 'service-1', name: 'Rửa xe', price: 50_000 },
+      { _id: undefined, serviceId: 'service-1', name: 'Car wash', price: 50_000 },
     ]);
     expect(booking?.serviceAmount).toBe(50_000);
     expect(booking?.finalAmount).toBe(70_000);
@@ -106,5 +106,51 @@ describe('BookingService normalization', () => {
     await bookingService.extendBooking('booking-1', payload);
 
     expect(put).toHaveBeenCalledWith('/bookings/booking-1/time', payload);
+  });
+
+  it('uses the same quote, hold, and bulk booking endpoints as the web flow', async () => {
+    const post = jest.spyOn(apiClient, 'post').mockResolvedValue({ success: true, data: {} });
+    const item = {
+      vehicleId: 'vehicle-1',
+      floorId: 'floor-1',
+      slotCode: 'A01',
+      startTime: backendBooking.scheduledStart,
+      endTime: backendBooking.scheduledEnd,
+      serviceIds: ['service-1'],
+    };
+
+    await bookingService.quoteBulkBooking([item]);
+    await bookingService.createBookingHold({
+      floorId: item.floorId,
+      slotCode: item.slotCode,
+      licensePlate: backendBooking.licensePlate,
+      startTime: item.startTime,
+      endTime: item.endTime,
+    });
+    await bookingService.createBulkBooking({
+      idempotencyKey: 'mobile-key',
+      items: [{ ...item, holdId: 'hold-1' }],
+    });
+
+    expect(post).toHaveBeenNthCalledWith(1, '/bookings/bulk/quote', { items: [item] });
+    expect(post).toHaveBeenNthCalledWith(2, '/bookings/hold', {
+      floorId: item.floorId,
+      slotCode: item.slotCode,
+      licensePlate: backendBooking.licensePlate,
+      startTime: item.startTime,
+      endTime: item.endTime,
+    });
+    expect(post).toHaveBeenNthCalledWith(3, '/bookings/bulk', {
+      idempotencyKey: 'mobile-key',
+      items: [{ ...item, holdId: 'hold-1' }],
+    });
+  });
+
+  it('calls the booking vehicle endpoint with a registered vehicle', async () => {
+    const put = jest.spyOn(apiClient, 'put').mockResolvedValue({ success: true, data: backendBooking });
+
+    await bookingService.updateBookingVehicle('booking-1', 'vehicle-2');
+
+    expect(put).toHaveBeenCalledWith('/bookings/booking-1/vehicle', { vehicleId: 'vehicle-2' });
   });
 });

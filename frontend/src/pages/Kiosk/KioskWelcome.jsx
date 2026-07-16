@@ -7,8 +7,8 @@ import { API_BASE } from '../../services/api';
 import { getAvailableBookingSlots } from '../../services/bookingService';
 import { normalizeLicensePlate } from '../../utils/licensePlate';
 
-const SCAN_ATTEMPTS = 8;
-const SCAN_RETRY_DELAY_MS = 900;
+const SCAN_ATTEMPTS = 20;
+const SCAN_RETRY_DELAY_MS = 800;
 const CAMERA_WARMUP_MS = 1200;
 const SCAN_TIMEOUT_MS = 7000;
 const VIDEO_READY_TIMEOUT_MS = 5000;
@@ -175,7 +175,7 @@ export default function KioskWelcome({ onStart, updateFormData }) {
       const isMotorbike = /\d/.test(series);
       return isMotorbike ? `${province}-${series} ${formattedNumbers}` : `${province}${series} - ${formattedNumbers}`;
     }
-    return null;
+    return clean; // Fallback to raw string
   };
 
   const captureAndAnalyze = async () => {
@@ -276,7 +276,7 @@ export default function KioskWelcome({ onStart, updateFormData }) {
 
     if (verifyData.isRegisteredVehicle || verifyData.isVIP) {
       updateFormData({
-        step3Mode: 'policy',
+        step3Mode: verifyData.assignedSlot ? 'fastpass' : 'policy',
         licensePlate: formatted,
         entryImageBase64: imageBase64,
         phone: verifyData.phone || '',
@@ -287,8 +287,11 @@ export default function KioskWelcome({ onStart, updateFormData }) {
         pricingSource: verifyData.pricingSource || 'default',
         ticketPackageId: verifyData.pricingPackage?._id || null,
         bookingMode: 'hourly',
+        selectedSlot: verifyData.assignedSlot || null,
+        floorId: verifyData.assignedFloorId || null,
+        bookingFloorName: verifyData.assignedFloorName || null,
       });
-      onStart(2);
+      onStart(verifyData.assignedSlot ? 3 : 2);
       return true;
     }
 

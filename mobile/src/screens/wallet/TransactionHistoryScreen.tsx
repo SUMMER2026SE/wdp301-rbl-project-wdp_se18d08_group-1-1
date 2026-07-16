@@ -25,18 +25,18 @@ type TypeFilter = 'ALL' | 'TOP_UP' | 'PAYMENT' | 'REFUND';
 type StatusFilter = 'ALL' | 'PENDING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 
 const TYPE_LABELS: Record<TypeFilter, string> = {
-  ALL: 'Tất cả',
-  TOP_UP: 'Nạp tiền',
-  PAYMENT: 'Thanh toán',
-  REFUND: 'Hoàn tiền',
+  ALL: 'All',
+  TOP_UP: 'Top up',
+  PAYMENT: 'Payment',
+  REFUND: 'Refund',
 };
 
 const STATUS_LABELS: Record<StatusFilter, string> = {
-  ALL: 'Mọi trạng thái',
-  PENDING: 'Chờ xử lý',
-  COMPLETED: 'Hoàn tất',
-  FAILED: 'Thất bại',
-  CANCELLED: 'Đã hủy',
+  ALL: 'All statuses',
+  PENDING: 'Pending',
+  COMPLETED: 'Completed',
+  FAILED: 'Failed',
+  CANCELLED: 'Cancelled',
 };
 
 const STATUS_COLORS: Record<StatusFilter, string> = {
@@ -66,7 +66,7 @@ export const TransactionHistoryScreen = ({ navigation }: Props) => {
       });
       setTransactions(response.data || []);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Không thể tải giao dịch.');
+      setError(loadError instanceof Error ? loadError.message : 'Unable to load transactions.');
       setTransactions([]);
     } finally {
       setLoading(false);
@@ -124,7 +124,7 @@ export const TransactionHistoryScreen = ({ navigation }: Props) => {
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#080808" />
-      <ScreenHeader title="Lịch sử ví" onBack={() => navigation.goBack()} />
+      <ScreenHeader title="Wallet history" onBack={() => navigation.goBack()} />
 
       <View style={styles.filtersBlock}>
         <FlatList
@@ -165,8 +165,8 @@ export const TransactionHistoryScreen = ({ navigation }: Props) => {
           ListEmptyComponent={
             <EmptyState
               icon="receipt-outline"
-              title="Chưa có giao dịch"
-              message="Giao dịch nạp tiền, thanh toán và hoàn tiền sẽ hiển thị tại đây."
+              title="No transactions yet"
+              message="Top-ups, payments, and refunds will appear here."
             />
           }
           refreshControl={

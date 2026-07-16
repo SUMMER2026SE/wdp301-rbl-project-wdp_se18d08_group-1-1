@@ -104,10 +104,15 @@ export default function KioskFlow() {
       const cleanPlate = formData.licensePlate
         ? formData.licensePlate.replace(/[^A-Z0-9]/gi, '').toUpperCase()
         : '';
+      const now = new Date();
+      const endTime = new Date(now.getTime() + 60 * 60 * 1000);
+
       const res = await createBookingHold({
         floorId: formData.floorId,
         slotCode: formData.selectedSlot,
         licensePlate: cleanPlate,
+        startTime: now.toISOString(),
+        endTime: endTime.toISOString(),
       });
 
       if (!res.ok) {

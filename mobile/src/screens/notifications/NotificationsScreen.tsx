@@ -23,18 +23,18 @@ import { getNotificationId, NOTIFICATION_TYPES, type NotificationFilter } from '
 const filters: NotificationFilter[] = ['ALL', 'UNREAD', 'READ', ...NOTIFICATION_TYPES];
 
 const FILTER_LABELS: Record<NotificationFilter, string> = {
-  ALL: 'Tất cả',
-  UNREAD: 'Chưa đọc',
-  READ: 'Đã đọc',
-  SYSTEM: 'Hệ thống',
-  PARKING: 'Bãi xe',
-  BOOKING: 'Đặt chỗ',
-  WALLET: 'Ví',
-  PAYMENT: 'Thanh toán',
-  ACCOUNT: 'Tài khoản',
-  PROMOTION: 'Ưu đãi',
+  ALL: 'All',
+  UNREAD: 'Unread',
+  READ: 'Read',
+  SYSTEM: 'System',
+  PARKING: 'Parking',
+  BOOKING: 'Booking',
+  WALLET: 'Wallet',
+  PAYMENT: 'Payment',
+  ACCOUNT: 'Account',
+  PROMOTION: 'Promotions',
   CAMERA: 'Camera',
-  VIOLATION: 'Vi phạm',
+  VIOLATION: 'Violations',
 };
 
 export const NotificationsScreen = () => {
@@ -69,8 +69,8 @@ export const NotificationsScreen = () => {
     return (
       <EmptyState
         icon="notifications-outline"
-        title="Không có thông báo"
-        message="Các cập nhật về đặt chỗ, ví và tài khoản sẽ xuất hiện tại đây."
+        title="No notifications"
+        message="Updates about bookings, your wallet, and your account will appear here."
       />
     );
   };
@@ -79,8 +79,8 @@ export const NotificationsScreen = () => {
     <SafeAreaView edges={['top']} style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#080808" />
       <ScreenHeader
-        title="Thông báo"
-        subtitle={unreadCount > 0 ? `${unreadCount} chưa đọc` : 'Đã cập nhật'}
+        title="Notifications"
+        subtitle={unreadCount > 0 ? `${unreadCount} unread` : 'Up to date'}
         right={
           unreadCount > 0 ? (
             <TouchableOpacity
@@ -90,7 +90,7 @@ export const NotificationsScreen = () => {
               onPress={() => void markAllAsRead()}
             >
               <Ionicons name="checkmark-done-outline" size={16} color={COLORS.gold} />
-              <Text style={styles.readAllText}>Đọc hết</Text>
+              <Text style={styles.readAllText}>Mark all read</Text>
             </TouchableOpacity>
           ) : null
         }

@@ -26,13 +26,19 @@
     },
     "plugins": [
       "expo-secure-store",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-notifications",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow VALO Parking to use the camera to photograph your vehicle registration."
+        }
+      ]
     ],
     "extra": {
       "eas": {
         "projectId": "d94bef71-b49a-407b-b084-3412ebdaac71"
       }
     }
-
   }
 }

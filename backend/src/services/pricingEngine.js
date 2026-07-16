@@ -2,13 +2,14 @@ const PricingConfig = require('../models/PricingConfig');
 
 // Mức giá dự phòng (Fallback) nếu DB trống
 const DEFAULT_CONFIG = {
-  sessionFee: 10000,
-  dayRate: 10000,
-  nightRate: 15000,
-  cap6hDay: 50000,
-  cap6hNight: 75000,
+  timeBlocks: [
+    { startHour: 7, endHour: 12, price: 10000 },
+    { startHour: 12, endHour: 17, price: 10000 },
+    { startHour: 17, endHour: 22, price: 20000 },
+    { startHour: 22, endHour: 7, price: 25000 }
+  ],
   cap12h: 100000,
-  cap24h: 180000,
+  cap24h: 180000
 };
 
 /**
@@ -25,107 +26,79 @@ async function getActivePricingConfig() {
 }
 
 /**
- * Tính số phút ban ngày và ban đêm trong khoảng thời gian thực tế
- */
-function getDayNightMinutes(checkIn, checkOut) {
-  let dayMinutes = 0;
-  let nightMinutes = 0;
-  
-  let current = new Date(checkIn);
-  const end = new Date(checkOut);
-  
-  while (current < end) {
-    const hour = current.getHours();
-    if (hour >= 6 && hour < 22) {
-      dayMinutes++;
-    } else {
-      nightMinutes++;
-    }
-    current.setMinutes(current.getMinutes() + 1);
-  }
-  
-  return { dayMinutes, nightMinutes };
-}
-
-/**
  * Tính toán phí đỗ xe thực tế dựa vào check-in/out
  * @param {Date} checkIn
  * @param {Date} checkOut
- * @param {Boolean} includeSessionFee
+ * @param {Boolean} includeSessionFee - Tham số giữ lại để tương thích, nhưng không còn dùng trong logic khối.
  * @param {Object} [config]
  */
 async function calculatePrice(checkIn, checkOut, includeSessionFee = true, config = null) {
   if (!config) {
     config = await getActivePricingConfig();
   }
+  const blocks = config.timeBlocks && config.timeBlocks.length > 0 ? config.timeBlocks : DEFAULT_CONFIG.timeBlocks;
 
-  const { dayMinutes, nightMinutes } = getDayNightMinutes(checkIn, checkOut);
-  const totalMinutes = dayMinutes + nightMinutes;
+  const start = new Date(checkIn);
+  const end = new Date(checkOut);
   
-  // Làm tròn lên theo giờ (1h20p -> 2h)
-  const totalHours = Math.ceil(totalMinutes / 60) || 1;
-  
-  // Phân bổ tỷ lệ số giờ Ngày/Đêm tương đương số phút
-  let dayHours = 0;
-  let nightHours = 0;
-  if (totalMinutes > 0) {
-    dayHours = Math.round(totalHours * (dayMinutes / totalMinutes));
-    nightHours = totalHours - dayHours;
-  } else {
-    dayHours = totalHours;
+  if (start >= end) {
+    return { finalTotal: 0, rawTotal: 0, durationHours: 0 };
   }
 
-  const sessionFee = includeSessionFee ? config.sessionFee : 0;
-  const dayAmount = dayHours * config.dayRate;
-  const nightAmount = nightHours * config.nightRate;
-  const rawTotal = sessionFee + dayAmount + nightAmount;
+  // Lặp qua các ngày đỗ xe, bắt đầu từ 1 ngày trước ngày checkIn để bắt các block vắt qua đêm
+  const startOfDay = new Date(start);
+  startOfDay.setHours(0, 0, 0, 0);
+  startOfDay.setDate(startOfDay.getDate() - 1);
   
-  let capApplied = 'NONE';
+  const endOfDay = new Date(end);
+  endOfDay.setHours(23, 59, 59, 999);
+  
+  let rawTotal = 0;
+  
+  for (let d = new Date(startOfDay); d <= endOfDay; d.setDate(d.getDate() + 1)) {
+    const year = d.getFullYear();
+    const month = d.getMonth();
+    const date = d.getDate();
+    
+    for (const block of blocks) {
+      let blockStart = new Date(year, month, date, block.startHour, 0, 0, 0);
+      let blockEnd = new Date(year, month, date, block.endHour, 0, 0, 0);
+      
+      // Nếu endHour <= startHour (VD: 22h -> 7h), tức là block kết thúc vào ngày hôm sau
+      if (block.endHour <= block.startHour) {
+        blockEnd.setDate(blockEnd.getDate() + 1);
+      }
+      
+      // Điều kiện overlap: start < blockEnd && end > blockStart
+      if (start < blockEnd && end > blockStart) {
+        console.log("Hits block", block.startHour, "-", block.endHour, "of date", date, "price:", block.price);
+        rawTotal += block.price;
+      }
+    }
+  }
+
+  const durationHours = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60));
   let finalTotal = rawTotal;
+  let capApplied = 'NONE';
   
-  // Áp dụng trần giá
-  if (totalHours <= 6) {
-    const cap6h = nightMinutes > dayMinutes ? config.cap6hNight : config.cap6hDay;
-    const adjustedCap = cap6h + (includeSessionFee ? 0 : -config.sessionFee);
-    if (rawTotal > adjustedCap) {
-      finalTotal = adjustedCap;
-      capApplied = nightMinutes > dayMinutes ? 'CAP_6H_NIGHT' : 'CAP_6H_DAY';
+  // Áp dụng trần giá (Price Caps)
+  if (durationHours <= 12 && rawTotal > config.cap12h) {
+    finalTotal = config.cap12h;
+    capApplied = 'CAP_12H';
+  } else if (durationHours <= 24 && rawTotal > config.cap24h) {
+    finalTotal = config.cap24h;
+    capApplied = 'CAP_24H';
+  } else if (durationHours > 24) {
+    const fullDays = Math.floor(durationHours / 24);
+    const maxAllowed = fullDays * config.cap24h + config.cap24h;
+    if (rawTotal > maxAllowed) {
+      finalTotal = maxAllowed;
+      capApplied = 'CAP_MULTI_DAY';
     }
-  } else if (totalHours <= 12) {
-    if (rawTotal > config.cap12h) {
-      finalTotal = config.cap12h;
-      capApplied = 'CAP_12H';
-    }
-  } else if (totalHours <= 24) {
-    if (rawTotal > config.cap24h) {
-      finalTotal = config.cap24h;
-      capApplied = 'CAP_24H';
-    }
-  } else {
-    // Vượt quá 24h: Tính trần 24h cho mỗi chu kỳ 24h + phần thừa tính lẻ không kèm phí mở phiên
-    const fullDays = Math.floor(totalHours / 24);
-    const remainderHours = totalHours % 24;
-    
-    let remainderPrice = 0;
-    if (remainderHours > 0) {
-      const remainderStart = new Date(checkIn.getTime() + fullDays * 24 * 60 * 60 * 1000);
-      const res = await calculatePrice(remainderStart, checkOut, false, config);
-      remainderPrice = res.finalTotal;
-    }
-    
-    finalTotal = fullDays * config.cap24h + remainderPrice;
-    capApplied = 'CAP_MULTI_DAY';
   }
   
   return {
-    durationHours: totalHours,
-    dayMinutes,
-    nightMinutes,
-    dayHours,
-    nightHours,
-    sessionFee,
-    dayAmount,
-    nightAmount,
+    durationHours,
     rawTotal,
     capApplied,
     finalTotal,

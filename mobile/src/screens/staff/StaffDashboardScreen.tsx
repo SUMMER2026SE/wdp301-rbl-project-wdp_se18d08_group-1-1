@@ -1,357 +1,66 @@
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import React, { useState } from 'react';
-import {
-  RefreshControl,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { ErrorState } from '@/components/common';
+import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
-import { COLORS, FONT_SIZES, RADIUS, SPACING } from '../../constants/theme';
+import type { StaffTabParamList } from '@/navigation/StaffNavigator';
+import { staffService, type StaffBooking, type StaffSession } from '@/services/api/staff';
+import { parkingFloorService } from '@/services/ParkingFloorService';
+import type { ParkingFloor } from '@/types/booking.types';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-type StatItem = {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  value: string | number;
-  color: string;
-};
+type Props = BottomTabScreenProps<StaffTabParamList, 'Dashboard'>;
+type Snapshot = { floors: ParkingFloor[]; sessions: StaffSession[]; bookings: StaffBooking[] };
+const floorCapacity = (floor: ParkingFloor) => floor.slots?.length ?? floor.layout?.elements?.filter(item => item.type === 'slot').length ?? floor.layoutData?.elements?.filter((item: { type?: string }) => item.type === 'slot').length ?? 0;
 
-type QuickAction = {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  sublabel: string;
-  color: string;
-  bg: string;
-  screen: string;
-};
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-function getGreeting() {
-  const h = new Date().getHours();
-  if (h < 12) return 'Chào buổi sáng';
-  if (h < 18) return 'Chào buổi chiều';
-  return 'Chào buổi tối';
-}
-
-function todayString() {
-  return new Date().toLocaleDateString('vi-VN', {
-    weekday: 'long',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  });
-}
-
-const QUICK_ACTIONS: QuickAction[] = [
-  {
-    icon: 'grid-outline',
-    label: 'Lưới bãi xe',
-    sublabel: 'Giám sát real-time',
-    color: COLORS.gold,
-    bg: 'rgba(212,175,55,0.12)',
-    screen: 'LiveGrid',
-  },
-  {
-    icon: 'car-outline',
-    label: 'Phiên đỗ xe',
-    sublabel: 'Check-in / Check-out',
-    color: '#60B4FF',
-    bg: 'rgba(96,180,255,0.12)',
-    screen: 'Sessions',
-  },
-  {
-    icon: 'search-outline',
-    label: 'Tra cứu KH',
-    sublabel: 'Tìm thông tin khách',
-    color: '#7EE8A2',
-    bg: 'rgba(126,232,162,0.12)',
-    screen: 'CustomerLookup',
-  },
-  {
-    icon: 'notifications-outline',
-    label: 'Thông báo',
-    sublabel: 'Gửi & quản lý',
-    color: '#E07BE0',
-    bg: 'rgba(224,123,224,0.12)',
-    screen: 'StaffNotifications',
-  },
-];
-
-// ─── Screen ───────────────────────────────────────────────────────────────────
-export default function StaffDashboardScreen({ navigation }: { navigation?: any }) {
+export default function StaffDashboardScreen({ navigation }: Props) {
   const { user } = useAuth();
+  const [snapshot, setSnapshot] = useState<Snapshot>({ floors: [], sessions: [], bookings: [] });
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState('');
+  const load = useCallback(async () => {
+    setError('');
+    try {
+      const today = new Date().toISOString().slice(0, 10);
+      const [floors, sessionResponse, bookingResponse] = await Promise.all([parkingFloorService.getParkingFloors(), staffService.getSessions(), staffService.getBookings({ date: today })]);
+      setSnapshot({ floors, sessions: sessionResponse.data ?? [], bookings: bookingResponse.data ?? [] });
+    } catch (loadError) { setError(loadError instanceof Error ? loadError.message : 'Unable to load the operations overview.'); }
+    finally { setLoading(false); }
+  }, []);
+  useEffect(() => { void load(); }, [load]);
+  const metrics = useMemo(() => {
+    const capacity = snapshot.floors.reduce((sum, floor) => sum + floorCapacity(floor), 0);
+    const active = snapshot.sessions.filter(item => item.status?.toLowerCase() === 'active').length;
+    const completed = snapshot.sessions.filter(item => item.status?.toLowerCase() === 'completed' && item.checkOutTime && new Date(item.checkOutTime).toDateString() === new Date().toDateString());
+    const avgMinutes = completed.length ? Math.round(completed.reduce((sum, item) => sum + (new Date(item.checkOutTime!).getTime() - new Date(item.checkInTime).getTime()) / 60000, 0) / completed.length) : 0;
+    const cancelled = snapshot.bookings.filter(item => item.status?.toLowerCase() === 'cancelled').length;
+    return { capacity, active, available: Math.max(capacity - active, 0), avgMinutes, cancelled, bookings: snapshot.bookings.length };
+  }, [snapshot]);
+  const displayName = user?.username || 'Staff member';
+  const goManage = (screen: 'Customers'|'Bookings'|'StaffNotifications') => navigation.navigate('Manage', { screen });
 
-  // Mock stats – replace with real API calls in Phase 2
-  const [stats] = useState<StatItem[]>([
-    { icon: 'checkmark-circle-outline', label: 'Slot trống', value: '--', color: '#7EE8A2' },
-    { icon: 'car-sport-outline', label: 'Xe đang đỗ', value: '--', color: COLORS.gold },
-    { icon: 'time-outline', label: 'Phiên hôm nay', value: '--', color: '#60B4FF' },
-    { icon: 'alert-circle-outline', label: 'Cảnh báo', value: '--', color: COLORS.error },
-  ]);
-
-  const onRefresh = async () => {
-    setRefreshing(true);
-    // TODO Phase 2: fetch real stats
-    await new Promise(r => setTimeout(r, 800));
-    setRefreshing(false);
-  };
-
-  const displayName = user?.username ?? 'Nhân viên';
-  const initial = displayName.charAt(0).toUpperCase();
-
-  return (
-    <SafeAreaView edges={['top']} style={styles.safe}>
-      <StatusBar barStyle="light-content" backgroundColor="#080808" />
-
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor={COLORS.gold}
-            colors={[COLORS.gold]}
-          />
-        }
-      >
-        {/* ── Header ──────────────────────────────────────────── */}
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Text style={styles.greeting}>{getGreeting()},</Text>
-            <Text style={styles.userName}>{displayName} 👋</Text>
-            <Text style={styles.dateText}>{todayString()}</Text>
-          </View>
-          <View style={styles.avatarWrap}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{initial}</Text>
-            </View>
-            <View style={styles.staffBadge}>
-              <Ionicons name="shield-checkmark" size={10} color={COLORS.textInverse} />
-            </View>
-          </View>
+  return <SafeAreaView edges={['top']} style={styles.safe}><StatusBar barStyle="light-content" backgroundColor={COLORS.background}/>
+    <ScrollView contentContainerStyle={styles.scroll} refreshControl={<RefreshControl refreshing={refreshing} tintColor={COLORS.gold} onRefresh={async()=>{setRefreshing(true);await load();setRefreshing(false);}} />}>
+      <View style={styles.header}><View style={{flex:1}}><Text style={styles.eyebrow}>{new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'short'})}</Text><Text style={styles.title}>Good {new Date().getHours()<12?'morning':new Date().getHours()<18?'afternoon':'evening'}, {displayName}</Text><Text style={styles.subtitle}>Your live operations snapshot</Text></View><View style={styles.avatar}><Text style={styles.avatarText}>{displayName[0].toUpperCase()}</Text></View></View>
+      {loading ? <View style={styles.loading}><ActivityIndicator color={COLORS.gold}/><Text style={styles.muted}>Loading live operations...</Text></View> : error ? <ErrorState message={error} onRetry={load}/> : <>
+        <Pressable onPress={()=>navigation.navigate('LiveGrid')} style={styles.hero}><View><Text style={styles.heroLabel}>PARKING AVAILABILITY</Text><Text style={styles.heroValue}>{metrics.available}<Text style={styles.heroUnit}> / {metrics.capacity} spaces</Text></Text><Text style={styles.heroHint}>{metrics.active} vehicles currently parked</Text></View><Ionicons name="arrow-forward-circle" size={34} color={COLORS.gold}/></Pressable>
+        <View style={styles.metricRow}><Metric label="Today's bookings" value={String(metrics.bookings)} icon="calendar-outline"/><Metric label="Avg. dwell" value={metrics.avgMinutes ? `${metrics.avgMinutes} min` : 'No data'} icon="time-outline"/><Metric label="Cancelled" value={String(metrics.cancelled)} icon="close-circle-outline" semantic={metrics.cancelled>0}/></View>
+        <Text style={styles.section}>Quick actions</Text><View style={styles.actions}>
+          <Action icon="map-outline" title="Live grid" detail="Monitor occupied spaces" onPress={()=>navigation.navigate('LiveGrid')}/>
+          <Action icon="car-sport-outline" title="Sessions" detail="Review parking activity" onPress={()=>navigation.navigate('Sessions')}/>
+          <Action icon="people-outline" title="Customers" detail="Profiles and account access" onPress={()=>goManage('Customers')}/>
+          <Action icon="calendar-outline" title="Bookings" detail="Today's reservations" onPress={()=>goManage('Bookings')}/>
+          <Action icon="notifications-outline" title="Notify customers" detail="Compose an operational notice" onPress={()=>goManage('StaffNotifications')}/>
         </View>
-
-        {/* ── Status Banner ───────────────────────────────────── */}
-        <View style={styles.statusBanner}>
-          <LinearGradient
-            colors={['rgba(126,232,162,0.1)', 'rgba(126,232,162,0.03)']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={StyleSheet.absoluteFill}
-          />
-          <View style={styles.statusDot} />
-          <Text style={styles.statusText}>Hệ thống đang hoạt động bình thường</Text>
-          <Ionicons name="chevron-forward" size={14} color={COLORS.textMuted} />
-        </View>
-
-        {/* ── Stats Grid ──────────────────────────────────────── */}
-        <Text style={styles.sectionTitle}>Tổng quan hôm nay</Text>
-        <View style={styles.statsGrid}>
-          {stats.map((s) => (
-            <View
-              key={s.label}
-              style={[styles.statCard, { borderColor: `${s.color}22` }]}
-            >
-              <View style={[styles.statIconWrap, { backgroundColor: `${s.color}18` }]}>
-                <Ionicons name={s.icon} size={22} color={s.color} />
-              </View>
-              <Text style={[styles.statValue, { color: s.color }]}>{s.value}</Text>
-              <Text style={styles.statLabel}>{s.label}</Text>
-            </View>
-          ))}
-        </View>
-
-        {/* ── Quick Actions ───────────────────────────────────── */}
-        <Text style={styles.sectionTitle}>Thao tác nhanh</Text>
-        <View style={styles.actionList}>
-          {QUICK_ACTIONS.map((action, i) => (
-            <React.Fragment key={action.label}>
-              <TouchableOpacity
-                style={styles.actionItem}
-                onPress={() => navigation?.navigate?.(action.screen)}
-                activeOpacity={0.7}
-              >
-                <View style={[styles.actionIconWrap, { backgroundColor: action.bg }]}>
-                  <Ionicons name={action.icon} size={22} color={action.color} />
-                </View>
-                <View style={styles.actionTextWrap}>
-                  <Text style={styles.actionLabel}>{action.label}</Text>
-                  <Text style={styles.actionSublabel}>{action.sublabel}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} />
-              </TouchableOpacity>
-              {i < QUICK_ACTIONS.length - 1 && <View style={styles.actionDivider} />}
-            </React.Fragment>
-          ))}
-        </View>
-
-        {/* ── Shift info ──────────────────────────────────────── */}
-        <View style={styles.shiftCard}>
-          <LinearGradient
-            colors={[COLORS.gold, 'transparent']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.shiftTopLine}
-          />
-          <View style={styles.shiftRow}>
-            <Ionicons name="time-outline" size={16} color={COLORS.gold} />
-            <Text style={styles.shiftLabel}>Ca làm việc hiện tại</Text>
-          </View>
-          <Text style={styles.shiftValue}>
-            {new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} — Đang hoạt động
-          </Text>
-          <Text style={styles.shiftSub}>Kéo xuống để làm mới dữ liệu</Text>
-        </View>
-      </ScrollView>
-    </SafeAreaView>
-  );
+      </>}
+    </ScrollView>
+  </SafeAreaView>;
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: COLORS.background },
-  scroll: { paddingBottom: SPACING.xl },
-
-  header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.md,
-    paddingBottom: SPACING.md,
-  },
-  headerLeft: { flex: 1 },
-  greeting: { fontSize: FONT_SIZES.sm, color: COLORS.textSecondary },
-  userName: { fontSize: FONT_SIZES.xl, fontWeight: '700', color: COLORS.textPrimary, marginTop: 2 },
-  dateText: { fontSize: FONT_SIZES.xs, color: COLORS.textMuted, marginTop: 4 },
-  avatarWrap: { position: 'relative' },
-  avatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#1C3A5F',
-    borderWidth: 2,
-    borderColor: '#60B4FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: { color: '#60B4FF', fontWeight: '700', fontSize: FONT_SIZES.md },
-  staffBadge: {
-    position: 'absolute',
-    bottom: 0,
-    right: -2,
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: '#60B4FF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: COLORS.background,
-  },
-
-  statusBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: SPACING.lg,
-    marginBottom: SPACING.sm,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.sm,
-    borderRadius: RADIUS.md,
-    borderWidth: 1,
-    borderColor: 'rgba(126,232,162,0.2)',
-    overflow: 'hidden',
-    gap: SPACING.sm,
-  },
-  statusDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#7EE8A2',
-  },
-  statusText: { flex: 1, fontSize: FONT_SIZES.xs, color: '#7EE8A2' },
-
-  sectionTitle: {
-    fontSize: FONT_SIZES.md,
-    fontWeight: '700',
-    color: COLORS.textPrimary,
-    marginTop: SPACING.lg,
-    marginBottom: SPACING.md,
-    paddingHorizontal: SPACING.lg,
-  },
-
-  statsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: SPACING.lg,
-    gap: SPACING.md,
-  },
-  statCard: {
-    width: '47%',
-    backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.md,
-    borderWidth: 1,
-  },
-  statIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: RADIUS.sm,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: SPACING.sm,
-  },
-  statValue: { fontSize: FONT_SIZES.xxl, fontWeight: '800' },
-  statLabel: { fontSize: FONT_SIZES.xs, color: COLORS.textSecondary, marginTop: 2 },
-
-  actionList: {
-    marginHorizontal: SPACING.lg,
-    backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.xl,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-    overflow: 'hidden',
-  },
-  actionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: SPACING.md,
-    gap: SPACING.md,
-  },
-  actionIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: RADIUS.md,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  actionTextWrap: { flex: 1 },
-  actionLabel: { fontSize: FONT_SIZES.md, color: COLORS.textPrimary, fontWeight: '500' },
-  actionSublabel: { fontSize: FONT_SIZES.xs, color: COLORS.textMuted, marginTop: 2 },
-  actionDivider: { height: 1, backgroundColor: COLORS.border, marginLeft: 60 + SPACING.md },
-
-  shiftCard: {
-    marginHorizontal: SPACING.lg,
-    marginTop: SPACING.lg,
-    backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.xl,
-    padding: SPACING.lg,
-    borderWidth: 1,
-    borderColor: 'rgba(212,175,55,0.2)',
-    overflow: 'hidden',
-  },
-  shiftTopLine: { position: 'absolute', top: 0, left: 0, right: 0, height: 2 },
-  shiftRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.sm },
-  shiftLabel: { fontSize: FONT_SIZES.sm, color: COLORS.textSecondary },
-  shiftValue: { fontSize: FONT_SIZES.lg, fontWeight: '700', color: COLORS.textPrimary },
-  shiftSub: { fontSize: FONT_SIZES.xs, color: COLORS.textMuted, marginTop: SPACING.xs },
-});
+function Metric({label,value,icon,semantic=false}:{label:string;value:string;icon:React.ComponentProps<typeof Ionicons>['name'];semantic?:boolean}) { return <View style={styles.metric}><Ionicons name={icon} size={18} color={semantic?COLORS.error:COLORS.gold}/><Text style={[styles.metricValue,semantic&&{color:COLORS.error}]} numberOfLines={1}>{value}</Text><Text style={styles.metricLabel}>{label}</Text></View>; }
+function Action({icon,title,detail,onPress}:{icon:React.ComponentProps<typeof Ionicons>['name'];title:string;detail:string;onPress:()=>void}) { return <Pressable onPress={onPress} style={({pressed})=>[styles.action,pressed&&styles.pressed]}><View style={styles.actionIcon}><Ionicons name={icon} size={20} color={COLORS.gold}/></View><View style={{flex:1}}><Text style={styles.actionTitle}>{title}</Text><Text style={styles.actionDetail}>{detail}</Text></View><Ionicons name="chevron-forward" size={18} color={COLORS.textMuted}/></Pressable>; }
+const styles=StyleSheet.create({safe:{flex:1,backgroundColor:COLORS.background},scroll:{padding:SPACING.lg,paddingBottom:96},header:{flexDirection:'row',alignItems:'center',gap:SPACING.md,marginBottom:SPACING.lg},eyebrow:{color:COLORS.gold,fontSize:FONT_SIZES.xs,fontWeight:'800',letterSpacing:1,textTransform:'uppercase'},title:{color:COLORS.textPrimary,fontSize:24,fontWeight:'800',letterSpacing:-.4,marginTop:4},subtitle:{color:COLORS.textMuted,fontSize:FONT_SIZES.sm,marginTop:4},avatar:{width:46,height:46,borderRadius:23,backgroundColor:'rgba(212,175,55,.12)',borderWidth:1,borderColor:COLORS.gold,alignItems:'center',justifyContent:'center'},avatarText:{color:COLORS.gold,fontWeight:'800',fontSize:FONT_SIZES.lg},loading:{minHeight:220,alignItems:'center',justifyContent:'center',gap:SPACING.sm},muted:{color:COLORS.textMuted},hero:{minHeight:150,backgroundColor:COLORS.surface,borderWidth:1,borderColor:'rgba(212,175,55,.3)',borderRadius:RADIUS.xl,padding:SPACING.lg,flexDirection:'row',justifyContent:'space-between',alignItems:'center'},heroLabel:{color:COLORS.gold,fontSize:FONT_SIZES.xs,fontWeight:'800',letterSpacing:1},heroValue:{color:COLORS.textPrimary,fontSize:38,fontWeight:'900',letterSpacing:-1,marginTop:10},heroUnit:{fontSize:FONT_SIZES.sm,color:COLORS.textSecondary,fontWeight:'600'},heroHint:{color:COLORS.textMuted,fontSize:FONT_SIZES.sm,marginTop:4},metricRow:{flexDirection:'row',gap:SPACING.sm,marginTop:SPACING.sm},metric:{flex:1,minHeight:104,backgroundColor:COLORS.surface,borderWidth:1,borderColor:COLORS.border,borderRadius:RADIUS.lg,padding:SPACING.sm,justifyContent:'space-between'},metricValue:{color:COLORS.textPrimary,fontSize:FONT_SIZES.lg,fontWeight:'800'},metricLabel:{color:COLORS.textMuted,fontSize:11,lineHeight:15},section:{color:COLORS.textPrimary,fontSize:FONT_SIZES.lg,fontWeight:'800',marginTop:SPACING.xl,marginBottom:SPACING.sm},actions:{borderWidth:1,borderColor:COLORS.border,borderRadius:RADIUS.xl,overflow:'hidden'},action:{minHeight:72,backgroundColor:COLORS.surface,borderBottomWidth:StyleSheet.hairlineWidth,borderBottomColor:COLORS.border,padding:SPACING.md,flexDirection:'row',alignItems:'center',gap:SPACING.md},pressed:{backgroundColor:COLORS.surfaceElevated},actionIcon:{width:42,height:42,borderRadius:RADIUS.md,backgroundColor:'rgba(212,175,55,.1)',alignItems:'center',justifyContent:'center'},actionTitle:{color:COLORS.textPrimary,fontWeight:'700'},actionDetail:{color:COLORS.textMuted,fontSize:FONT_SIZES.xs,marginTop:3}});

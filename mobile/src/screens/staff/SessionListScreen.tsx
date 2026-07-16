@@ -45,8 +45,8 @@ type FilterType = 'active' | 'completed' | 'all';
 const SOURCE_LABELS: Record<string, string> = {
   kiosk: 'Kiosk',
   app_booking: 'App',
-  booking: 'Đặt trước',
-  walk_in: 'Vãng lai',
+  booking: 'Booked',
+  walk_in: 'Walk-in',
 };
 
 function SessionCard({ session, onPress }: { session: ActiveSession; onPress: () => void }) {
@@ -61,7 +61,7 @@ function SessionCard({ session, onPress }: { session: ActiveSession; onPress: ()
     <Pressable style={({ pressed }) => [styles.card, pressed && styles.pressed]} onPress={onPress}>
       {isActive ? (
         <LinearGradient
-          colors={[COLORS.staffBlue, 'transparent']}
+          colors={[COLORS.gold, 'transparent']}
           end={{ x: 1, y: 0 }}
           start={{ x: 0, y: 0 }}
           style={styles.cardTopLine}
@@ -75,7 +75,7 @@ function SessionCard({ session, onPress }: { session: ActiveSession; onPress: ()
         <View style={[styles.statusPill, isActive ? styles.statusPillActive : styles.statusPillDone]}>
           <View style={[styles.statusDot, { backgroundColor: isActive ? COLORS.success : COLORS.textMuted }]} />
           <Text style={[styles.statusText, { color: isActive ? COLORS.success : COLORS.textMuted }]}>
-            {isActive ? 'Đang đỗ' : 'Đã xong'}
+            {isActive ? 'Active' : 'Completed'}
           </Text>
         </View>
       </View>
@@ -83,7 +83,7 @@ function SessionCard({ session, onPress }: { session: ActiveSession; onPress: ()
       <View style={[styles.cardRow, styles.metaRow]}>
         <View style={styles.infoItem}>
           <Ionicons name="location-outline" size={13} color={COLORS.textMuted} />
-          <Text style={styles.infoText}>{session.parkingSlot ?? 'Chưa xác định'}</Text>
+          <Text style={styles.infoText}>{session.parkingSlot ?? 'Not assigned'}</Text>
         </View>
         <View style={styles.infoItem}>
           <Ionicons name="time-outline" size={13} color={COLORS.textMuted} />
@@ -121,7 +121,7 @@ export const SessionListScreen = ({ navigation }: Props) => {
       const res = await sessionsService.getActiveParkingStatus();
       setSessions((res as { data?: ActiveSession[] }).data ?? []);
     } catch (loadError: unknown) {
-      setError(loadError instanceof Error ? loadError.message : 'Không thể tải phiên đỗ xe.');
+      setError(loadError instanceof Error ? loadError.message : 'Unable to load parking sessions.');
     } finally {
       setLoading(false);
     }
@@ -146,25 +146,25 @@ export const SessionListScreen = ({ navigation }: Props) => {
       <StatusBar barStyle="light-content" backgroundColor="#080808" />
 
       <View style={styles.header}>
-        <Text style={styles.title}>Phiên đỗ xe</Text>
+        <Text style={styles.title}>Parking sessions</Text>
         <View style={styles.headerBadge}>
           <View style={styles.onlineDot} />
-          <Text style={styles.headerBadgeText}>{activeCount} đang đỗ</Text>
+          <Text style={styles.headerBadgeText}>{activeCount} active</Text>
         </View>
       </View>
 
       <View style={styles.statsRow}>
         <View style={[styles.statCard, { borderColor: 'rgba(126,232,162,0.2)' }]}>
           <Text style={[styles.statValue, { color: COLORS.success }]}>{activeCount}</Text>
-          <Text style={styles.statLabel}>Đang đỗ</Text>
+          <Text style={styles.statLabel}>Active</Text>
         </View>
         <View style={[styles.statCard, { borderColor: 'rgba(160,160,160,0.2)' }]}>
           <Text style={[styles.statValue, { color: COLORS.textSecondary }]}>{completedCount}</Text>
-          <Text style={styles.statLabel}>Đã xong</Text>
+          <Text style={styles.statLabel}>Completed</Text>
         </View>
         <View style={[styles.statCard, { borderColor: 'rgba(212,175,55,0.2)' }]}>
           <Text style={[styles.statValue, { color: COLORS.gold }]}>{sessions.length}</Text>
-          <Text style={styles.statLabel}>Tổng</Text>
+          <Text style={styles.statLabel}>Total</Text>
         </View>
       </View>
 
@@ -176,7 +176,7 @@ export const SessionListScreen = ({ navigation }: Props) => {
             onPress={() => setFilter(item)}
           >
             <Text style={[styles.filterText, filter === item && styles.filterTextActive]}>
-              {item === 'active' ? 'Đang đỗ' : item === 'completed' ? 'Đã xong' : 'Tất cả'}
+              {item === 'active' ? 'Active' : item === 'completed' ? 'Completed' : 'All'}
             </Text>
           </Pressable>
         ))}
@@ -184,7 +184,7 @@ export const SessionListScreen = ({ navigation }: Props) => {
 
       {loading ? (
         <View style={styles.loadingWrap}>
-          <ActivityIndicator color={COLORS.staffBlue} size="large" />
+          <ActivityIndicator color={COLORS.gold} size="large" />
         </View>
       ) : error ? (
         <ErrorState message={error} onRetry={load} />
@@ -196,8 +196,8 @@ export const SessionListScreen = ({ navigation }: Props) => {
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              tintColor={COLORS.staffBlue}
-              colors={[COLORS.staffBlue]}
+              tintColor={COLORS.gold}
+              colors={[COLORS.gold]}
               onRefresh={onRefresh}
             />
           }
@@ -210,9 +210,9 @@ export const SessionListScreen = ({ navigation }: Props) => {
           ListEmptyComponent={
             <EmptyState
               icon="car-outline"
-              title="Không có phiên nào"
-              message="Không có dữ liệu phù hợp với bộ lọc hiện tại."
-              accentColor={COLORS.staffBlue}
+              title="No sessions found"
+              message="No sessions match the current filter."
+              accentColor={COLORS.gold}
             />
           }
           showsVerticalScrollIndicator={false}
@@ -267,9 +267,9 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 8,
   },
-  filterTabActive: { backgroundColor: 'rgba(96,180,255,0.12)', borderColor: COLORS.staffBlue },
+  filterTabActive: { backgroundColor: 'rgba(212,175,55,0.12)', borderColor: COLORS.gold },
   filterText: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs, fontWeight: '600' },
-  filterTextActive: { color: COLORS.staffBlue },
+  filterTextActive: { color: COLORS.gold },
   loadingWrap: { alignItems: 'center', flex: 1, justifyContent: 'center' },
   listContent: { gap: SPACING.md, padding: SPACING.lg, paddingBottom: SPACING.xl },
   card: {

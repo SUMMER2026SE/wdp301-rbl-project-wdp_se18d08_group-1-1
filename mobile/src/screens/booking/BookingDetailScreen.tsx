@@ -23,7 +23,9 @@ import {
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
 import { useBooking } from '@/hooks/useBooking';
 import type { BookingStackParamList } from '@/navigation/BookingStackNavigator';
+import { vehiclesService } from '@/services/api/vehicles';
 import type { BookingStatus, PaymentStatus } from '@/types/booking.types';
+import type { Vehicle } from '@/types/models';
 import { canExtendBookingBy, getBookingActionAvailability } from '@/utils/bookingActions';
 import { formatCurrency } from '@/utils/formatters';
 
@@ -42,13 +44,13 @@ interface ActionDialog {
 const EXTENSION_OPTIONS = [30, 60, 120];
 
 const STATUS_LABELS: Record<BookingStatus, { label: string; color: string; bg: string }> = {
-  pending: { label: 'Chờ thanh toán', color: COLORS.warning, bg: 'rgba(255,159,67,0.12)' },
-  confirmed: { label: 'Đã xác nhận', color: COLORS.staffBlue, bg: 'rgba(96,180,255,0.12)' },
-  active: { label: 'Đang đỗ xe', color: COLORS.success, bg: 'rgba(76,175,80,0.12)' },
-  paused: { label: 'Tạm dừng', color: COLORS.warning, bg: 'rgba(255,159,67,0.12)' },
-  completed: { label: 'Hoàn thành', color: COLORS.textMuted, bg: COLORS.surfaceElevated },
-  cancelled: { label: 'Đã hủy', color: COLORS.error, bg: 'rgba(255,77,77,0.12)' },
-  expired: { label: 'Hết hạn', color: COLORS.warning, bg: 'rgba(255,159,67,0.12)' },
+  pending: { label: 'Payment pending', color: COLORS.warning, bg: 'rgba(255,159,67,0.12)' },
+  confirmed: { label: 'Confirmed', color: COLORS.staffBlue, bg: 'rgba(96,180,255,0.12)' },
+  active: { label: 'Parked', color: COLORS.success, bg: 'rgba(76,175,80,0.12)' },
+  paused: { label: 'Paused', color: COLORS.warning, bg: 'rgba(255,159,67,0.12)' },
+  completed: { label: 'Completed', color: COLORS.textMuted, bg: COLORS.surfaceElevated },
+  cancelled: { label: 'Cancelled', color: COLORS.error, bg: 'rgba(255,77,77,0.12)' },
+  expired: { label: 'Expired', color: COLORS.warning, bg: 'rgba(255,159,67,0.12)' },
 };
 
 function safeFormat(dateValue: string, pattern: string) {
@@ -57,11 +59,11 @@ function safeFormat(dateValue: string, pattern: string) {
 }
 
 const PAYMENT_LABELS: Record<PaymentStatus, string> = {
-  paid: 'Đã thanh toán',
-  partially_refunded: 'Hoàn một phần',
-  refunded: 'Đã hoàn tiền',
-  failed: 'Thanh toán thất bại',
-  pending: 'Chờ thanh toán',
+  paid: 'Paid',
+  partially_refunded: 'Partially refunded',
+  refunded: 'Refunded',
+  failed: 'Payment failed',
+  pending: 'Payment pending',
 };
 
 function InfoRow({ label, value, valueColor }: { label: string; value: string; valueColor?: string }) {
@@ -82,10 +84,15 @@ export const BookingDetailScreen = ({ navigation, route }: Props) => {
     checkOutBooking,
     cancelBooking,
     extendBooking,
+    updateBookingVehicle,
   } = useBooking();
   const [actionLoading, setActionLoading] = useState(false);
   const [extendModalVisible, setExtendModalVisible] = useState(false);
   const [extendingMinutes, setExtendingMinutes] = useState<number | null>(null);
+  const [vehicleModalVisible, setVehicleModalVisible] = useState(false);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [selectedVehicleId, setSelectedVehicleId] = useState('');
+  const [vehiclesLoading, setVehiclesLoading] = useState(false);
   const [actionDialog, setActionDialog] = useState<ActionDialog | null>(null);
   const booking = getBookingById(route.params.bookingId);
 
@@ -95,8 +102,33 @@ export const BookingDetailScreen = ({ navigation, route }: Props) => {
     }
   }, [booking, fetchBookings]);
 
+  useEffect(() => {
+    if (!vehicleModalVisible) return;
+
+    let active = true;
+    setVehiclesLoading(true);
+    void vehiclesService.getMyVehicles()
+      .then((response) => {
+        if (!active) return;
+        const approved = (response.data || []).filter((vehicle) => !vehicle.status || vehicle.status === 'approved');
+        setVehicles(approved);
+        setSelectedVehicleId((current) => current || String(approved[0]?._id ?? approved[0]?.id ?? ''));
+      })
+      .catch((error) => {
+        if (active) {
+          setVehicleModalVisible(false);
+          showFeedback('error', 'Unable to load vehicles', error instanceof Error ? error.message : 'Unable to load the vehicle list.');
+        }
+      })
+      .finally(() => {
+        if (active) setVehiclesLoading(false);
+      });
+
+    return () => { active = false; };
+  }, [vehicleModalVisible]);
+
   const showFeedback = (variant: BookingModalVariant, title: string, message: string) => {
-    setActionDialog({ variant, title, message, primaryLabel: 'Đóng' });
+    setActionDialog({ variant, title, message, primaryLabel: 'Close' });
   };
 
   const runAction = async (
@@ -110,7 +142,7 @@ export const BookingDetailScreen = ({ navigation, route }: Props) => {
       await action();
       showFeedback('success', successTitle, successMessage);
     } catch (error) {
-      showFeedback('error', 'Không thể thực hiện', error instanceof Error ? error.message : fallbackError);
+      showFeedback('error', 'Action unavailable', error instanceof Error ? error.message : fallbackError);
     } finally {
       setActionLoading(false);
     }
@@ -128,16 +160,16 @@ export const BookingDetailScreen = ({ navigation, route }: Props) => {
   const handleCheckIn = () => {
     setActionDialog({
       variant: 'info',
-      title: 'Xác nhận Check-in',
-      message: 'Bạn đã đến đúng ô đỗ và muốn bắt đầu phiên gửi xe?',
+      title: 'Confirm check-in',
+      message: 'Are you at the assigned space and ready to start your parking session?',
       primaryLabel: 'Check-in ngay',
-      secondaryLabel: 'Để sau',
+      secondaryLabel: 'Not now',
       onConfirm: () =>
         runAction(
           () => checkInBooking(route.params.bookingId),
-          'Check-in thành công',
-          'Phiên gửi xe của bạn đã bắt đầu.',
-          'Check-in thất bại',
+          'Check-in successful',
+          'Your parking session has started.',
+          'Check-in failed',
         ),
     });
   };
@@ -145,16 +177,16 @@ export const BookingDetailScreen = ({ navigation, route }: Props) => {
   const handleCheckOut = () => {
     setActionDialog({
       variant: 'warning',
-      title: 'Kết thúc phiên gửi xe?',
-      message: 'Hệ thống sẽ tính phí thực tế và tự động thu thêm hoặc hoàn tiền vào ví.',
-      primaryLabel: 'Xác nhận Check-out',
-      secondaryLabel: 'Tiếp tục gửi',
+      title: 'End parking session?',
+      message: 'The final fee will be calculated automatically, with any difference charged to or refunded to your wallet.',
+      primaryLabel: 'Confirm check-out',
+      secondaryLabel: 'Keep parking',
       onConfirm: () =>
         runAction(
           () => checkOutBooking(route.params.bookingId),
-          'Check-out thành công',
-          'Phiên gửi xe đã kết thúc và số dư ví đã được cập nhật.',
-          'Check-out thất bại',
+          'Check-out successful',
+          'Your parking session has ended and your wallet balance has been updated.',
+          'Check-out failed',
         ),
     });
   };
@@ -164,17 +196,17 @@ export const BookingDetailScreen = ({ navigation, route }: Props) => {
 
     setActionDialog({
       variant: 'error',
-      title: 'Hủy đặt chỗ?',
-      message: `${formatCurrency(booking.prepaidAmount)} sẽ được hoàn lại vào ví VALO sau khi hủy.`,
-      primaryLabel: 'Xác nhận hủy',
-      secondaryLabel: 'Giữ đặt chỗ',
+      title: 'Cancel booking?',
+      message: `${formatCurrency(booking.prepaidAmount)} will be refunded to your VALO Wallet after cancellation.`,
+      primaryLabel: 'Confirm cancellation',
+      secondaryLabel: 'Keep booking',
       destructive: true,
       onConfirm: () =>
         runAction(
           () => cancelBooking(booking._id),
-          'Đã hủy đặt chỗ',
-          'Tiền đặt trước đã được hoàn lại vào ví VALO.',
-          'Hủy đặt chỗ thất bại',
+          'Booking cancelled',
+          'Your prepayment has been refunded to your VALO Wallet.',
+          'Cancellation failed',
         ),
     });
   };
@@ -184,12 +216,12 @@ export const BookingDetailScreen = ({ navigation, route }: Props) => {
 
     const currentEnd = new Date(booking.endTime);
     if (Number.isNaN(currentEnd.getTime())) {
-      showFeedback('error', 'Không thể gia hạn', 'Thời gian kết thúc hiện tại không hợp lệ.');
+      showFeedback('error', 'Unable to extend', 'The current end time is invalid.');
       return;
     }
 
     if (!canExtendBookingBy(booking, minutes)) {
-      showFeedback('warning', 'Vượt giới hạn thời gian', 'Tổng thời lượng đặt chỗ không được vượt quá 24 giờ.');
+      showFeedback('warning', 'Time limit exceeded', 'The total booking duration cannot exceed 24 hours.');
       return;
     }
 
@@ -204,18 +236,34 @@ export const BookingDetailScreen = ({ navigation, route }: Props) => {
       setExtendModalVisible(false);
       showFeedback(
         'success',
-        'Gia hạn thành công',
-        `Giờ kết thúc mới: ${safeFormat(newEnd.toISOString(), 'HH:mm dd/MM/yyyy')}`,
+        'Booking extended',
+        `New end time: ${safeFormat(newEnd.toISOString(), 'HH:mm dd/MM/yyyy')}`,
       );
     } catch (error) {
       setExtendModalVisible(false);
       showFeedback(
         'error',
-        'Không thể gia hạn',
-        error instanceof Error ? error.message : 'Gia hạn đặt chỗ thất bại',
+        'Unable to extend',
+        error instanceof Error ? error.message : 'Failed to extend the booking',
       );
     } finally {
       setExtendingMinutes(null);
+      setActionLoading(false);
+    }
+  };
+
+  const handleChangeVehicle = async () => {
+    if (!booking || !selectedVehicleId) return;
+
+    setActionLoading(true);
+    try {
+      await updateBookingVehicle(booking._id, selectedVehicleId);
+      setVehicleModalVisible(false);
+      showFeedback('success', 'Vehicle updated', 'The vehicle for this booking has been updated.');
+    } catch (error) {
+      setVehicleModalVisible(false);
+      showFeedback('error', 'Unable to change vehicle', error instanceof Error ? error.message : 'Failed to change the vehicle.');
+    } finally {
       setActionLoading(false);
     }
   };
@@ -224,15 +272,15 @@ export const BookingDetailScreen = ({ navigation, route }: Props) => {
     return (
       <SafeAreaView edges={['top']} style={styles.safe}>
         <StatusBar barStyle="light-content" backgroundColor="#080808" />
-        <ScreenHeader title="Chi tiết đặt chỗ" onBack={() => navigation.goBack()} />
+        <ScreenHeader title="Booking details" onBack={() => navigation.goBack()} />
         <View style={styles.center}>
           {isLoading ? (
             <ActivityIndicator color={COLORS.gold} size="large" />
           ) : (
             <EmptyState
               icon="calendar-outline"
-              title="Không tìm thấy đặt chỗ"
-              message="Dữ liệu có thể đã thay đổi. Quay lại danh sách và làm mới."
+              title="Booking not found"
+              message="The booking may have changed. Return to the list and refresh."
             />
           )}
         </View>
@@ -242,12 +290,12 @@ export const BookingDetailScreen = ({ navigation, route }: Props) => {
 
   const statusConfig = STATUS_LABELS[booking.status];
   const floorName = typeof booking.floorId === 'object' ? booking.floorId.name : booking.floorId;
-  const { canCancel, canCheckIn, canCheckOut, canExtend } = getBookingActionAvailability(booking);
+  const { canCancel, canChangeVehicle, canCheckIn, canCheckOut, canExtend } = getBookingActionAvailability(booking);
 
   return (
     <SafeAreaView edges={['top', 'bottom']} style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#080808" />
-      <ScreenHeader title="Chi tiết đặt chỗ" onBack={() => navigation.goBack()} />
+      <ScreenHeader title="Booking details" onBack={() => navigation.goBack()} />
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.statusCard}>
@@ -266,14 +314,14 @@ export const BookingDetailScreen = ({ navigation, route }: Props) => {
               <Text style={[styles.statusText, { color: statusConfig.color }]}>{statusConfig.label}</Text>
             </View>
           </View>
-          {floorName ? <Text style={styles.floorName}>Tầng: {floorName}</Text> : null}
+          {floorName ? <Text style={styles.floorName}>Floor: {floorName}</Text> : null}
         </View>
 
         <View style={styles.section}>
-          <SectionTitle>Thời gian đặt</SectionTitle>
+          <SectionTitle>Booking time</SectionTitle>
           <View style={styles.timeRow}>
             <View style={styles.timeBlock}>
-              <Text style={styles.timeLabel}>Vào lúc</Text>
+              <Text style={styles.timeLabel}>Arrival</Text>
               <Text style={styles.timeValue}>{safeFormat(booking.startTime, 'HH:mm')}</Text>
               <Text style={styles.timeDate}>{safeFormat(booking.startTime, 'dd/MM/yyyy')}</Text>
             </View>
@@ -282,7 +330,7 @@ export const BookingDetailScreen = ({ navigation, route }: Props) => {
               <Text style={styles.timeDuration}>{booking.paidHours}h</Text>
             </View>
             <View style={[styles.timeBlock, styles.timeBlockRight]}>
-              <Text style={styles.timeLabel}>Ra lúc</Text>
+              <Text style={styles.timeLabel}>Departure</Text>
               <Text style={styles.timeValue}>{safeFormat(booking.endTime, 'HH:mm')}</Text>
               <Text style={styles.timeDate}>{safeFormat(booking.endTime, 'dd/MM/yyyy')}</Text>
             </View>
@@ -290,37 +338,48 @@ export const BookingDetailScreen = ({ navigation, route }: Props) => {
         </View>
 
         <View style={styles.section}>
-          <SectionTitle>Phương tiện</SectionTitle>
+          <SectionTitle>Vehicle</SectionTitle>
           <View style={styles.infoCard}>
             <View style={styles.plateBig}>
               <Text style={styles.plateBigText}>{booking.licensePlate}</Text>
             </View>
+            {canChangeVehicle ? (
+              <TouchableOpacity
+                activeOpacity={0.8}
+                disabled={actionLoading}
+                style={styles.changeVehicleBtn}
+                onPress={() => setVehicleModalVisible(true)}
+              >
+                <Ionicons name="swap-horizontal-outline" size={18} color={COLORS.staffBlue} />
+                <Text style={styles.changeVehicleText}>Change vehicle</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         </View>
 
         <View style={styles.section}>
-          <SectionTitle>Thanh toán</SectionTitle>
+          <SectionTitle>Payment</SectionTitle>
           <View style={styles.infoCard}>
-            <InfoRow label="Phương thức" value={booking.paymentMethod === 'vietqr' ? 'VietQR' : 'Ví VALO'} />
+            <InfoRow label="Method" value={booking.paymentMethod === 'vietqr' ? 'VietQR' : 'VALO Wallet'} />
             <View style={styles.divider} />
             <InfoRow
-              label="Trạng thái"
+              label="Status"
               value={PAYMENT_LABELS[booking.paymentStatus]}
               valueColor={booking.paymentStatus === 'paid' ? COLORS.success : undefined}
             />
             <View style={styles.divider} />
-            <InfoRow label="Tạm tính" value={formatCurrency(booking.prepaidAmount)} />
+            <InfoRow label="Prepaid" value={formatCurrency(booking.prepaidAmount)} />
             {booking.serviceAmount > 0 ? (
               <>
                 <View style={styles.divider} />
-                <InfoRow label="Dịch vụ" value={formatCurrency(booking.serviceAmount)} />
+                <InfoRow label="Services" value={formatCurrency(booking.serviceAmount)} />
               </>
             ) : null}
             {(booking.refundAmount ?? 0) > 0 ? (
               <>
                 <View style={styles.divider} />
                 <InfoRow
-                  label="Hoàn tiền"
+                  label="Refund"
                   value={`-${formatCurrency(booking.refundAmount ?? 0)}`}
                   valueColor={COLORS.success}
                 />
@@ -328,7 +387,7 @@ export const BookingDetailScreen = ({ navigation, route }: Props) => {
             ) : null}
             <View style={[styles.divider, styles.strongDivider]} />
             <View style={styles.infoRow}>
-              <Text style={styles.totalLabel}>Tổng cộng</Text>
+              <Text style={styles.totalLabel}>Total</Text>
               <Text style={styles.totalValue}>{formatCurrency(booking.finalAmount ?? booking.prepaidAmount ?? 0)}</Text>
             </View>
           </View>
@@ -344,7 +403,7 @@ export const BookingDetailScreen = ({ navigation, route }: Props) => {
                 onPress={() => setExtendModalVisible(true)}
               >
                 <Ionicons name="time-outline" size={19} color={COLORS.gold} />
-                <Text style={styles.extendText}>Gia hạn</Text>
+                <Text style={styles.extendText}>Extend</Text>
               </TouchableOpacity>
             ) : null}
             {canCancel ? (
@@ -355,7 +414,7 @@ export const BookingDetailScreen = ({ navigation, route }: Props) => {
                 onPress={handleCancel}
               >
                 <Ionicons name="trash-outline" size={19} color={COLORS.error} />
-                <Text style={styles.cancelText}>Hủy đặt chỗ</Text>
+                <Text style={styles.cancelText}>Cancel booking</Text>
               </TouchableOpacity>
             ) : null}
           </View>
@@ -411,6 +470,65 @@ export const BookingDetailScreen = ({ navigation, route }: Props) => {
       <Modal
         animationType="fade"
         transparent
+        visible={vehicleModalVisible}
+        onRequestClose={() => setVehicleModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Change vehicle</Text>
+            <Text style={styles.modalSubtitle}>Only approved vehicles can be used for this booking.</Text>
+            {vehiclesLoading ? (
+              <ActivityIndicator color={COLORS.gold} size="large" style={styles.vehicleLoader} />
+            ) : (
+              <View style={styles.vehicleOptions}>
+                {vehicles.map((vehicle) => {
+                  const vehicleId = String(vehicle._id ?? vehicle.id);
+                  const selected = vehicleId === selectedVehicleId;
+                  return (
+                    <TouchableOpacity
+                      key={vehicleId}
+                      activeOpacity={0.8}
+                      style={[styles.vehicleOption, selected && styles.vehicleOptionSelected]}
+                      onPress={() => setSelectedVehicleId(vehicleId)}
+                    >
+                      <View>
+                        <Text style={styles.vehiclePlate}>{vehicle.licensePlate}</Text>
+                        <Text style={styles.vehicleMeta}>{[vehicle.brand, vehicle.model].filter(Boolean).join(' ')}</Text>
+                      </View>
+                      <Ionicons
+                        name={selected ? 'radio-button-on' : 'radio-button-off'}
+                        size={20}
+                        color={selected ? COLORS.gold : COLORS.textMuted}
+                      />
+                    </TouchableOpacity>
+                  );
+                })}
+                {!vehicles.length ? <Text style={styles.modalNote}>You do not have any approved vehicles.</Text> : null}
+              </View>
+            )}
+            <TouchableOpacity
+              activeOpacity={0.8}
+              disabled={!selectedVehicleId || actionLoading || vehiclesLoading}
+              style={[styles.vehicleConfirmBtn, (!selectedVehicleId || vehiclesLoading) && styles.vehicleConfirmDisabled]}
+              onPress={() => void handleChangeVehicle()}
+            >
+              {actionLoading ? <ActivityIndicator color={COLORS.textInverse} size="small" /> : <Text style={styles.vehicleConfirmText}>Confirm vehicle</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              disabled={actionLoading}
+              style={styles.modalCloseBtn}
+              onPress={() => setVehicleModalVisible(false)}
+            >
+              <Text style={styles.modalCloseText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        transparent
         visible={extendModalVisible}
         onRequestClose={() => setExtendModalVisible(false)}
       >
@@ -419,11 +537,11 @@ export const BookingDetailScreen = ({ navigation, route }: Props) => {
             <View style={styles.modalIconGlow}>
               <Ionicons name="time" size={70} color={COLORS.gold} />
             </View>
-            <Text style={styles.modalTitle}>Gia hạn đặt chỗ</Text>
+            <Text style={styles.modalTitle}>Extend booking</Text>
             <Text style={styles.modalSubtitle}>
-              Giờ kết thúc hiện tại: {safeFormat(booking.endTime, 'HH:mm dd/MM/yyyy')}
+              Current end time: {safeFormat(booking.endTime, 'HH:mm dd/MM/yyyy')}
             </Text>
-            <Text style={styles.modalHint}>Chọn thời gian muốn gia hạn</Text>
+            <Text style={styles.modalHint}>Choose an extension</Text>
             <View style={styles.extensionOptions}>
               {EXTENSION_OPTIONS.map((minutes) => {
                 const optionAvailable = canExtendBookingBy(booking, minutes);
@@ -450,7 +568,7 @@ export const BookingDetailScreen = ({ navigation, route }: Props) => {
                             !optionAvailable && styles.extensionOptionTextDisabled,
                           ]}
                         >
-                          +{minutes < 60 ? `${minutes} phút` : `${minutes / 60} giờ`}
+                          +{minutes < 60 ? `${minutes} min` : `${minutes / 60} hr`}
                         </Text>
                       </>
                     )}
@@ -458,14 +576,14 @@ export const BookingDetailScreen = ({ navigation, route }: Props) => {
                 );
               })}
             </View>
-            <Text style={styles.modalNote}>Phí phát sinh sẽ được trừ từ ví sau khi hệ thống kiểm tra ô đỗ.</Text>
+            <Text style={styles.modalNote}>Any additional fee will be charged to your wallet after availability is verified.</Text>
             <TouchableOpacity
               activeOpacity={0.8}
               disabled={actionLoading}
               style={styles.modalCloseBtn}
               onPress={() => setExtendModalVisible(false)}
             >
-              <Text style={styles.modalCloseText}>Đóng</Text>
+              <Text style={styles.modalCloseText}>Close</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -475,7 +593,7 @@ export const BookingDetailScreen = ({ navigation, route }: Props) => {
         destructive={actionDialog?.destructive}
         loading={actionLoading}
         message={actionDialog?.message}
-        primaryLabel={actionDialog?.primaryLabel ?? 'Đóng'}
+        primaryLabel={actionDialog?.primaryLabel ?? 'Close'}
         secondaryLabel={actionDialog?.secondaryLabel}
         title={actionDialog?.title ?? ''}
         variant={actionDialog?.variant ?? 'info'}
@@ -548,6 +666,15 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 3,
   },
+  changeVehicleBtn: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    flexDirection: 'row',
+    gap: SPACING.xs,
+    marginTop: SPACING.md,
+    paddingVertical: SPACING.xs,
+  },
+  changeVehicleText: { color: COLORS.staffBlue, fontSize: FONT_SIZES.sm, fontWeight: '700' },
   infoRow: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -638,6 +765,32 @@ const styles = StyleSheet.create({
   },
   modalHint: { color: COLORS.textPrimary, fontSize: FONT_SIZES.sm, fontWeight: '600', marginTop: SPACING.lg },
   extensionOptions: { gap: SPACING.sm, marginTop: SPACING.md, width: '100%' },
+  vehicleLoader: { marginVertical: SPACING.xl },
+  vehicleOptions: { gap: SPACING.sm, marginTop: SPACING.lg, width: '100%' },
+  vehicleOption: {
+    alignItems: 'center',
+    backgroundColor: COLORS.surfaceElevated,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: SPACING.md,
+  },
+  vehicleOptionSelected: { borderColor: COLORS.gold },
+  vehiclePlate: { color: COLORS.textPrimary, fontSize: FONT_SIZES.md, fontWeight: '800' },
+  vehicleMeta: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs, marginTop: 2 },
+  vehicleConfirmBtn: {
+    alignItems: 'center',
+    backgroundColor: COLORS.gold,
+    borderRadius: RADIUS.md,
+    justifyContent: 'center',
+    marginTop: SPACING.lg,
+    minHeight: 50,
+    width: '100%',
+  },
+  vehicleConfirmDisabled: { opacity: 0.55 },
+  vehicleConfirmText: { color: COLORS.textInverse, fontSize: FONT_SIZES.md, fontWeight: '800' },
   extensionOption: {
     alignItems: 'center',
     backgroundColor: 'rgba(212,175,55,0.08)',

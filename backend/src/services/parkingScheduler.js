@@ -72,23 +72,11 @@ async function checkBookings(app) {
         notifTriggers.notifyBookingCancelled(app, booking.userId, {
           bookingId: booking._id.toString(),
           slotInfo: booking.parkingSlot,
-          reason: 'Quá 30 phút từ giờ bắt đầu. Booking đã bị hủy và hoàn tiền.'
+          reason: 'Quá 30 phút từ giờ bắt đầu. Booking đã bị hủy và không được hoàn tiền (0%).'
         }).catch(err => console.error('Failed to send cancelled no-show notification:', err));
 
-        // Hoàn phí đã thanh toán trước về ví
-        if (booking.prepaidAmount > 0) {
-          try {
-            await walletService.creditWallet(
-              booking.userId,
-              booking.prepaidAmount,
-              'REFUND',
-              `Hoàn tiền do Không đến Kiosk (No-show) - Biển số ${booking.licensePlate}`,
-              { refSource: 'booking', refSourceId: booking._id }
-            );
-          } catch (refundErr) {
-            console.error(`[ParkingScheduler] Lỗi hoàn tiền no-show ${booking._id}:`, refundErr.message);
-          }
-        }
+        // Không hoàn tiền cho lỗi No-show theo chính sách mới
+        // (Booking tự động huỷ sau 30 phút do khách không đến -> Hoàn 0%)
       }
     }
 

@@ -4,6 +4,7 @@ import type { WalletTransaction } from '@/types/models';
 
 import {
   calculateExpirationDate,
+  calculateSubscriptionTotal,
   calculateWalletBalanceFromTransactions,
   getSubscriptionPackageRestriction,
   isValidTopUpAmount,
@@ -63,6 +64,12 @@ describe('walletSubscription properties', () => {
       ),
       { numRuns: 100 },
     );
+  });
+
+  it('calculates the subscription price for every reserved slot', () => {
+    expect(calculateSubscriptionTotal(100_000, 0)).toBe(100_000);
+    expect(calculateSubscriptionTotal(100_000, 1)).toBe(100_000);
+    expect(calculateSubscriptionTotal(100_000, 3)).toBe(300_000);
   });
 
   it('prevents buying the active package or downgrading a yearly package', () => {

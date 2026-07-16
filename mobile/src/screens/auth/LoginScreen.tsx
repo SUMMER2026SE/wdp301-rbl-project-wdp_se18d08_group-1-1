@@ -33,12 +33,40 @@ export const LoginScreen = ({ navigation }: Props) => {
     selectAccount: true,
   });
 
+  const handleGoogleLogin = useCallback(async (idToken: string) => {
+    setGoogleLoading(true);
+    try {
+      await googleLogin({ idToken });
+    } catch (err: unknown) {
+      const message = err instanceof Error
+        ? err.message
+        : 'Google sign-in failed. Please try again.';
+      alert('Google sign-in failed', message);
+    } finally {
+      setGoogleLoading(false);
+    }
+  }, [alert, googleLogin]);
+
+  useEffect(() => {
+    if (googleResponse?.type !== 'success') return;
+
+    const idToken =
+      googleResponse.authentication?.idToken ??
+      (googleResponse.params as Record<string, string>)?.id_token;
+
+    if (idToken) {
+      void handleGoogleLogin(idToken);
+    } else {
+      alert('Error', 'Unable to retrieve the Google ID token.');
+    }
+  }, [alert, googleResponse, handleGoogleLogin]);
+
   const handleLogin = async () => {
     const trimEmail = email.trim();
     const trimPass = password.trim();
 
     if (!trimEmail || !trimPass) {
-      alert('Thiếu thông tin', 'Vui lòng nhập email và mật khẩu.');
+      alert('Missing information', 'Please enter your email and password.');
       return;
     }
 
@@ -46,52 +74,145 @@ export const LoginScreen = ({ navigation }: Props) => {
     try {
       await login({ email: trimEmail, password: trimPass });
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : 'Đăng nhập thất bại. Vui lòng thử lại.';
-      alert('Đăng nhập thất bại', message);
+      const message = err instanceof Error
+        ? err.message
+        : 'Sign-in failed. Please try again.';
+      alert('Sign-in failed', message);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const completeGoogleLogin = useCallback(
-    async (idToken: string) => {
-      setGoogleSubmitting(true);
-      try {
-        await googleLogin({ idToken });
-      } catch (err: unknown) {
-        const message =
-          err instanceof Error ? err.message : 'Đăng nhập Google thất bại. Vui lòng thử lại.';
-        alert('Đăng nhập Google thất bại', message);
-      } finally {
-        setGoogleSubmitting(false);
-      }
-    },
-    [alert, googleLogin],
-  );
+  return (
+    <SafeAreaView edges={['top', 'bottom']} style={styles.safe}>
+      <StatusBar barStyle="light-content" backgroundColor="#080808" />
+      <LinearGradient
+        colors={['#080808', '#111111', '#161208']}
+        locations={[0, 0.6, 1]}
+        style={StyleSheet.absoluteFill}
+      />
+      <View pointerEvents="none" style={styles.cornerGlow} />
 
-  useEffect(() => {
-    if (googleResponse?.type !== 'success') return;
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.kav}
+      >
+        <ScrollView
+          bounces={false}
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.hero}>
+            <View style={styles.logoGlow}>
+              <Image resizeMode="contain" source={LogoImg} style={styles.logoImg} />
+            </View>
+            <Text style={styles.brandName}>VALO</Text>
+            <Text style={styles.brandSub}>PARKING</Text>
+            <View style={styles.badge}>
+              <Ionicons name="flash" size={11} color={COLORS.gold} />
+              <Text style={styles.badgeText}>Smart Parking Platform</Text>
+            </View>
+          </View>
 
-    const idToken =
-      googleResponse.params?.id_token ?? googleResponse.authentication?.idToken;
+          <View style={styles.card}>
+            <LinearGradient
+              colors={[COLORS.gold, 'transparent']}
+              end={{ x: 1, y: 0 }}
+              start={{ x: 0, y: 0 }}
+              style={styles.cardTopLine}
+            />
+            <Text style={styles.cardTitle}>Sign in</Text>
+            <Text style={styles.cardSub}>Welcome back to VALO Parking</Text>
 
-    if (idToken) {
-      void completeGoogleLogin(idToken);
-    } else {
-      alert('Lỗi', 'Không lấy được Google ID token.');
-    }
-  }, [alert, completeGoogleLogin, googleResponse]);
+            <Field
+              autoCapitalize="none"
+              icon={<Ionicons name="mail-outline" size={18} color={COLORS.textMuted} />}
+              keyboardType="email-address"
+              placeholder="Your email"
+              returnKeyType="next"
+              value={email}
+              onChangeText={setEmail}
+            />
 
-  const handleGooglePress = async () => {
-    if (!config.googleClientId) {
-      alert('Lỗi cấu hình', 'Thiếu EXPO_PUBLIC_GOOGLE_CLIENT_ID.');
-      return;
-    }
-    await promptGoogleAsync();
-  };
+            <Field
+              icon={<Ionicons name="lock-closed-outline" size={18} color={COLORS.textMuted} />}
+              placeholder="Password"
+              returnKeyType="done"
+              rightIcon={
+                <Ionicons
+                  name={passwordHidden ? 'eye-off-outline' : 'eye-outline'}
+                  size={18}
+                  color={COLORS.textMuted}
+                />
+              }
+              secureTextEntry={passwordHidden}
+              value={password}
+              onChangeText={setPassword}
+              onRightIconPress={() => setPasswordHidden((value) => !value)}
+              onSubmitEditing={handleLogin}
+            />
 
-  const loading = submitting || isLoading;
+            <Pressable
+              style={({ pressed }) => [styles.forgotRow, pressed && styles.pressed]}
+              onPress={() => navigation?.navigate('ForgotPassword')}
+            >
+              <Text style={styles.forgotText}>Forgot password?</Text>
+            </Pressable>
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              disabled={loading}
+              style={[styles.loginBtn, loading && styles.disabled]}
+              onPress={handleLogin}
+            >
+              <LinearGradient
+                colors={[COLORS.goldLight, COLORS.gold, COLORS.goldDark]}
+                end={{ x: 1, y: 0 }}
+                start={{ x: 0, y: 0 }}
+                style={styles.loginBtnGrad}
+              >
+                {loading ? (
+                  <ActivityIndicator color={COLORS.textInverse} size="small" />
+                ) : (
+                  <>
+                    <Text style={styles.loginBtnText}>Sign in</Text>
+                    <Ionicons name="arrow-forward" size={18} color={COLORS.textInverse} />
+                  </>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
+
+            <View style={styles.dividerRow}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>or continue with</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            <TouchableOpacity
+              activeOpacity={0.85}
+              disabled={!googleRequest || googleLoading}
+              style={[styles.googleBtn, (!googleRequest || googleLoading) && styles.disabled]}
+              onPress={() => googlePromptAsync()}
+            >
+              {googleLoading ? (
+                <ActivityIndicator color="#444" size="small" />
+              ) : (
+                <>
+                  <GoogleIcon />
+                  <Text style={styles.googleBtnText}>Continue with Google</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            <Pressable
+              style={({ pressed }) => [styles.registerRow, pressed && styles.pressed]}
+              onPress={() => navigation?.navigate('Register')}
+            >
+              <Text style={styles.registerText}>New to VALO? </Text>
+              <Text style={[styles.registerText, styles.registerLink]}>Create account</Text>
+            </Pressable>
+          </View>
 
   return (
     <Screen>

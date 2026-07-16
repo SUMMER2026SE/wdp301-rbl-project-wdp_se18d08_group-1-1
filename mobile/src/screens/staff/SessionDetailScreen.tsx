@@ -41,16 +41,16 @@ function InfoRow({ icon, label, value, valueColor }: {
 }
 
 const SOURCE_LABELS: Record<string, string> = {
-  kiosk:       'Kiosk tự phục vụ',
-  app_booking: 'Đặt qua App',
-  booking:     'Đặt trước',
-  walk_in:     'Vãng lai',
+  kiosk:       'Self-service kiosk',
+  app_booking: 'App booking',
+  booking:     'Booked',
+  walk_in:     'Walk-in',
 };
 
 const VEHICLE_TYPE_LABELS: Record<string, string> = {
-  car:           'Ô tô',
-  electric_car:  'Xe điện',
-  motorcycle:    'Xe máy',
+  car:           'Car',
+  electric_car:  'Electric car',
+  motorcycle:    'Motorcycle',
 };
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
@@ -77,7 +77,7 @@ export const SessionDetailScreen = ({ navigation, route }: Props) => {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Ionicons name="arrow-back" size={22} color={COLORS.textSecondary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Chi tiết phiên</Text>
+        <Text style={styles.headerTitle}>Session details</Text>
         <View style={{ width: 32 }} />
       </View>
 
@@ -86,7 +86,7 @@ export const SessionDetailScreen = ({ navigation, route }: Props) => {
         {/* Hero card */}
         <View style={styles.heroCard}>
           <LinearGradient
-            colors={isActive ? ['#60B4FF', 'transparent'] : [COLORS.textMuted, 'transparent']}
+            colors={isActive ? [COLORS.gold, 'transparent'] : [COLORS.textMuted, 'transparent']}
             start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
             style={styles.cardTopLine}
           />
@@ -97,14 +97,14 @@ export const SessionDetailScreen = ({ navigation, route }: Props) => {
             <View style={[styles.statusBadge, isActive ? styles.statusBadgeActive : styles.statusBadgeDone]}>
               <View style={[styles.statusDot, { backgroundColor: isActive ? '#7EE8A2' : COLORS.textMuted }]} />
               <Text style={[styles.statusText, { color: isActive ? '#7EE8A2' : COLORS.textMuted }]}>
-                {isActive ? 'Đang đỗ' : 'Đã xong'}
+                {isActive ? 'Active' : 'Completed'}
               </Text>
             </View>
           </View>
 
           <View style={styles.heroSlot}>
             <Ionicons name="location" size={16} color={COLORS.gold} />
-            <Text style={styles.heroSlotText}>{session.parkingSlot ?? 'Chưa xác định vị trí'}</Text>
+            <Text style={styles.heroSlotText}>{session.parkingSlot ?? 'Space not assigned'}</Text>
           </View>
 
           {/* Time bar */}
@@ -137,14 +137,14 @@ export const SessionDetailScreen = ({ navigation, route }: Props) => {
 
         {/* Vehicle info */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Thông tin phương tiện</Text>
+          <Text style={styles.sectionTitle}>Vehicle information</Text>
           <View style={styles.infoCard}>
-            <InfoRow icon="car-outline" label="Loại xe"
-              value={VEHICLE_TYPE_LABELS[session.vehicleType ?? ''] ?? session.vehicleType ?? 'Không xác định'} />
+            <InfoRow icon="car-outline" label="Vehicle type"
+              value={VEHICLE_TYPE_LABELS[session.vehicleType ?? ''] ?? session.vehicleType ?? 'Unknown'} />
             {session.source && (
               <>
                 <View style={styles.divider} />
-                <InfoRow icon="git-branch-outline" label="Nguồn vào" value={SOURCE_LABELS[session.source] ?? session.source} />
+                <InfoRow icon="git-branch-outline" label="Entry source" value={SOURCE_LABELS[session.source] ?? session.source} />
               </>
             )}
           </View>
@@ -153,9 +153,9 @@ export const SessionDetailScreen = ({ navigation, route }: Props) => {
         {/* Contact */}
         {session.phone && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Liên hệ khách hàng</Text>
+            <Text style={styles.sectionTitle}>Customer contact</Text>
             <View style={styles.infoCard}>
-              <InfoRow icon="call-outline" label="Số điện thoại" value={session.phone} />
+              <InfoRow icon="call-outline" label="Phone number" value={session.phone} />
             </View>
           </View>
         )}
@@ -163,17 +163,17 @@ export const SessionDetailScreen = ({ navigation, route }: Props) => {
         {/* Payment */}
         {session.totalPrice !== undefined && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Thanh toán</Text>
+            <Text style={styles.sectionTitle}>Payment</Text>
             <View style={styles.infoCard}>
               <InfoRow
                 icon="wallet-outline"
-                label="Trạng thái"
-                value={session.paymentStatus ?? 'Chờ xử lý'}
+                label="Status"
+                value={session.paymentStatus ?? 'Pending'}
                 valueColor={session.paymentStatus === 'paid' ? '#7EE8A2' : undefined}
               />
               <View style={styles.divider} />
               <View style={styles.totalRow}>
-                <Text style={styles.totalLabel}>Tổng phí</Text>
+                <Text style={styles.totalLabel}>Total</Text>
                 <Text style={styles.totalValue}>{formatCurrency(session.totalPrice ?? 0)}</Text>
               </View>
             </View>

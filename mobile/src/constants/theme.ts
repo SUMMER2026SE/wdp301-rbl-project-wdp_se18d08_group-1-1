@@ -1,24 +1,24 @@
 export const COLORS = {
   // Backgrounds
-  background: '#0D0D0D',
-  surface: '#1A1A1A',
-  surfaceElevated: '#222222',
+  background: '#0B0C0E',
+  surface: '#15171A',
+  surfaceElevated: '#1D2024',
 
   // Brand Gold
-  gold: '#D4AF37',
-  goldLight: '#F0D060',
-  goldDark: '#A8892A',
+  gold: '#E2BA4B',
+  goldLight: '#F2D47A',
+  goldDark: '#A77E20',
   staffBlue: '#60B4FF',
 
   // Text
-  textPrimary: '#F5F5F5',
-  textSecondary: '#A0A0A0',
-  textMuted: '#5A5A5A',
-  textInverse: '#0D0D0D',
+  textPrimary: '#F4F4F0',
+  textSecondary: '#A9ADB4',
+  textMuted: '#858B94',
+  textInverse: '#111214',
 
   // Borders
-  border: '#2E2E2E',
-  borderLight: '#3A3A3A',
+  border: '#292D32',
+  borderLight: '#383D44',
 
   // Status
   error: '#FF4D4D',
@@ -26,8 +26,8 @@ export const COLORS = {
   warning: '#FF9F43',
 
   // Gradient stops (used with LinearGradient)
-  gradientGold: ['#F0D060', '#D4AF37', '#A8892A'] as const,
-  gradientDark: ['#1E1E1E', '#0D0D0D'] as const,
+  gradientGold: ['#F2D47A', '#E2BA4B', '#B88A24'] as const,
+  gradientDark: ['#1D2024', '#0B0C0E'] as const,
   gradientStaff: ['#60B4FF', '#2F7FD8'] as const,
 };
 

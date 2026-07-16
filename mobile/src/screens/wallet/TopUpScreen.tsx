@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import type { NavigationProp } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -17,9 +18,11 @@ import QRCode from 'react-native-qrcode-svg';
 
 import { ErrorState, ScreenHeader, SectionTitle } from '@/components/common';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
+import type { CustomerTabParamList } from '@/navigation/CustomerNavigator';
 import type { WalletStackParamList } from '@/navigation/types';
 import { walletService } from '@/services/api/wallet';
 import { formatCurrency } from '@/utils/formatters';
+import { isPolicyAcceptanceRequired } from '@/utils/policyErrors';
 import { isValidTopUpAmount, TOP_UP_MIN_AMOUNT } from '@/utils/walletSubscription';
 
 type Props = NativeStackScreenProps<WalletStackParamList, 'TopUp'>;
@@ -29,6 +32,7 @@ const QUICK_AMOUNTS = [50000, 100000, 200000, 500000];
 export const TopUpScreen = ({ navigation }: Props) => {
   const [amount, setAmount] = useState('');
   const [error, setError] = useState('');
+  const [policyRequired, setPolicyRequired] = useState(false);
   const [loading, setLoading] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
   const [payment, setPayment] = useState<{
@@ -68,18 +72,24 @@ export const TopUpScreen = ({ navigation }: Props) => {
     const numericAmount = Number(amount);
 
     if (!isValidTopUpAmount(numericAmount)) {
-      setError(`Số tiền nạp tối thiểu là ${formatCurrency(TOP_UP_MIN_AMOUNT)}.`);
+      setError(`The minimum top-up amount is ${formatCurrency(TOP_UP_MIN_AMOUNT)}.`);
       return;
     }
 
     setLoading(true);
     setError('');
+    setPolicyRequired(false);
     try {
       const response = await walletService.createTopUp({ amount: numericAmount, paymentMethod: 'payos' });
       setPayment(response.data);
       setStatus('PENDING');
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'Nạp tiền thất bại.');
+      if (isPolicyAcceptanceRequired(submitError)) {
+        setPolicyRequired(true);
+        setError('You must accept the latest policy before adding funds.');
+      } else {
+        setError(submitError instanceof Error ? submitError.message : 'Top-up failed.');
+      }
     } finally {
       setLoading(false);
     }
@@ -95,7 +105,7 @@ export const TopUpScreen = ({ navigation }: Props) => {
         triggerSuccessRedirect();
       }
     } catch (statusError) {
-      setError(statusError instanceof Error ? statusError.message : 'Không thể kiểm tra thanh toán.');
+      setError(statusError instanceof Error ? statusError.message : 'Unable to check payment status.');
     }
   };
 
@@ -119,7 +129,7 @@ export const TopUpScreen = ({ navigation }: Props) => {
         triggerSuccessRedirect();
       }
     } catch (cancelError) {
-      setError(cancelError instanceof Error ? cancelError.message : 'Không thể hủy giao dịch.');
+      setError(cancelError instanceof Error ? cancelError.message : 'Unable to cancel the transaction.');
     } finally {
       setCancelLoading(false);
     }
@@ -153,15 +163,15 @@ export const TopUpScreen = ({ navigation }: Props) => {
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#080808" />
-      <ScreenHeader title="Nạp tiền" onBack={() => navigation.goBack()} />
+      <ScreenHeader title="Top up wallet" onBack={() => navigation.goBack()} />
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.amountCard}>
-          <SectionTitle>Số tiền</SectionTitle>
+          <SectionTitle>Amount</SectionTitle>
           <View style={styles.inputWrap}>
             <TextInput
               keyboardType="numeric"
-              placeholder="Nhập số tiền"
+              placeholder="Enter amount"
               placeholderTextColor={COLORS.textMuted}
               style={styles.input}
               value={amount}
@@ -190,13 +200,23 @@ export const TopUpScreen = ({ navigation }: Props) => {
 
         {error && !payment ? <ErrorState message={error} /> : null}
 
+        {policyRequired && !payment ? (
+          <TouchableOpacity
+            activeOpacity={0.8}
+            style={styles.outlineButton}
+            onPress={() => navigation.getParent<NavigationProp<CustomerTabParamList>>()?.navigate('ProfileTab', { screen: 'Policies' })}
+          >
+            <Text style={styles.outlineButtonText}>Review and accept policy</Text>
+          </TouchableOpacity>
+        ) : null}
+
         <TouchableOpacity activeOpacity={0.85} disabled={loading} style={[styles.primaryButton, loading && styles.disabled]} onPress={handleSubmit}>
           {loading ? (
             <ActivityIndicator color={COLORS.textInverse} size="small" />
           ) : (
             <>
               <Ionicons name="card-outline" size={20} color={COLORS.textInverse} />
-              <Text style={styles.primaryButtonText}>Tiếp tục thanh toán</Text>
+              <Text style={styles.primaryButtonText}>Continue to payment</Text>
             </>
           )}
         </TouchableOpacity>
@@ -206,13 +226,13 @@ export const TopUpScreen = ({ navigation }: Props) => {
             <View style={styles.paymentHeader}>
               <View>
                 <Text style={styles.paymentTitle}>PayOS</Text>
-                <Text style={styles.paymentMeta}>Mã đơn: {payment.orderCode}</Text>
+                <Text style={styles.paymentMeta}>Order ID: {payment.orderCode}</Text>
               </View>
               <Text style={styles.paymentAmount}>{formatCurrency(payment.amount || Number(amount))}</Text>
             </View>
             <View style={styles.statusRow}>
               <Ionicons name="sync-circle-outline" size={18} color={COLORS.gold} />
-              <Text style={styles.statusText}>Trạng thái: {status}</Text>
+              <Text style={styles.statusText}>Status: {status}</Text>
             </View>
                         {payment.qrCode ? (
               <View style={styles.qrWrapper}>
@@ -222,11 +242,11 @@ export const TopUpScreen = ({ navigation }: Props) => {
                   backgroundColor="white"
                   color="black"
                 />
-                <Text style={styles.qrHint}>Quét bằng app ngân hàng để thanh toán</Text>
+                <Text style={styles.qrHint}>Scan with your banking app to pay</Text>
               </View>
             ) : null}
             <Text style={styles.helpText}>
-              Quét QR bằng ứng dụng ngân hàng hoặc mở trang thanh toán PayOS. Hệ thống sẽ tự cập nhật qua webhook.
+              Scan the QR code with your banking app or open the PayOS checkout page. Payment status updates automatically.
             </Text>
             {error ? <Text style={styles.inlineError}>{error}</Text> : null}
 
@@ -235,17 +255,17 @@ export const TopUpScreen = ({ navigation }: Props) => {
               <View style={styles.successBanner}>
                 <Ionicons name="checkmark-circle" size={28} color="#7EE8A2" />
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.successTitle}>Nạp tiền thành công! 🎉</Text>
-                  <Text style={styles.successSub}>Đang chuyển về Ví tiền sau {successCountdown}s...</Text>
+                  <Text style={styles.successTitle}>Top-up successful</Text>
+                  <Text style={styles.successSub}>Returning to your wallet in {successCountdown}s...</Text>
                 </View>
               </View>
             ) : (
               <View style={styles.actions}>
                 <TouchableOpacity activeOpacity={0.8} style={styles.outlineButton} onPress={() => Linking.openURL(payment.checkoutUrl)}>
-                  <Text style={styles.outlineButtonText}>Mở PayOS</Text>
+                  <Text style={styles.outlineButtonText}>Open PayOS</Text>
                 </TouchableOpacity>
                 <TouchableOpacity activeOpacity={0.8} style={styles.outlineButton} onPress={checkStatus}>
-                  <Text style={styles.outlineButtonText}>Kiểm tra</Text>
+                  <Text style={styles.outlineButtonText}>Check status</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   activeOpacity={0.8}
@@ -256,7 +276,7 @@ export const TopUpScreen = ({ navigation }: Props) => {
                   {cancelLoading ? (
                     <ActivityIndicator color={COLORS.error} size="small" />
                   ) : (
-                    <Text style={styles.cancelButtonText}>Hủy</Text>
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
                   )}
                 </TouchableOpacity>
               </View>

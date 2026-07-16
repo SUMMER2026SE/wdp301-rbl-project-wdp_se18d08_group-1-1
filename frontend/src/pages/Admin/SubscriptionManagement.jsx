@@ -152,6 +152,15 @@ export default function SubscriptionManagement() {
                     <td className="p-4">
                       <div className="font-semibold text-slate-200">{sub.user?.username || 'Unknown User'}</div>
                       <div className="text-xs text-slate-500">{sub.user?.email || 'No email'}</div>
+                      {sub.user?.vehicles && sub.user.vehicles.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {sub.user.vehicles.map(plate => (
+                            <span key={plate} className="px-1.5 py-0.5 text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded font-mono font-medium">
+                              {plate}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </td>
                     <td className="p-4">
                       <div className="text-slate-200 font-medium">{sub.ticketPackage?.name || 'Unknown Package'}</div>

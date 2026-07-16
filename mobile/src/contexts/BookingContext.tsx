@@ -43,6 +43,7 @@ interface BookingContextValue {
   checkOutBooking: (bookingId: string) => Promise<void>;
   cancelBooking: (bookingId: string) => Promise<void>;
   extendBooking: (bookingId: string, data: ModifyBookingTimeRequest) => Promise<void>;
+  updateBookingVehicle: (bookingId: string, vehicleId: string) => Promise<void>;
   getBookingById: (bookingId: string) => Booking | undefined;
   fetchParkingFloors: () => Promise<void>;
   fetchServices: () => Promise<void>;
@@ -226,6 +227,23 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
     [fetchWalletBalance],
   );
 
+  const updateBookingVehicle = useCallback(async (bookingId: string, vehicleId: string) => {
+    setIsLoading(true);
+    setError('');
+    try {
+      const response = await bookingService.updateBookingVehicle(bookingId, vehicleId);
+      const updated = bookingService.normalizeBooking(response.data);
+      if (!updated) throw new Error('Booking response was empty.');
+
+      setBookings((current) => current.map((item) => (item._id === bookingId ? updated : item)));
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : 'Unable to update booking vehicle.');
+      throw updateError;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
   const getBookingById = useCallback(
     (bookingId: string) => bookings.find((booking) => booking._id === bookingId),
     [bookings],
@@ -286,6 +304,7 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
       checkOutBooking,
       cancelBooking,
       extendBooking,
+      updateBookingVehicle,
       getBookingById,
       fetchParkingFloors,
       fetchServices,
@@ -310,6 +329,7 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
       checkOutBooking,
       cancelBooking,
       extendBooking,
+      updateBookingVehicle,
       getBookingById,
       fetchParkingFloors,
       fetchServices,

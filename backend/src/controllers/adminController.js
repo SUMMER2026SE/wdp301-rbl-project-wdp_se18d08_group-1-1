@@ -500,11 +500,12 @@ exports.getPricingConfig = async (req, res, next) => {
   try {
     const config = await PricingConfig.findOne({ isActive: true }).sort({ createdAt: -1 });
     const DEFAULT_CONFIG = {
-      sessionFee: 10000,
-      dayRate: 10000,
-      nightRate: 15000,
-      cap6hDay: 50000,
-      cap6hNight: 75000,
+      timeBlocks: [
+        { startHour: 7, endHour: 12, price: 10000 },
+        { startHour: 12, endHour: 17, price: 10000 },
+        { startHour: 17, endHour: 22, price: 20000 },
+        { startHour: 22, endHour: 7, price: 25000 }
+      ],
       cap12h: 100000,
       cap24h: 180000,
     };
@@ -521,18 +522,53 @@ exports.getPricingConfig = async (req, res, next) => {
  */
 exports.updatePricingConfig = async (req, res, next) => {
   try {
-    const { sessionFee, dayRate, nightRate, cap6hDay, cap6hNight, cap12h, cap24h } = req.body;
+    const { timeBlocks, cap12h, cap24h } = req.body;
+
+    if (!Array.isArray(timeBlocks)) {
+      return res.status(400).json({ success: false, message: 'Invalid time blocks format' });
+    }
+
+    // Validate coverage of 24 hours (no gaps, no overlaps)
+    const hours = new Array(24).fill(false);
+    for (let i = 0; i < timeBlocks.length; i++) {
+      const b = timeBlocks[i];
+      const start = Number(b.startHour);
+      const end = Number(b.endHour);
+
+      if (start === end) {
+        return res.status(400).json({ success: false, message: 'A time block cannot have the same start and end time.' });
+      }
+
+      const markHour = (h) => {
+        if (hours[h]) {
+          throw new Error(`Overlap detected at hour ${h}:00`);
+        }
+        hours[h] = true;
+      };
+
+      try {
+        if (start < end) {
+          for (let h = start; h < end; h++) markHour(h);
+        } else {
+          for (let h = start; h < 24; h++) markHour(h);
+          for (let h = 0; h < end; h++) markHour(h);
+        }
+      } catch (e) {
+        return res.status(400).json({ success: false, message: e.message });
+      }
+    }
+
+    const missingHour = hours.findIndex(h => !h);
+    if (missingHour !== -1) {
+      return res.status(400).json({ success: false, message: `Gap detected in schedule. Time block missing for hour ${missingHour}:00` });
+    }
 
     // Vô hiệu hóa cấu hình cũ
     await PricingConfig.updateMany({ isActive: true }, { isActive: false });
 
     // Tạo cấu hình mới
     const newConfig = await PricingConfig.create({
-      sessionFee: Number(sessionFee),
-      dayRate: Number(dayRate),
-      nightRate: Number(nightRate),
-      cap6hDay: Number(cap6hDay),
-      cap6hNight: Number(cap6hNight),
+      timeBlocks,
       cap12h: Number(cap12h),
       cap24h: Number(cap24h),
       isActive: true

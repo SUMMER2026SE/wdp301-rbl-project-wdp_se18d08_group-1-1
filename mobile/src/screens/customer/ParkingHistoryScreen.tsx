@@ -39,8 +39,8 @@ interface HistorySession {
 const SOURCE_LABELS: Record<string, string> = {
   kiosk:       'Kiosk',
   app_booking: 'App',
-  booking:     'Đặt trước',
-  walk_in:     'Vãng lai',
+  booking:     'Booked',
+  walk_in:     'Walk-in',
 };
 
 // ─── Card ─────────────────────────────────────────────────────────────────────
@@ -85,7 +85,7 @@ function HistoryCard({ session }: { session: HistorySession }) {
         <View style={styles.infoItem}>
           <Ionicons name="log-out-outline" size={13} color={COLORS.textMuted} />
           <Text style={styles.infoText}>
-            {checkOut ? format(checkOut, 'HH:mm dd/MM/yyyy') : 'Chưa ra'}
+            {checkOut ? format(checkOut, 'HH:mm dd/MM/yyyy') : 'Still parked'}
           </Text>
         </View>
         <View style={styles.rightRow}>
@@ -119,7 +119,7 @@ export const ParkingHistoryScreen = ({ navigation }: Props) => {
       const data = (res as { data?: HistorySession[] }).data;
       setHistory(Array.isArray(data) ? data : []);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Không thể tải lịch sử đỗ xe.');
+      setError(loadError instanceof Error ? loadError.message : 'Unable to load parking history.');
       setHistory([]);
     } finally {
       setLoading(false);
@@ -146,7 +146,7 @@ export const ParkingHistoryScreen = ({ navigation }: Props) => {
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Ionicons name="arrow-back" size={22} color={COLORS.textSecondary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Lịch sử đỗ xe</Text>
+        <Text style={styles.headerTitle}>Parking history</Text>
         <View style={{ width: 32 }} />
       </View>
 
@@ -155,12 +155,12 @@ export const ParkingHistoryScreen = ({ navigation }: Props) => {
         <View style={styles.summaryRow}>
           <View style={styles.summaryItem}>
             <Text style={styles.summaryValue}>{history.length}</Text>
-            <Text style={styles.summaryLabel}>Lần đỗ</Text>
+            <Text style={styles.summaryLabel}>Sessions</Text>
           </View>
           <View style={styles.summaryDivider} />
           <View style={styles.summaryItem}>
             <Text style={[styles.summaryValue, { color: COLORS.gold }]}>{formatCurrency(totalSpent)}</Text>
-            <Text style={styles.summaryLabel}>Tổng chi</Text>
+            <Text style={styles.summaryLabel}>Total spent</Text>
           </View>
         </View>
       )}
@@ -184,7 +184,7 @@ export const ParkingHistoryScreen = ({ navigation }: Props) => {
           ListEmptyComponent={
             <View style={styles.emptyWrap}>
               <Ionicons name="car-outline" size={48} color={COLORS.textMuted} />
-              <Text style={styles.emptyText}>Chưa có lịch sử đỗ xe</Text>
+              <Text style={styles.emptyText}>No parking history yet</Text>
             </View>
           }
           showsVerticalScrollIndicator={false}

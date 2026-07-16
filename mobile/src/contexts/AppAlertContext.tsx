@@ -24,9 +24,9 @@ interface AppAlertContextValue {
 const AppAlertContext = createContext<AppAlertContextValue | undefined>(undefined);
 
 const inferVariant = (request: AlertRequest, primary: AppAlertButton): BookingModalVariant => {
-  const title = request.title.toLocaleLowerCase('vi-VN');
-  if (primary.style === 'destructive' || title.includes('lỗi') || title.includes('thất bại')) return 'error';
-  if (title.includes('thiếu') || title.includes('cảnh báo')) return 'warning';
+  const normalizedTitle = request.title.toLocaleLowerCase('en-US');
+  if (primary.style === 'destructive' || normalizedTitle.includes('error') || normalizedTitle.includes('failed')) return 'error';
+  if (normalizedTitle.includes('missing') || normalizedTitle.includes('warning')) return 'warning';
   return 'info';
 };
 
@@ -37,7 +37,7 @@ export const AppAlertProvider = ({ children }: { children: ReactNode }) => {
     setRequest({
       title,
       message,
-      buttons: buttons && buttons.length > 0 ? buttons : [{ text: 'Đóng' }],
+      buttons: buttons && buttons.length > 0 ? buttons : [{ text: 'Close' }],
     });
   }, []);
 
@@ -61,7 +61,7 @@ export const AppAlertProvider = ({ children }: { children: ReactNode }) => {
       <BookingActionModal
         destructive={primary?.style === 'destructive'}
         message={request?.message}
-        primaryLabel={primary?.text ?? 'Đóng'}
+        primaryLabel={primary?.text ?? 'Close'}
         secondaryLabel={secondary?.text}
         title={request?.title ?? ''}
         variant={request && primary ? inferVariant(request, primary) : 'info'}

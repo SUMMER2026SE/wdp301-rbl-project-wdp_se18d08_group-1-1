@@ -33,7 +33,7 @@ export const MembershipScreen = ({ navigation }: Props) => {
       const response = await subscriptionsService.getMembership();
       setMembership(response.data || null);
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Không thể tải Membership.');
+      setError(loadError instanceof Error ? loadError.message : 'Unable to load membership.');
       setMembership(null);
     } finally {
       setLoading(false);
@@ -60,9 +60,9 @@ export const MembershipScreen = ({ navigation }: Props) => {
       ) : !membership ? (
         <EmptyState
           icon="ribbon-outline"
-          title="Chưa có Membership"
-          message="Mua gói để giữ chỗ định kỳ và nhận ưu đãi dịch vụ."
-          actionLabel="Xem gói"
+          title="No active membership"
+          message="Choose a plan for reserved spaces and service benefits."
+          actionLabel="View plans"
           onAction={() => navigation.navigate('SubscriptionPackages')}
         />
       ) : (
@@ -81,34 +81,34 @@ export const MembershipScreen = ({ navigation }: Props) => {
               <View style={[styles.statusPill, { backgroundColor: active ? 'rgba(126,232,162,0.12)' : 'rgba(255,77,77,0.12)' }]}>
                 <View style={[styles.statusDot, { backgroundColor: active ? COLORS.success : COLORS.error }]} />
                 <Text style={[styles.statusText, { color: active ? COLORS.success : COLORS.error }]}>
-                  {active ? 'Đang hoạt động' : 'Hết hạn'}
+                  {active ? 'Active' : 'Expired'}
                 </Text>
               </View>
             </View>
             <Text style={styles.packageName}>{membership.package?.name ?? 'VALO Membership'}</Text>
             {membership.expireAt ? (
-              <Text style={styles.expireText}>Hết hạn: {formatDate(membership.expireAt)}</Text>
+              <Text style={styles.expireText}>Expires: {formatDate(membership.expireAt)}</Text>
             ) : (
-              <Text style={styles.expireText}>Chưa có ngày hết hạn</Text>
+              <Text style={styles.expireText}>No expiration date</Text>
             )}
             {membership.expirationWarning ? (
               <View style={styles.warningBox}>
                 <Ionicons name="alert-circle-outline" size={16} color={COLORS.warning} />
-                <Text style={styles.warningText}>Membership sẽ hết hạn trong 7 ngày.</Text>
+                <Text style={styles.warningText}>Your membership expires within 7 days.</Text>
               </View>
             ) : null}
           </View>
 
           <View style={styles.section}>
-            <SectionTitle>Quyền lợi</SectionTitle>
+            <SectionTitle>Benefits</SectionTitle>
             <View style={styles.grid}>
               <View style={styles.metricCard}>
                 <Text style={styles.metricValue}>{membership.freeServiceCount}</Text>
-                <Text style={styles.metricLabel}>Dịch vụ miễn phí</Text>
+                <Text style={styles.metricLabel}>Complimentary services</Text>
               </View>
               <View style={styles.metricCard}>
                 <Text style={styles.metricValue}>{membership.reservedSlots.length}</Text>
-                <Text style={styles.metricLabel}>Chỗ giữ riêng</Text>
+                <Text style={styles.metricLabel}>Reserved spaces</Text>
               </View>
             </View>
             {(membership.benefits ?? []).map((benefit) => (
@@ -120,17 +120,17 @@ export const MembershipScreen = ({ navigation }: Props) => {
           </View>
 
           <View style={styles.section}>
-            <SectionTitle>Chỗ giữ riêng</SectionTitle>
+            <SectionTitle>Reserved spaces</SectionTitle>
             {membership.reservedSlots.length === 0 ? (
               <View style={styles.softState}>
-                <Text style={styles.softStateText}>Chưa có chỗ giữ riêng.</Text>
+                <Text style={styles.softStateText}>No reserved spaces assigned.</Text>
               </View>
             ) : (
               membership.reservedSlots.map((slot) => (
                 <View key={`${slot.floorId}-${slot.slotCode}`} style={styles.slotRow}>
                   <Ionicons name="location-outline" size={18} color={COLORS.gold} />
                   <Text style={styles.slotText}>
-                    {slot.slotCode} - {slot.floorName || `Tầng ${slot.floorNumber || ''}`}
+                    {slot.slotCode} - {slot.floorName || `Floor ${slot.floorNumber || ''}`}
                   </Text>
                 </View>
               ))
@@ -138,11 +138,11 @@ export const MembershipScreen = ({ navigation }: Props) => {
           </View>
 
           <View style={styles.section}>
-            <SectionTitle>Gia hạn</SectionTitle>
+            <SectionTitle>Renewal</SectionTitle>
             <View style={styles.renewalCard}>
               <Text style={styles.renewalPrice}>{formatCurrency(membership.renewal.price)}</Text>
               {membership.renewal.nextRenewalDate ? (
-                <Text style={styles.renewalMeta}>Kỳ tiếp theo: {formatDate(membership.renewal.nextRenewalDate)}</Text>
+                <Text style={styles.renewalMeta}>Next renewal: {formatDate(membership.renewal.nextRenewalDate)}</Text>
               ) : null}
               <Text style={styles.renewalMessage}>{membership.renewal.message}</Text>
             </View>
@@ -150,7 +150,7 @@ export const MembershipScreen = ({ navigation }: Props) => {
 
           <TouchableOpacity activeOpacity={0.85} style={styles.primaryButton} onPress={() => navigation.navigate('SubscriptionPackages')}>
             <Ionicons name="cube-outline" size={20} color={COLORS.textInverse} />
-            <Text style={styles.primaryButtonText}>Xem gói Membership</Text>
+            <Text style={styles.primaryButtonText}>View membership plans</Text>
           </TouchableOpacity>
         </ScrollView>
       )}

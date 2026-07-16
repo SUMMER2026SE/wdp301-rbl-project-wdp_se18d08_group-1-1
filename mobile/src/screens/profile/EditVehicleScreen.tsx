@@ -55,29 +55,29 @@ export const EditVehicleScreen = ({ navigation, route }: Props) => {
         nickname: nickname.trim(),
         hexColor,
       });
-      toast.showSuccess('Cập nhật xe thành công');
+      toast.showSuccess('Vehicle updated successfully');
       navigation.goBack();
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'Cập nhật thất bại.');
+      setError(submitError instanceof Error ? submitError.message : 'Unable to update the vehicle.');
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = () => {
-    alert('Xoá xe', 'Bạn có chắc chắn muốn xoá phương tiện này không?', [
-      { text: 'Huỷ', style: 'cancel' },
+    alert('Delete vehicle', 'Are you sure you want to delete this vehicle?', [
+      { text: 'Cancel', style: 'cancel' },
       {
-        text: 'Xoá',
+        text: 'Delete',
         style: 'destructive',
         onPress: async () => {
           setSaving(true);
           try {
             await vehiclesService.deleteVehicle(route.params.vehicleId);
-            toast.showSuccess('Đã xoá phương tiện');
+            toast.showSuccess('Vehicle deleted');
             navigation.goBack();
           } catch (deleteError) {
-            setError(deleteError instanceof Error ? deleteError.message : 'Xoá thất bại.');
+            setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete the vehicle.');
           } finally {
             setSaving(false);
           }
@@ -90,10 +90,10 @@ export const EditVehicleScreen = ({ navigation, route }: Props) => {
     setSaving(true);
     try {
       await vehiclesService.setDefaultVehicle(route.params.vehicleId);
-      toast.showSuccess('Đã đặt làm xe mặc định');
+      toast.showSuccess('Default vehicle updated');
       navigation.goBack();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Lỗi khi đặt mặc định.');
+      setError(err instanceof Error ? err.message : 'Unable to set the default vehicle.');
     } finally {
       setSaving(false);
     }
@@ -103,7 +103,7 @@ export const EditVehicleScreen = ({ navigation, route }: Props) => {
     return (
       <SafeAreaView edges={['top']} style={styles.safe}>
         <StatusBar barStyle="light-content" backgroundColor="#080808" />
-        <ScreenHeader title="Cập nhật xe" onBack={() => navigation.goBack()} />
+        <ScreenHeader title="Edit vehicle" onBack={() => navigation.goBack()} />
         <View style={styles.center}>
           <ActivityIndicator color={COLORS.gold} size="large" />
         </View>
@@ -114,12 +114,12 @@ export const EditVehicleScreen = ({ navigation, route }: Props) => {
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#080808" />
-      <ScreenHeader title="Cập nhật xe" onBack={() => navigation.goBack()} />
+      <ScreenHeader title="Edit vehicle" onBack={() => navigation.goBack()} />
 
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         <View style={styles.formCard}>
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Hãng xe</Text>
+            <Text style={styles.label}>Make</Text>
             <View style={styles.inputWrap}>
               <TextInput
                 style={styles.input}
@@ -132,7 +132,7 @@ export const EditVehicleScreen = ({ navigation, route }: Props) => {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Dòng xe</Text>
+            <Text style={styles.label}>Model</Text>
             <View style={styles.inputWrap}>
               <TextInput
                 style={styles.input}
@@ -145,11 +145,11 @@ export const EditVehicleScreen = ({ navigation, route }: Props) => {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Màu sắc</Text>
+            <Text style={styles.label}>Color</Text>
             <View style={styles.inputWrap}>
               <TextInput
                 style={styles.input}
-                placeholder="VD: Trắng"
+                placeholder="e.g. White"
                 placeholderTextColor={COLORS.textMuted}
                 value={color}
                 onChangeText={setColor}
@@ -158,11 +158,11 @@ export const EditVehicleScreen = ({ navigation, route }: Props) => {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Chủ xe (Nickname)</Text>
+            <Text style={styles.label}>Vehicle nickname</Text>
             <View style={styles.inputWrap}>
               <TextInput
                 style={styles.input}
-                placeholder="Tên hoặc biệt danh"
+                placeholder="Name or nickname"
                 placeholderTextColor={COLORS.textMuted}
                 value={nickname}
                 onChangeText={setNickname}
@@ -171,7 +171,7 @@ export const EditVehicleScreen = ({ navigation, route }: Props) => {
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Mã màu Hex</Text>
+            <Text style={styles.label}>Hex color code</Text>
             <View style={styles.inputWrap}>
               <View style={[styles.colorPreview, { backgroundColor: hexColor }]} />
               <TextInput
@@ -196,7 +196,7 @@ export const EditVehicleScreen = ({ navigation, route }: Props) => {
           {saving ? (
             <ActivityIndicator color={COLORS.textInverse} size="small" />
           ) : (
-            <Text style={styles.primaryButtonText}>Lưu Thay Đổi</Text>
+            <Text style={styles.primaryButtonText}>Save changes</Text>
           )}
         </TouchableOpacity>
 
@@ -207,7 +207,7 @@ export const EditVehicleScreen = ({ navigation, route }: Props) => {
           disabled={saving}
         >
           <Ionicons name="star-outline" size={20} color={COLORS.gold} />
-          <Text style={styles.outlineButtonText}>Đặt làm xe mặc định</Text>
+          <Text style={styles.outlineButtonText}>Set as default vehicle</Text>
         </TouchableOpacity>
 
         <TouchableOpacity 
@@ -217,7 +217,7 @@ export const EditVehicleScreen = ({ navigation, route }: Props) => {
           disabled={saving}
         >
           <Ionicons name="trash-outline" size={20} color={COLORS.error} />
-          <Text style={styles.ghostButtonText}>Xoá phương tiện</Text>
+          <Text style={styles.ghostButtonText}>Delete vehicle</Text>
         </TouchableOpacity>
 
       </ScrollView>

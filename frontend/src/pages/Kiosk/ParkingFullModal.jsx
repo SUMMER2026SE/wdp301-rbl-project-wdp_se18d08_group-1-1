@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { AlertCircle } from 'lucide-react';
 
-export default function ParkingFullModal({ isOpen, onClose }) {
-  const [timeLeft, setTimeLeft] = useState(30);
+export default function ParkingFullModal({ isOpen, onClose, title = "PARKING FULL", message = "We apologize, but the parking lot is currently full. Please come back again later!" }) {
+  const [timeLeft, setTimeLeft] = useState(20);
 
   useEffect(() => {
     if (!isOpen) {
-      setTimeLeft(30);
+      setTimeLeft(20);
       return;
     }
 
@@ -36,18 +36,18 @@ export default function ParkingFullModal({ isOpen, onClose }) {
             <circle cx="50" cy="50" r="48" fill="none" stroke="currentColor" strokeWidth="4" />
             <circle cx="50" cy="50" r="48" fill="none" stroke="#ef4444" strokeWidth="4"
               strokeDasharray="301.59"
-              strokeDashoffset={301.59 * (1 - timeLeft / 30)}
+              strokeDashoffset={301.59 * (1 - timeLeft / 20)}
               className="transition-all duration-1000 ease-linear"
             />
           </svg>
         </div>
 
-        <h2 className="text-4xl font-black text-white tracking-tight mb-5">
-          PARKING FULL
+        <h2 className="text-4xl font-black text-white tracking-tight mb-5 uppercase">
+          {title}
         </h2>
 
         <p className="text-gray-300 text-xl leading-relaxed mb-8 font-medium">
-          We're sorry, but the parking lot is currently full for walk-in guests. Please come back and try again later!
+          {message}
         </p>
 
         <div className="bg-white/5 rounded-2xl py-4 px-6 border border-white/10 text-gray-400 font-medium text-lg">

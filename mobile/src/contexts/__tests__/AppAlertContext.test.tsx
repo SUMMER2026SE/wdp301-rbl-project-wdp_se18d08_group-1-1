@@ -7,7 +7,7 @@ jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
 
 const ErrorTrigger = () => {
   const { alert } = useAppAlert();
-  return <Button title="Open error" onPress={() => alert('Lỗi', 'Không thể thực hiện thao tác.')} />;
+  return <Button title="Open error" onPress={() => alert('Error', 'Unable to complete this action.')} />;
 };
 
 const ConfirmTrigger = ({ onConfirm }: { onConfirm: () => void }) => {
@@ -16,9 +16,9 @@ const ConfirmTrigger = ({ onConfirm }: { onConfirm: () => void }) => {
     <Button
       title="Open confirm"
       onPress={() =>
-        alert('Xoá xe', 'Bạn có chắc không?', [
-          { text: 'Huỷ', style: 'cancel' },
-          { text: 'Xoá', style: 'destructive', onPress: onConfirm },
+        alert('Delete vehicle', 'Are you sure?', [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Delete', style: 'destructive', onPress: onConfirm },
         ])
       }
     />
@@ -35,9 +35,9 @@ describe('AppAlertProvider', () => {
 
     fireEvent.press(screen.getByText('Open error'));
 
-    expect(screen.getByText('Lỗi')).toBeTruthy();
-    expect(screen.getByText('Không thể thực hiện thao tác.')).toBeTruthy();
-    expect(screen.getByText('Đóng')).toBeTruthy();
+    expect(screen.getByText('Error')).toBeTruthy();
+    expect(screen.getByText('Unable to complete this action.')).toBeTruthy();
+    expect(screen.getByText('Close')).toBeTruthy();
   });
 
   it('preserves destructive confirmation callbacks', () => {
@@ -49,9 +49,9 @@ describe('AppAlertProvider', () => {
     );
 
     fireEvent.press(screen.getByText('Open confirm'));
-    fireEvent.press(screen.getByText('Xoá'));
+    fireEvent.press(screen.getByText('Delete'));
 
     expect(onConfirm).toHaveBeenCalledTimes(1);
-    expect(screen.queryByText('Bạn có chắc không?')).toBeNull();
+    expect(screen.queryByText('Are you sure?')).toBeNull();
   });
 });
