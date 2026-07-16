@@ -355,6 +355,7 @@ export default function ParkingLots() {
     return (
       <ParkingLotsBuilder 
         floor={currentFloor} 
+        dbSlots={dbSlots}
         onSave={handleSaveLayout} 
         onCancel={() => setIsEditMode(false)} 
       />
