@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import * as AuthSession from 'expo-auth-session';
 import * as Google from 'expo-auth-session/providers/google';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, useState } from 'react';
@@ -21,11 +21,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { config } from '@/config/env';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useAppAlert } from '@/contexts/AppAlertContext';
-
-import { GOOGLE_CLIENT_ID } from '../../constants/env';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -116,11 +115,13 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
-  const redirectUri = AuthSession.makeRedirectUri();
-  const [googleRequest, googleResponse, googlePromptAsync] = Google.useAuthRequest({
-    clientId: GOOGLE_CLIENT_ID,
-    scopes: ['openid', 'email', 'profile'],
-    redirectUri,
+  const [googleRequest, googleResponse, googlePromptAsync] = Google.useIdTokenAuthRequest({
+    androidClientId: config.googleAndroidClientId || undefined,
+    clientId: config.googleClientId,
+    iosClientId: config.googleIosClientId || undefined,
+    webClientId: config.googleClientId,
+    scopes: ['openid', 'profile', 'email'],
+    selectAccount: true,
   });
 
   const handleGoogleLogin = useCallback(async (idToken: string) => {
@@ -150,6 +151,23 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
       alert('Error', 'Unable to retrieve the Google ID token.');
     }
   }, [alert, googleResponse, handleGoogleLogin]);
+
+  const promptGoogleLogin = async () => {
+    if (Constants.executionEnvironment === ExecutionEnvironment.StoreClient) {
+      alert(
+        'Google sign-in requires a development build',
+        'Expo Go cannot use this app\'s OAuth redirect. Install and open the VALO development build, then try again.',
+      );
+      return;
+    }
+
+    if (!config.googleClientId) {
+      alert('Google sign-in unavailable', 'Missing EXPO_PUBLIC_GOOGLE_CLIENT_ID.');
+      return;
+    }
+
+    await googlePromptAsync();
+  };
 
   const handleLogin = async () => {
     const trimEmail = email.trim();
@@ -283,7 +301,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
               activeOpacity={0.85}
               disabled={!googleRequest || googleLoading}
               style={[styles.googleBtn, (!googleRequest || googleLoading) && styles.disabled]}
-              onPress={() => googlePromptAsync()}
+              onPress={promptGoogleLogin}
             >
               {googleLoading ? (
                 <ActivityIndicator color="#444" size="small" />

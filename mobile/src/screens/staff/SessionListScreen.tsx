@@ -17,27 +17,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { EmptyState, ErrorState } from '@/components/common';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
-import { sessionsService } from '@/services/api/sessions';
+import { staffService, type StaffSession } from '@/services/api/staff';
 
 export type StaffSessionStackParamList = {
   SessionList: undefined;
   SessionDetail: { session: ActiveSession };
 };
 
-export interface ActiveSession {
-  _id: string;
-  licensePlate: string;
-  parkingSlot?: string;
-  floorId?: string;
-  checkInTime: string;
-  checkOutTime?: string;
-  status: 'active' | 'completed' | 'cancelled';
-  phone?: string;
-  vehicleType?: string;
-  source?: 'kiosk' | 'app_booking' | 'booking' | 'walk_in';
-  totalPrice?: number;
-  paymentStatus?: string;
-}
+export type ActiveSession = StaffSession;
 
 type Props = NativeStackScreenProps<StaffSessionStackParamList, 'SessionList'>;
 type FilterType = 'active' | 'completed' | 'all';
@@ -86,8 +73,26 @@ function SessionCard({ session, onPress }: { session: ActiveSession; onPress: ()
           <Text style={styles.infoText}>{session.parkingSlot ?? 'Not assigned'}</Text>
         </View>
         <View style={styles.infoItem}>
-          <Ionicons name="time-outline" size={13} color={COLORS.textMuted} />
-          <Text style={styles.infoText}>{format(new Date(session.checkInTime), 'HH:mm dd/MM')}</Text>
+          <Ionicons name="call-outline" size={13} color={COLORS.textMuted} />
+          <Text style={styles.infoText}>{session.phone || 'No phone'}</Text>
+        </View>
+      </View>
+
+      <View style={styles.timelineRow}>
+        <View style={styles.timelineItem}>
+          <Text style={styles.timelineLabel}>Check in</Text>
+          <Text style={styles.timelineValue}>
+            {format(new Date(session.checkInTime), 'HH:mm dd/MM')}
+          </Text>
+        </View>
+        <Ionicons name="arrow-forward" size={14} color={COLORS.borderLight} />
+        <View style={[styles.timelineItem, styles.timelineItemRight]}>
+          <Text style={styles.timelineLabel}>Check out</Text>
+          <Text style={styles.timelineValue}>
+            {session.checkOutTime
+              ? format(new Date(session.checkOutTime), 'HH:mm dd/MM')
+              : 'In progress'}
+          </Text>
         </View>
       </View>
 
@@ -112,14 +117,14 @@ export const SessionListScreen = ({ navigation }: Props) => {
   const [sessions, setSessions] = useState<ActiveSession[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [filter, setFilter] = useState<FilterType>('active');
+  const [filter, setFilter] = useState<FilterType>('all');
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
     setError('');
     try {
-      const res = await sessionsService.getActiveParkingStatus();
-      setSessions((res as { data?: ActiveSession[] }).data ?? []);
+      const res = await staffService.getSessions();
+      setSessions(res.data ?? []);
     } catch (loadError: unknown) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load parking sessions.');
     } finally {
@@ -312,6 +317,25 @@ const styles = StyleSheet.create({
   metaRow: { marginTop: SPACING.sm },
   infoItem: { alignItems: 'center', flexDirection: 'row', gap: 4 },
   infoText: { color: COLORS.textSecondary, fontSize: FONT_SIZES.xs },
+  timelineRow: {
+    alignItems: 'center',
+    backgroundColor: COLORS.surfaceElevated,
+    borderRadius: RADIUS.sm,
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginTop: SPACING.sm,
+    padding: SPACING.sm,
+  },
+  timelineItem: { flex: 1 },
+  timelineItemRight: { alignItems: 'flex-end' },
+  timelineLabel: { color: COLORS.textMuted, fontSize: 9, textTransform: 'uppercase' },
+  timelineValue: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.xs,
+    fontVariant: ['tabular-nums'],
+    fontWeight: '600',
+    marginTop: 2,
+  },
   footerRow: { marginTop: SPACING.xs },
   durationBadge: {
     backgroundColor: 'rgba(212,175,55,0.1)',

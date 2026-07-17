@@ -47,7 +47,7 @@ export function StaffSubscriptionManagementScreen({ navigation }: Props) {
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
-      <ScreenHeader title="VIP subscriptions" subtitle={`${items.length} subscriptions`} onBack={navigation.goBack} />
+      <ScreenHeader title="VIP subscriptions" subtitle={`${items.length} subscriptions`} onBack={() => navigation.navigate('ManagementHome')} />
       <View style={styles.search}><Ionicons name="search-outline" size={18} color={COLORS.textMuted} /><TextInput value={query} onChangeText={setQuery} placeholder="Customer, email, or license plate" placeholderTextColor={COLORS.textMuted} style={styles.searchInput} /></View>
       <ScrollView horizontal style={styles.filterScroll} contentContainerStyle={styles.filters} showsHorizontalScrollIndicator={false}>
         {FILTERS.map((item) => <Pressable key={item} onPress={() => setFilter(item)} style={[styles.filter, filter === item && styles.filterActive]}><Text style={[styles.filterText, filter === item && styles.filterTextActive]}>{item.charAt(0).toUpperCase() + item.slice(1)}</Text></Pressable>)}

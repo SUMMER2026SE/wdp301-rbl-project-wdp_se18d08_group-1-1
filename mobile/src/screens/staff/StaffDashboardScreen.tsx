@@ -41,7 +41,8 @@ export default function StaffDashboardScreen({ navigation }: Props) {
     return { capacity, active, available: Math.max(capacity - active, 0), avgMinutes, cancelled, bookings: snapshot.bookings.length };
   }, [snapshot]);
   const displayName = user?.username || 'Staff member';
-  const goManage = (screen: 'Customers'|'Bookings'|'StaffNotifications') => navigation.navigate('Manage', { screen });
+  const goManage = (screen: 'Customers'|'Bookings'|'StaffNotifications') =>
+    navigation.navigate('Manage', { screen, initial: false });
 
   return <SafeAreaView edges={['top']} style={styles.safe}><StatusBar barStyle="light-content" backgroundColor={COLORS.background}/>
     <ScrollView contentContainerStyle={styles.scroll} refreshControl={<RefreshControl refreshing={refreshing} tintColor={COLORS.gold} onRefresh={async()=>{setRefreshing(true);await load();setRefreshing(false);}} />}>
