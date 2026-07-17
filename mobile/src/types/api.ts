@@ -50,6 +50,10 @@ export interface VerifyOTPRequest {
   otp: string;
 }
 
+export interface SendOTPRequest {
+  email: string;
+}
+
 export interface ResetPasswordRequest {
   email: string;
   otp: string;

@@ -1,84 +1,27 @@
-import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useState } from 'react';
-import {
-  ActivityIndicator,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  Pressable,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
-import { useAuth } from '@/hooks/useAuth';
+import { AppText, Button, Input } from '@/components/common';
+import { Screen } from '@/components/layout/Screen';
 import type { AuthStackParamList } from '@/navigation/types';
+import { authService } from '@/services/api/auth';
+import { colors } from '@/theme';
 import { isValidEmail, isValidPassword } from '@/utils/validation';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Register'>;
-type KeyboardType = 'default' | 'email-address' | 'phone-pad';
-
-const LogoImg = require('../../../assets/logo.png') as number;
-
-function Field({
-  icon,
-  placeholder,
-  value,
-  onChangeText,
-  secureTextEntry,
-  keyboardType = 'default',
-  autoCapitalize = 'sentences',
-}: {
-  icon: React.ReactNode;
-  placeholder: string;
-  value: string;
-  onChangeText: (value: string) => void;
-  secureTextEntry?: boolean;
-  keyboardType?: KeyboardType;
-  autoCapitalize?: 'none' | 'sentences';
-}) {
-  const [focused, setFocused] = useState(false);
-
-  return (
-    <View style={[styles.fieldWrap, focused ? styles.fieldFocused : styles.fieldDefault]}>
-      <View style={styles.fieldIcon}>
-        {icon}
-      </View>
-      <TextInput
-        autoCapitalize={autoCapitalize}
-        keyboardType={keyboardType}
-        placeholder={placeholder}
-        placeholderTextColor={COLORS.textMuted}
-        secureTextEntry={secureTextEntry}
-        selectionColor={COLORS.gold}
-        style={styles.fieldInput}
-        value={value}
-        onBlur={() => setFocused(false)}
-        onChangeText={onChangeText}
-        onFocus={() => setFocused(true)}
-      />
-    </View>
-  );
-}
 
 export const RegisterScreen = ({ navigation }: Props) => {
-  const { register, isLoading } = useAuth();
-  const [username, setUsername] = useState('');
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const handleSubmit = async () => {
-    setError('');
+    const normalizedName = name.trim();
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedPhone = phone.trim();
 
     if (!username.trim()) {
       setError('Please enter your full name.');
@@ -89,18 +32,18 @@ export const RegisterScreen = ({ navigation }: Props) => {
       setError('Please enter a valid email address.');
       return;
     }
-
     if (!isValidPassword(password)) {
       setError('Password must be at least 8 characters.');
       return;
     }
 
+    setLoading(true);
     try {
-      await register({
-        username: username.trim(),
-        name: username.trim(),
-        email: email.trim(),
-        phone: phone.trim(),
+      await authService.register({
+        username: normalizedName,
+        name: normalizedName,
+        email: normalizedEmail,
+        phone: normalizedPhone,
         password,
         role: 'customer',
       });
@@ -110,12 +53,15 @@ export const RegisterScreen = ({ navigation }: Props) => {
   };
 
   return (
-    <SafeAreaView edges={['top', 'bottom']} style={styles.safe}>
-      <StatusBar barStyle="light-content" backgroundColor="#080808" />
-      <LinearGradient
-        colors={['#080808', '#111111', '#161208']}
-        locations={[0, 0.6, 1]}
-        style={StyleSheet.absoluteFill}
+    <Screen scrollable>
+      <AppText variant="h1">Create account</AppText>
+      <Input label="Name" onChangeText={setName} placeholder="Full name" value={name} />
+      <Input
+        autoCapitalize="none"
+        keyboardType="email-address"
+        label="Email"
+        onChangeText={setEmail}
+        value={email}
       />
       <View pointerEvents="none" style={styles.cornerGlow} />
 
@@ -221,152 +167,4 @@ export const RegisterScreen = ({ navigation }: Props) => {
   );
 };
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#080808' },
-  kav: { flex: 1 },
-  scroll: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.xl,
-  },
-  cornerGlow: {
-    backgroundColor: COLORS.gold,
-    borderRadius: 130,
-    height: 260,
-    opacity: 0.05,
-    position: 'absolute',
-    right: -80,
-    top: -80,
-    width: 260,
-  },
-  hero: { alignItems: 'center', marginBottom: SPACING.xl },
-  logoGlow: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(212,175,55,0.08)',
-    borderColor: 'rgba(212,175,55,0.3)',
-    borderRadius: 48,
-    borderWidth: 1.5,
-    height: 96,
-    justifyContent: 'center',
-    marginBottom: SPACING.sm,
-    width: 96,
-  },
-  logoImg: { height: 68, width: 68 },
-  brandName: {
-    color: COLORS.gold,
-    fontSize: 34,
-    fontWeight: '900',
-    letterSpacing: 8,
-  },
-  brandSub: {
-    color: COLORS.textSecondary,
-    fontSize: FONT_SIZES.sm,
-    fontWeight: '600',
-    letterSpacing: 5,
-    marginTop: -4,
-  },
-  card: {
-    backgroundColor: COLORS.surface,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.xl,
-    borderWidth: 1,
-    overflow: 'hidden',
-    padding: SPACING.lg,
-  },
-  cardTopLine: {
-    height: 2,
-    left: 0,
-    position: 'absolute',
-    right: 0,
-    top: 0,
-  },
-  cardTitle: {
-    color: COLORS.textPrimary,
-    fontSize: FONT_SIZES.xxl,
-    fontWeight: '800',
-    marginBottom: 4,
-    marginTop: SPACING.xs,
-  },
-  cardSub: {
-    color: COLORS.textSecondary,
-    fontSize: FONT_SIZES.sm,
-    marginBottom: SPACING.lg,
-  },
-  fieldWrap: {
-    alignItems: 'center',
-    borderRadius: RADIUS.lg,
-    borderWidth: 1.5,
-    flexDirection: 'row',
-    height: 52,
-    marginBottom: SPACING.sm,
-    paddingHorizontal: SPACING.sm,
-  },
-  fieldDefault: {
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderColor: COLORS.border,
-  },
-  fieldFocused: {
-    backgroundColor: 'rgba(212,175,55,0.06)',
-    borderColor: 'rgba(212,175,55,0.5)',
-  },
-  fieldIcon: {
-    alignItems: 'center',
-    width: 32,
-  },
-  fieldInput: {
-    color: COLORS.textPrimary,
-    flex: 1,
-    fontSize: FONT_SIZES.md,
-    paddingVertical: 0,
-  },
-  errorBox: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,77,77,0.1)',
-    borderColor: 'rgba(255,77,77,0.2)',
-    borderRadius: RADIUS.md,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: SPACING.xs,
-    marginBottom: SPACING.md,
-    padding: SPACING.sm,
-  },
-  errorText: {
-    color: COLORS.error,
-    flex: 1,
-    fontSize: FONT_SIZES.sm,
-  },
-  submitBtn: {
-    borderRadius: RADIUS.lg,
-    marginTop: SPACING.xs,
-    overflow: 'hidden',
-  },
-  submitGrad: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: SPACING.sm,
-    justifyContent: 'center',
-    minHeight: 52,
-  },
-  submitText: {
-    color: COLORS.textInverse,
-    fontSize: FONT_SIZES.md,
-    fontWeight: '800',
-  },
-  disabled: { opacity: 0.6 },
-  pressed: { opacity: 0.65 },
-  loginRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: SPACING.md,
-    paddingVertical: SPACING.xs,
-  },
-  loginText: {
-    color: COLORS.textSecondary,
-    fontSize: FONT_SIZES.sm,
-  },
-  loginLink: {
-    color: COLORS.gold,
-    fontWeight: '700',
-  },
-});
+export default RegisterScreen;
