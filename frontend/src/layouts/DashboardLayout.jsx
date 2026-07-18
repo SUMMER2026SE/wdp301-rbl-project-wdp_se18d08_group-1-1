@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Outlet, NavLink, useNavigate } from "react-router-dom";
+import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { apiFetch } from "../services/api";
 import { logoutUser } from "../services/authService";
 import { clearAuthSession, notifyAuthChange } from "../services/authStorage";
@@ -26,13 +26,9 @@ import {
   // Manager icons
   MonitorCheck,
   Car,
-  Gauge,
-  FileWarning,
   ScrollText,
-  ClipboardList,
   BookOpen,
   CalendarCheck,
-  SlidersHorizontal,
   // Common
   Bell,
   LogOut,
@@ -191,6 +187,7 @@ const getInitials = (name = "") =>
 
 export default function DashboardLayout() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [user, setUser] = useState(() =>
     JSON.parse(sessionStorage.getItem("valo_user") || "{}"),
   );
@@ -501,7 +498,11 @@ export default function DashboardLayout() {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto bg-gray-100 dark:bg-[#0D0D0D] transition-colors duration-300">
+        <main
+          className={`flex-1 overflow-y-auto bg-gray-100 transition-colors duration-300 dark:bg-[#0D0D0D] ${
+            location.pathname === "/admin/revenue" ? "scrollbar-hidden" : ""
+          }`}
+        >
           <Outlet />
         </main>
       </div>
