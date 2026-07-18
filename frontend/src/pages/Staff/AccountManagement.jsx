@@ -3,9 +3,9 @@ import { Menu, Transition } from '@headlessui/react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, X, Mail, Phone, Calendar, Users, User, Shield, UserX,
-  ChevronDown, ChevronUp, Trash2, Send, Download, Edit3, Ban,
-  RotateCcw, AlertTriangle, Check, Clock, UserPlus,
-  CheckSquare, Square, RefreshCw, Layers, Eye, Lock
+  ChevronDown, Edit3,
+  AlertTriangle, Check, Clock, UserPlus,
+  RefreshCw, Eye, Lock
 } from 'lucide-react';
 import { apiFetch } from '../../services/api';
 
@@ -114,7 +114,7 @@ function SkeletonRow() {
 function StatCard({ icon: Icon, label, value, gradient, glow, loading }) {
   return (
     <div
-      className="relative rounded-2xl p-5 overflow-hidden cursor-default group transition-all duration-300 hover:scale-[1.035]"
+      className="relative rounded-xl p-3 overflow-hidden cursor-default group transition-all duration-300 hover:scale-[1.02]"
       style={{
         background: 'rgba(255,255,255,0.03)',
         border: '1px solid rgba(255,255,255,0.08)',
@@ -131,13 +131,13 @@ function StatCard({ icon: Icon, label, value, gradient, glow, loading }) {
 
       <div className="relative flex items-start justify-between">
         <div>
-          <p className="text-[11px] text-white/40 uppercase tracking-widest font-semibold mb-2">{label}</p>
-          <p className="text-3xl font-bold text-white">
+          <p className="text-[10px] text-white/40 uppercase tracking-widest font-semibold mb-1">{label}</p>
+          <p className="text-2xl font-bold text-white">
             {loading ? <span className="inline-block w-12 h-8 rounded bg-white/10 animate-skeleton" /> : <AnimatedCounter target={value} />}
           </p>
         </div>
-        <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center shadow-lg`}>
-          <Icon size={20} className="text-white" />
+        <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${gradient} flex items-center justify-center shadow-md`}>
+          <Icon size={16} className="text-white" />
         </div>
       </div>
     </div>
@@ -151,13 +151,10 @@ export default function AccountManagement() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterRole, setFilterRole] = useState('customer'); // Always customer for Staff
+  const filterRole = 'customer'; // Always customer for Staff
   const [filterStatus, setFilterStatus] = useState('all');
-  const [sortCol, setSortCol] = useState('createdAt');
-  const [sortDir, setSortDir] = useState('desc');
   const [page, setPage] = useState(1);
   const [panelUser, setPanelUser] = useState(null);
-  const [panelTab, setPanelTab] = useState('overview'); // overview | roles | activity | audit
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({});
   const [saveState, setSaveState] = useState('idle'); // idle | saving | success | error
@@ -184,8 +181,13 @@ export default function AccountManagement() {
     finally { setLoading(false); }
   };
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { fetchUsers(); }, []);
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      fetchUsers();
+    }, 0);
+
+    return () => window.clearTimeout(timerId);
+  }, []);
 
   const handleBlockToggle = async (userId, currentStatus) => {
     const userToBlock = users.find(u => u._id === userId);
@@ -219,7 +221,7 @@ export default function AccountManagement() {
       showToast('You do not have permission to view this account.', 'error');
       return;
     }
-    setPanelUser(u); setIsEditing(false); setPanelTab('overview'); setBlockConfirm(false); setSaveState('idle'); 
+    setPanelUser(u); setIsEditing(false); setBlockConfirm(false); setSaveState('idle'); 
   };
   const closePanel = () => { setPanelUser(null); setIsEditing(false); setBlockConfirm(false); };
 
@@ -355,20 +357,10 @@ export default function AccountManagement() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageUsers = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const toggleSort = (col) => {
-    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    else { setSortCol(col); setSortDir('asc'); }
-  };
-
   const formatDate = (d) => !d ? 'N/A' : new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
   const displayName = (u) => `${u?.profile?.firstName || ''} ${u?.profile?.lastName || ''}`.trim() || u?.username || u?.email || '-';
   const initials = (u) => displayName(u).charAt(0).toUpperCase();
   const avatarGrad = (u) => (ROLES[u?.role] || ROLES.customer).gradient;
-
-  const SortIcon = ({ col }) => {
-    if (sortCol !== col) return <ChevronDown size={12} className="text-white/20" />;
-    return sortDir === 'asc' ? <ChevronUp size={12} className="text-[#ffd555]" /> : <ChevronDown size={12} className="text-[#ffd555]" />;
-  };
 
   return (
     <div className="flex h-[calc(100vh-70px)] bg-[#080808] text-white relative overflow-hidden">
@@ -440,7 +432,7 @@ export default function AccountManagement() {
           </div>
 
           {/* -- Stat Cards -- */}
-          <div className="grid grid-cols-4 gap-4 mt-6">
+          <div className="grid grid-cols-4 gap-3 mt-4">
             <StatCard icon={Users}   label="Total Customers"  value={totalAccounts} gradient="from-cyan-400 to-blue-500"    glow="rgba(6,182,212,0.3)"    loading={loading} />
             <StatCard icon={UserPlus} label="New This Month"  value={newThisMonth}  gradient="from-violet-400 to-purple-600" glow="rgba(167,139,250,0.3)"  loading={loading} />
             <StatCard icon={UserX}   label="Blocked Customers" value={blockedCount}  gradient="from-rose-500 to-red-600"     glow="rgba(239,68,68,0.3)"    loading={loading} />
@@ -679,9 +671,9 @@ export default function AccountManagement() {
                         <h4 className="text-xs font-bold uppercase tracking-widest text-[#ffd555]/80 mb-3">Account Activity</h4>
                         <div className="relative pl-3 border-l border-white/10 space-y-4">
                           {[
-                            { icon: UserPlus, label: 'Account Created', date: panelUser.createdAt, color: 'text-emerald-400', bg: 'bg-emerald-400/10' },
-                            { icon: Edit3, label: 'Last Updated', date: panelUser.updatedAt, color: 'text-[#ffd555]', bg: 'bg-[#ffd555]/10' },
-                          ].map(({ icon: Ic, label, date, color, bg }, i) => (
+                            { label: 'Account Created', date: panelUser.createdAt, color: 'text-emerald-400', bg: 'bg-emerald-400/10' },
+                            { label: 'Last Updated', date: panelUser.updatedAt, color: 'text-[#ffd555]', bg: 'bg-[#ffd555]/10' },
+                          ].map(({ label, date, color, bg }, i) => (
                             <div key={i} className="relative">
                               <div className={`absolute -left-[21px] w-6 h-6 rounded-full border-[3px] border-[#1B2027] flex items-center justify-center ${bg}`}>
                                 <div className={`w-1.5 h-1.5 rounded-full ${color.replace('text-', 'bg-')}`} />

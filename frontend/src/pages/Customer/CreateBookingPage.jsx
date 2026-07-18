@@ -1,33 +1,39 @@
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef, useCallback } from 'react';
 import {
   AlertCircle,
   Calendar,
-  CalendarClock,
-  Car,
   Check,
   CheckCircle2,
   ChevronDown,
   Clock,
   CreditCard,
   Loader2,
+  Lock,
   MapPin,
-  RefreshCw,
+  Plus,
   Sparkles,
+  Trash2,
   Wallet,
 } from 'lucide-react';
 import ParkingMapViewer from '../../components/ParkingMapViewer';
 import PolicyAcceptancePrompt from '../../components/policies/PolicyAcceptancePrompt';
+import BookingPolicyModal from '../../components/policies/BookingPolicyModal';
 import { extractMissingPolicies, isPolicyAcceptanceRequired } from '../../utils/policyErrors';
+import { getPolicyAcceptanceStatus } from '../../services/policyService';
 import { getServices } from '../../services/extraServiceApi';
 import { getMyVehicles } from '../../services/vehicleService';
 import { getWalletInfo } from '../../services/walletService';
 import { apiFetch } from '../../services/api';
 import {
-  createBooking,
+  createBulkBooking,
+  createBookingHold,
   getAvailableBookingSlots,
+  quoteBulkBooking,
+  releaseBookingHold,
 } from '../../services/bookingService';
 import { QRCodeSVG } from 'qrcode.react';
 import { createTopUpUrl, getTopUpStatus } from '../../services/walletService';
+import { calculateBookingPrice } from '../../utils/bookingPricing';
 
 const formatMoney = (value = 0) => `${Number(value || 0).toLocaleString('vi-VN')} VND`;
 
@@ -86,6 +92,18 @@ const formatDateTime = (value) =>
     dateStyle: 'short',
     timeStyle: 'short',
   });
+
+const createClientItemId = () => (
+  window.crypto?.randomUUID?.() || `item-${Date.now()}-${Math.random().toString(16).slice(2)}`
+);
+
+const toItemErrorMap = (itemErrors = []) =>
+  itemErrors.reduce((acc, itemError) => {
+    if (itemError.clientItemId) {
+      acc[itemError.clientItemId] = itemError;
+    }
+    return acc;
+  }, {});
 
 const TIME_OPTIONS = [];
 for (let h = 0; h < 24; h++) {
@@ -186,7 +204,10 @@ export default function CreateBookingPage() {
   const [wallet, setWallet] = useState(null);
   const [slots, setSlots] = useState([]);
   const [selectedSlotKey, setSelectedSlotKey] = useState('');
-  const [hourlyRate, setHourlyRate] = useState(10000);
+  const [cartItems, setCartItems] = useState([]);
+  const [cartQuote, setCartQuote] = useState(null);
+  const [cartItemErrors, setCartItemErrors] = useState({});
+  const [editingClientItemId, setEditingClientItemId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [checkingSlots, setCheckingSlots] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -206,31 +227,34 @@ export default function CreateBookingPage() {
     open: false,
     missingPolicies: [],
   });
+  const [showPolicyModal, setShowPolicyModal] = useState(false);
 
   // Map state
   const [floors, setFloors] = useState([]);
+  const [pricingConfig, setPricingConfig] = useState(null);
   const [currentFloorId, setCurrentFloorId] = useState(null);
   const [dbSlots, setDbSlots] = useState([]);
   const [activeSessions, setActiveSessions] = useState([]);
 
-  useEffect(() => {
-    const fetchDbSlots = async () => {
-      if (!currentFloorId) {
-        setDbSlots([]);
-        return;
+  const fetchDbSlots = useCallback(async () => {
+    if (!currentFloorId) {
+      setDbSlots([]);
+      return;
+    }
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/parking-floors/${currentFloorId}/slots`);
+      const data = await res.json();
+      if (data.success) {
+        setDbSlots(data.data);
       }
-      try {
-        const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/parking-floors/${currentFloorId}/slots`);
-        const data = await res.json();
-        if (data.success) {
-          setDbSlots(data.data);
-        }
-      } catch (err) {
-        console.error("Failed to fetch slots", err);
-      }
-    };
-    fetchDbSlots();
+    } catch (err) {
+      console.error("Failed to fetch slots", err);
+    }
   }, [currentFloorId]);
+
+  useEffect(() => {
+    fetchDbSlots();
+  }, [fetchDbSlots]);
 
   const fetchActiveSessions = async () => {
     try {
@@ -247,6 +271,15 @@ export default function CreateBookingPage() {
       console.error('Failed to fetch active parking sessions', err);
     }
   };
+
+  useEffect(() => {
+    fetchActiveSessions();
+    const intervalId = setInterval(() => {
+      fetchActiveSessions();
+      fetchDbSlots();
+    }, 30000); // 30s
+    return () => clearInterval(intervalId);
+  }, [fetchDbSlots]);
 
   const handleStartChange = (newDate, newTime) => {
     setStartDate(newDate);
@@ -269,6 +302,20 @@ export default function CreateBookingPage() {
   };
 
   const handleEndChange = (newDate, newTime) => {
+    if (newDate && newTime) {
+      const startObj = new Date(`${startDate}T${startTimeStr}`);
+      const newEndObj = new Date(`${newDate}T${newTime}`);
+      
+      const minEndObj = new Date(startObj);
+      minEndObj.setMinutes(minEndObj.getMinutes() + 30);
+      
+      if (newEndObj < minEndObj) {
+        const minEndStr = toDateTimeLocal(minEndObj);
+        setEndDate(minEndStr.split('T')[0]);
+        setEndTimeStr(minEndStr.split('T')[1]);
+        return;
+      }
+    }
     setEndDate(newDate);
     setEndTimeStr(newTime);
   };
@@ -300,14 +347,6 @@ export default function CreateBookingPage() {
     [services, selectedServices]
   );
 
-  const parkingTotal = useMemo(() => {
-    let paidHours = durationHours;
-    if (paidHours < 1) paidHours = 1;
-    return paidHours * hourlyRate;
-  }, [durationHours, hourlyRate]);
-
-  const grandTotal = parkingTotal + serviceTotal;
-
   const selectedSlot = slots.find((slot) => `${slot.floorId}:${slot.slotCode}` === selectedSlotKey);
   const selectedVehicle = vehicles.find((vehicle) => vehicle._id === vehicleId);
   const activeMembershipType = useMemo(() => {
@@ -321,23 +360,59 @@ export default function CreateBookingPage() {
     ? dbSlots.find((slot) => slot.slotNumber === selectedSlot.slotCode)
     : null;
   const selectedSlotReservedFor = selectedDbSlot?.reservedFor?._id || selectedDbSlot?.reservedFor || null;
+  const currentLicensePlate = vehicleId ? selectedVehicle?.licensePlate : manualPlate.trim();
+  const isRegisteredPlate = vehicles.some(
+    v => v.licensePlate.toUpperCase() === currentLicensePlate?.toUpperCase()
+  );
+
   const selectedSlotIsOwnVipSlot = Boolean(
     activeMembershipType &&
-    selectedVehicle &&
+    isRegisteredPlate &&
     selectedSlot &&
     selectedSlotReservedFor &&
     String(selectedSlotReservedFor) === String(profile?.id)
   );
+
   const selectedRegisteredVehicleBlockedByVip = Boolean(
     activeMembershipType &&
-    selectedVehicle &&
+    isRegisteredPlate &&
     selectedSlot &&
     selectedDbSlot &&
     !selectedSlotIsOwnVipSlot
   );
+  const pricePreview = useMemo(
+    () => calculateBookingPrice(startTime, endTime, { 
+      waiveOpeningFee: selectedSlotIsOwnVipSlot,
+      config: pricingConfig
+    }),
+    [endTime, selectedSlotIsOwnVipSlot, startTime, pricingConfig]
+  );
+  const parkingTotal = selectedSlotIsOwnVipSlot ? 0 : pricePreview.totalAmount;
+  const grandTotal = parkingTotal + serviceTotal;
+  const walletBalance = Number(wallet?.balance || 0);
+  const walletShortfall = Math.max(grandTotal - walletBalance, 0);
+  const hasEnoughWallet = walletShortfall <= 0;
+  const cartApiItems = useMemo(
+    () => cartItems.map((item) => ({
+      clientItemId: item.clientItemId,
+      vehicleId: item.vehicleId || undefined,
+      licensePlate: item.vehicleId ? undefined : item.licensePlate,
+      floorId: item.floorId,
+      slotCode: item.slotCode,
+      startTime: item.startTime,
+      endTime: item.endTime,
+      serviceIds: item.serviceIds,
+    })),
+    [cartItems]
+  );
+  const cartGrandTotal = Number(
+    cartQuote?.grandTotal ?? cartItems.reduce((total, item) => total + Number(item.totalAmount || 0), 0)
+  );
+  const cartWalletShortfall = Math.max(cartGrandTotal - walletBalance, 0);
+  const hasActiveCheckoutHold = false;
 
   const loadData = () => {
-    Promise.all([
+    return Promise.all([
       getWalletInfo().then(res => res.ok ? res.data?.data : null).catch(() => null),
       getMyVehicles().then(res => res.ok ? res.data?.data : []).catch(() => []),
       apiFetch('/profile', {
@@ -345,10 +420,8 @@ export default function CreateBookingPage() {
       }).then(res => res.ok ? res.data?.data : null).catch(() => null),
       getServices().then(res => res.ok ? res.data?.data : []).catch(() => []),
       fetch(`${import.meta.env.VITE_API_BASE_URL}/parking-floors`).then(res => res.json().catch(() => ({}))),
-      fetch(`${import.meta.env.VITE_API_BASE_URL}/ticket-packages/active`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
-      }).then(r => r.json().catch(() => ({})))
-    ]).then(([walletData, vehiclesData, profileData, servicesData, floorsData, packagesData]) => {
+      fetch(`${import.meta.env.VITE_API_BASE_URL}/pricing-config`).then(res => res.json().catch(() => ({}))),
+    ]).then(([walletData, vehiclesData, profileData, servicesData, floorsData, pricingData]) => {
       if (walletData) setWallet(walletData);
       if (profileData) setProfile(profileData);
       if (vehiclesData) {
@@ -361,9 +434,8 @@ export default function CreateBookingPage() {
         setFloors(fls);
         if (fls.length > 0) setCurrentFloorId(fls[0]._id);
       }
-      if (packagesData && packagesData.success) {
-        const hourlyPkg = packagesData.data?.find(p => p.type === 'hourly');
-        if (hourlyPkg) setHourlyRate(hourlyPkg.price);
+      if (pricingData && pricingData.success) {
+        setPricingConfig(pricingData.data);
       }
     }).finally(() => {
       setLoading(false);
@@ -371,9 +443,12 @@ export default function CreateBookingPage() {
   };
 
   useEffect(() => {
-    loadData();
-    fetchActiveSessions();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const timer = setTimeout(() => {
+      loadData();
+      fetchActiveSessions();
+    }, 0);
+
+    return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -431,7 +506,9 @@ export default function CreateBookingPage() {
   useEffect(() => {
     if (!showSuccessModal || !bookingInfo) return undefined;
 
-    setSuccessRedirectCountdown(4);
+    const resetTimer = setTimeout(() => {
+      setSuccessRedirectCountdown(4);
+    }, 0);
 
     const countdownTimer = setInterval(() => {
       setSuccessRedirectCountdown((prev) => {
@@ -450,6 +527,7 @@ export default function CreateBookingPage() {
     }, 4000);
 
     return () => {
+      clearTimeout(resetTimer);
       clearInterval(countdownTimer);
       clearTimeout(redirectTimer);
     };
@@ -460,7 +538,6 @@ export default function CreateBookingPage() {
     setError('');
     setSuccess('');
     setSlots([]);
-    setSelectedSlotKey('');
 
     try {
       const res = await getAvailableBookingSlots({
@@ -470,23 +547,217 @@ export default function CreateBookingPage() {
 
       if (!res.ok) {
         setError(res.data?.message || 'Could not check available slots.');
+        setSelectedSlotKey('');
         return;
       }
 
       const nextSlots = res.data?.data?.slots || [];
       setSlots(nextSlots);
-
-
-      if (nextSlots[0]) {
-        setSelectedSlotKey(`${nextSlots[0].floorId}:${nextSlots[0].slotCode}`);
+      
+      // Preserve selection if it's still available in the new time range
+      if (selectedSlotKey) {
+        const [fId, sCode] = selectedSlotKey.split(':');
+        const stillAvailable = nextSlots.some(s => s.floorId === fId && s.slotCode === sCode);
+        if (!stillAvailable) {
+          setSelectedSlotKey('');
+        }
       }
     } catch (err) {
       console.error('Error finding slots:', err);
       setError(`Network error while checking slots: ${err.message}`);
+      setSelectedSlotKey('');
     } finally {
       setCheckingSlots(false);
     }
   };
+
+
+  const handleAddOrUpdateCartItem = async () => {
+    setError('');
+    setSuccess('');
+
+    const startObj = new Date(startTime);
+    const endObj = new Date(endTime);
+    const now = new Date();
+
+    if (startObj < now) {
+      setError('Start time cannot be in the past.');
+      return;
+    }
+
+    if ((endObj.getTime() - startObj.getTime()) / 60000 < 30) {
+      setError('Minimum booking duration is 30 minutes.');
+      return;
+    }
+
+    if (!selectedSlot) {
+      setError('Please select an available slot first.');
+      return;
+    }
+
+    if (!vehicleId) {
+      if (!manualPlate.trim()) {
+        setError('Please select a vehicle or enter a license plate.');
+        return;
+      }
+      const plateRegex = /^[A-Za-z0-9]{4,12}$/;
+      if (!plateRegex.test(manualPlate.trim())) {
+        setError('License plate must be 4-12 alphanumeric characters.');
+        return;
+      }
+    }
+
+    if (selectedRegisteredVehicleBlockedByVip) {
+      setError('This vehicle is already covered by your active VIP membership. Please use your assigned VIP slot instead of booking another slot.');
+      return;
+    }
+
+    if (!editingClientItemId && cartItems.length >= 5) {
+      setError('You can add up to 5 vehicles in one checkout.');
+      return;
+    }
+
+    const hasOverlap = (startA, endA, startB, endB) => startA < endB && endA > startB;
+
+    const isDuplicate = cartItems.some((item) => {
+      if (editingClientItemId === item.clientItemId) return false;
+      const itemStart = new Date(item.startTime);
+      const itemEnd = new Date(item.endTime);
+      
+      if (hasOverlap(startObj, endObj, itemStart, itemEnd)) {
+        const isSameVehicle = (vehicleId && item.vehicleId === vehicleId) || 
+                              (!vehicleId && manualPlate.trim() === item.licensePlate);
+        if (isSameVehicle) {
+          setError(`This vehicle is already in the booking list for an overlapping time.`);
+          return true;
+        }
+        
+        if (item.slotCode === selectedSlot.slotCode && item.floorId === selectedSlot.floorId) {
+          setError(`Slot ${selectedSlot.slotCode} is already in the booking list for an overlapping time.`);
+          return true;
+        }
+      }
+      return false;
+    });
+
+    if (isDuplicate) return;
+
+    setSubmitting(true);
+    try {
+      if (editingClientItemId) {
+        const oldItem = cartItems.find(i => i.clientItemId === editingClientItemId);
+        if (oldItem && oldItem.holdId) {
+          await releaseBookingHold(oldItem.holdId).catch(() => {});
+        }
+      }
+
+      const holdRes = await createBookingHold({
+        floorId: selectedSlot.floorId,
+        slotCode: selectedSlot.slotCode,
+        licensePlate: vehicleId ? selectedVehicle?.licensePlate : manualPlate.trim(),
+        startTime: startObj.toISOString(),
+        endTime: endObj.toISOString(),
+      });
+
+      if (!holdRes.ok) {
+        setError(holdRes.data?.message || 'Không thể giữ chỗ cho ô đỗ này. Có thể ai đó đã nhanh tay hơn!');
+        return;
+      }
+
+    const nextItem = {
+      clientItemId: editingClientItemId || createClientItemId(),
+      vehicleId: vehicleId || '',
+      licensePlate: vehicleId ? selectedVehicle?.licensePlate : manualPlate.trim(),
+      vehicleLabel: vehicleId
+        ? `${selectedVehicle?.licensePlate || 'Vehicle'} - ${selectedVehicle?.brand || 'Vehicle'} ${selectedVehicle?.model || ''}`.trim()
+        : manualPlate.trim(),
+      floorId: selectedSlot.floorId,
+      floorName: selectedSlot.floorName,
+      slotCode: selectedSlot.slotCode,
+      startTime: startObj.toISOString(),
+      endTime: endObj.toISOString(),
+      serviceIds: selectedServices,
+      serviceNames: services
+        .filter((service) => selectedServices.includes(service._id))
+        .map((service) => service.name),
+      parkingAmount: parkingTotal,
+      serviceAmount: serviceTotal,
+      totalAmount: grandTotal,
+      pricingDetails: pricePreview,
+      holdId: holdRes.data?.data?._id,
+      holdExpiresAt: holdRes.data?.data?.expiresAt,
+    };
+
+    setCartItems((current) => {
+      if (editingClientItemId) {
+        return current.map((item) => item.clientItemId === editingClientItemId ? nextItem : item);
+      }
+      return [...current, nextItem];
+    });
+
+    setCartItemErrors({});
+    setEditingClientItemId(null);
+    setSuccess(editingClientItemId ? 'Booking item updated.' : 'Booking item added to the list.');
+
+    setSelectedServices([]);
+    handleFindSlots();
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleEditCartItem = (item) => {
+    const localStart = toDateTimeLocal(new Date(item.startTime));
+    const localEnd = toDateTimeLocal(new Date(item.endTime));
+
+    setEditingClientItemId(item.clientItemId);
+    setStartDate(localStart.split('T')[0]);
+    setStartTimeStr(localStart.split('T')[1]);
+    setEndDate(localEnd.split('T')[0]);
+    setEndTimeStr(localEnd.split('T')[1]);
+    setVehicleId(item.vehicleId || '');
+    setManualPlate(item.vehicleId ? '' : item.licensePlate);
+    setSelectedServices(item.serviceIds || []);
+    setSelectedSlotKey(`${item.floorId}:${item.slotCode}`);
+    setSuccess('');
+    setError('');
+  };
+
+  const handleRemoveCartItem = async (clientItemId) => {
+    const itemToRemove = cartItems.find(i => i.clientItemId === clientItemId);
+    if (itemToRemove && itemToRemove.holdId) {
+      await releaseBookingHold(itemToRemove.holdId).catch(() => {});
+      handleFindSlots();
+    }
+    setCartItems((current) => current.filter((item) => item.clientItemId !== clientItemId));
+    setCartItemErrors((current) => {
+      const next = { ...current };
+      delete next[clientItemId];
+      return next;
+    });
+    if (editingClientItemId === clientItemId) {
+      setEditingClientItemId(null);
+    }
+  };
+
+  const startTopUpForShortfall = async (shortfall) => {
+    const amountToTopUp = Math.max(shortfall, 10000);
+    setTopUpLoading(true);
+    try {
+      const topUpRes = await createTopUpUrl(amountToTopUp);
+      if (topUpRes.ok) {
+        setTopUpData(topUpRes.data?.data);
+        setShowTopUpModal(true);
+      } else {
+        setError('Insufficient balance and failed to generate top-up QR.');
+      }
+    } catch {
+      setError('Insufficient balance. Network error while generating top-up QR.');
+    } finally {
+      setTopUpLoading(false);
+    }
+  };
+
 
   useEffect(() => {
     const startObj = new Date(startTime);
@@ -496,9 +767,44 @@ export default function CreateBookingPage() {
     if (startObj < now) return;
     if ((endObj - startObj) / 60000 < 30) return;
     
-    handleFindSlots();
+    const timer = setTimeout(() => {
+      handleFindSlots();
+    }, 0);
+
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startTime, endTime]);
+
+  useEffect(() => {
+    if (cartItems.length === 0) {
+      const timer = setTimeout(() => {
+        setCartQuote(null);
+        setCartItemErrors({});
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await quoteBulkBooking({ items: cartApiItems });
+        const data = res.data?.data || {};
+        if (data.items || data.grandTotal !== undefined) {
+          setCartQuote({
+            grandTotal: data.grandTotal,
+            walletBalance: data.walletBalance,
+            shortfall: data.shortfall,
+            items: data.items,
+          });
+        }
+        setCartItemErrors(res.ok ? {} : toItemErrorMap(data.itemErrors || []));
+      } catch (err) {
+        console.error('Bulk quote failed', err);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [cartApiItems, cartItems.length]);
+
 
   const toggleService = (serviceId) => {
     setSelectedServices((current) =>
@@ -508,54 +814,72 @@ export default function CreateBookingPage() {
     );
   };
 
-  const handleCreateBooking = async () => {
+  const handleCheckoutCart = () => {
+    if (cartItems.length === 0) {
+      setError('Add at least one vehicle to the booking list before checkout.');
+      return;
+    }
+    if (Object.keys(cartItemErrors).length > 0) {
+      setError('Fix highlighted booking items before checkout.');
+      return;
+    }
+    setShowPolicyModal(true);
+  };
+
+  const executeCheckoutCart = async () => {
+    setShowPolicyModal(false);
     setSubmitting(true);
     setError('');
     setSuccess('');
 
     try {
-      const startObj = new Date(startTime);
-      const endObj = new Date(endTime);
-      const now = new Date();
-      
-      if (startObj < now) {
-        setError('Start time cannot be in the past.');
-        return;
-      }
-      
-      const diffMins = (endObj.getTime() - startObj.getTime()) / 60000;
-      if (diffMins < 30) {
-        setError('Minimum booking duration is 30 minutes.');
+      if (cartItems.length === 0) {
+        setError('Add at least one vehicle to the booking list before checkout.');
         return;
       }
 
-      if (!selectedSlot) {
-        setError('Please select an available slot first.');
+      if (Object.keys(cartItemErrors).length > 0) {
+        setError('Fix highlighted booking items before checkout.');
         return;
       }
 
-      if (!vehicleId && !manualPlate.trim()) {
-        setError('Please select a vehicle or enter a license plate.');
+      const walletRes = await getWalletInfo();
+      const latestWallet = walletRes.ok ? walletRes.data?.data : wallet;
+      if (latestWallet) setWallet(latestWallet);
+
+      const latestBalance = Number(latestWallet?.balance || 0);
+      const latestShortfall = Math.max(cartGrandTotal - latestBalance, 0);
+      if (latestShortfall > 0) {
+        await startTopUpForShortfall(latestShortfall);
         return;
       }
 
-      if (selectedRegisteredVehicleBlockedByVip) {
-        setError('This registered vehicle is already covered by your active VIP membership. Please use your assigned VIP slot instead of booking another slot.');
-        return;
+
+
+
+      const checkoutItems = cartApiItems.map((item) => ({
+        ...item,
+        holdId: cartItems.find(c => c.clientItemId === item.clientItemId)?.holdId,
+      }));
+
+      // Proactively check policy acceptance status before confirming booking
+      const statusRes = await getPolicyAcceptanceStatus();
+      if (statusRes.ok && statusRes.data?.success) {
+        const missingPolicies = statusRes.data.data?.missingPolicies || [];
+        if (missingPolicies.length > 0) {
+          setPolicyPrompt({
+            open: true,
+            missingPolicies: missingPolicies,
+          });
+          setSubmitting(false);
+          return;
+        }
       }
 
-      const payload = {
-        startTime: new Date(startTime).toISOString(),
-        endTime: new Date(endTime).toISOString(),
-        floorId: selectedSlot.floorId,
-        slotCode: selectedSlot.slotCode,
-        serviceIds: selectedServices,
-      };
-
-      if (vehicleId) payload.vehicleId = vehicleId;
-      else payload.licensePlate = manualPlate;
-
-      const res = await createBooking(payload);
+      const res = await createBulkBooking({
+        idempotencyKey: createClientItemId(),
+        items: checkoutItems,
+      });
 
       if (!res.ok) {
         if (isPolicyAcceptanceRequired(res.data)) {
@@ -567,24 +891,16 @@ export default function CreateBookingPage() {
         }
 
         const errorMessage = res.data?.message || '';
-        if (errorMessage.toLowerCase().includes('insufficient wallet balance')) {
-          const shortfall = Math.max(grandTotal - (wallet?.balance || 0), 0);
-          const amountToTopUp = Math.max(shortfall, 10000);
+        const itemErrors = res.data?.data?.itemErrors || [];
+        if (itemErrors.length > 0) {
+          setCartItemErrors(toItemErrorMap(itemErrors));
+          setError(errorMessage || 'One or more booking items need attention.');
+          return;
+        }
 
-          setTopUpLoading(true);
-          try {
-            const topUpRes = await createTopUpUrl(amountToTopUp);
-            if (topUpRes.ok) {
-              setTopUpData(topUpRes.data?.data);
-              setShowTopUpModal(true);
-            } else {
-              setError('Insufficient balance and failed to generate top-up QR.');
-            }
-          } catch {
-            setError('Insufficient balance. Network error while generating top-up QR.');
-          } finally {
-            setTopUpLoading(false);
-          }
+        if (res.data?.code === 'INSUFFICIENT_WALLET_BALANCE' || errorMessage.toLowerCase().includes('insufficient')) {
+          const shortfall = Math.max(Number(res.data?.data?.shortfall || 0), 0);
+          await startTopUpForShortfall(shortfall);
           return;
         }
 
@@ -592,24 +908,40 @@ export default function CreateBookingPage() {
         return;
       }
 
-      setBookingInfo(res.data?.data?.booking);
+      setBookingInfo(res.data?.data);
       setShowSuccessModal(true);
 
-      setSuccess(`Booking created for slot ${selectedSlot.slotCode}. Wallet charged ${formatMoney(grandTotal)}.`);
+      setSuccess(`Booking order created. Wallet charged ${formatMoney(res.data?.data?.grandTotal || cartGrandTotal)}.`);
+      setCartItems([]);
+      setCartQuote(null);
+      setCartItemErrors({});
       setSelectedServices([]);
-      setSlots((current) => current.filter((slot) => `${slot.floorId}:${slot.slotCode}` !== selectedSlotKey));
       setSelectedSlotKey('');
       await loadData(true);
     } catch {
-      setError('Network error while creating booking.');
+      setError('Network error while creating booking order.');
     } finally {
       setSubmitting(false);
     }
   };
 
   useEffect(() => {
-    latestActions.current.handleCreateBooking = handleCreateBooking;
+    latestActions.current.handleCreateBooking = handleCheckoutCart;
   });
+
+  const successBookingCards = bookingInfo?.bookings || (
+    bookingInfo?._id
+      ? [{
+          bookingId: bookingInfo._id,
+          qrCode: bookingInfo._id,
+          slotCode: bookingInfo.slotCode,
+          licensePlate: bookingInfo.licensePlate,
+          startTime: bookingInfo.startTime,
+          endTime: bookingInfo.endTime,
+          totalAmount: bookingInfo.finalAmount,
+        }]
+      : []
+  );
 
   if (loading) {
     return (
@@ -620,7 +952,7 @@ export default function CreateBookingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FAFAFA] text-charcoal pt-32 pb-12 px-6 md:px-8">
+    <div className="min-h-screen bg-[#FAFAFA] text-charcoal pt-24 pb-6 px-6 md:px-8 flex flex-col">
       <style dangerouslySetInnerHTML={{ __html: `
         .custom-date-input::-webkit-calendar-picker-indicator {
           background: transparent;
@@ -648,8 +980,8 @@ export default function CreateBookingPage() {
           background-color: #d1d5db;
         }
       `}} />
-      <div className="max-w-7xl mx-auto">
-        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-8">
+      <div className="max-w-[1400px] mx-auto w-full flex-1 flex flex-col">
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-4">
           <div>
             <h1 className="text-3xl lg:text-4xl font-black text-gray-900 tracking-tight">Book Parking</h1>
             <p className="text-gray-500 font-medium mt-1">Reserve your spot and check live availability.</p>
@@ -665,7 +997,7 @@ export default function CreateBookingPage() {
             </div>
             <button
               type="button"
-              onClick={() => setShowTopUpModal(true)}
+              onClick={() => { window.location.href = '/customer/wallet'; }}
               className="w-10 h-10 rounded-xl bg-gold/10 text-gold flex items-center justify-center hover:bg-gold hover:text-white transition shadow-sm"
             >
               +
@@ -683,12 +1015,12 @@ export default function CreateBookingPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-          <section className="xl:col-span-5 flex flex-col gap-6">
-            <div className="rounded-3xl bg-white border border-gray-200 p-4 md:p-5 shadow-sm">
-              <h2 className="text-lg font-black mb-4 text-gray-900">Booking Details</h2>
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 flex-1 lg:min-h-0">
+          <section className="xl:col-span-4 flex flex-col gap-4 xl:overflow-y-auto time-scrollbar xl:pr-2 pb-4 h-full">
+            <div className="rounded-3xl bg-white border border-gray-200 p-4 shadow-sm shrink-0">
+              <h2 className="text-lg font-black mb-3 text-gray-900">Booking Details</h2>
 
-              <div className="grid grid-cols-1 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-4">
                 <label className="block">
                   <span className="text-[11px] text-gray-400 uppercase tracking-widest font-bold mb-1.5 block">Start time</span>
                   <div className="flex gap-2 h-11">
@@ -737,7 +1069,7 @@ export default function CreateBookingPage() {
                 </label>
               </div>
 
-              <div className="mt-5">
+              <div className="mt-4">
                 <span className="text-[11px] text-gray-400 uppercase tracking-widest font-bold">Vehicle</span>
                 {vehicles.length > 0 ? (
                   <select
@@ -783,12 +1115,12 @@ export default function CreateBookingPage() {
                 )}
               </div>
 
-              <div className="mt-6">
-                <div className="flex items-center justify-between mb-3">
+              <div className="mt-4">
+                <div className="flex items-center justify-between mb-2">
                   <span className="text-[11px] text-gray-400 uppercase tracking-widest font-bold">Extra services</span>
                   <span className="text-xs font-black text-gray-900">{formatMoney(serviceTotal)}</span>
                 </div>
-                <div className="space-y-1.5 max-h-36 overflow-auto pr-1">
+                <div className="space-y-1.5 max-h-32 overflow-auto pr-1 time-scrollbar">
                   {services.length === 0 ? (
                     <div className="rounded-xl border border-gray-100 bg-gray-50 px-4 py-3 text-sm text-gray-400 font-medium">
                       No active services.
@@ -823,40 +1155,172 @@ export default function CreateBookingPage() {
                 </div>
               </div>
 
-              <div className="mt-6 rounded-2xl border border-gray-100 bg-gray-50 p-4 space-y-3 shadow-inner">
+              <div className="mt-4 rounded-2xl border border-gray-100 bg-gray-50 p-3 space-y-2 shadow-inner">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-gray-500 font-medium flex items-center gap-2"><Clock size={15} /> Duration</span>
-                  <span className="font-bold text-gray-900">{durationHours || 0} hour(s)</span>
+                  <span className="font-bold text-gray-900">{pricePreview.durationMinutes || 0} mins ({pricePreview.paidHours || 0} billable h)</span>
                 </div>
+
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-gray-500 font-medium flex items-center gap-2"><CreditCard size={15} /> Parking</span>
-                  <span className="font-bold text-gray-900">{formatMoney(parkingTotal)}</span>
+                  <span className="font-bold text-gray-900 text-right">
+                    {formatMoney(parkingTotal)}
+                    {pricePreview.capApplied && (
+                      <span className="block text-[10px] text-emerald-600">Cap {pricePreview.capHours}h applied</span>
+                    )}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-gray-500 font-medium flex items-center gap-2"><Sparkles size={15} /> Services</span>
                   <span className="font-bold text-gray-900">{formatMoney(serviceTotal)}</span>
                 </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-500 font-medium flex items-center gap-2"><Wallet size={15} /> Wallet balance</span>
+                  <span className={`font-bold ${hasEnoughWallet ? 'text-emerald-600' : 'text-rose-600'}`}>{formatMoney(walletBalance)}</span>
+                </div>
                 <div className="pt-3 border-t border-gray-200 flex items-center justify-between">
                   <span className="font-black text-gray-900">Wallet charge</span>
                   <span className="text-xl font-black text-gold">{formatMoney(grandTotal)}</span>
                 </div>
+                {!hasEnoughWallet && (
+                  <div className="rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-600">
+                    Top up {formatMoney(walletShortfall)} before this slot can be held.
+                  </div>
+                )}
+                {selectedSlot && hasEnoughWallet && (
+                  <div className="rounded-xl border border-cyan-100 bg-cyan-50 px-3 py-2 text-xs font-bold flex items-center gap-2 text-cyan-700">
+                    <Lock size={14} />
+                    This slot will be locked when you review checkout.
+                  </div>
+                )}
               </div>
             </div>
 
-            <div className="mt-2">
+            <div className="mt-1 shrink-0">
               <button
                 type="button"
-                onClick={handleCreateBooking}
-                disabled={submitting || !selectedSlot || durationHours <= 0 || checkingSlots}
+                onClick={handleAddOrUpdateCartItem}
+                disabled={submitting || topUpLoading || !selectedSlot || durationHours <= 0 || checkingSlots}
                 className="w-full rounded-2xl bg-gradient-to-r from-gold to-yellow-500 hover:from-yellow-500 hover:to-gold disabled:opacity-50 text-black px-4 py-4 font-black transition flex items-center justify-center gap-2 shadow-[0_4px_20px_rgba(212,175,55,0.4)] hover:shadow-[0_8px_25px_rgba(212,175,55,0.5)] active:scale-[0.98]"
               >
-                {submitting ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
-                Book Now
+                <Plus size={18} />
+                {editingClientItemId ? 'Update Booking Item' : 'Add to Booking List'}
               </button>
+            </div>
+
+            <div className="rounded-3xl bg-white border border-gray-200 p-4 shadow-sm shrink-0">
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div>
+                  <h2 className="text-lg font-black text-gray-900">Booking List</h2>
+                  <p className="text-xs text-gray-500 font-medium">Checkout one or many vehicles together.</p>
+                </div>
+                <div className="rounded-full bg-gray-100 px-3 py-1 text-xs font-black text-gray-700">
+                  {cartItems.length}/5
+                </div>
+              </div>
+
+              {cartItems.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-center">
+                  <p className="text-sm font-bold text-gray-500">No vehicles added yet.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {cartItems.map((item, index) => {
+                    const itemError = cartItemErrors[item.clientItemId];
+                    const quotedItem = cartQuote?.items?.find((quoteItem) => quoteItem.clientItemId === item.clientItemId);
+                    const itemTotal = quotedItem?.totalAmount ?? item.totalAmount;
+
+                    return (
+                      <div
+                        key={item.clientItemId}
+                        className={`rounded-2xl border p-3 ${
+                          itemError ? 'border-rose-200 bg-rose-50' : 'border-gray-200 bg-white'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="text-[11px] font-black text-gray-400 uppercase tracking-widest">
+                              Vehicle {index + 1}
+                            </div>
+                            <div className="font-black text-gray-900 truncate">{item.vehicleLabel}</div>
+                            <div className="text-xs font-semibold text-gray-500 mt-1">
+                              Slot {item.slotCode} {item.floorName ? `- ${item.floorName}` : ''}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-1 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleEditCartItem(item)}
+                              className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-black transition"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveCartItem(item.clientItemId)}
+                              className="w-8 h-8 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 flex items-center justify-center transition"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-semibold text-gray-500">
+                          <div>{formatDateTime(item.startTime)}</div>
+                          <div>{formatDateTime(item.endTime)}</div>
+                        </div>
+
+                        {item.serviceNames.length > 0 && (
+                          <div className="mt-2 text-xs font-semibold text-gray-500">
+                            Services: {item.serviceNames.join(', ')}
+                          </div>
+                        )}
+
+                        <div className="mt-3 flex items-center justify-between">
+                          <span className={`text-xs font-black ${itemError ? 'text-rose-600' : 'text-emerald-600'}`}>
+                            {itemError ? itemError.message : 'Ready'}
+                          </span>
+                          <span className="text-sm font-black text-gray-900">{formatMoney(itemTotal)}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {hasActiveCheckoutHold && (
+                    <div className="hidden"></div>
+                  )}
+
+                  <div className="rounded-2xl border border-gray-100 bg-gray-50 p-4 space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-500 font-semibold">Wallet balance</span>
+                      <span className="font-black text-gray-900">{formatMoney(walletBalance)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-500 font-semibold">Cart total</span>
+                      <span className="font-black text-gold text-lg">{formatMoney(cartGrandTotal)}</span>
+                    </div>
+                    {cartWalletShortfall > 0 && (
+                      <div className="rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-600">
+                        Top up {formatMoney(cartWalletShortfall)} before checkout. No bookings will be created until the full cart is covered.
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleCheckoutCart}
+                    disabled={submitting || topUpLoading  || cartItems.length === 0}
+                    className="w-full rounded-2xl bg-gray-900 hover:bg-black disabled:opacity-50 text-white px-4 py-4 font-black transition flex items-center justify-center gap-2 shadow-sm active:scale-[0.98]"
+                  >
+                    {(submitting || topUpLoading ) ? <Loader2 size={18} className="animate-spin" /> : <CheckCircle2 size={18} />}
+                    {cartWalletShortfall > 0 ? `Top Up ${formatMoney(cartWalletShortfall)}` : hasActiveCheckoutHold ? `Pay ${formatMoney(cartGrandTotal)}` : 'Booking'}
+                  </button>
+                </div>
+              )}
             </div>
           </section>
 
-          <section className="xl:col-span-7 rounded-3xl bg-white border border-gray-200 p-3 md:p-4 shadow-sm flex flex-col min-h-[400px] lg:min-h-[480px]">
+          <section className="xl:col-span-8 rounded-3xl bg-white border border-gray-200 p-3 shadow-sm flex flex-col h-[500px] xl:h-[calc(100vh-140px)]">
             <div className="flex items-center justify-between gap-4 mb-3 px-2 pt-2">
               <div>
                 <h2 className="text-lg font-black text-gray-900">Available Slots Map</h2>
@@ -911,7 +1375,12 @@ export default function CreateBookingPage() {
                 onFloorSelect={setCurrentFloorId}
                 activeSessions={activeSessions}
                 dbSlots={dbSlots}
-                selectedSlotId={selectedSlot?.slotCode}
+                availableSlots={slots}
+                selectedSlotId={
+                  cartItems.length > 0 
+                    ? [...cartItems.map(item => `${item.floorId}:${item.slotCode}`), selectedSlotKey].filter(Boolean)
+                    : (selectedSlotKey || null)
+                }
                 onSelectSlot={(slot, floorId) => setSelectedSlotKey(`${floorId}:${slot.id}`)}
                 is2DMode={true}
                 hideUI={true}
@@ -936,6 +1405,10 @@ export default function CreateBookingPage() {
                       <span className="text-[10px] text-gray-300 font-bold tracking-wide">Selected</span>
                     </div>
                     <div className="flex items-center gap-1.5">
+                      <div className="w-3.5 h-3.5 rounded-sm bg-yellow-100 border border-yellow-500"></div>
+                      <span className="text-[10px] text-yellow-500 font-bold tracking-wide">VIP Pass</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
                       <div className="w-3.5 h-3.5 rounded-sm bg-red-200 border border-red-500" style={{ backgroundImage: 'repeating-linear-gradient(45deg, rgba(239, 68, 68, 0.2), rgba(239, 68, 68, 0.2) 4px, rgba(127, 29, 29, 0.3) 4px, rgba(127, 29, 29, 0.3) 8px)' }}></div>
                       <span className="text-[10px] text-gray-300 font-bold tracking-wide">Maintenance</span>
                     </div>
@@ -950,7 +1423,7 @@ export default function CreateBookingPage() {
       {/* SUCCESS MODAL */}
       {showSuccessModal && bookingInfo && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/60 backdrop-blur-md">
-          <div className="relative bg-white border border-emerald-100 rounded-[32px] p-7 max-w-[360px] w-full flex flex-col items-center text-center shadow-[0_30px_90px_rgba(16,185,129,0.18)] overflow-hidden">
+          <div className="relative bg-white border border-emerald-100 rounded-[32px] p-7 max-w-3xl w-full max-h-[90vh] flex flex-col items-center text-center shadow-[0_30px_90px_rgba(16,185,129,0.18)] overflow-y-auto">
             <div className="absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r from-emerald-300 via-teal-300 to-cyan-300" />
             <div className="absolute -top-16 -right-10 w-36 h-36 rounded-full bg-emerald-100/70 blur-2xl" />
             <div className="absolute -bottom-14 -left-8 w-28 h-28 rounded-full bg-cyan-100/70 blur-2xl" />
@@ -963,27 +1436,45 @@ export default function CreateBookingPage() {
             </div>
             <h2 className="text-[32px] leading-none font-black text-gray-900 mb-2">Booking Confirmed</h2>
             <p className="text-gray-500 font-medium text-sm mb-5 max-w-[260px]">
-              Everything is ready. Use this QR at the kiosk for a fast check-in.
+              Everything is ready. Each vehicle has its own QR for check-in.
             </p>
-
-            <div className="relative bg-white border border-gray-100 p-4 rounded-[24px] mb-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.8),0_12px_30px_rgba(15,23,42,0.06)]">
-              <div className="absolute inset-x-6 -top-2 h-3 rounded-full bg-emerald-100/70 blur-md" />
-              <QRCodeSVG value={bookingInfo._id} size={176} />
-            </div>
 
             <div className="w-full bg-[#f8fafc] border border-gray-100 rounded-[24px] p-4 text-left space-y-3 mb-5">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-gray-500 font-semibold">Slot</span>
-                <span className="font-black text-gray-900 text-lg">{bookingInfo.slotCode}</span>
+                <span className="text-gray-500 font-semibold">Order total</span>
+                <span className="font-black text-gray-900 text-lg">{formatMoney(bookingInfo.grandTotal || bookingInfo.finalAmount || 0)}</span>
               </div>
-              <div className="flex justify-between text-sm gap-4">
-                <span className="text-gray-500 font-semibold">Valid from</span>
-                <span className="font-bold text-gray-900 text-right">{formatDateTime(bookingInfo.startTime)}</span>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-500 font-semibold">Bookings</span>
+                <span className="font-black text-gray-900">{successBookingCards.length}</span>
               </div>
-              <div className="flex justify-between text-sm gap-4">
-                <span className="text-gray-500 font-semibold">Valid until</span>
-                <span className="font-bold text-gray-900 text-right">{formatDateTime(bookingInfo.endTime)}</span>
-              </div>
+            </div>
+
+            <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+              {successBookingCards.map((booking, index) => (
+                <div key={booking.bookingId || booking._id || index} className="bg-white border border-gray-100 p-4 rounded-[24px] text-left shadow-sm">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Booking {index + 1}</div>
+                      <div className="font-black text-gray-900">{booking.licensePlate || 'Vehicle'}</div>
+                    </div>
+                    <div className="font-black text-gold">{booking.slotCode}</div>
+                  </div>
+                  <div className="flex justify-center bg-gray-50 border border-gray-100 rounded-2xl p-3 mb-3">
+                    <QRCodeSVG value={String(booking.qrCode || booking.bookingId || booking._id)} size={140} />
+                  </div>
+                  <div className="space-y-2 text-xs">
+                    <div className="flex justify-between gap-3">
+                      <span className="text-gray-500 font-semibold">From</span>
+                      <span className="font-bold text-gray-900 text-right">{formatDateTime(booking.startTime)}</span>
+                    </div>
+                    <div className="flex justify-between gap-3">
+                      <span className="text-gray-500 font-semibold">Until</span>
+                      <span className="font-bold text-gray-900 text-right">{formatDateTime(booking.endTime)}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
 
             <div className="w-full bg-gradient-to-r from-emerald-50 to-cyan-50 border border-emerald-100 text-emerald-700 font-bold py-3.5 px-4 rounded-[22px] text-sm leading-relaxed">
@@ -1009,7 +1500,7 @@ export default function CreateBookingPage() {
             </div>
             <h2 className="text-2xl font-black text-gray-900 mb-1">Insufficient Balance</h2>
             <p className="text-gray-500 font-medium text-sm mb-6">
-              You need to top up <span className="font-bold text-gray-900">{formatMoney(topUpData.amount)}</span> to complete this booking.
+              You need to top up <span className="font-bold text-gray-900">{formatMoney(topUpData.amount)}</span> to complete this checkout.
             </p>
 
             <div className="bg-gray-50 border border-gray-100 p-4 rounded-2xl mb-4 shadow-inner">
@@ -1029,7 +1520,7 @@ export default function CreateBookingPage() {
 
             <div className="flex items-center justify-center gap-2 mb-6 text-sm text-gold font-black">
               <Loader2 size={16} className="animate-spin" />
-              {topUpSuccess ? "Payment received! Processing booking..." : "Waiting for your payment..."}
+              {topUpSuccess ? "Payment received! Processing checkout..." : "Waiting for your payment..."}
             </div>
 
             <div className="flex gap-3 w-full">
@@ -1053,7 +1544,16 @@ export default function CreateBookingPage() {
         open={policyPrompt.open}
         missingPolicies={policyPrompt.missingPolicies}
         onClose={() => setPolicyPrompt({ open: false, missingPolicies: [] })}
-        onAccepted={() => setPolicyPrompt({ open: false, missingPolicies: [] })}
+        onAccepted={() => {
+          setPolicyPrompt({ open: false, missingPolicies: [] });
+          executeCheckoutCart();
+        }}
+      />
+
+      <BookingPolicyModal
+        open={showPolicyModal}
+        onClose={() => setShowPolicyModal(false)}
+        onConfirm={executeCheckoutCart}
       />
     </div>
   );

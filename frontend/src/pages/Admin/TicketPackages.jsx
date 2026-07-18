@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Tag, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Plus, Edit2, Trash2, Tag, Loader2, AlertCircle } from 'lucide-react';
 
 
 export default function TicketPackages() {
@@ -18,9 +18,11 @@ export default function TicketPackages() {
     isActive: true,
   });
 
-  useEffect(() => {
-    fetchPackages();
-  }, []);
+  let isAdmin = false;
+  try {
+    const user = JSON.parse(sessionStorage.getItem('valo_user'));
+    if (user && user.role === 'admin') isAdmin = true;
+  } catch(e) {}
 
   const fetchPackages = async () => {
     try {
@@ -41,6 +43,14 @@ export default function TicketPackages() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      fetchPackages();
+    }, 0);
+
+    return () => window.clearTimeout(timerId);
+  }, []);
 
   const openModal = (pkg = null) => {
     setError('');
@@ -129,12 +139,14 @@ export default function TicketPackages() {
           <h1 className="text-3xl lg:text-4xl font-black text-white tracking-tight">Ticket Packages</h1>
           <p className="text-gray-400 font-medium mt-1">Manage parking rates and ticket packages.</p>
         </div>
-        <button
-          onClick={() => openModal()}
-          className="bg-gold text-[#0B0E17] px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-gold/90 transition shadow-lg shadow-gold/20"
-        >
-          <Plus size={18} /> Add Package
-        </button>
+        {isAdmin && (
+          <button
+            onClick={() => openModal()}
+            className="bg-gold text-[#0B0E17] px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-gold/90 transition shadow-lg shadow-gold/20"
+          >
+            <Plus size={18} /> Add Package
+          </button>
+        )}
       </div>
 
       {error && !showModal && (
@@ -151,14 +163,16 @@ export default function TicketPackages() {
               <div className="w-12 h-12 rounded-2xl bg-gold/10 text-gold flex items-center justify-center">
                 <Tag size={24} />
               </div>
-              <div className="flex gap-2">
-                <button onClick={() => openModal(pkg)} className="w-8 h-8 rounded-full bg-white/5 text-gray-400 flex items-center justify-center hover:bg-gold hover:text-[#0B0E17] transition">
-                  <Edit2 size={14} />
-                </button>
-                <button onClick={() => handleDelete(pkg._id)} className="w-8 h-8 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center hover:bg-red-500 hover:text-white transition">
-                  <Trash2 size={14} />
-                </button>
-              </div>
+              {isAdmin && (
+                <div className="flex gap-2">
+                  <button onClick={() => openModal(pkg)} className="w-8 h-8 rounded-full bg-white/5 text-gray-400 flex items-center justify-center hover:bg-gold hover:text-[#0B0E17] transition">
+                    <Edit2 size={14} />
+                  </button>
+                  <button onClick={() => handleDelete(pkg._id)} className="w-8 h-8 rounded-full bg-red-500/10 text-red-400 flex items-center justify-center hover:bg-red-500 hover:text-white transition">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              )}
             </div>
             
             <div className="mb-2">

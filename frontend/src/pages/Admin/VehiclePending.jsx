@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Car, Zap, Check, X, Loader2, RefreshCw, Image } from 'lucide-react';
-import { apiFetch, API_BASE } from '../../services/api';
+import { apiFetch } from '../../services/api';
 
 const authHeader = () => ({
   Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
@@ -27,7 +27,13 @@ export default function VehiclePending() {
     if (res.ok) setVehicles(res.data.data || []);
   };
 
-  useEffect(() => { fetchPending(); }, []);
+  useEffect(() => {
+    const timerId = window.setTimeout(() => {
+      fetchPending();
+    }, 0);
+
+    return () => window.clearTimeout(timerId);
+  }, []);
 
   const handleApprove = async (id, modelUrl) => {
     setProcessing((p) => ({ ...p, [id]: true }));

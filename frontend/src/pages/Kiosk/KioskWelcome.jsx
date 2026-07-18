@@ -1,12 +1,14 @@
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Loader2, Pointer } from 'lucide-react';
 import backgroundImage from '../../assets/images/Kiosk/BackgroundWelcomeKiosk.png';
 import logoImage from '../../assets/images/Kiosk/LogoKiosk.png';
+import ParkingFullModal from './ParkingFullModal';
 import { API_BASE } from '../../services/api';
+import { getAvailableBookingSlots } from '../../services/bookingService';
 import { normalizeLicensePlate } from '../../utils/licensePlate';
 
-const SCAN_ATTEMPTS = 8;
-const SCAN_RETRY_DELAY_MS = 900;
+const SCAN_ATTEMPTS = 20;
+const SCAN_RETRY_DELAY_MS = 800;
 const CAMERA_WARMUP_MS = 1200;
 const SCAN_TIMEOUT_MS = 7000;
 const VIDEO_READY_TIMEOUT_MS = 5000;
@@ -30,7 +32,9 @@ const plateFingerprint = (plate) => {
 
 export default function KioskWelcome({ onStart, updateFormData }) {
   const [isScanning, setIsScanning] = useState(false);
-  const [scanMessage, setScanMessage] = useState('');
+  const isParkingFullRef = useRef(false);
+  const [, setScanMessage] = useState('Scanning Plate...');
+  const [showFullModal, setShowFullModal] = useState(false);
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
@@ -171,7 +175,7 @@ export default function KioskWelcome({ onStart, updateFormData }) {
       const isMotorbike = /\d/.test(series);
       return isMotorbike ? `${province}-${series} ${formattedNumbers}` : `${province}${series} - ${formattedNumbers}`;
     }
-    return null;
+    return clean; // Fallback to raw string
   };
 
   const captureAndAnalyze = async () => {
@@ -258,14 +262,21 @@ export default function KioskWelcome({ onStart, updateFormData }) {
         pricingSource: verifyData.pricingSource || 'default',
         ticketPackageId: verifyData.bookingTicketPackageId || verifyData.pricingPackage?._id || null,
         bookingMode: verifyData.bookingMode || 'hourly',
+        isParkingFull: isParkingFullRef.current
       });
       onStart(3);
       return true;
     }
 
+    if (isParkingFullRef.current) {
+      setShowFullModal(true);
+      updateFormData({ licensePlate: '', phone: '', entryImageBase64: null, isParkingFull: false });
+      return true;
+    }
+
     if (verifyData.isRegisteredVehicle || verifyData.isVIP) {
       updateFormData({
-        step3Mode: 'policy',
+        step3Mode: verifyData.assignedSlot ? 'fastpass' : 'policy',
         licensePlate: formatted,
         entryImageBase64: imageBase64,
         phone: verifyData.phone || '',
@@ -276,8 +287,11 @@ export default function KioskWelcome({ onStart, updateFormData }) {
         pricingSource: verifyData.pricingSource || 'default',
         ticketPackageId: verifyData.pricingPackage?._id || null,
         bookingMode: 'hourly',
+        selectedSlot: verifyData.assignedSlot || null,
+        floorId: verifyData.assignedFloorId || null,
+        bookingFloorName: verifyData.assignedFloorName || null,
       });
-      onStart(2);
+      onStart(verifyData.assignedSlot ? 3 : 2);
       return true;
     }
 
@@ -296,11 +310,27 @@ export default function KioskWelcome({ onStart, updateFormData }) {
   };
 
   const handleStart = async () => {
-    if (isScanning) return;
     setIsScanning(true);
-    setScanMessage('Opening camera...');
+    setScanMessage('Checking availability...');
 
     try {
+      const startTimeStr = new Date().toISOString();
+      const endTimeStr = new Date(Date.now() + 1 * 60 * 60 * 1000).toISOString();
+      const availableRes = await getAvailableBookingSlots({
+        startTime: startTimeStr,
+        endTime: endTimeStr,
+      });
+
+      let isFull = false;
+      if (availableRes.ok && availableRes.data?.data?.slots) {
+        if (availableRes.data.data.slots.length === 0) {
+          isFull = true;
+          setScanMessage('HOURLY PARKING FULL (VIP ONLY)');
+        }
+      }
+      isParkingFullRef.current = isFull;
+
+      setScanMessage('Initializing camera...');
       const stream = await openCameraStream();
       streamRef.current = stream;
       await configureCameraTrack(stream);
@@ -352,14 +382,16 @@ export default function KioskWelcome({ onStart, updateFormData }) {
           console.error('Welcome scan attempt failed:', scanError);
         }
         await wait(SCAN_RETRY_DELAY_MS);
-      }
-
-      updateFormData({ licensePlate: '', phone: '', entryImageBase64: null });
+      } // End of loop
+      // After loop finishes without returning, it means it timed out or didn't find plate
+      updateFormData({ licensePlate: '', phone: '', entryImageBase64: null, isParkingFull: isParkingFullRef.current });
       stopCamera();
       setIsScanning(false);
       onStart(1);
     } catch (error) {
       console.error('Welcome camera scan error:', error);
+      
+      updateFormData({ licensePlate: '', phone: '', entryImageBase64: null, isParkingFull: isParkingFullRef.current });
       stopCamera();
       setIsScanning(false);
       onStart(1);
@@ -420,6 +452,14 @@ export default function KioskWelcome({ onStart, updateFormData }) {
         ref={canvasRef}
         className="absolute h-px w-px opacity-0 pointer-events-none"
         aria-hidden="true"
+      />
+
+      <ParkingFullModal 
+        isOpen={showFullModal} 
+        onClose={() => {
+          setShowFullModal(false);
+          window.location.replace('/kiosk');
+        }} 
       />
     </div>
   );

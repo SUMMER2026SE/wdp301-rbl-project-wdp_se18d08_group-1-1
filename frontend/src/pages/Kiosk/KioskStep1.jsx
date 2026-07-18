@@ -1,10 +1,137 @@
-import { useState } from 'react';
-import { Delete } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Delete, AlertCircle } from 'lucide-react';
 import { API_BASE } from '../../services/api';
+import { isValidLicensePlate } from '../../utils/licensePlate';
+import ParkingFullModal from './ParkingFullModal';
 
 export default function KioskStep1({ formData, updateFormData, onNext }) {
   const [activeField, setActiveField] = useState('plate'); // Default to plate
   const [isVerifying, setIsVerifying] = useState(false);
+  const [duplicateError, setDuplicateError] = useState('');
+  const [showFullModal, setShowFullModal] = useState(false);
+  const [modalTitle, setModalTitle] = useState(undefined);
+  const [modalMessage, setModalMessage] = useState(undefined);
+
+  // Auto-verify logic
+  useEffect(() => {
+    const plate = formData.licensePlate || '';
+    setDuplicateError(''); // Clear error on edit
+    // Trigger auto-verify if plate is valid and we are actively typing it
+    if (isValidLicensePlate(plate) && activeField === 'plate') {
+      const timerId = setTimeout(async () => {
+        try {
+          const cleanPlate = plate.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+          const response = await fetch(`${API_BASE}/sessions/verify-plate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ licensePlate: cleanPlate })
+          });
+          const data = await response.json();
+          if (data.success && data.data) {
+            const verifyData = data.data;
+
+            if (verifyData.isActive) {
+              setModalTitle('VEHICLE ALREADY INSIDE');
+              setModalMessage('This license plate is currently parked in the lot. Please check again.');
+              setShowFullModal(true);
+              return;
+            }
+
+            // 1. Auto-fill phone if available and currently empty
+            if (verifyData.phone && !formData.phone) {
+              updateFormData({ phone: verifyData.phone });
+            }
+
+            // 2. Auto-next for Bookings or Subscriptions
+            if (verifyData.hasPreBooking || verifyData.isMonthly) {
+              updateFormData({
+                step3Mode: verifyData.requiresSlotReallocation ? 'policy' : 'fastpass',
+                isMonthly: verifyData.isMonthly,
+                membershipType: verifyData.membershipType || null,
+                hasPreBooking: verifyData.hasPreBooking,
+                selectedSlot: verifyData.assignedSlot,
+                floorId: verifyData.assignedFloorId || null,
+                bookingId: verifyData.bookingId || null,
+                bookingFloorName: verifyData.assignedFloorName || null,
+                durationHours: verifyData.bookingDurationHours || formData.durationHours || 1,
+                licensePlate: plate,
+                phone: verifyData.phone || formData.phone || '',
+                ticketPackageId: verifyData.bookingTicketPackageId || formData.ticketPackageId || null,
+                bookingMode: verifyData.bookingMode || formData.bookingMode || 'hourly',
+              });
+
+              if (verifyData.requiresSlotReallocation) {
+                alert('Your booking has expired, and the previous parking space is now occupied. Please select another available space on the map (no extra charge).');
+                onNext('2');
+              } else {
+                onNext('3');
+              }
+            } else if (verifyData.isVIP || verifyData.isRegisteredVehicle) {
+              // VIPs and Registered Vehicles ALWAYS bypass the full check
+              updateFormData({
+                step3Mode: verifyData.assignedSlot ? 'fastpass' : 'policy',
+                isVIP: !!verifyData.isVIP,
+                isRegisteredVehicle: !!verifyData.isRegisteredVehicle,
+                membershipType: verifyData.membershipType || null,
+                phone: verifyData.phone || formData.phone || '',
+                licensePlate: plate,
+                pricingPackage: verifyData.pricingPackage || null,
+                pricingSource: verifyData.pricingSource || 'default',
+                ticketPackageId: verifyData.pricingPackage?._id || null,
+                bookingMode: 'hourly',
+                selectedSlot: verifyData.assignedSlot || null,
+                floorId: verifyData.assignedFloorId || null,
+                bookingFloorName: verifyData.assignedFloorName || null,
+              });
+              onNext(verifyData.assignedSlot ? '3' : '2');
+            } else if (verifyData.phone && verifyData.phone.length >= 10) {
+              // Returning guests with phone number, subject to full check
+              if (formData.isParkingFull || verifyData.isFull) {
+                setModalTitle(undefined);
+                setModalMessage(undefined);
+                setShowFullModal(true);
+                updateFormData({ licensePlate: '', phone: '', entryImageBase64: null, isParkingFull: false });
+                return;
+              }
+              updateFormData({
+                step3Mode: 'policy',
+                isVIP: false,
+                isRegisteredVehicle: false,
+                membershipType: verifyData.membershipType || null,
+                phone: verifyData.phone,
+                licensePlate: plate,
+                pricingPackage: verifyData.pricingPackage || null,
+                pricingSource: verifyData.pricingSource || 'default',
+                ticketPackageId: verifyData.pricingPackage?._id || null,
+                bookingMode: 'hourly',
+              });
+              onNext('2');
+            } else {
+              if (formData.isParkingFull || verifyData.isFull) {
+                setModalTitle(undefined);
+                setModalMessage(undefined);
+                setShowFullModal(true);
+                updateFormData({ licensePlate: '', phone: '', entryImageBase64: null, isParkingFull: false });
+                return;
+              }
+              // It's a guest and parking is not full. Automatically switch to phone input.
+              setActiveField('phone');
+            }
+          } else {
+            if (formData.isParkingFull) {
+              setModalTitle(undefined);
+              setModalMessage(undefined);
+              setShowFullModal(true);
+              updateFormData({ licensePlate: '', phone: '', entryImageBase64: null, isParkingFull: false });
+            }
+          }
+        } catch (e) {
+          console.error("Auto verify failed", e);
+        }
+      }, 800); // 0.8s debounce to allow user to finish typing
+      return () => clearTimeout(timerId);
+    }
+  }, [formData.licensePlate, activeField]);
 
   const formatVietnamesePlate = (plate) => {
     if (!plate) return null;
@@ -149,24 +276,27 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
     setIsVerifying(true);
     try {
       const plate = (formData.licensePlate || '').trim();
+      const cleanPlate = plate.replace(/[^A-Z0-9]/gi, '').toUpperCase();
       const phone = (formData.phone || '').trim();
       const hasValidPhone = /^0[35789]\d{8}$/.test(phone);
       const response = await fetch(`${API_BASE}/sessions/verify-plate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ licensePlate: plate })
+        body: JSON.stringify({ licensePlate: cleanPlate })
       });
       const data = await response.json();
       const verifyData = data.data || {};
 
       if (data.success && verifyData.isActive) {
-        alert('This vehicle is already inside the parking lot!');
+        setModalTitle('VEHICLE ALREADY INSIDE');
+        setModalMessage('This license plate is currently parked in the lot. Please check again.');
+        setShowFullModal(true);
         setIsVerifying(false);
         return;
       }
       else if (data.success && (verifyData.isMonthly || verifyData.hasPreBooking)) {
         updateFormData({
-          step3Mode: 'fastpass',
+          step3Mode: verifyData.requiresSlotReallocation ? 'policy' : 'fastpass',
           isMonthly: verifyData.isMonthly,
           membershipType: verifyData.membershipType || null,
           hasPreBooking: verifyData.hasPreBooking,
@@ -180,10 +310,16 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
           ticketPackageId: verifyData.bookingTicketPackageId || formData.ticketPackageId || null,
           bookingMode: verifyData.bookingMode || formData.bookingMode || 'hourly',
         });
-        setIsVerifying(false);
-        onNext('3');
+
+        if (verifyData.requiresSlotReallocation) {
+          alert('Booking của bạn đã quá hạn và ô đỗ cũ đã được sử dụng. Vui lòng chọn một ô đỗ trống khác trên bản đồ (Không mất thêm phí).');
+          onNext('2'); // Chuyển sang chọn Map
+        } else {
+          onNext('3'); // Fast-pass
+        }
       }
       else if (data.success && (verifyData.isVIP || verifyData.isRegisteredVehicle)) {
+        // VIPs and Registered Vehicles bypass the full check
         updateFormData({
           step3Mode: 'policy',
           isVIP: !!verifyData.isVIP,
@@ -200,6 +336,14 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
         onNext('2');
       }
       else if (data.success && verifyData.phone && verifyData.phone.length >= 10) {
+        if (formData.isParkingFull || verifyData.isFull) {
+          setModalTitle(undefined);
+          setModalMessage(undefined);
+          setShowFullModal(true);
+          updateFormData({ licensePlate: '', phone: '', entryImageBase64: null, isParkingFull: false });
+          setIsVerifying(false);
+          return;
+        }
         updateFormData({
           step3Mode: 'policy',
           phone: verifyData.phone,
@@ -214,6 +358,15 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
         onNext('2');
       }
       else {
+        if (formData.isParkingFull || (data.data && data.data.isFull)) {
+          setModalTitle(undefined);
+          setModalMessage(undefined);
+          setShowFullModal(true);
+          updateFormData({ licensePlate: '', phone: '', entryImageBase64: null, isParkingFull: false });
+          setIsVerifying(false);
+          return;
+        }
+
         setIsVerifying(false);
         updateFormData({
           step3Mode: 'policy',
@@ -240,18 +393,35 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
       alert('Could not verify the license plate. Please try again.');
     }
   };
-
   return (
     <div className="flex flex-col items-center justify-center flex-1 w-full max-w-[650px] mx-auto pb-4">
+      {/* FULL BANNER (Only shows if forced via formData) */}
+      {formData.isParkingFull && (
+        <div className="w-full bg-red-600 text-white font-bold py-3 px-6 rounded-2xl mb-4 flex items-center justify-center gap-3 shadow-lg animate-pulse">
+          <AlertCircle size={24} />
+          <span className="text-lg tracking-wide uppercase">Parking Full - Reserved Only</span>
+        </div>
+      )}
+
       {/* ─── Yellow Card Container (Flat & Soft) ─── */}
       <div className="bg-[#FFDF00] w-full rounded-[32px] py-6 px-4 sm:px-8 flex flex-col items-center transition-all duration-500">
 
         {/* License Plate Field */}
-        <div className="w-full text-center mb-4">
+        <div className="w-full text-center mb-4 relative flex flex-col items-center">
           <label className="block text-xs font-bold text-[#0f172a] tracking-widest mb-2 uppercase">
             License Plate Number
             {isVerifying && <span className="ml-2 text-blue-500 animate-pulse font-normal lowercase tracking-normal">(verifying...)</span>}
           </label>
+          {!isValidLicensePlate(formData.licensePlate || '') && (formData.licensePlate || '').length > 0 && (
+            <div className="absolute -top-10 flex items-center gap-2 text-rose-600 bg-white/80 px-4 py-1 rounded-full font-bold shadow-sm animate-pulse">
+              <AlertCircle size={16} /> License plate format is incorrect.
+            </div>
+          )}
+          {duplicateError && (
+            <div className="absolute -top-10 flex items-center gap-2 text-rose-600 bg-white/80 px-4 py-1 rounded-full font-bold shadow-sm animate-pulse">
+              <AlertCircle size={16} /> {duplicateError}
+            </div>
+          )}
           <div
             className={`relative bg-white rounded-2xl h-[60px] flex items-center justify-center w-[90%] mx-auto transition-all border-2 cursor-pointer ${activeField === 'plate' ? 'border-[#0f172a] shadow-[0_4px_15px_rgba(0,0,0,0.05)]' : 'border-transparent'}`}
             onClick={() => setActiveField('plate')}
@@ -293,14 +463,21 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
       {/* Next Step Button */}
       <button
         onClick={handleManualNext}
-        disabled={isVerifying || !(formData.licensePlate || '')}
-        className={`mt-6 mb-2 font-bold text-[18px] px-16 py-[16px] rounded-full transition-all border-2 ${(isVerifying || !(formData.licensePlate || ''))
+        disabled={isVerifying || !(formData.licensePlate || '') || !isValidLicensePlate(formData.licensePlate || '')}
+        className={`mt-6 mb-2 font-bold text-[18px] px-16 py-[16px] rounded-full transition-all border-2 ${(isVerifying || !(formData.licensePlate || '') || !isValidLicensePlate(formData.licensePlate || ''))
           ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
           : 'bg-[#0f172a] border-[#0f172a] text-white hover:bg-black shadow-[0_10px_20px_rgba(0,0,0,0.2)] active:scale-95'
           }`}
       >
         Next step
       </button>
+
+      <ParkingFullModal
+        isOpen={showFullModal}
+        onClose={() => window.location.replace('/kiosk')}
+        title={modalTitle}
+        message={modalMessage}
+      />
     </div>
   );
 }

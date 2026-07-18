@@ -77,13 +77,42 @@ const protect = async (req, res, next) => {
 const authorize = (...roles) => {
   return (req, res, next) => {
     if (!roles.includes(req.user.role)) {
+      console.warn(
+        `[Auth] Forbidden access attempt: user=${req.user._id} role=${req.user.role} method=${req.method} path=${req.originalUrl}`
+      );
       return res.status(403).json({
         success: false,
-        message: `Role '${req.user.role}' is not authorized to access this resource.`,
+        message: 'Forbidden: You do not have permission to perform this action',
       });
     }
     next();
   };
 };
 
-module.exports = { protect, authorize };
+/**
+ * Soft protect routes - verify JWT access token if present
+ * Does not block if token is missing or invalid.
+ */
+const softProtect = async (req, res, next) => {
+  try {
+    let token;
+    if (
+      req.headers.authorization &&
+      req.headers.authorization.startsWith('Bearer')
+    ) {
+      token = req.headers.authorization.split(' ')[1];
+    }
+    if (!token) return next();
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id);
+    if (user && user.status) {
+      req.user = user;
+    }
+    next();
+  } catch (error) {
+    next();
+  }
+};
+
+module.exports = { protect, authorize, softProtect };

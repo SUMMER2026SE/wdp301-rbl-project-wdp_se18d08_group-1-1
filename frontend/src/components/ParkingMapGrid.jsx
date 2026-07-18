@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
-import { Car, Zap, ZoomIn, ZoomOut, Maximize, TreePine, ArrowRight, Accessibility, Bike, Navigation, Layers, MonitorSmartphone } from "lucide-react";
+import { Car, Zap, Maximize, TreePine, ArrowRight, Accessibility, Navigation, Layers, MonitorSmartphone } from "lucide-react";
 
-const SlotElement = React.memo(({ el, floorId, style, isHovered, session, isMaintenance, onMouseEnter, onMouseLeave, onClick }) => {
+const SlotElement = React.memo(({ el, floorId, style, isHovered, session, isMaintenance, isReserved, isHeld, canViewLicensePlate, onMouseEnter, onMouseLeave, onClick }) => {
   const slotZ = 5;
   const slotTransition = 'all 0.2s ease-in-out';
   const hasName = !!el.name && el.name.trim() !== '';
@@ -9,7 +9,7 @@ const SlotElement = React.memo(({ el, floorId, style, isHovered, session, isMain
     e.stopPropagation();
     if (!hasName) return;
     if (onClick) {
-      onClick({ id: el.name || el.id, type, session, floorId });
+      onClick({ id: el.name || el.id, type, session, floorId, isReserved });
     }
   };
 
@@ -22,8 +22,28 @@ const SlotElement = React.memo(({ el, floorId, style, isHovered, session, isMain
   if (el.type === 'slot') {
     let bgColor = '#ffffff';
     let borderColor = '#94a3b8';
+    let vipBg = '#fef08a';
+    let vipBorder = '#eab308';
+    
+    // Admin specific VIP display
+    if (isReserved) {
+       if (canViewLicensePlate && el.subscriptionType === 'monthly') {
+          vipBg = '#fef08a'; // yellow background
+          vipBorder = '#eab308'; // yellow border
+       } else if (canViewLicensePlate && el.subscriptionType === 'yearly') {
+          vipBg = '#fef08a'; // yellow background
+          vipBorder = '#a855f7'; // purple border
+       } else {
+          // Default VIP or Customer view
+          vipBg = '#fef08a'; 
+          vipBorder = '#eab308';
+       }
+    }
+
     if (isMaintenance) { bgColor = '#fee2e2'; borderColor = '#ef4444'; }
+    else if (isReserved) { bgColor = vipBg; borderColor = vipBorder; }
     else if (isOccupied) { bgColor = '#fecdd3'; borderColor = '#e11d48'; } 
+    else if (isHeld) { bgColor = '#ffedd5'; borderColor = '#f97316'; }
     else if (isHovered) { bgColor = '#67e8f9'; borderColor = '#06b6d4'; }
 
     return (
@@ -31,10 +51,15 @@ const SlotElement = React.memo(({ el, floorId, style, isHovered, session, isMain
            onMouseEnter={() => onMouseEnter(el.id)}
            onMouseLeave={onMouseLeave}
            onClick={(e) => handleClick(e, 'hourly')}>
-        <span className={`text-[10px] font-bold mb-1 ${isMaintenance ? 'text-red-700' : isOccupied ? 'text-rose-700' : 'text-slate-500 group-hover:text-[#0891b2]'}`} style={{ transform: 'translateZ(2px)' }}>
-          {isOccupied ? session.licensePlate : (hasName ? el.name : '')}
+        <span className={`text-[10px] font-bold ${isOccupied ? 'mb-0.5' : 'mb-1'} ${isMaintenance ? 'text-red-700' : isReserved ? 'text-purple-700' : isHeld ? 'text-orange-700' : isOccupied ? 'text-rose-700' : 'text-slate-500 group-hover:text-[#0891b2]'}`} style={{ transform: 'translateZ(2px)' }}>
+          {hasName ? el.name : ''}
         </span>
-        <Car size={20} className={isMaintenance ? 'text-red-500' : isOccupied ? 'text-rose-500' : 'text-slate-400 group-hover:text-[#06b6d4]'} style={{ transform: 'translateZ(5px)' }} />
+        {isOccupied && canViewLicensePlate && (
+           <div className="bg-white border border-gray-400 text-black px-1 py-0.5 mx-1 rounded-[3px] text-[7px] font-black uppercase tracking-tighter shadow-sm mb-0.5 w-[90%] text-center overflow-hidden text-ellipsis whitespace-nowrap" style={{ transform: 'translateZ(3px)' }}>
+             {session.licensePlate}
+           </div>
+        )}
+        <Car size={isOccupied && canViewLicensePlate ? 16 : 20} className={isMaintenance ? 'text-red-500' : isReserved ? 'text-purple-500' : isHeld ? 'text-orange-500' : isOccupied ? 'text-rose-500' : 'text-slate-400 group-hover:text-[#06b6d4]'} style={{ transform: 'translateZ(5px)' }} />
       </div>
     );
   }
@@ -42,18 +67,34 @@ const SlotElement = React.memo(({ el, floorId, style, isHovered, session, isMain
   if (el.type === 'slot-ev') {
     let bgColor = '#ecfdf5';
     let borderColor = '#10b981';
+    let vipBg = '#fef08a';
+    let vipBorder = '#eab308';
+    if (isReserved) {
+       if (canViewLicensePlate && el.subscriptionType === 'monthly') {
+          vipBg = '#fef08a'; vipBorder = '#eab308';
+       } else if (canViewLicensePlate && el.subscriptionType === 'yearly') {
+          vipBg = '#fef08a'; vipBorder = '#a855f7';
+       }
+    }
     if (isMaintenance) { bgColor = '#fee2e2'; borderColor = '#ef4444'; }
+    else if (isReserved) { bgColor = vipBg; borderColor = vipBorder; }
     else if (isOccupied) { bgColor = '#fecdd3'; borderColor = '#e11d48'; }
+    else if (isHeld) { bgColor = '#ffedd5'; borderColor = '#f97316'; }
     else if (isHovered) { bgColor = '#6ee7b7'; borderColor = '#059669'; }
     return (
       <div style={{...style, ...maintenanceStyle, opacity: hasName ? 1 : 0.3, cursor: hasName ? 'pointer' : 'not-allowed', transform: `translateZ(${slotZ}px) rotateZ(${el.rot || 0}deg)`, borderColor, backgroundColor: bgColor, transition: slotTransition }} className="border-[2px] border-solid rounded-lg shadow-sm flex flex-col items-center justify-center group"
            onMouseEnter={() => onMouseEnter(el.id)}
            onMouseLeave={onMouseLeave}
            onClick={(e) => handleClick(e, 'ev')}>
-        <span className={`text-[10px] font-bold mb-1 ${isMaintenance ? 'text-red-700' : isOccupied ? 'text-rose-700' : 'text-emerald-600'}`} style={{ transform: 'translateZ(2px)' }}>
-          {isOccupied ? session.licensePlate : (hasName ? el.name : '')}
+        <span className={`text-[10px] font-bold ${isOccupied ? 'mb-0.5' : 'mb-1'} ${isMaintenance ? 'text-red-700' : isReserved ? 'text-purple-700' : isHeld ? 'text-orange-700' : isOccupied ? 'text-rose-700' : 'text-emerald-600'}`} style={{ transform: 'translateZ(2px)' }}>
+          {hasName ? el.name : ''}
         </span>
-        <Zap size={20} className={isMaintenance ? 'text-red-500' : isOccupied ? 'text-rose-500' : 'text-emerald-500'} style={{ transform: 'translateZ(5px)' }} />
+        {isOccupied && canViewLicensePlate && (
+           <div className="bg-white border border-gray-400 text-black px-1 py-0.5 mx-1 rounded-[3px] text-[7px] font-black uppercase tracking-tighter shadow-sm mb-0.5 w-[90%] text-center overflow-hidden text-ellipsis whitespace-nowrap" style={{ transform: 'translateZ(3px)' }}>
+             {session.licensePlate}
+           </div>
+        )}
+        <Zap size={isOccupied && canViewLicensePlate ? 16 : 20} className={isMaintenance ? 'text-red-500' : isReserved ? 'text-purple-500' : isHeld ? 'text-orange-500' : isOccupied ? 'text-rose-500' : 'text-emerald-500'} style={{ transform: 'translateZ(5px)' }} />
       </div>
     );
   }
@@ -61,18 +102,34 @@ const SlotElement = React.memo(({ el, floorId, style, isHovered, session, isMain
   if (el.type === 'slot-handicap') {
     let bgColor = '#eff6ff';
     let borderColor = '#3b82f6';
+    let vipBg = '#fef08a';
+    let vipBorder = '#eab308';
+    if (isReserved) {
+       if (canViewLicensePlate && el.subscriptionType === 'monthly') {
+          vipBg = '#fef08a'; vipBorder = '#eab308';
+       } else if (canViewLicensePlate && el.subscriptionType === 'yearly') {
+          vipBg = '#fef08a'; vipBorder = '#a855f7';
+       }
+    }
     if (isMaintenance) { bgColor = '#fee2e2'; borderColor = '#ef4444'; }
+    else if (isReserved) { bgColor = vipBg; borderColor = vipBorder; }
     else if (isOccupied) { bgColor = '#fecdd3'; borderColor = '#e11d48'; }
+    else if (isHeld) { bgColor = '#ffedd5'; borderColor = '#f97316'; }
     else if (isHovered) { bgColor = '#93c5fd'; borderColor = '#2563eb'; }
     return (
       <div style={{...style, ...maintenanceStyle, opacity: hasName ? 1 : 0.3, cursor: hasName ? 'pointer' : 'not-allowed', transform: `translateZ(${slotZ}px) rotateZ(${el.rot || 0}deg)`, borderColor, backgroundColor: bgColor, transition: slotTransition }} className="border-[2px] border-solid rounded-lg shadow-sm flex flex-col items-center justify-center group"
            onMouseEnter={() => onMouseEnter(el.id)}
            onMouseLeave={onMouseLeave}
            onClick={(e) => handleClick(e, 'handicap')}>
-        <span className={`text-[10px] font-bold mb-1 ${isMaintenance ? 'text-red-700' : isOccupied ? 'text-rose-700' : 'text-blue-600'}`} style={{ transform: 'translateZ(2px)' }}>
-          {isOccupied ? session.licensePlate : (hasName ? el.name : '')}
+        <span className={`text-[10px] font-bold ${isOccupied ? 'mb-0.5' : 'mb-1'} ${isMaintenance ? 'text-red-700' : isReserved ? 'text-purple-700' : isHeld ? 'text-orange-700' : isOccupied ? 'text-rose-700' : 'text-blue-600'}`} style={{ transform: 'translateZ(2px)' }}>
+          {hasName ? el.name : ''}
         </span>
-        <Accessibility size={20} className={isMaintenance ? 'text-red-500' : isOccupied ? 'text-rose-500' : 'text-blue-500'} style={{ transform: 'translateZ(5px)' }} />
+        {isOccupied && canViewLicensePlate && (
+           <div className="bg-white border border-gray-400 text-black px-1 py-0.5 mx-1 rounded-[3px] text-[7px] font-black uppercase tracking-tighter shadow-sm mb-0.5 w-[90%] text-center overflow-hidden text-ellipsis whitespace-nowrap" style={{ transform: 'translateZ(3px)' }}>
+             {session.licensePlate}
+           </div>
+        )}
+        <Accessibility size={isOccupied && canViewLicensePlate ? 16 : 20} className={isMaintenance ? 'text-red-500' : isReserved ? 'text-purple-500' : isHeld ? 'text-orange-500' : isOccupied ? 'text-rose-500' : 'text-blue-500'} style={{ transform: 'translateZ(5px)' }} />
       </div>
     );
   }
@@ -86,12 +143,18 @@ export default function ParkingMapGrid({
   onFloorSelect, 
   onSlotClick,
   onZoneClick,
-  activeSessions = [], // Array of sessions to determine slot status
-  dbSlots = [], // Array of slot data from DB to check maintenance status
+  activeSessions = [], 
+  dbSlots = [], 
+  availableSlots = null, 
+  activeHolds = [],
   loading = false,
-  isEditMode = false // In case we want to reuse something, but currently builder is separated
+  is2DMode = false,
 }) {
-  const [camera, setCamera] = useState({ rotX: 60, rotZ: -30, panX: 0, panY: 0, zoom: 0.7 });
+  const [camera, setCamera] = useState(
+    is2DMode 
+      ? { rotX: 0, rotZ: 0, panX: 0, panY: 0, zoom: 0.65 }
+      : { rotX: 60, rotZ: -30, panX: 0, panY: 0, zoom: 0.7 }
+  );
   const [dragStart, setDragStart] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [hoveredSlotId, setHoveredSlotId] = useState(null);
@@ -111,6 +174,27 @@ export default function ParkingMapGrid({
       return acc;
     }, {});
   }, [dbSlots]);
+
+  const availableSlotMap = useMemo(() => {
+    if (!availableSlots) return null;
+    return availableSlots.reduce((acc, curr) => {
+      acc[`${curr.floorId}-${curr.slotCode}`] = true;
+      return acc;
+    }, {});
+  }, [availableSlots]);
+
+  const canViewLicensePlate = useMemo(() => {
+    try {
+      const raw = sessionStorage.getItem('valo_user');
+      if (raw) {
+        const user = JSON.parse(raw);
+        return user.role === 'admin' || user.role === 'staff';
+      }
+    } catch (e) {
+      return false;
+    }
+    return false;
+  }, []);
 
   const handleMouseEnterSlot = useCallback((id) => setHoveredSlotId(id), []);
   const handleMouseLeaveSlot = useCallback(() => setHoveredSlotId(null), []);
@@ -148,13 +232,13 @@ export default function ParkingMapGrid({
     const deltaX = e.clientX - dragStart.x;
     const deltaY = e.clientY - dragStart.y;
     
-    if (dragStart.action === 'orbit') {
+    if (dragStart.action === 'orbit' && !is2DMode) {
       setCamera({
         ...dragStart.startCamera,
         rotZ: dragStart.startCamera.rotZ + deltaX * 0.5,
         rotX: Math.max(0, Math.min(90, dragStart.startCamera.rotX - deltaY * 0.5))
       });
-    } else if (dragStart.action === 'pan') {
+    } else if (dragStart.action === 'pan' || (dragStart.action === 'orbit' && is2DMode)) {
       setCamera({
         ...dragStart.startCamera,
         panX: dragStart.startCamera.panX + deltaX,
@@ -220,16 +304,30 @@ export default function ParkingMapGrid({
         const session = sessionMap[`${floorId}-${el.name || el.id}`];
         const dbSlot = dbSlotMap[`${floorId}-${el.name || el.id}`];
         const isMaintenance = dbSlot?.status === 'maintenance';
+        
+        const hasName = !!el.name && el.name.trim() !== '';
+        // Only evaluate if it has a valid name (real slot). Phantom unnamed slots are not reserved.
+        const isAvailable = (hasName && availableSlotMap) ? !!availableSlotMap[`${floorId}-${el.name}`] : (hasName ? false : true);
+        
+        let isHeld = false;
+        if (activeHolds && hasName) {
+          isHeld = activeHolds.some(h => String(h.floorId) === String(floorId) && String(h.slotCode).toUpperCase() === String(el.name).toUpperCase());
+        }
+
+        const isReserved = !!dbSlot?.subscriptionType;
 
         return (
-          <SlotElement
+          <SlotElement 
             key={el.id}
-            el={el}
+            el={{ ...el, subscriptionType: dbSlot?.subscriptionType }}
             floorId={floorId}
-            style={style}
+            style={style} 
             isHovered={isHovered}
             session={session}
             isMaintenance={isMaintenance}
+            isReserved={isReserved}
+            isHeld={isHeld}
+            canViewLicensePlate={canViewLicensePlate}
             onMouseEnter={handleMouseEnterSlot}
             onMouseLeave={handleMouseLeaveSlot}
             onClick={onSlotClick}
@@ -333,11 +431,13 @@ export default function ParkingMapGrid({
 
   return (
     <>
-      <div className="absolute top-4 right-8 z-50 text-white/40 text-xs text-right pointer-events-none">
-        <p><strong>Left Click + Drag</strong>: Orbit 3D Space</p>
-        <p><strong>Shift + Drag / Right Click</strong>: Pan</p>
-        <p><strong>Mouse Wheel</strong>: Zoom</p>
-      </div>
+      {!is2DMode && (
+        <div className="absolute top-4 right-8 z-50 text-white/40 text-xs text-right pointer-events-none">
+          <p><strong>Left Click + Drag</strong>: Orbit 3D Space</p>
+          <p><strong>Shift + Drag / Right Click</strong>: Pan</p>
+          <p><strong>Mouse Wheel</strong>: Zoom</p>
+        </div>
+      )}
 
       <div 
         ref={containerRef}
@@ -373,17 +473,37 @@ export default function ParkingMapGrid({
                   let targetOpacity = 1;
                   let pointerEvents = 'auto';
 
-                  if (isOverview) {
-                      const centerIndex = (floors.length - 1) / 2;
-                      targetZ = (idx - centerIndex) * 200;
-                  } else {
-                      targetZ = (idx - currentFloorIndex) * 150;
-                      if (isAbove) {
-                          targetZ += 500;
+                  if (is2DMode) {
+                      if (isOverview) {
+                          targetZ = -800;
                           targetOpacity = 0;
                           pointerEvents = 'none';
-                      } else if (isBelow) {
-                          targetOpacity = 0.2;
+                      } else {
+                          if (isAbove) {
+                              targetZ = 800;
+                              targetOpacity = 0;
+                              pointerEvents = 'none';
+                          } else if (isBelow) {
+                              targetZ = -800;
+                              targetOpacity = 0;
+                              pointerEvents = 'none';
+                          } else {
+                              targetZ = 0;
+                          }
+                      }
+                  } else {
+                      if (isOverview) {
+                          const centerIndex = (floors.length - 1) / 2;
+                          targetZ = (idx - centerIndex) * 200;
+                      } else {
+                          targetZ = (idx - currentFloorIndex) * 150;
+                          if (isAbove) {
+                              targetZ += 500;
+                              targetOpacity = 0;
+                              pointerEvents = 'none';
+                          } else if (isBelow) {
+                              targetOpacity = 0.2;
+                          }
                       }
                   }
                   
@@ -414,10 +534,12 @@ export default function ParkingMapGrid({
                          }
                       }}
                     >
-                      <div className="absolute -top-12 left-10 text-cyan-400/80 font-black text-3xl tracking-widest uppercase drop-shadow-xl transition-all duration-1000 pointer-events-none" 
-                           style={{ transform: 'translateZ(20px)', opacity: isCurrent ? 1 : 0.5 }}>
-                        {floor.name} {isCurrent && <span className="text-sm bg-cyan-500/20 text-cyan-400 px-3 py-1 rounded-full ml-4">SELECTED</span>}
-                      </div>
+                      {!is2DMode && (
+                        <div className="absolute -top-12 left-10 text-cyan-400/80 font-black text-3xl tracking-widest uppercase drop-shadow-xl transition-all duration-1000 pointer-events-none" 
+                             style={{ transform: 'translateZ(20px)', opacity: isCurrent ? 1 : 0.5 }}>
+                          {floor.name} {isCurrent && <span className="text-sm bg-cyan-500/20 text-cyan-400 px-3 py-1 rounded-full ml-4">SELECTED</span>}
+                        </div>
+                      )}
                       
                       <div className="absolute inset-0 rounded-[2rem] pointer-events-none opacity-20"
                            style={{ backgroundImage: `linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)`, backgroundSize: '40px 40px' }} />
@@ -440,7 +562,7 @@ export default function ParkingMapGrid({
         </div>
 
         <div className="absolute bottom-14 right-8 flex flex-row gap-2 z-50">
-          <button onClick={() => setCamera({ rotX: 60, rotZ: -30, panX: 0, panY: 0, zoom: 0.7 })} className="p-3 bg-[#181c23]/80 hover:bg-white/10 backdrop-blur border border-white/10 rounded-xl text-white shadow-xl transition-all"><Maximize size={20} /></button>
+          <button onClick={() => setCamera(is2DMode ? { rotX: 0, rotZ: 0, panX: 0, panY: 0, zoom: 0.65 } : { rotX: 60, rotZ: -30, panX: 0, panY: 0, zoom: 0.7 })} className="p-3 bg-[#181c23]/80 hover:bg-white/10 backdrop-blur border border-white/10 rounded-xl text-white shadow-xl transition-all"><Maximize size={20} /></button>
         </div>
       </div>
     </>

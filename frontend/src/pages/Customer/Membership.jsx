@@ -1,21 +1,25 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Crown, Sparkles, Check, Loader2, ArrowRight, AlertCircle, QrCode, Wallet } from 'lucide-react';
-import { getTicketPackages, createSubscriptionPayment, verifySubscriptionPayment, paySubscriptionWithWallet } from '../../services/subscriptionService';
+import { getTicketPackages, createSubscriptionPayment, verifySubscriptionPayment, paySubscriptionWithWallet, getMembership } from '../../services/subscriptionService';
 import { getWalletInfo } from '../../services/walletService';
 import { getMyVehicles } from '../../services/vehicleService';
 import { apiFetch } from '../../services/api';
 import { notifyAuthChange } from '../../services/authStorage';
 import ParkingMapViewer from '../../components/ParkingMapViewer';
 import PolicyAcceptancePrompt from '../../components/policies/PolicyAcceptancePrompt';
+import BookingPolicyModal from '../../components/policies/BookingPolicyModal';
 import { extractMissingPolicies, isPolicyAcceptanceRequired } from '../../utils/policyErrors';
-import { QRCodeSVG } from 'qrcode.react';
+import { getPolicyAcceptanceStatus } from '../../services/policyService';
+import toast, { Toaster } from 'react-hot-toast';
 
 export default function Membership() {
+  const navigate = useNavigate();
   const [packages, setPackages] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const [user, setUser] = useState(null);
+  const [membershipData, setMembershipData] = useState(null);
 
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [showSlotModal, setShowSlotModal] = useState(false);
@@ -24,8 +28,6 @@ export default function Membership() {
   const [currentFloorId, setCurrentFloorId] = useState(null);
   const [dbSlots, setDbSlots] = useState([]);
   
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [paymentData, setPaymentData] = useState(null);
   const [verifying, setVerifying] = useState(false);
   const [success, setSuccess] = useState(false);
   const [walletBalance, setWalletBalance] = useState(0);
@@ -34,6 +36,7 @@ export default function Membership() {
     open: false,
     missingPolicies: [],
   });
+  const [showPolicyModal, setShowPolicyModal] = useState(false);
 
   const subscriptionPackages = packages
     .filter(pkg => ['monthly', 'yearly'].includes(pkg.type))
@@ -50,9 +53,10 @@ export default function Membership() {
     const token = localStorage.getItem('accessToken');
     if (!token) return;
 
-    const { ok, data } = await apiFetch('/profile', {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const [{ ok, data }, membershipRes] = await Promise.all([
+      apiFetch('/profile', { headers: { Authorization: `Bearer ${token}` } }),
+      getMembership()
+    ]);
 
     if (ok && data?.success) {
       const cached = JSON.parse(sessionStorage.getItem('valo_user') || 'null');
@@ -65,6 +69,10 @@ export default function Membership() {
       setUser(data.data);
       notifyAuthChange();
     }
+    
+    if (membershipRes.ok && membershipRes.data?.success) {
+      setMembershipData(membershipRes.data.data);
+    }
   };
 
   // Check URL for PayOS return
@@ -75,22 +83,41 @@ export default function Membership() {
 
     if (orderCode) {
       if (cancel === 'true') {
-        alert('Payment transaction was cancelled.');
-        // Delete query string
+        toast.error('Payment transaction was cancelled.');
         window.history.replaceState({}, document.title, window.location.pathname);
       } else {
         setVerifying(true);
-        verifySubscriptionPayment(orderCode).then(async (res) => {
-          if (res.ok) {
-            await syncCurrentUserProfile();
-            setSuccess(true);
-          } else {
-            alert(res.data?.message || 'The transaction is incomplete or failed');
+        let attempts = 0;
+        
+        const intervalId = setInterval(async () => {
+          try {
+            attempts++;
+            const res = await verifySubscriptionPayment(orderCode);
+            
+            if (res.ok && res.data?.success) {
+              clearInterval(intervalId);
+              await syncCurrentUserProfile();
+              setSuccess(true);
+              setVerifying(false);
+              window.history.replaceState({}, document.title, window.location.pathname);
+            } else if (attempts >= 100) { // Timeout after 5 minutes (3s * 100)
+              clearInterval(intervalId);
+              setVerifying(false);
+              toast.error('Payment verification timed out. Please contact support if you have paid.');
+              window.history.replaceState({}, document.title, window.location.pathname);
+            } else if (res.data?.message !== 'Payment not completed.') {
+              // If it's a hard error (not just pending), stop polling
+              clearInterval(intervalId);
+              setVerifying(false);
+              toast.error(res.data?.message || 'The transaction failed');
+              window.history.replaceState({}, document.title, window.location.pathname);
+            }
+          } catch (err) {
+            console.error("Polling error:", err);
           }
-        }).finally(() => {
-          setVerifying(false);
-          window.history.replaceState({}, document.title, window.location.pathname);
-        });
+        }, 3000);
+
+        return () => clearInterval(intervalId);
       }
     }
   }, []);
@@ -118,14 +145,15 @@ export default function Membership() {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [pkgRes, vRes, floorRes, profileRes, walletRes] = await Promise.all([
+        const [pkgRes, vRes, floorRes, profileRes, walletRes, membershipRes] = await Promise.all([
           getTicketPackages(),
           getMyVehicles(),
           fetch(`${import.meta.env.VITE_API_BASE_URL}/parking-floors`).then(r => r.json()),
           fetch(`${import.meta.env.VITE_API_BASE_URL}/profile`, {
             headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
           }).then(r => r.json()),
-          getWalletInfo()
+          getWalletInfo(),
+          getMembership()
         ]);
         
         if (pkgRes.ok && pkgRes.data?.data) {
@@ -147,6 +175,9 @@ export default function Membership() {
         if (walletRes.ok && walletRes.data?.success) {
           setWalletBalance(walletRes.data.data.balance || 0);
         }
+        if (membershipRes.ok && membershipRes.data?.success) {
+          setMembershipData(membershipRes.data.data);
+        }
       } catch (err) {
         console.error(err);
       } finally {
@@ -165,13 +196,15 @@ export default function Membership() {
 
   const cardShellClass = "group relative z-10 flex min-h-[430px] w-full flex-col overflow-hidden rounded-3xl bg-white p-5 shadow-[0_14px_34px_rgba(15,23,42,0.08)] transition-all duration-300 hover:-translate-y-1.5 hover:shadow-[0_22px_46px_rgba(15,23,42,0.14)] md:p-6";
 
-  const totalCards = subscriptionPackages.length + 1;
+  const visibleCardsCount = subscriptionPackages.length === 0 ? 2 : subscriptionPackages.length + 1;
   const getDesktopGridBalanceClass = (cardIndex) => {
-    const lastRowCount = totalCards % 3;
-    const lastRowStartIndex = totalCards - lastRowCount;
+    if (visibleCardsCount === 2) return ''; // Left-align if only 2 cards (Member + Empty State or 1 Package)
+    
+    const lastRowCount = visibleCardsCount % 3;
+    const lastRowStartIndex = visibleCardsCount - lastRowCount;
 
     if (lastRowCount === 1 && cardIndex === lastRowStartIndex) return 'lg:col-start-2';
-    if (lastRowCount === 2 && cardIndex === lastRowStartIndex + 1) return 'lg:col-start-3';
+    // Remove the awkward col-start-3 gap for 2 items in the last row
     return '';
   };
 
@@ -227,12 +260,19 @@ export default function Membership() {
   };
 
   const getPackageButton = (pkg) => {
-    if (isVipActive && activePackage?._id === pkg._id) {
-      return { disabled: true, label: 'In use' };
+    const totalReservedSlots = membershipData?.reservedSlots?.length || 0;
+    const maxSlots = Math.min(3, vehicles.length);
+    
+    if (totalReservedSlots >= maxSlots && maxSlots > 0) {
+      return { disabled: true, label: 'In use (Max slots)' };
     }
 
     if (isVipActive && activePackageType === 'yearly' && pkg.type === 'monthly') {
-      return { disabled: true, label: 'Included in the Yearly plan' };
+      return { disabled: true, label: 'Included in Yearly' };
+    }
+
+    if (totalReservedSlots > 0) {
+      return { disabled: false, label: 'Add slot' };
     }
 
     return { disabled: false, label: 'Upgrade now' };
@@ -246,12 +286,15 @@ export default function Membership() {
     } else {
       // Add
       const maxSlots = Math.min(3, vehicles.length);
+      const totalReservedSlots = membershipData?.reservedSlots?.length || 0;
+      const availableSlots = Math.max(0, maxSlots - totalReservedSlots);
+      
       if (vehicles.length === 0) {
-        alert("You need to add a vehicle before buying a VIP pass.");
+        toast.error("You need to add a vehicle before buying a VIP pass.");
         return;
       }
-      if (selectedSlots.length >= maxSlots) {
-        alert(`You can select at most ${maxSlots} parking slots (matching your number of vehicles).`);
+      if (selectedSlots.length >= availableSlots) {
+        toast.error(`You can select at most ${availableSlots} additional slot(s) based on your vehicles.`);
         return;
       }
       setSelectedSlots(prev => [...prev, { floorId, slotCode: slotData.slotNumber }]);
@@ -260,12 +303,46 @@ export default function Membership() {
 
   const handleConfirmSlots = async () => {
     if (selectedSlots.length === 0) {
-      alert("Please select at least one parking slot to reserve.");
+      toast.error("Please select at least one parking slot to reserve.");
+      return;
+    }
+
+    const totalPrice = selectedPackage ? selectedPackage.price * Math.max(1, selectedSlots.length) : 0;
+
+    if (paymentMethod === 'wallet' && selectedPackage && walletBalance < totalPrice) {
+      toast.error("Số dư ví không đủ. Hệ thống sẽ chuyển hướng bạn đến trang Nạp Tiền.");
+      setTimeout(() => {
+        setShowSlotModal(false);
+        navigate('/wallet');
+      }, 1500);
       return;
     }
     
     try {
       setShowSlotModal(false);
+      setShowPolicyModal(true);
+    } catch {
+      toast.error("Network error");
+    }
+  };
+
+  const executeConfirmSlots = async () => {
+    setShowPolicyModal(false);
+    try {
+
+      // Proactively check policy acceptance status before confirming booking
+      const statusRes = await getPolicyAcceptanceStatus();
+      if (statusRes.ok && statusRes.data?.success) {
+        const missingPolicies = statusRes.data.data?.missingPolicies || [];
+        if (missingPolicies.length > 0) {
+          setPolicyPrompt({
+            open: true,
+            missingPolicies: missingPolicies,
+          });
+          return;
+        }
+      }
+
       setVerifying(true); // Show the processing state
 
       if (paymentMethod === 'wallet') {
@@ -279,7 +356,7 @@ export default function Membership() {
             missingPolicies: extractMissingPolicies(res.data),
           });
         } else {
-          alert(res.data?.message || "Error while paying with Valo Wallet");
+          toast.error(res.data?.message || "Error while paying with Valo Wallet");
         }
         setVerifying(false);
       } else {
@@ -294,12 +371,12 @@ export default function Membership() {
           });
           setVerifying(false);
         } else {
-          alert(res.data?.message || "Error creating PayOS transaction");
+          toast.error(res.data?.message || "Error creating PayOS transaction");
           setVerifying(false);
         }
       }
     } catch {
-      alert("Network error");
+      toast.error("Network error");
       setVerifying(false);
     }
   };
@@ -316,6 +393,7 @@ export default function Membership() {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
+      <Toaster position="top-right" />
       {/* Header Banner */}
       <div className="bg-[#181C23] text-white pt-28 pb-20 px-6 rounded-b-[32px] text-center relative overflow-hidden">
         <div className="absolute inset-0 opacity-10 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-gold via-[#181C23] to-[#181C23]"></div>
@@ -463,9 +541,15 @@ export default function Membership() {
             <div className="p-6 border-b border-gray-100 flex items-center justify-between">
               <div>
                 <h3 className="text-xl font-black text-gray-900">Choose Fixed Parking Slots</h3>
-                <p className="text-sm text-gray-500 mt-1">
-                  You currently have {vehicles.length} registered vehicles. You can select {Math.min(3, vehicles.length)} parking slots.
-                </p>
+                <p className="text-gray-500 mt-1">
+                You currently have <span className="font-bold text-gray-900">{vehicles.length}</span> registered vehicles. 
+                You can select up to <span className="font-bold text-gray-900">{Math.min(3, vehicles.length)}</span> parking slots.
+                {vehicles.length > 1 && (
+                  <span className="block mt-1 text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-md">
+                    Tip: You can select fewer slots than vehicles to share slots among your vehicles.
+                  </span>
+                )}
+              </p>
               </div>
               <button 
                 onClick={() => setShowSlotModal(false)}
@@ -483,7 +567,7 @@ export default function Membership() {
                   dbSlots={dbSlots}
                   onFloorSelect={setCurrentFloorId}
                   onSelectSlot={(slotData) => handleSelectSlot(currentFloorId, { slotNumber: slotData.name || slotData.id })}
-                  selectedSlotId={selectedSlots.filter(s => s.floorId === currentFloorId).map(s => s.slotCode)}
+                  selectedSlotId={selectedSlots.map(s => `${s.floorId}:${s.slotCode}`)}
                   is2DMode={true}
                   hideUI={true}
                   theme="dark"
@@ -555,14 +639,14 @@ export default function Membership() {
                     </button>
                   </div>
                   
-                  {paymentMethod === 'wallet' && selectedPackage && walletBalance < selectedPackage.price && (
-                    <div className="mb-3 p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-medium flex items-start gap-1.5">
+                  {paymentMethod === 'wallet' && selectedPackage && walletBalance < (selectedPackage.price * Math.max(1, selectedSlots.length)) && (
+                    <div className="bg-rose-50 text-rose-600 text-xs p-3 rounded-xl border border-rose-100 flex gap-2 mt-4 font-medium items-start">
                       <AlertCircle className="shrink-0 w-4 h-4" />
                       <p>Insufficient balance. Please top up or use PayOS.</p>
                     </div>
                   )}
 
-                  <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-3">
+                  <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-3 mt-4">
                     Selected ({selectedSlots.length} / {Math.min(3, vehicles.length)})
                   </label>
                   <div className="space-y-2">
@@ -580,12 +664,21 @@ export default function Membership() {
                   </div>
                 </div>
                 
-                <button 
+                <button
+                  disabled={selectedSlots.length === 0 || verifying || (paymentMethod === 'wallet' && walletBalance < (selectedPackage?.price * Math.max(1, selectedSlots.length)))}
                   onClick={handleConfirmSlots}
-                  disabled={paymentMethod === 'wallet' && selectedPackage && walletBalance < selectedPackage.price}
-                  className={`w-full py-4 rounded-xl font-bold text-white transition flex items-center justify-center gap-2 ${paymentMethod === 'wallet' && selectedPackage && walletBalance < selectedPackage.price ? 'bg-gray-800 cursor-not-allowed opacity-50' : 'bg-gray-900 hover:bg-black'}`}
+                  className="w-full bg-gray-900 hover:bg-black text-white font-bold py-3.5 px-8 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transform hover:-translate-y-0.5 active:translate-y-0"
                 >
-                  Pay now <ArrowRight size={18} />
+                  {verifying ? (
+                    <span className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Processing...
+                    </span>
+                  ) : (
+                    <>
+                      Pay now {selectedPackage && selectedSlots.length > 0 ? `(${(selectedPackage.price * selectedSlots.length).toLocaleString('vi-VN')} VND)` : ''} <ArrowRight size={18} />
+                    </>
+                  )}
                 </button>
               </div>
             </div>
@@ -604,10 +697,10 @@ export default function Membership() {
             <p className="text-gray-500 mb-8">Transaction successful. Your benefits are active and your slot has been reserved.</p>
             
             <button 
-              onClick={() => window.location.href = '/'}
+              onClick={() => navigate('/profile')}
               className="w-full py-4 rounded-xl font-bold text-white bg-gray-900 hover:bg-black transition"
             >
-              Back to home
+              Back to profile
             </button>
           </div>
         </div>
@@ -617,7 +710,16 @@ export default function Membership() {
         open={policyPrompt.open}
         missingPolicies={policyPrompt.missingPolicies}
         onClose={() => setPolicyPrompt({ open: false, missingPolicies: [] })}
-        onAccepted={() => setPolicyPrompt({ open: false, missingPolicies: [] })}
+        onAccepted={() => {
+          setPolicyPrompt({ open: false, missingPolicies: [] });
+          executeConfirmSlots();
+        }}
+      />
+
+      <BookingPolicyModal
+        open={showPolicyModal}
+        onClose={() => setShowPolicyModal(false)}
+        onConfirm={executeConfirmSlots}
       />
     </div>
   );

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import ParkingMapGrid from "../../components/ParkingMapGrid";
 import { getAllFloors } from "../../services/parkingFloorService";
 import { apiFetch } from "../../services/api";
@@ -72,10 +72,15 @@ export default function LiveGridMonitor() {
   };
 
   useEffect(() => {
-    fetchFloors();
-    fetchLiveStatus();
+    const timerId = window.setTimeout(() => {
+      fetchFloors();
+      fetchLiveStatus();
+    }, 0);
     const interval = setInterval(fetchLiveStatus, 15000); // refresh every 15s
-    return () => clearInterval(interval);
+    return () => {
+      window.clearTimeout(timerId);
+      clearInterval(interval);
+    };
   }, []);
 
   return (
@@ -170,6 +175,34 @@ export default function LiveGridMonitor() {
                             <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Check-in Time</span><span className="font-medium text-white">{new Date(selectedSlot.session.checkInTime).toLocaleString('vi-VN')}</span></div>
                             <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Expected Duration</span><span className="font-medium text-white">{selectedSlot.session.expectedDurationHours} hr(s)</span></div>
                             <div className="flex justify-between items-center"><span className="text-slate-400 text-sm">Expiration Time</span><span className="font-bold text-emerald-400">{new Date(new Date(selectedSlot.session.checkInTime).getTime() + (selectedSlot.session.expectedDurationHours || 0) * 3600000).toLocaleString('vi-VN')}</span></div>
+                        </div>
+                    );
+                  }
+
+                  if (selectedSlot.isReserved) {
+                    return (
+                        <div className="flex flex-col gap-4">
+                            <div className="bg-purple-900/20 border border-purple-500/30 rounded-xl p-4 flex flex-col items-center justify-center mb-2">
+                                <span className="text-xs text-purple-400 uppercase tracking-widest font-bold mb-1">Status</span>
+                                <span className="text-lg text-white font-black uppercase">Reserved / VIP</span>
+                            </div>
+                            {dbSlotInfo?.subscriptionDetail ? (
+                              <>
+                                {dbSlotInfo.subscriptionDetail.user && (
+                                  <>
+                                    <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Customer Name</span><span className="font-medium text-white">{dbSlotInfo.subscriptionDetail.user.username || 'N/A'}</span></div>
+                                    <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Phone</span><span className="font-medium text-white">{dbSlotInfo.subscriptionDetail.user.phone || 'N/A'}</span></div>
+                                    <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Email</span><span className="font-medium text-emerald-400">{dbSlotInfo.subscriptionDetail.user.email || 'N/A'}</span></div>
+                                  </>
+                                )}
+                                {dbSlotInfo.subscriptionDetail.ticketPackage && (
+                                  <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Package</span><span className="font-medium text-purple-400 uppercase">{dbSlotInfo.subscriptionDetail.ticketPackage.name || dbSlotInfo.subscriptionDetail.ticketPackage.type}</span></div>
+                                )}
+                                <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Valid Until</span><span className="font-bold text-purple-400">{new Date(dbSlotInfo.subscriptionDetail.expireAt).toLocaleString('vi-VN')}</span></div>
+                              </>
+                            ) : (
+                              <p className="text-xs text-purple-300 text-center mt-4">This slot is currently reserved for a VIP subscription package or an upcoming booking.</p>
+                            )}
                         </div>
                     );
                   }

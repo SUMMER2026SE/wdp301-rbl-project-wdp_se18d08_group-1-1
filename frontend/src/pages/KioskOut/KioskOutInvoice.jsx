@@ -6,7 +6,11 @@ import { API_BASE } from '../../services/api';
 export default function KioskOutInvoice({ sessionData, exitImage, onCheckoutSuccess, onBack }) {
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const handleCheckout = useCallback(async (paymentMethod) => {
+  const [isEarlyExitModalOpen, setIsEarlyExitModalOpen] = useState(false);
+  const [paymentData, setPaymentData] = useState(null);
+  const [keepPausedChoice, setKeepPausedChoice] = useState(false);
+
+  const handleCheckout = useCallback(async (paymentMethod, keepPaused = false) => {
     setIsProcessing(true);
     try {
       const res = await fetch(`${API_BASE}/sessions/kiosk-checkout`, {
@@ -15,12 +19,18 @@ export default function KioskOutInvoice({ sessionData, exitImage, onCheckoutSucc
         body: JSON.stringify({
           sessionId: sessionData?.session?._id,
           exitImageBase64: exitImage,
-          paymentMethod
+          paymentMethod,
+          keepPaused
         })
       });
       const data = await res.json();
       if (data.success) {
-        onCheckoutSuccess();
+        if (data.requiresPayment) {
+          setPaymentData(data.data);
+          setIsProcessing(false);
+        } else {
+          onCheckoutSuccess();
+        }
       } else {
         alert(data.message);
         setIsProcessing(false);
@@ -32,12 +42,43 @@ export default function KioskOutInvoice({ sessionData, exitImage, onCheckoutSucc
   }, [exitImage, onCheckoutSuccess, sessionData]);
 
   useEffect(() => {
-    // If AutoPay is allowed, auto-trigger checkout
-    if (sessionData && sessionData.canAutoPay) {
-      const timerId = setTimeout(() => handleCheckout('wallet'), 0);
-      return () => clearTimeout(timerId);
+    const timerIds = [];
+    if (sessionData && sessionData.isEarlyExit) {
+      timerIds.push(setTimeout(() => setIsEarlyExitModalOpen(true), 0));
     }
+    // If AutoPay is allowed AND it's not an early exit, auto-trigger checkout
+    if (sessionData && sessionData.canAutoPay && !sessionData.isEarlyExit) {
+      const timerId = setTimeout(() => handleCheckout('wallet', false), 0);
+      timerIds.push(timerId);
+    } else if (sessionData && !sessionData.canAutoPay && sessionData.amountToPay > 0 && !sessionData.isEarlyExit) {
+      const timerId = setTimeout(() => handleCheckout('vietqr', false), 0);
+      timerIds.push(timerId);
+    }
+
+    return () => timerIds.forEach((timerId) => clearTimeout(timerId));
   }, [handleCheckout, sessionData]);
+
+  // Polling for PayOS payment status
+  useEffect(() => {
+    let intervalId;
+    if (paymentData && paymentData.orderCode) {
+      intervalId = setInterval(async () => {
+        try {
+          const res = await fetch(`${API_BASE}/sessions/check-payos/${paymentData.orderCode}`);
+          const data = await res.json();
+          if (data.success && data.isPaid) {
+            clearInterval(intervalId);
+            handleCheckout('qr', keepPausedChoice); // Call handleCheckout to complete the session
+          }
+        } catch (err) {
+          console.error('Error polling payment status:', err);
+        }
+      }, 3000); // Check every 3 seconds
+    }
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [paymentData, handleCheckout, keepPausedChoice]);
 
   if (!sessionData) {
     return (
@@ -47,15 +88,15 @@ export default function KioskOutInvoice({ sessionData, exitImage, onCheckoutSucc
     );
   }
 
-  const { session, durationHours, expectedHours, totalPrice, walletBalance, canAutoPay } = sessionData;
+  const { session, durationHours, expectedHours, totalPrice, amountToPay, walletBalance, canAutoPay, isEarlyExit, remainingHours, bookingEnd, isSubscriptionExpired } = sessionData;
 
-  // If AutoPay, show a loading screen while it processes
-  if (canAutoPay) {
+  // If AutoPay AND NOT early exit, show a loading screen while it processes
+  if (canAutoPay && !isEarlyExit) {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center bg-black">
         <div className="w-20 h-20 border-4 border-yellow-400 border-t-transparent rounded-full animate-spin mb-8" />
         <h2 className="text-3xl font-bold text-yellow-400 mb-2">
-          {totalPrice > 0 ? 'Processing Auto-Pay (ETC)...' : 'Exit Authorized...'}
+          {amountToPay > 0 ? 'Processing Auto-Pay (ETC)...' : 'Exit Authorized...'}
         </h2>
         <p className="text-gray-400">
           {totalPrice > 0
@@ -129,7 +170,7 @@ export default function KioskOutInvoice({ sessionData, exitImage, onCheckoutSucc
                 <span className={`font-bold ${durationHours > expectedHours ? 'text-red-400' : 'text-white'}`}>{durationHours} hrs</span>
               </div>
               
-              {durationHours > expectedHours && (
+              {durationHours > expectedHours && !isEarlyExit && (
                 <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 mt-2 flex items-start gap-3">
                   <AlertTriangle className="text-red-400 shrink-0 mt-0.5" size={16} />
                   <div>
@@ -138,11 +179,33 @@ export default function KioskOutInvoice({ sessionData, exitImage, onCheckoutSucc
                   </div>
                 </div>
               )}
+
+              {isSubscriptionExpired && (
+                <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-3 mt-2 flex items-start gap-3">
+                  <AlertTriangle className="text-orange-400 shrink-0 mt-0.5" size={16} />
+                  <div>
+                    <p className="text-orange-400 font-semibold text-xs">SUBSCRIPTION EXPIRED</p>
+                    <p className="text-gray-300 text-xs mt-1">Your subscription has expired. This session is charged at standard rates.</p>
+                  </div>
+                </div>
+              )}
             </div>
 
-            <div className="mt-6 pt-6 border-t border-white/5 flex justify-between items-end">
-              <span className="text-gray-400 text-sm font-semibold">TOTAL AMOUNT</span>
-              <span className="text-4xl font-black text-yellow-400">{formatVND(totalPrice)}</span>
+            <div className="mt-6 pt-6 border-t border-white/5 space-y-2">
+              <div className="flex justify-between items-end">
+                <span className="text-gray-400 text-sm font-semibold">SESSION COST</span>
+                <span className="text-xl font-bold text-white">{formatVND(totalPrice)}</span>
+              </div>
+              {totalPrice !== amountToPay && (
+                <div className="flex justify-between items-end text-green-400">
+                  <span className="text-sm font-semibold">PREPAID / COVERED</span>
+                  <span className="text-xl font-bold">-{formatVND(Math.max(totalPrice - amountToPay, 0))}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-end pt-4 border-t border-white/5">
+                <span className="text-gray-400 text-sm font-semibold">AMOUNT TO PAY</span>
+                <span className="text-4xl font-black text-yellow-400">{formatVND(amountToPay)}</span>
+              </div>
             </div>
           </div>
 
@@ -166,7 +229,17 @@ export default function KioskOutInvoice({ sessionData, exitImage, onCheckoutSucc
           {/* QR Code Section */}
           <div className="bg-white rounded-2xl p-6 flex flex-col items-center text-black">
             <p className="font-bold text-sm mb-4">SCAN TO PAY</p>
-            <QRCode value={`VALOPARKING-${session._id}-${totalPrice}`} size={160} />
+            {amountToPay === 0 ? (
+              <div className="w-[160px] h-[160px] bg-green-100 flex items-center justify-center text-green-600 text-sm text-center p-4 rounded-lg font-bold">
+                Fully Paid
+              </div>
+            ) : paymentData ? (
+              <QRCode value={paymentData.qrCode} size={160} />
+            ) : (
+              <div className="w-[160px] h-[160px] bg-gray-200 flex items-center justify-center text-gray-500 text-xs text-center p-4 rounded-lg">
+                {isProcessing ? "Generating QR Code..." : "Please select a payment method"}
+              </div>
+            )}
             <p className="text-xs text-gray-500 mt-4 text-center">Use any banking app to scan and pay.</p>
           </div>
         </div>
@@ -178,16 +251,81 @@ export default function KioskOutInvoice({ sessionData, exitImage, onCheckoutSucc
           >
             Cancel
           </button>
-          
-          <button 
-            onClick={() => handleCheckout('qr')}
-            disabled={isProcessing}
-            className="flex-1 bg-yellow-500 hover:bg-yellow-400 text-black font-black text-lg py-4 rounded-xl flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
-          >
-            {isProcessing ? 'Processing...' : 'CONFIRM PAYMENT'} <ChevronRight />
-          </button>
+          {paymentData ? (
+            <button 
+              disabled={true}
+              className="flex-1 bg-green-500/50 text-white font-black text-lg py-4 rounded-xl flex items-center justify-center gap-2 transition-colors cursor-wait"
+            >
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              Awaiting payment...
+            </button>
+          ) : (
+            <button 
+              onClick={() => handleCheckout(amountToPay === 0 ? 'wallet' : 'vietqr', keepPausedChoice)}
+              disabled={isProcessing || (sessionData?.canAutoPay && !isEarlyExit)}
+              className="flex-1 bg-yellow-500 hover:bg-yellow-400 text-black font-black text-lg py-4 rounded-xl flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
+            >
+              {isProcessing ? 'Processing...' : (amountToPay === 0 ? 'CONFIRM CHECKOUT' : 'GENERATE QR')} <ChevronRight />
+            </button>
+          )}
         </div>
       </div>
+      {/* Early Exit Modal */}
+      {isEarlyExitModalOpen && isEarlyExit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+          <div className="bg-[#1A1A1A] border border-white/10 p-8 rounded-3xl max-w-[550px] w-[90%] flex flex-col items-center text-center shadow-2xl">
+            <div className="w-16 h-16 bg-yellow-500/20 text-yellow-400 flex items-center justify-center rounded-full mb-6">
+              <Clock size={32} />
+            </div>
+            
+            <h2 className="text-3xl font-black text-white mb-2 uppercase tracking-wide">Early Exit Detected!</h2>
+            <p className="text-gray-400 mb-6 text-lg">
+              You still have <strong className="text-yellow-400">{remainingHours} hours</strong> remaining in your booking.<br />
+              Your booking is valid until: <br />
+              <strong className="text-white">{new Date(bookingEnd).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} - {new Date(bookingEnd).toLocaleDateString('en-US')}</strong>
+            </p>
+
+            <div className="flex flex-col gap-4 w-full">
+              <button 
+                onClick={() => {
+                  setIsEarlyExitModalOpen(false);
+                  setKeepPausedChoice(true);
+                  if (canAutoPay) handleCheckout('wallet', true);
+                  else handleCheckout('vietqr', true);
+                }}
+                disabled={isProcessing}
+                className={`w-full py-4 px-6 rounded-xl font-bold text-lg text-black transition-colors bg-yellow-500 hover:bg-yellow-400`}
+              >
+                PAUSE (I WILL RETURN LATER)
+              </button>
+              
+              <button 
+                onClick={() => {
+                  setIsEarlyExitModalOpen(false);
+                  setKeepPausedChoice(false);
+                  if (canAutoPay) handleCheckout('wallet', false);
+                  else handleCheckout('vietqr', false);
+                }}
+                disabled={isProcessing}
+                className={`w-full py-4 px-6 rounded-xl font-bold text-lg text-white border-2 transition-colors border-white/20 hover:bg-white/10`}
+              >
+                END SESSION (RELEASE PARKING SLOT)
+              </button>
+            </div>
+            {!canAutoPay && (
+              <p className="mt-6 text-sm text-gray-400">
+                Close this dialog, pay via QR, and the system will process your early exit automatically.
+              </p>
+            )}
+            
+            {!canAutoPay && (
+              <button onClick={() => setIsEarlyExitModalOpen(false)} className="mt-6 text-gray-400 underline hover:text-white">
+                Close
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

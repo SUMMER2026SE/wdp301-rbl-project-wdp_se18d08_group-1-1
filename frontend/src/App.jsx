@@ -27,10 +27,12 @@ import AdminDashboard from "./pages/Admin/Dashboard";
 import VehicleManagement from "./pages/Admin/VehicleManagement";
 import AdminProfile from "./pages/Admin/AdminProfile";
 import ParkingLots from "./pages/Admin/ParkingLots";
+import PricingManagement from "./pages/Admin/PricingManagement";
 import AdminServiceManager from "./pages/Admin/AdminServiceManager";
 import TicketPackages from "./pages/Admin/TicketPackages";
 import AccountManagement from "./pages/Admin/AccountManagement";
 import PolicyManagement from "./pages/Admin/PolicyManagement";
+import SubscriptionManagement from "./pages/Admin/SubscriptionManagement";
 
 // Pages – Staff
 import StaffDashboard from "./pages/Staff/Dashboard";
@@ -39,6 +41,7 @@ import StaffSessionManagement from "./pages/Staff/SessionManagement";
 import StaffAccountManagement from "./pages/Staff/AccountManagement";
 import NotificationManagement from "./pages/Staff/NotificationManagement";
 import LiveGridMonitor from "./pages/Staff/LiveGridMonitor";
+import BookingManagement from "./pages/Staff/BookingManagement";
 
 // Pages – Customer
 import CustomerProfile from "./pages/Customer/CustomerProfile";
@@ -126,7 +129,9 @@ export default function App() {
             <Route path="/admin/services" element={<AdminServiceManager />} />
             <Route path="/admin/policies" element={<PolicyManagement />} />
             <Route path="/admin/parking-lots" element={<ParkingLots />} />
+            <Route path="/admin/pricing" element={<PricingManagement />} />
             <Route path="/admin/tickets" element={<TicketPackages />} />
+            <Route path="/admin/subscriptions" element={<SubscriptionManagement />} />
             <Route path="/admin/profile" element={<AdminProfile />} />
           </Route>
 
@@ -156,6 +161,9 @@ export default function App() {
               element={<NotificationManagement />}
             />
             <Route path="/staff/live-grid" element={<LiveGridMonitor />} />
+            <Route path="/staff/bookings" element={<BookingManagement />} />
+            <Route path="/staff/subscriptions" element={<SubscriptionManagement />} />
+            <Route path="/staff/tickets" element={<TicketPackages />} />
           </Route>
 
           {/* ── Customer section ── */}

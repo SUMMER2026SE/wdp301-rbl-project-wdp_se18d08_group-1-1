@@ -1,12 +1,15 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { formatDistanceToNow } from 'date-fns';
 import {
   Users, ShieldCheck, ParkingCircle, Ticket, Wrench,
-  BarChart2, TrendingUp, DollarSign, AlertTriangle, CheckCircle2,
+  TrendingUp, DollarSign, AlertTriangle, CheckCircle2,
   UserX, UserCheck, Settings2,
 } from 'lucide-react';
+import { API_BASE } from '../../services/api';
 
 // ─── Stat Card ─────────────────────────────────────────────────────────────────
-const StatCard = ({ icon, label, value, sub, color }) => (
+const StatCard = ({ icon, label, value, sub, color, increaseStr }) => (
   <div className="bg-[#1A1A1A] border border-white/5 rounded-2xl p-5 flex flex-col gap-4 hover:border-white/10 transition-colors group">
     <div className="flex items-center justify-between">
       <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${color}`}>{icon}</div>
@@ -21,8 +24,8 @@ const StatCard = ({ icon, label, value, sub, color }) => (
 );
 
 // ─── Quick Action Button ────────────────────────────────────────────────────────
-const QuickAction = ({ icon, label, desc, color }) => (
-  <button className={`w-full flex items-center gap-3 p-4 rounded-xl border ${color} hover:brightness-110 transition-all text-left group`}>
+const QuickAction = ({ icon, label, desc, color, onClick }) => (
+  <button onClick={onClick} className={`w-full flex items-center gap-3 p-4 rounded-xl border ${color} hover:brightness-110 transition-all text-left group`}>
     <div className="shrink-0">{icon}</div>
     <div>
       <p className="text-sm font-bold text-white">{label}</p>
@@ -53,6 +56,51 @@ const ActionRow = ({ action, target, time, type }) => (
 );
 
 export default function AdminDashboard() {
+  const navigate = useNavigate();
+  const [stats, setStats] = useState({
+    totalStaff: 0,
+    activeUsers: 0,
+    blockedUsers: 0,
+    parkingLots: 0,
+    pendingLots: 0,
+    totalRevenueMonth: 0,
+    revenueIncreasePercent: 0,
+    recentActions: []
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchStats();
+  }, []);
+
+  const fetchStats = async () => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const res = await fetch(`${API_BASE}/admin/overview`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setStats(data.data);
+      }
+    } catch (error) {
+      console.error('Failed to fetch admin overview', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatCurrency = (value) => {
+    if (value >= 1000000) {
+      return (value / 1000000).toLocaleString('vi-VN') + 'M₫';
+    } else if (value >= 1000) {
+      return (value / 1000).toLocaleString('vi-VN') + 'K₫';
+    }
+    return value.toLocaleString('vi-VN') + '₫';
+  };
+
   return (
     <div className="p-6 lg:p-8 space-y-8 min-h-full">
 
@@ -68,29 +116,29 @@ export default function AdminDashboard() {
           icon={<Users size={18} className="text-yellow-400" />}
           color="bg-yellow-500/10"
           label="Total Staff"
-          value="8"
-          sub="↑ 1 added this week"
+          value={loading ? "..." : stats.totalStaff.toLocaleString()}
+          sub="Managed users"
         />
         <StatCard
           icon={<ShieldCheck size={18} className="text-blue-400" />}
           color="bg-blue-500/10"
           label="Active Users"
-          value="2,841"
-          sub="12 blocked accounts"
+          value={loading ? "..." : stats.activeUsers.toLocaleString()}
+          sub={stats.blockedUsers > 0 ? `${stats.blockedUsers} blocked accounts` : "All users are active"}
         />
         <StatCard
           icon={<ParkingCircle size={18} className="text-purple-400" />}
           color="bg-purple-500/10"
           label="Parking Lots"
-          value="12"
-          sub="3 pending setup"
+          value={loading ? "..." : stats.parkingLots.toLocaleString()}
+          sub={stats.pendingLots > 0 ? `${stats.pendingLots} pending setup` : "Fully operational"}
         />
         <StatCard
           icon={<DollarSign size={18} className="text-green-400" />}
           color="bg-green-500/10"
           label="Total Revenue (Month)"
-          value="284M₫"
-          sub="↑ 18% vs last month"
+          value={loading ? "..." : formatCurrency(stats.totalRevenueMonth)}
+          sub={stats.revenueIncreasePercent > 0 ? `↑ ${stats.revenueIncreasePercent}% vs last month` : stats.revenueIncreasePercent < 0 ? `↓ ${Math.abs(stats.revenueIncreasePercent)}% vs last month` : 'Same as last month'}
         />
       </div>
 
@@ -106,30 +154,28 @@ export default function AdminDashboard() {
               label="Create Staff Account"
               desc="Add a new parking lot staff"
               color="bg-yellow-500/5 border-yellow-500/10"
+              onClick={() => navigate('/admin/accounts')}
             />
             <QuickAction
               icon={<UserX size={16} className="text-red-400" />}
               label="Block User Account"
               desc="Suspend a customer account"
               color="bg-red-500/5 border-red-500/10"
+              onClick={() => navigate('/admin/accounts')}
             />
             <QuickAction
               icon={<ParkingCircle size={16} className="text-purple-400" />}
               label="Create Parking Lot"
               desc="Setup a new parking facility"
               color="bg-purple-500/5 border-purple-500/10"
+              onClick={() => navigate('/admin/parking-lots')}
             />
             <QuickAction
               icon={<Ticket size={16} className="text-sky-400" />}
               label="Create Ticket Package"
               desc="Add monthly or hourly ticket"
               color="bg-sky-500/5 border-sky-500/10"
-            />
-            <QuickAction
-              icon={<Settings2 size={16} className="text-orange-400" />}
-              label="Configure Overtime Rates"
-              desc="Set penalty pricing rules"
-              color="bg-orange-500/5 border-orange-500/10"
+              onClick={() => navigate('/admin/ticket-packages')}
             />
           </div>
         </div>
@@ -140,12 +186,19 @@ export default function AdminDashboard() {
             <h3 className="text-white font-bold text-sm">Recent Admin Actions</h3>
             <span className="text-[10px] text-gray-600 bg-white/5 px-2.5 py-1 rounded-full">Last 24h</span>
           </div>
-          <ActionRow action="Created Staff Account" target="Nguyen Thi Lan • staff@lot-b.vn" time="5m ago"  type="create" />
-          <ActionRow action="Blocked User Account"    target="ID #4421 • khach01@gmail.com"       time="22m ago" type="block"  />
-          <ActionRow action="Deleted Ticket Package"  target="Monthly Basic – expired plan"        time="1h ago"  type="delete" />
-          <ActionRow action="Updated Staff Privileges" target="Tran Van Minh • Lot C staff"   time="2h ago"  type="update" />
-          <ActionRow action="Unblocked User Account"  target="ID #3302 • appeal approved"          time="3h ago"  type="update" />
-          <ActionRow action="Created Parking Lot"     target="Lot D – District 7, 200 slots"       time="5h ago"  type="create" />
+          {stats.recentActions && stats.recentActions.length > 0 ? (
+            stats.recentActions.map((action, i) => (
+              <ActionRow 
+                key={i} 
+                action={action.action} 
+                target={action.target} 
+                time={formatDistanceToNow(new Date(action.createdAt), { addSuffix: true })}  
+                type={action.type} 
+              />
+            ))
+          ) : (
+            <div className="py-8 text-center text-gray-500 text-sm">No recent actions</div>
+          )}
         </div>
       </div>
 

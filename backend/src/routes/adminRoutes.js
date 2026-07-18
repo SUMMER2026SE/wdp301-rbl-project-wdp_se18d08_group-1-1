@@ -62,4 +62,11 @@ router.get("/vehicles/pending", getPendingVehicles);
 router.patch("/vehicles/:id/approve", approveVehicle);
 router.delete("/vehicles/:id/reject", rejectVehicle);
 
+// Pricing config management
+router.get("/pricing-config", require("../controllers/adminController").getPricingConfig);
+router.post("/pricing-config", require("../controllers/adminController").updatePricingConfig);
+
+// Overview Dashboard
+router.get("/overview", require("../controllers/adminController").getAdminOverview);
+
 module.exports = router;

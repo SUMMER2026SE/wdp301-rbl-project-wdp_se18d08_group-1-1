@@ -176,6 +176,7 @@ const login = async (req, res, next) => {
           username: user.username,
           email: user.email,
           role: user.role,
+          membership: user.membership,
         },
         accessToken,
         refreshToken,
@@ -302,9 +303,33 @@ const getMe = async (req, res, next) => {
           role: user.role,
           status: user.status,
           createdAt: user.createdAt,
+          membership: user.membership,
         },
         profile: userDetail || null,
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const updatePushToken = async (req, res, next) => {
+  try {
+    const { expoPushToken } = req.body;
+    if (!expoPushToken || typeof expoPushToken !== 'string') {
+      return res.status(400).json({
+        success: false,
+        message: 'Expo push token is required.',
+      });
+    }
+
+    await User.findByIdAndUpdate(req.user._id, {
+      $addToSet: { expoPushTokens: expoPushToken },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Push token updated successfully',
     });
   } catch (error) {
     next(error);
@@ -416,6 +441,7 @@ const googleLogin = async (req, res, next) => {
           username: user.username,
           email: user.email,
           role: user.role,
+          membership: user.membership,
         },
         accessToken,
         refreshToken,
@@ -731,6 +757,7 @@ module.exports = {
   refreshAccessToken,
   logout,
   getMe,
+  updatePushToken,
   googleLogin,
   sendOTP,
   getOTPConfig,
