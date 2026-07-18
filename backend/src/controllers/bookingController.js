@@ -1997,3 +1997,33 @@ exports.getAllBookings = async (req, res, next) => {
     res.status(500).json({ success: false, message: 'Lỗi tải danh sách Booking' });
   }
 };
+
+exports.getActiveMapBookings = async (req, res, next) => {
+  try {
+    const now = new Date();
+    const start = now;
+    const end = new Date(now.getTime() + 60 * 1000); // 1 minute range for live map
+
+    const overlappingBookings = await Booking.find({
+      status: { $in: BOOKING_STATUSES_THAT_BLOCK_SLOT },
+      scheduledStart: { $lt: end },
+      scheduledEnd: { $gt: start },
+      $or: [
+        { status: { $in: ['ACTIVE', 'PAUSED'] } },
+        {
+          status: 'PAID',
+          scheduledStart: { $gt: new Date(now.getTime() - 15 * 60 * 1000) }
+        }
+      ]
+    })
+      .populate('userId', 'username email phone')
+      .lean();
+
+    res.status(200).json({
+      success: true,
+      data: overlappingBookings,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

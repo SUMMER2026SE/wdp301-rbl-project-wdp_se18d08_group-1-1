@@ -5,7 +5,7 @@ import ParkingMapGrid from "../../components/ParkingMapGrid";
 import { getAllFloors, createFloor, updateFloorLayout, deleteFloor, getFloorSlots } from "../../services/parkingFloorService";
 import { startMaintenance, endMaintenance } from "../../services/maintenanceService";
 import { apiFetch, API_BASE } from "../../services/api";
-import { getAvailableBookingSlots, getActiveHolds } from "../../services/bookingService";
+import { getAvailableBookingSlots, getActiveHolds, getActiveMapBookings } from "../../services/bookingService";
 
 const LiveDuration = ({ checkInTime, expectedDurationHours }) => {
   const [now, setNow] = useState(Date.now());
@@ -41,9 +41,10 @@ export default function ParkingLots() {
   const [loading, setLoading] = useState(true);
   const [availableSlots, setAvailableSlots] = useState(null);
   const [activeHolds, setActiveHolds] = useState([]);
+  const [activeBookings, setActiveBookings] = useState([]);
   const [selectedItem, setSelectedItem] = useState(null);
   const [dbSlots, setDbSlots] = useState([]);
-
+  
   // activeSessions to track live cars
   const [activeSessions, setActiveSessions] = useState([]);
 
@@ -203,6 +204,11 @@ export default function ParkingLots() {
       const holdsRes = await getActiveHolds();
       if (holdsRes.ok && holdsRes.data?.data) {
         setActiveHolds(holdsRes.data.data);
+      }
+      
+      const bookingsRes = await getActiveMapBookings();
+      if (bookingsRes.ok && bookingsRes.data?.data) {
+        setActiveBookings(bookingsRes.data.data);
       }
     } catch (err) {
       console.error('Failed to fetch live data', err);
@@ -411,6 +417,7 @@ export default function ParkingLots() {
           dbSlots={dbSlots}
           availableSlots={availableSlots}
           activeHolds={activeHolds}
+          activeBookings={activeBookings}
           loading={loading}
           isEditMode={isEditMode}
         />
@@ -549,6 +556,25 @@ export default function ParkingLots() {
                         </>
                       ) : (
                         <p className="text-xs text-purple-300 text-center mt-4">This slot is currently reserved for a VIP subscription package or an upcoming booking.</p>
+                      )}
+                  </div>
+                ) : !isZone && selectedItem.isHeld ? (
+                  <div className="flex flex-col gap-4">
+                      <div className="bg-orange-900/20 border border-orange-500/30 rounded-xl p-4 flex flex-col items-center justify-center mb-2">
+                          <span className="text-xs text-orange-400 uppercase tracking-widest font-bold mb-1">Status</span>
+                          <span className="text-lg text-white font-black uppercase">Holding / Booked</span>
+                      </div>
+                      {selectedItem.booking ? (
+                        <>
+                          <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Customer Name</span><span className="font-medium text-white">{selectedItem.booking.userId?.username || 'N/A'}</span></div>
+                          <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Phone</span><span className="font-medium text-white">{selectedItem.booking.userId?.phone || 'N/A'}</span></div>
+                          <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Email</span><span className="font-medium text-cyan-400">{selectedItem.booking.userId?.email || 'N/A'}</span></div>
+                          <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">License Plate</span><span className="font-mono text-base font-semibold text-white bg-slate-800/80 px-3 py-1 rounded border border-slate-700/50">{selectedItem.booking.licensePlate || 'N/A'}</span></div>
+                          <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Start Time</span><span className="font-medium text-white">{new Date(selectedItem.booking.scheduledStart).toLocaleString('vi-VN')}</span></div>
+                          <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">End Time</span><span className="font-medium text-white">{new Date(selectedItem.booking.scheduledEnd).toLocaleString('vi-VN')}</span></div>
+                        </>
+                      ) : (
+                        <p className="text-xs text-orange-400 text-center mt-4">This slot is currently held for an upcoming booking or checkout process.</p>
                       )}
                   </div>
                 ) : (

@@ -9,7 +9,7 @@ const SlotElement = React.memo(({ el, floorId, style, isHovered, session, isMain
     e.stopPropagation();
     if (!hasName) return;
     if (onClick) {
-      onClick({ id: el.name || el.id, type, session, floorId, isReserved });
+      onClick({ id: el.name || el.id, type, session, floorId, isReserved, isHeld, booking: el.booking });
     }
   };
 
@@ -147,6 +147,7 @@ export default function ParkingMapGrid({
   dbSlots = [], 
   availableSlots = null, 
   activeHolds = [],
+  activeBookings = [],
   loading = false,
   is2DMode = false,
 }) {
@@ -316,10 +317,20 @@ export default function ParkingMapGrid({
 
         const isReserved = !!dbSlot?.subscriptionType;
 
+        // If a slot is booked but a car hasn't physically checked in (no session), it's unavailable.
+        // We render it as 'Held' (Orange) to distinguish from 'Occupied' (Red).
+        let booking = null;
+        if (hasName && availableSlotMap && !isAvailable && !session && !isMaintenance && !isReserved) {
+          isHeld = true;
+          if (activeBookings) {
+            booking = activeBookings.find(b => String(b.floorId) === String(floorId) && String(b.parkingSlot).toUpperCase() === String(el.name).toUpperCase());
+          }
+        }
+
         return (
           <SlotElement 
             key={el.id}
-            el={{ ...el, subscriptionType: dbSlot?.subscriptionType }}
+            el={{ ...el, subscriptionType: dbSlot?.subscriptionType, booking }}
             floorId={floorId}
             style={style} 
             isHovered={isHovered}
