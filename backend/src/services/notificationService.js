@@ -350,6 +350,41 @@ async function createForAllUsers(data, createdBy = null) {
   return { notification, userIds };
 }
 
+// ─── Create notification for specific roles ─────────────────────────────────────
+async function createForRole(roles, data, createdBy = null) {
+  const roleArray = Array.isArray(roles) ? roles : [roles];
+  const users = await User.find({ status: true, role: { $in: roleArray } })
+    .select('_id')
+    .lean();
+
+  const userIds = users.map((u) => u._id);
+
+  const notification = await Notification.create({
+    title: data.title,
+    content: data.content,
+    type: data.type || 'SYSTEM',
+    priority: data.priority || 'INFO',
+    targetType: 'ROLE_BASED',
+    targetRoles: roleArray,
+    targetUsers: [],
+    createdBy,
+    metadata: data.metadata || {},
+  });
+
+  if (userIds.length > 0) {
+    const userNotifs = userIds.map((uid) => ({
+      userId: uid,
+      notificationId: notification._id,
+    }));
+
+    await UserNotification.insertMany(userNotifs, { ordered: false }).catch(() => {
+      // Ignore duplicate key errors
+    });
+  }
+
+  return { notification, userIds };
+}
+
 // ─── Create auto notification with deduplication ────────────────────────────────
 async function createAutoNotification(eventType, referenceId, userId, templateKey, templateData = {}) {
   // Check dedup
@@ -442,9 +477,25 @@ async function getUserNotifications(userId, filters = {}) {
       },
     },
     { $unwind: '$notification' },
-    // Filter out revoked notifications
+  // Filter out revoked notifications
     { $match: { 'notification.isRevoked': false } },
   ];
+
+  if (filters.contextRole) {
+    if (filters.contextRole === 'customer') {
+      pipeline.push({
+        $match: {
+          $or: [
+            { 'notification.targetRoles': 'customer' },
+            { 'notification.targetRoles': { $exists: false } },
+            { 'notification.targetRoles': { $size: 0 } }
+          ]
+        }
+      });
+    } else {
+      pipeline.push({ $match: { 'notification.targetRoles': filters.contextRole } });
+    }
+  }
 
   // Type filter
   if (type) {
@@ -505,13 +556,41 @@ async function getUserNotifications(userId, filters = {}) {
 }
 
 // ─── Get unread count ───────────────────────────────────────────────────────────
-async function getUnreadCount(userId) {
-  const count = await UserNotification.countDocuments({
-    userId,
-    isRead: false,
-    isDeleted: false,
-  });
-  return count;
+async function getUnreadCount(userId, contextRole) {
+  const matchUser = { userId, isRead: false, isDeleted: false };
+  const pipeline = [
+    { $match: matchUser },
+    {
+      $lookup: {
+        from: 'notifications',
+        localField: 'notificationId',
+        foreignField: '_id',
+        as: 'notification',
+      },
+    },
+    { $unwind: '$notification' },
+    { $match: { 'notification.isRevoked': false } },
+  ];
+
+  if (contextRole) {
+    if (contextRole === 'customer') {
+      pipeline.push({
+        $match: {
+          $or: [
+            { 'notification.targetRoles': 'customer' },
+            { 'notification.targetRoles': { $exists: false } },
+            { 'notification.targetRoles': { $size: 0 } }
+          ]
+        }
+      });
+    } else {
+      pipeline.push({ $match: { 'notification.targetRoles': contextRole } });
+    }
+  }
+
+  pipeline.push({ $count: 'total' });
+  const countResult = await UserNotification.aggregate(pipeline);
+  return countResult.length > 0 ? countResult[0].total : 0;
 }
 
 // ─── Mark as read ───────────────────────────────────────────────────────────────
@@ -684,6 +763,7 @@ module.exports = {
   createForUser,
   createForUsers,
   createForAllUsers,
+  createForRole,
   createAutoNotification,
   createBroadcastAutoNotification,
   getUserNotifications,

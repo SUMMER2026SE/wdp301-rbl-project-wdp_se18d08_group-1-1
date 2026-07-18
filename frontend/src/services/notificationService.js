@@ -5,13 +5,14 @@
 import { apiFetch } from './api';
 
 /** GET /api/notifications — paginated, filtered */
-export const getNotifications = ({ page = 1, limit = 20, type, isRead, search } = {}) => {
+export const getNotifications = ({ page = 1, limit = 20, type, isRead, search, contextRole } = {}) => {
   const params = new URLSearchParams();
   params.set('page', page);
   params.set('limit', limit);
   if (type) params.set('type', type);
   if (isRead !== undefined && isRead !== null && isRead !== '') params.set('isRead', isRead);
   if (search) params.set('search', search);
+  if (contextRole) params.set('contextRole', contextRole);
 
   return apiFetch(`/notifications?${params.toString()}`, {
     method: 'GET',
@@ -20,11 +21,15 @@ export const getNotifications = ({ page = 1, limit = 20, type, isRead, search } 
 };
 
 /** GET /api/notifications/unread-count */
-export const getUnreadCount = () =>
-  apiFetch('/notifications/unread-count', {
+export const getUnreadCount = ({ contextRole } = {}) => {
+  const params = new URLSearchParams();
+  if (contextRole) params.set('contextRole', contextRole);
+  
+  return apiFetch(`/notifications/unread-count${contextRole ? `?${params.toString()}` : ''}`, {
     method: 'GET',
     headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` },
   });
+};
 
 /** PUT /api/notifications/:id/read */
 export const markAsRead = (id) =>
@@ -53,8 +58,22 @@ export const deleteNotification = (id) =>
 export const createNotification = (data) =>
   apiFetch('/notifications', {
     method: 'POST',
-    headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` },
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
+    },
     body: JSON.stringify(data),
+  });
+
+/** POST /api/notifications/internal-report */
+export const sendInternalReport = (content, priority = 'INFO') =>
+  apiFetch('/notifications/internal-report', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
+    },
+    body: JSON.stringify({ content, priority }),
   });
 
 /** GET /api/notifications/admin/history */
