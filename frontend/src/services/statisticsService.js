@@ -1,0 +1,43 @@
+import { apiFetch } from './api';
+
+const authHeader = () => ({
+  Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
+});
+
+const withRange = (endpoint, range = '30d') =>
+  `${endpoint}?${new URLSearchParams({ range }).toString()}`;
+
+export const getCustomerBookingStatistics = (range = '30d') =>
+  apiFetch(withRange('/statistics/customer/bookings', range), {
+    headers: authHeader(),
+  });
+
+export const getAdminBookingStatistics = (range = '30d') =>
+  apiFetch(withRange('/statistics/admin/bookings', range), {
+    headers: authHeader(),
+  });
+
+export const getAdminSubscriptionStatistics = (range = '30d') =>
+  apiFetch(withRange('/statistics/admin/subscriptions', range), {
+    headers: authHeader(),
+  });
+
+const getRevenueDateRange = (range) => {
+  if (range === 'all') return {};
+  const endDate = new Date();
+  const startDate = new Date(endDate);
+  if (range === '7d') startDate.setDate(startDate.getDate() - 7);
+  if (range === '30d') startDate.setDate(startDate.getDate() - 30);
+  if (range === 'month') startDate.setDate(1);
+  return {
+    startDate: startDate.toISOString(),
+    endDate: endDate.toISOString(),
+  };
+};
+
+export const getViolationRevenueStatistics = (range = '30d') => {
+  const query = new URLSearchParams(getRevenueDateRange(range)).toString();
+  return apiFetch(`/revenue/violations/statistics${query ? `?${query}` : ''}`, {
+    headers: authHeader(),
+  });
+};

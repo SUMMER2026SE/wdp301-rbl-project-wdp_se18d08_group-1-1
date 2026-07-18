@@ -7,6 +7,7 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 
 import { ErrorState } from '@/components/common';
 import { walletService } from '@/services/api/wallet';
+import { statisticsService, type CustomerBookingStatistics } from '@/services/api/statistics';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
 import { formatCurrency } from '@/utils/formatters';
 import type { WalletStackParamList } from '@/navigation/types';
@@ -29,11 +30,19 @@ export const WalletScreen = ({ navigation }: Props) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [bookingStats, setBookingStats] = useState<CustomerBookingStatistics | null>(null);
   const load = useCallback(async () => {
     setError('');
     try {
-      const res = await walletService.getWallet();
-      setWallet(res.data || null);
+      const [walletResult, statisticsResult] = await Promise.allSettled([
+        walletService.getWallet(),
+        statisticsService.getCustomerBookings('30d'),
+      ]);
+      if (walletResult.status === 'rejected') throw walletResult.reason;
+      setWallet(walletResult.value.data || null);
+      if (statisticsResult.status === 'fulfilled') {
+        setBookingStats(statisticsResult.value.data || null);
+      }
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load wallet.');
       setWallet(null);
@@ -74,6 +83,37 @@ export const WalletScreen = ({ navigation }: Props) => {
                 <View style={styles.statCard}><Ionicons name="refresh-circle-outline" size={20} color="#60B4FF" /><Text style={[styles.statValue,{color:'#60B4FF'}]}>{formatCurrency(wallet.monthlyRefunded??0)}</Text><Text style={styles.statLabel}>Refunded</Text></View>
               </View>
             </>}
+            {bookingStats ? (
+              <View style={styles.insightsSection}>
+                <View style={styles.insightsHeader}>
+                  <View>
+                    <Text style={styles.insightsTitle}>Your parking story</Text>
+                    <Text style={styles.insightsSubtitle}>Last 30 days</Text>
+                  </View>
+                  <View style={styles.insightsIcon}>
+                    <Ionicons name="analytics-outline" size={20} color={COLORS.gold} />
+                  </View>
+                </View>
+                <View style={styles.insightsGrid}>
+                  <View style={styles.insightMetric}>
+                    <Text style={styles.insightLabel}>Bookings</Text>
+                    <Text style={styles.insightValue}>{bookingStats.operational.totalBookings}</Text>
+                    <Text style={styles.insightNote}>{bookingStats.operational.completedBookings} completed</Text>
+                  </View>
+                  <View style={styles.insightMetric}>
+                    <Text style={styles.insightLabel}>Net booking spend</Text>
+                    <Text style={styles.insightValue}>{formatCurrency(bookingStats.money.walletNetBookingSpend)}</Text>
+                    <Text style={styles.insightNote}>{formatCurrency(bookingStats.money.walletBookingRefunds)} refunded</Text>
+                  </View>
+                </View>
+                {bookingStats.money.financialCoverage === 'partial' ? (
+                  <Text style={styles.coverageNote}>
+                    Wallet totals include transactions with a verified booking reference. PayOS
+                    history is estimated from booking records.
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
           </>
         )}
       </ScrollView>
@@ -98,4 +138,15 @@ const styles = StyleSheet.create({
   statValue:{fontSize:FONT_SIZES.md,fontWeight:'700'},
   statLabel:{fontSize:FONT_SIZES.xs,color:COLORS.textMuted},
   errorWrap:{paddingHorizontal:SPACING.lg,paddingTop:SPACING.lg},
+  insightsSection:{marginHorizontal:SPACING.lg,marginBottom:SPACING.xl,backgroundColor:COLORS.surface,borderRadius:RADIUS.xl,borderWidth:1,borderColor:'rgba(212,175,55,0.16)',padding:SPACING.lg,gap:SPACING.md},
+  insightsHeader:{flexDirection:'row',alignItems:'center',justifyContent:'space-between'},
+  insightsTitle:{color:COLORS.textPrimary,fontSize:FONT_SIZES.lg,fontWeight:'900'},
+  insightsSubtitle:{color:COLORS.textMuted,fontSize:FONT_SIZES.xs,marginTop:2},
+  insightsIcon:{width:42,height:42,borderRadius:RADIUS.md,alignItems:'center',justifyContent:'center',backgroundColor:'rgba(212,175,55,0.1)'},
+  insightsGrid:{flexDirection:'row',gap:SPACING.md},
+  insightMetric:{flex:1,borderLeftWidth:1,borderLeftColor:COLORS.border,paddingLeft:SPACING.md},
+  insightLabel:{color:COLORS.textMuted,fontSize:FONT_SIZES.xs},
+  insightValue:{color:COLORS.textPrimary,fontSize:FONT_SIZES.lg,fontWeight:'900',marginTop:4},
+  insightNote:{color:COLORS.textSecondary,fontSize:10,marginTop:3},
+  coverageNote:{color:COLORS.textMuted,fontSize:FONT_SIZES.xs,lineHeight:18},
 });

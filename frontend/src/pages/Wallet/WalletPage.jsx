@@ -3,19 +3,18 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   BarChart3,
+  CalendarCheck,
   Car,
   Check,
   ChevronRight,
   CreditCard,
   Loader2,
-  MoreHorizontal,
   Plus,
   RefreshCw,
+  RotateCcw,
   Shield,
   Sparkles,
-  TrendingDown,
   TrendingUp,
-  Wallet as WalletIcon,
   X,
   Zap,
 } from "lucide-react";
@@ -28,6 +27,7 @@ import {
 import { clearAuthSession } from "../../services/authStorage";
 import PolicyAcceptancePrompt from "../../components/policies/PolicyAcceptancePrompt";
 import { extractMissingPolicies, isPolicyAcceptanceRequired } from "../../utils/policyErrors";
+import { getCustomerBookingStatistics } from "../../services/statisticsService";
 
 const DEFAULT_TRANSACTION_LIMIT = 4;
 const ALL_TRANSACTION_LIMIT = 50;
@@ -104,6 +104,10 @@ export default function WalletPage() {
     open: false,
     missingPolicies: [],
   });
+  const [bookingStats, setBookingStats] = useState(null);
+  const [statsRange, setStatsRange] = useState("30d");
+  const [statsLoading, setStatsLoading] = useState(true);
+  const [statsError, setStatsError] = useState("");
 
   const showToast = useCallback((message, type = "success") => {
     setToast({ message, type });
@@ -256,6 +260,36 @@ export default function WalletPage() {
     };
   }, [modal]);
 
+  useEffect(() => {
+    let active = true;
+
+    getCustomerBookingStatistics(statsRange)
+      .then((response) => {
+        if (!active) return;
+        if (response.ok && response.data?.success) {
+          setBookingStats(response.data.data);
+        } else if (response.status !== 404) {
+          setStatsError(response.data?.message || "Unable to load booking insights");
+        }
+      })
+      .catch(() => {
+        if (active) setStatsError("Unable to load booking insights");
+      })
+      .finally(() => {
+        if (active) setStatsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [statsRange]);
+
+  const handleStatsRangeChange = (nextRange) => {
+    setStatsLoading(true);
+    setStatsError("");
+    setStatsRange(nextRange);
+  };
+
 
 
   const weeklyBars = useMemo(() => {
@@ -321,6 +355,16 @@ export default function WalletPage() {
           </div>
         )}
 
+        {(statsLoading || bookingStats || statsError) && (
+          <BookingInsightsPanel
+            data={bookingStats}
+            loading={statsLoading}
+            error={statsError}
+            range={statsRange}
+            onRangeChange={handleStatsRangeChange}
+          />
+        )}
+
         <section className="grid grid-cols-1 gap-6 xl:grid-cols-[1.35fr_1fr]">
           <TransactionsPanel
             transactions={transactions}
@@ -352,6 +396,102 @@ export default function WalletPage() {
         onClose={() => setPolicyPrompt({ open: false, missingPolicies: [] })}
         onAccepted={() => setPolicyPrompt({ open: false, missingPolicies: [] })}
       />
+    </div>
+  );
+}
+
+function BookingInsightsPanel({ data, loading, error, range, onRangeChange }) {
+  const operational = data?.operational || {};
+  const money = data?.money || {};
+
+  return (
+    <section className="overflow-hidden rounded-[24px] border border-white/5 bg-[#151515]">
+      <div className="grid lg:grid-cols-[0.85fr_1.6fr]">
+        <div className="relative border-b border-white/5 p-5 sm:p-6 lg:border-b-0 lg:border-r">
+          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#DCA11D] to-transparent opacity-70" />
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-yellow-500/10 text-yellow-300">
+              <CalendarCheck className="h-5 w-5" />
+            </div>
+            <select
+              value={range}
+              onChange={(event) => onRangeChange(event.target.value)}
+              aria-label="Booking insight period"
+              className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs font-bold text-white outline-none transition focus:border-yellow-500/60 focus:ring-2 focus:ring-yellow-500/10"
+            >
+              <option value="7d">7 days</option>
+              <option value="30d">30 days</option>
+              <option value="month">This month</option>
+              <option value="all">All time</option>
+            </select>
+          </div>
+          <h2 className="mt-6 text-xl font-black tracking-tight">Your parking story</h2>
+          <p className="mt-2 max-w-sm text-sm leading-6 text-[#AFC2D8]">
+            Booking activity and wallet cash flow are separated so every number has a clear source.
+          </p>
+          {money.financialCoverage === "partial" && (
+            <p className="mt-5 rounded-xl border border-yellow-500/10 bg-yellow-500/5 px-3 py-2 text-xs leading-5 text-yellow-100/70">
+              PayOS history is estimated from booking records. Wallet charges and refunds include
+              transactions with a verified booking reference.
+            </p>
+          )}
+        </div>
+
+        <div className="p-5 sm:p-6">
+          {loading ? (
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Loading booking insights">
+              {[0, 1, 2, 3].map((item) => (
+                <div key={item} className="h-24 animate-pulse rounded-2xl bg-white/[0.04]" />
+              ))}
+            </div>
+          ) : error ? (
+            <div className="flex min-h-24 items-center gap-3 rounded-2xl border border-rose-500/15 bg-rose-500/5 px-4 text-sm text-rose-200">
+              <RotateCcw className="h-4 w-4" />
+              {error}
+            </div>
+          ) : (
+            <div className="grid gap-x-6 gap-y-5 sm:grid-cols-2 xl:grid-cols-4">
+              <InsightMetric
+                label="Bookings"
+                value={operational.totalBookings || 0}
+                note={`${operational.completedBookings || 0} completed`}
+              />
+              <InsightMetric
+                label="Wallet charges"
+                value={formatMoney(money.walletBookingCharges)}
+                note="Booking sources only"
+              />
+              <InsightMetric
+                label="Refunded"
+                value={formatMoney(money.walletBookingRefunds)}
+                note={`${money.walletRefundCount || 0} refund events`}
+                tone="positive"
+              />
+              <InsightMetric
+                label="Net wallet spend"
+                value={formatMoney(money.walletNetBookingSpend)}
+                note={`${operational.scheduledHours || 0} scheduled hours`}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function InsightMetric({ label, value, note, tone = "default" }) {
+  return (
+    <div className="border-l border-white/10 pl-4">
+      <p className="text-xs font-semibold text-[#AFC2D8]">{label}</p>
+      <p
+        className={`mt-2 text-xl font-black tracking-tight ${
+          tone === "positive" ? "text-emerald-400" : "text-white"
+        }`}
+      >
+        {value}
+      </p>
+      <p className="mt-1 text-xs text-white/35">{note}</p>
     </div>
   );
 }
@@ -423,7 +563,7 @@ function BalancePanel({ wallet, loading, onTopUp, onRefresh, refreshing }) {
               <Sparkles className="h-3 w-3" /> Refunds
             </p>
             <p className="mt-1 text-sm font-bold text-emerald-300">
-              {formatMoney(wallet?.monthlyRefunds)} <span className="text-[10px] font-medium text-emerald-400/40 normal-case tracking-normal">this month</span>
+              {formatMoney(wallet?.monthlyRefunded)} <span className="text-[10px] font-medium text-emerald-400/40 normal-case tracking-normal">this month</span>
             </p>
           </div>
 
@@ -436,26 +576,6 @@ function BalancePanel({ wallet, loading, onTopUp, onRefresh, refreshing }) {
             </p>
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function StatCard({ icon, label, value, note }) {
-  return (
-    <div className="min-h-[150px] rounded-[24px] border border-white/5 bg-[#1A1A1A] p-5 shadow-sm transition hover:border-yellow-500/20">
-      <div className="flex items-center justify-between">
-        <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/5 bg-white/5 text-gray-300">
-          {icon}
-        </div>
-        <MoreHorizontal className="h-4 w-4 text-gray-500" />
-      </div>
-      <div className="mt-8">
-        <p className="text-sm font-medium text-[#AFC2D8]">{label}</p>
-        <p className="mt-2 text-2xl font-black tracking-tight text-white">
-          {value}
-        </p>
-        <p className="mt-2 text-xs font-medium text-gray-500">{note}</p>
       </div>
     </div>
   );

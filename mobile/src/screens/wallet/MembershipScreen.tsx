@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Crypto from 'expo-crypto';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -17,7 +18,8 @@ import { EmptyState, ErrorState, ScreenHeader, SectionTitle } from '@/components
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
 import type { WalletStackParamList } from '@/navigation/types';
 import { subscriptionsService } from '@/services/api/subscriptions';
-import type { MembershipStatus } from '@/types/subscription.types';
+import { walletService } from '@/services/api/wallet';
+import type { MembershipStatus, SubscriptionPaymentMethod, SubscriptionRenewalQuote } from '@/types/subscription.types';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 
 type Props = NativeStackScreenProps<WalletStackParamList, 'Membership'>;
@@ -26,12 +28,22 @@ export const MembershipScreen = ({ navigation }: Props) => {
   const [membership, setMembership] = useState<MembershipStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [renewalError, setRenewalError] = useState('');
+  const [renewalQuote, setRenewalQuote] = useState<SubscriptionRenewalQuote | null>(null);
+  const [renewalMethod, setRenewalMethod] = useState<SubscriptionPaymentMethod>('wallet');
+  const [renewalLoading, setRenewalLoading] = useState(false);
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [renewalKey, setRenewalKey] = useState('');
 
   const loadMembership = useCallback(async () => {
     setError('');
     try {
-      const response = await subscriptionsService.getMembership();
-      setMembership(response.data || null);
+      const [membershipResponse, walletResponse] = await Promise.all([
+        subscriptionsService.getMembership(),
+        walletService.getWallet(),
+      ]);
+      setMembership(membershipResponse.data || null);
+      setWalletBalance(walletResponse.data?.balance || 0);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load membership.');
       setMembership(null);
@@ -45,6 +57,49 @@ export const MembershipScreen = ({ navigation }: Props) => {
   }, [loadMembership]);
 
   const active = membership?.status === 'active';
+
+  const openRenewal = async () => {
+    if (!membership?.subscriptionId) return;
+    setRenewalLoading(true);
+    setRenewalError('');
+    try {
+      const response = await subscriptionsService.getRenewalQuote(membership.subscriptionId);
+      setRenewalQuote(response.data || null);
+      setRenewalMethod(walletBalance >= (response.data?.amount || 0) ? 'wallet' : 'payos');
+      setRenewalKey(Crypto.randomUUID());
+    } catch (renewError) {
+      setRenewalError(renewError instanceof Error ? renewError.message : 'Unable to prepare renewal.');
+    } finally {
+      setRenewalLoading(false);
+    }
+  };
+
+  const confirmRenewal = async () => {
+    if (!membership?.subscriptionId || !renewalQuote || !renewalKey) return;
+    setRenewalLoading(true);
+    setRenewalError('');
+    try {
+      if (renewalMethod === 'wallet') {
+        const response = await subscriptionsService.renewWithWallet(membership.subscriptionId, renewalKey);
+        setWalletBalance(response.data?.walletBalance ?? Math.max(0, walletBalance - renewalQuote.amount));
+        setRenewalQuote(null);
+        await loadMembership();
+      } else {
+        const response = await subscriptionsService.createRenewalPayment(membership.subscriptionId, renewalKey);
+        navigation.navigate('SubscriptionPaymentStatus', {
+          orderCode: response.data?.orderCode || 0,
+          checkoutUrl: response.data?.checkoutUrl,
+          qrCode: response.data?.qrCode,
+          amount: response.data?.amount,
+          renewal: true,
+        });
+      }
+    } catch (renewError) {
+      setRenewalError(renewError instanceof Error ? renewError.message : 'Renewal failed.');
+    } finally {
+      setRenewalLoading(false);
+    }
+  };
 
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
@@ -145,7 +200,56 @@ export const MembershipScreen = ({ navigation }: Props) => {
                 <Text style={styles.renewalMeta}>Next renewal: {formatDate(membership.renewal.nextRenewalDate)}</Text>
               ) : null}
               <Text style={styles.renewalMessage}>{membership.renewal.message}</Text>
+              {membership.renewal.canRenew && !renewalQuote ? (
+                <TouchableOpacity activeOpacity={0.85} style={styles.renewButton} onPress={openRenewal} disabled={renewalLoading}>
+                  {renewalLoading ? <ActivityIndicator color={COLORS.textInverse} size="small" /> : <Ionicons name="refresh-outline" size={18} color={COLORS.textInverse} />}
+                  <Text style={styles.renewButtonText}>Review renewal</Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
+            {renewalQuote ? (
+              <View style={styles.renewalReview}>
+                <View style={styles.renewalDates}>
+                  <View>
+                    <Text style={styles.reviewLabel}>Current expiry</Text>
+                    <Text style={styles.reviewValue}>{formatDate(renewalQuote.currentExpireAt)}</Text>
+                  </View>
+                  <Ionicons name="arrow-forward" size={16} color={COLORS.gold} />
+                  <View style={styles.reviewDateRight}>
+                    <Text style={styles.reviewLabel}>New expiry</Text>
+                    <Text style={styles.reviewValue}>{formatDate(renewalQuote.newExpireAt)}</Text>
+                  </View>
+                </View>
+                <Text style={styles.reviewAmount}>{formatCurrency(renewalQuote.amount)}</Text>
+                <Text style={styles.reviewMeta}>{renewalQuote.retainedSlots.length} spaces retained</Text>
+                <View style={styles.methodRow}>
+                  {(['wallet', 'payos'] as const).map((method) => (
+                    <TouchableOpacity
+                      key={method}
+                      activeOpacity={0.8}
+                      onPress={() => setRenewalMethod(method)}
+                      style={[styles.methodButton, renewalMethod === method && styles.methodButtonActive]}
+                    >
+                      <Ionicons name={method === 'wallet' ? 'wallet-outline' : 'qr-code-outline'} size={17} color={renewalMethod === method ? COLORS.gold : COLORS.textMuted} />
+                      <Text style={[styles.methodText, renewalMethod === method && styles.methodTextActive]}>{method === 'wallet' ? 'Wallet' : 'PayOS'}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                {renewalMethod === 'wallet' && walletBalance < renewalQuote.amount ? (
+                  <Text style={styles.renewalError}>Wallet balance is not enough.</Text>
+                ) : null}
+                {renewalError ? <Text style={styles.renewalError}>{renewalError}</Text> : null}
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  style={[styles.confirmRenewalButton, renewalLoading && styles.disabled]}
+                  disabled={renewalLoading || (renewalMethod === 'wallet' && walletBalance < renewalQuote.amount)}
+                  onPress={confirmRenewal}
+                >
+                  {renewalLoading ? <ActivityIndicator color={COLORS.textInverse} size="small" /> : <Ionicons name="checkmark-circle-outline" size={18} color={COLORS.textInverse} />}
+                  <Text style={styles.renewButtonText}>Pay {formatCurrency(renewalQuote.amount)}</Text>
+                </TouchableOpacity>
+              </View>
+            ) : renewalError ? <Text style={styles.renewalError}>{renewalError}</Text> : null}
           </View>
 
           <TouchableOpacity activeOpacity={0.85} style={styles.primaryButton} onPress={() => navigation.navigate('SubscriptionPackages')}>
@@ -325,6 +429,65 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     lineHeight: 20,
   },
+  renewButton: {
+    alignItems: 'center',
+    backgroundColor: COLORS.gold,
+    borderRadius: RADIUS.md,
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    justifyContent: 'center',
+    marginTop: SPACING.md,
+    minHeight: 48,
+  },
+  renewButtonText: {
+    color: COLORS.textInverse,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '900',
+  },
+  renewalReview: {
+    backgroundColor: COLORS.surface,
+    borderColor: 'rgba(212,175,55,0.24)',
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    gap: SPACING.md,
+    padding: SPACING.md,
+  },
+  renewalDates: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  reviewDateRight: { alignItems: 'flex-end' },
+  reviewLabel: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs },
+  reviewValue: { color: COLORS.textPrimary, fontSize: FONT_SIZES.sm, fontWeight: '800', marginTop: 3 },
+  reviewAmount: { color: COLORS.gold, fontSize: FONT_SIZES.xxl, fontWeight: '900' },
+  reviewMeta: { color: COLORS.textSecondary, fontSize: FONT_SIZES.sm },
+  methodRow: { flexDirection: 'row', gap: SPACING.sm },
+  methodButton: {
+    alignItems: 'center',
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    flex: 1,
+    flexDirection: 'row',
+    gap: SPACING.xs,
+    justifyContent: 'center',
+    minHeight: 46,
+  },
+  methodButtonActive: { backgroundColor: 'rgba(212,175,55,0.1)', borderColor: COLORS.gold },
+  methodText: { color: COLORS.textMuted, fontSize: FONT_SIZES.sm, fontWeight: '800' },
+  methodTextActive: { color: COLORS.gold },
+  renewalError: { color: COLORS.error, fontSize: FONT_SIZES.xs, lineHeight: 18 },
+  confirmRenewalButton: {
+    alignItems: 'center',
+    backgroundColor: COLORS.gold,
+    borderRadius: RADIUS.md,
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    justifyContent: 'center',
+    minHeight: 50,
+  },
+  disabled: { opacity: 0.45 },
   primaryButton: {
     alignItems: 'center',
     backgroundColor: COLORS.gold,

@@ -9,6 +9,7 @@ import { EmptyState, ErrorState, ScreenHeader } from '@/components/common';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
 import type { StaffManagementStackParamList } from '@/navigation/StaffNavigator';
 import { staffService, type StaffSubscription } from '@/services/api/staff';
+import { statisticsService, type AdminSubscriptionStatistics } from '@/services/api/statistics';
 import { formatCurrency } from '@/utils/formatters';
 
 type Props = NativeStackScreenProps<StaffManagementStackParamList, 'Subscriptions'>;
@@ -23,12 +24,18 @@ export function StaffSubscriptionManagementScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [statistics, setStatistics] = useState<AdminSubscriptionStatistics | null>(null);
 
   const load = useCallback(async () => {
     setError('');
     try {
-      const response = await staffService.getSubscriptions();
-      setItems(response.data ?? []);
+      const [subscriptionsResult, statisticsResult] = await Promise.allSettled([
+        staffService.getSubscriptions(),
+        statisticsService.getAdminSubscriptions('30d'),
+      ]);
+      if (subscriptionsResult.status === 'rejected') throw subscriptionsResult.reason;
+      setItems(subscriptionsResult.value.data ?? []);
+      if (statisticsResult.status === 'fulfilled') setStatistics(statisticsResult.value.data ?? null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load subscriptions.');
     } finally {
@@ -48,6 +55,13 @@ export function StaffSubscriptionManagementScreen({ navigation }: Props) {
     <SafeAreaView edges={['top']} style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
       <ScreenHeader title="VIP subscriptions" subtitle={`${items.length} subscriptions`} onBack={() => navigation.navigate('ManagementHome')} />
+      {statistics ? (
+        <View style={styles.pulse}>
+          <View style={styles.pulseMetric}><Text style={styles.pulseLabel}>Active</Text><Text style={styles.pulseValue}>{statistics.summary.active}</Text></View>
+          <View style={styles.pulseMetric}><Text style={styles.pulseLabel}>Expiring</Text><Text style={styles.pulseValue}>{statistics.summary.expiringWithin7Days}</Text></View>
+          <View style={styles.pulseMetric}><Text style={styles.pulseLabel}>Renewal</Text><Text style={styles.pulseValue}>{statistics.summary.renewalRate}%</Text></View>
+        </View>
+      ) : null}
       <View style={styles.search}><Ionicons name="search-outline" size={18} color={COLORS.textMuted} /><TextInput value={query} onChangeText={setQuery} placeholder="Customer, email, or license plate" placeholderTextColor={COLORS.textMuted} style={styles.searchInput} /></View>
       <ScrollView horizontal style={styles.filterScroll} contentContainerStyle={styles.filters} showsHorizontalScrollIndicator={false}>
         {FILTERS.map((item) => <Pressable key={item} onPress={() => setFilter(item)} style={[styles.filter, filter === item && styles.filterActive]}><Text style={[styles.filterText, filter === item && styles.filterTextActive]}>{item.charAt(0).toUpperCase() + item.slice(1)}</Text></Pressable>)}
@@ -86,5 +100,9 @@ const styles = StyleSheet.create({
   search: { alignItems: 'center', backgroundColor: COLORS.surface, borderColor: COLORS.border, borderRadius: RADIUS.md, borderWidth: 1, flexDirection: 'row', gap: SPACING.sm, marginHorizontal: SPACING.lg, marginTop: SPACING.sm, minHeight: 46, paddingHorizontal: SPACING.md }, searchInput: { color: COLORS.textPrimary, flex: 1, fontSize: FONT_SIZES.sm },
   filterScroll: { flexGrow: 0 }, filters: { gap: SPACING.sm, padding: SPACING.lg, paddingBottom: SPACING.md }, filter: { borderColor: COLORS.border, borderRadius: RADIUS.round, borderWidth: 1, justifyContent: 'center', minHeight: 36, paddingHorizontal: SPACING.md }, filterActive: { backgroundColor: 'rgba(226,186,75,0.1)', borderColor: COLORS.gold }, filterText: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs, fontWeight: '600' }, filterTextActive: { color: COLORS.gold },
   list: { gap: SPACING.md, padding: SPACING.lg, paddingTop: 0, paddingBottom: SPACING.xxl }, card: { backgroundColor: COLORS.surface, borderColor: COLORS.border, borderRadius: RADIUS.lg, borderWidth: 1, gap: SPACING.md, padding: SPACING.md }, cardHeader: { alignItems: 'center', flexDirection: 'row', gap: SPACING.sm }, customerIcon: { alignItems: 'center', backgroundColor: 'rgba(226,186,75,0.1)', borderRadius: RADIUS.md, height: 42, justifyContent: 'center', width: 42 }, customerCopy: { flex: 1, minWidth: 0 }, customerName: { color: COLORS.textPrimary, fontSize: FONT_SIZES.md, fontWeight: '700' }, customerEmail: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs, marginTop: 2 }, status: { borderRadius: RADIUS.round, borderWidth: 1, paddingHorizontal: SPACING.sm, paddingVertical: 4 }, statusText: { fontSize: 9, fontWeight: '800' },
+  pulse: { flexDirection: 'row', marginHorizontal: SPACING.lg, marginTop: SPACING.sm, marginBottom: SPACING.sm, backgroundColor: COLORS.surface, borderColor: COLORS.border, borderWidth: 1, borderRadius: RADIUS.lg, padding: SPACING.md },
+  pulseMetric: { flex: 1, borderLeftColor: COLORS.border, borderLeftWidth: 1, paddingLeft: SPACING.sm },
+  pulseLabel: { color: COLORS.textMuted, fontSize: 10 },
+  pulseValue: { color: COLORS.gold, fontSize: FONT_SIZES.lg, fontWeight: '900', marginTop: 3 },
   packageRow: { alignItems: 'flex-end', borderTopColor: COLORS.border, borderTopWidth: StyleSheet.hairlineWidth, flexDirection: 'row', justifyContent: 'space-between', paddingTop: SPACING.sm }, packageLabel: { color: COLORS.textMuted, fontSize: 10 }, packageName: { color: COLORS.textPrimary, fontSize: FONT_SIZES.sm, fontWeight: '700', marginTop: 2 }, amount: { color: COLORS.gold, fontSize: FONT_SIZES.md, fontWeight: '800' }, period: { alignItems: 'center', backgroundColor: COLORS.surfaceElevated, borderRadius: RADIUS.md, flexDirection: 'row', gap: SPACING.sm, justifyContent: 'center', padding: SPACING.sm }, periodText: { color: COLORS.textSecondary, fontSize: FONT_SIZES.xs }, tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 }, plateTag: { backgroundColor: 'rgba(226,186,75,0.1)', borderRadius: RADIUS.sm, paddingHorizontal: SPACING.sm, paddingVertical: 4 }, plateText: { color: COLORS.gold, fontSize: 10, fontWeight: '700' }, slotTag: { backgroundColor: 'rgba(226,186,75,0.1)', borderRadius: RADIUS.sm, paddingHorizontal: SPACING.sm, paddingVertical: 4 }, slotText: { color: COLORS.gold, fontSize: 10, fontWeight: '700' },
 });

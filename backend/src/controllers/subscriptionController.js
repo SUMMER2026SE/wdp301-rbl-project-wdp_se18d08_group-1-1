@@ -4,6 +4,10 @@ const User = require('../models/User');
 const Slot = require('../models/Slot');
 const payos = require('../config/payos');
 const walletService = require('../services/walletService');
+const {
+  validateNewSubscriptionEligibility,
+} = require('../services/subscriptionEligibilityService');
+const { isEnabled, defaultForCurrentEnvironment } = require('../utils/featureFlags');
 
 const buildExpirationDate = (packageType, fromDate = new Date()) => {
   const expireAt = new Date(fromDate);
@@ -26,24 +30,14 @@ exports.createSubscriptionPayment = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Invalid subscription package.' });
     }
 
-    // Validate slots limit based on vehicles
-    const Vehicle = require('../models/Vehicle');
-    const vehiclesCount = await Vehicle.countDocuments({ owner: req.user._id });
-    const maxSlots = Math.min(3, vehiclesCount); // User can choose up to their vehicle count, max 3
-    if (slots.length > maxSlots) {
-      return res.status(400).json({ success: false, message: `You can only select up to ${maxSlots} slots based on your registered vehicles.` });
-    }
-
-    // Check if slots are already reserved
-    for (const slot of slots) {
-      const slotDoc = await Slot.findOne({ floorID: slot.floorId, slotNumber: slot.slotCode });
-      if (slotDoc && slotDoc.reservedFor && slotDoc.reservedFor.toString() !== req.user._id.toString()) {
-        return res.status(400).json({ success: false, message: `Slot ${slot.slotCode} is already reserved by someone else.` });
-      }
-    }
+    const { normalizedSlots } = await validateNewSubscriptionEligibility({
+      userId: req.user._id,
+      ticketPackage,
+      slots,
+    });
 
     // Amount to pay (price * number of slots)
-    const amount = ticketPackage.price * Math.max(1, slots.length);
+    const amount = ticketPackage.price * normalizedSlots.length;
 
     // Generate Order Code for PayOS
     const orderCode = Number(String(Date.now()).slice(-6) + Math.floor(Math.random() * 100));
@@ -74,7 +68,7 @@ exports.createSubscriptionPayment = async (req, res, next) => {
     const subscription = new Subscription({
       user: req.user._id,
       ticketPackage: ticketPackage._id,
-      slots,
+      slots: normalizedSlots,
       amount,
       orderCode,
       expireAt,
@@ -145,7 +139,11 @@ exports.verifyPayment = async (req, res, next) => {
       for (const slot of subscription.slots) {
         await Slot.updateOne(
           { floorID: slot.floorId, slotNumber: slot.slotCode },
-          { reservedFor: user._id }
+          {
+            reservedFor: user._id,
+            reservedBySubscriptionId: subscription._id,
+            reservedUntil: subscription.expireAt,
+          }
         );
       }
 
@@ -175,24 +173,14 @@ exports.paySubscriptionWithWallet = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Invalid subscription package.' });
     }
 
-    // Validate slots limit based on vehicles
-    const Vehicle = require('../models/Vehicle');
-    const vehiclesCount = await Vehicle.countDocuments({ owner: req.user._id });
-    const maxSlots = Math.min(3, vehiclesCount); 
-    if (slots.length > maxSlots) {
-      return res.status(400).json({ success: false, message: `You can only select up to ${maxSlots} slots based on your registered vehicles.` });
-    }
-
-    // Check if slots are already reserved
-    for (const slot of slots) {
-      const slotDoc = await Slot.findOne({ floorID: slot.floorId, slotNumber: slot.slotCode });
-      if (slotDoc && slotDoc.reservedFor && slotDoc.reservedFor.toString() !== req.user._id.toString()) {
-        return res.status(400).json({ success: false, message: `Slot ${slot.slotCode} is already reserved by someone else.` });
-      }
-    }
+    const { normalizedSlots } = await validateNewSubscriptionEligibility({
+      userId: req.user._id,
+      ticketPackage,
+      slots,
+    });
 
     // Amount to pay (price * number of slots)
-    const amount = ticketPackage.price * Math.max(1, slots.length);
+    const amount = ticketPackage.price * normalizedSlots.length;
 
     // Calculate expiration date
     const expireAt = buildExpirationDate(ticketPackage.type);
@@ -201,7 +189,7 @@ exports.paySubscriptionWithWallet = async (req, res, next) => {
     const subscription = new Subscription({
       user: req.user._id,
       ticketPackage: ticketPackage._id,
-      slots,
+      slots: normalizedSlots,
       amount,
       orderCode: Number(String(Date.now()).slice(-6) + Math.floor(Math.random() * 100)),
       expireAt,
@@ -242,7 +230,11 @@ exports.paySubscriptionWithWallet = async (req, res, next) => {
     for (const slot of subscription.slots) {
       await Slot.updateOne(
         { floorID: slot.floorId, slotNumber: slot.slotCode },
-        { reservedFor: user._id }
+        {
+          reservedFor: user._id,
+          reservedBySubscriptionId: subscription._id,
+          reservedUntil: subscription.expireAt,
+        }
       );
     }
 
@@ -256,7 +248,10 @@ exports.getMembership = async (req, res, next) => {
   try {
     const user = await User.findById(req.user._id)
       .select('membership')
-      .populate('membership.packageId', 'name type price description isActive')
+      .populate(
+        'membership.packageId',
+        'name type price description isActive isRenewable renewalWindowDays maxSlots'
+      )
       .lean();
 
     const activeSubscription = await Subscription.findOne({
@@ -265,7 +260,10 @@ exports.getMembership = async (req, res, next) => {
       paymentStatus: 'paid',
     })
       .sort({ expireAt: -1 })
-      .populate('ticketPackage', 'name type price description isActive')
+      .populate(
+        'ticketPackage',
+        'name type price description isActive isRenewable renewalWindowDays maxSlots'
+      )
       .populate('slots.floorId', 'name floorNumber')
       .lean();
 
@@ -276,13 +274,24 @@ exports.getMembership = async (req, res, next) => {
       ? Math.ceil((expireAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
       : null;
     const pkg = activeSubscription?.ticketPackage || user?.membership?.packageId || null;
+    const renewalWindowDays = Number(pkg?.renewalWindowDays || 7);
+    const canRenew = Boolean(
+      isEnabled('SUBSCRIPTION_RENEWAL_ENABLED', defaultForCurrentEnvironment()) &&
+      isActive &&
+      activeSubscription?._id &&
+      pkg?.isRenewable !== false &&
+      daysUntilExpiration !== null &&
+      daysUntilExpiration <= renewalWindowDays
+    );
 
     res.status(200).json({
       success: true,
       data: {
         isVip: isActive,
         status: isActive ? 'active' : 'expired',
+        subscriptionId: activeSubscription?._id || null,
         expireAt,
+        daysUntilExpiration,
         expirationWarning: Boolean(isActive && daysUntilExpiration !== null && daysUntilExpiration <= 7),
         freeServiceCount: user?.membership?.freeServiceCount || 0,
         package: pkg
@@ -307,7 +316,11 @@ exports.getMembership = async (req, res, next) => {
           status: 'manual',
           nextRenewalDate: expireAt,
           price: pkg?.price || 0,
-          message: 'Auto-renewal is not yet supported.',
+          canRenew,
+          renewalWindowDays,
+          message: canRenew
+            ? 'Your renewal window is open. Renew now to keep your reserved spaces.'
+            : 'Manual renewal opens before your membership expires.',
         },
       },
     });
