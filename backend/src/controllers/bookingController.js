@@ -238,10 +238,10 @@ const getActiveMembershipType = async (user) => {
   return ticketPackage?.type || null;
 };
 
-const findVipRegisteredVehicleBookingRestriction = async ({ userId, licensePlate, floorId, slotCode }) => {
+const findVipRegisteredVehicleBookingRestriction = async ({ userId, licensePlate, floorId, slotCode, start, end }) => {
   const [user, registeredVehicle] = await Promise.all([
     User.findById(userId).select('membership').lean(),
-    Vehicle.findOne({ owner: userId, licensePlate }).select('_id licensePlate').lean(),
+    Vehicle.findOne({ owner: userId, licensePlate, status: 'approved' }).select('_id licensePlate').lean(),
   ]);
 
   if (!registeredVehicle) return null;
@@ -259,6 +259,45 @@ const findVipRegisteredVehicleBookingRestriction = async ({ userId, licensePlate
   ));
 
   if (isSelectedReservedSlot) return null;
+
+  // Check if ALL their reserved slots are currently occupied/booked in the requested time frame.
+  if (start && end) {
+    let allOccupied = true;
+    for (const slot of reservedSlots) {
+      // 1. check active session
+      const activeSession = await mongoose.model('Session').findOne({
+        floorId: slot.floorID,
+        parkingSlot: normalizeSlotCode(slot.slotNumber),
+        status: 'active'
+      });
+      if (activeSession) continue;
+      
+      // 2. check overlapping booking
+      const overlapping = await mongoose.model('Booking').findOne({
+        floorId: slot.floorID,
+        parkingSlot: normalizeSlotCode(slot.slotNumber),
+        status: { $in: ['PAID', 'ACTIVE', 'PAUSED'] },
+        scheduledStart: { $lt: end },
+        scheduledEnd: { $gt: start }
+      });
+      if (overlapping) continue;
+      
+      // 3. check maintenance
+      const isMaintenance = await mongoose.model('Slot').findOne({
+        floorID: slot.floorID,
+        slotNumber: slot.slotNumber,
+        status: 'maintenance'
+      });
+      if (isMaintenance) continue;
+      
+      allOccupied = false;
+      break;
+    }
+    
+    if (allOccupied) {
+      return null;
+    }
+  }
 
   return {
     membershipType,
@@ -437,7 +476,9 @@ exports.createBooking = async (req, res, next) => {
       userId,
       licensePlate: vehicle.licensePlate,
       floorId,
-      slotCode: parkingSlot
+      slotCode: parkingSlot,
+      start,
+      end
     });
     if (restriction) {
       return res.status(400).json({ success: false, message: `Xe ${vehicle.licensePlate} đã nằm trong gói thuê bao VIP. Vui lòng sử dụng ô đỗ VIP của bạn thay vì đặt chỗ mới.` });
@@ -450,8 +491,13 @@ exports.createBooking = async (req, res, next) => {
       status: 'active',
       expireAt: { $gt: start }
     });
-    if (subscriptionInfo && subscriptionInfo.user.toString() !== userId.toString()) {
-      return res.status(400).json({ success: false, message: 'Ô đỗ này đã được đăng ký gói thuê bao cố định và không thể đặt chỗ.' });
+    
+    if (subscriptionInfo) {
+      if (subscriptionInfo.user.toString() !== userId.toString()) {
+        return res.status(400).json({ success: false, message: 'Ô đỗ này đã được đăng ký gói thuê bao cố định và không thể đặt chỗ.' });
+      } else if (vehicle.status !== 'approved') {
+        return res.status(400).json({ success: false, message: 'Chỉ các xe đã được duyệt mới có thể đặt chỗ vào ô đỗ VIP của bạn.' });
+      }
     }
 
     // 3.6. Kiểm tra ô đỗ có bị người khác Booking trùng giờ không
@@ -468,7 +514,11 @@ exports.createBooking = async (req, res, next) => {
 
     // 4. Tính toán phí trước dựa trên pricingEngine
     const pricing = await pricingEngine.calculatePrice(start, end);
-    const prepaidAmount = pricing.finalTotal;
+    let prepaidAmount = pricing.finalTotal;
+
+    if (subscriptionInfo && subscriptionInfo.user.toString() === userId.toString()) {
+      prepaidAmount = 0;
+    }
 
     const { services = [] } = req.body;
 
@@ -1523,7 +1573,9 @@ exports.quoteBulkBooking = async (req, res, next) => {
           userId,
           licensePlate: vehicle.licensePlate,
           floorId,
-          slotCode: parkingSlot
+          slotCode: parkingSlot,
+          start,
+          end
         });
         if (restriction) {
           throw new Error(`Xe ${vehicle.licensePlate} đã nằm trong gói thuê bao VIP. Vui lòng sử dụng ô đỗ VIP của bạn thay vì đặt chỗ mới.`);
@@ -1666,7 +1718,9 @@ exports.createBulkBooking = async (req, res, next) => {
           userId,
           licensePlate: vehicle.licensePlate,
           floorId,
-          slotCode: parkingSlot
+          slotCode: parkingSlot,
+          start,
+          end
         });
         if (restriction) {
           throw new Error(`Xe ${vehicle.licensePlate} đã nằm trong gói thuê bao VIP. Vui lòng sử dụng ô đỗ VIP của bạn thay vì đặt chỗ mới.`);

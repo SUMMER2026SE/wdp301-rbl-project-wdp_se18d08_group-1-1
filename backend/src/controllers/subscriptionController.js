@@ -116,12 +116,18 @@ exports.verifyPayment = async (req, res, next) => {
   try {
     const { orderCode } = req.body;
     
-    const subscription = await Subscription.findOne({ orderCode, user: req.user._id });
+    const subscription = await Subscription.findOne({
+      $or: [{ orderCode }, { 'pendingRenewal.orderCode': orderCode }],
+      user: req.user._id
+    });
+    
     if (!subscription) {
       return res.status(404).json({ success: false, message: 'Subscription not found.' });
     }
 
-    if (subscription.paymentStatus === 'paid') {
+    const isRenewal = subscription.pendingRenewal && subscription.pendingRenewal.orderCode == orderCode;
+
+    if (!isRenewal && subscription.paymentStatus === 'paid') {
       return res.status(200).json({ success: true, message: 'Already paid.' });
     }
 
@@ -137,8 +143,16 @@ exports.verifyPayment = async (req, res, next) => {
     }
     
     if (isPaymentSuccessful) {
-      subscription.paymentStatus = 'paid';
-      subscription.status = 'active';
+      if (isRenewal) {
+        subscription.expireAt = subscription.pendingRenewal.newExpireAt;
+        subscription.status = 'active';
+        subscription.expireWarningSent = false;
+        subscription.pendingRenewal = undefined;
+      } else {
+        subscription.paymentStatus = 'paid';
+        subscription.status = 'active';
+      }
+      
       await subscription.save();
 
       // Update User VIP status
@@ -161,13 +175,18 @@ exports.verifyPayment = async (req, res, next) => {
         );
       }
 
-      return res.status(200).json({ success: true, message: 'Subscription activated successfully!' });
+      return res.status(200).json({ success: true, message: isRenewal ? 'Subscription renewed successfully!' : 'Subscription activated successfully!' });
     } else {
       const payosInfo = await payos.paymentRequests.get(parseInt(orderCode)).catch(() => null);
       if (['CANCELLED', 'FAILED'].includes(payosInfo?.status)) {
-        subscription.paymentStatus = payosInfo.status === 'CANCELLED' ? 'cancelled' : 'failed';
-        subscription.status = payosInfo.status === 'CANCELLED' ? 'cancelled' : 'failed';
-        await subscription.save();
+        if (isRenewal) {
+           subscription.pendingRenewal = undefined; // clear pending renewal if failed
+           await subscription.save();
+        } else {
+           subscription.paymentStatus = payosInfo.status === 'CANCELLED' ? 'cancelled' : 'failed';
+           subscription.status = payosInfo.status === 'CANCELLED' ? 'cancelled' : 'failed';
+           await subscription.save();
+        }
       }
       return res.status(400).json({ success: false, message: 'Payment not completed.' });
     }
@@ -388,6 +407,109 @@ exports.getAllSubscriptions = async (req, res, next) => {
       success: true,
       data: enhancedSubscriptions
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Renew subscription
+exports.renewSubscription = async (req, res, next) => {
+  try {
+    const { subscriptionId, paymentMethod } = req.body;
+    
+    const subscription = await Subscription.findById(subscriptionId).populate('ticketPackage');
+    if (!subscription) {
+      return res.status(404).json({ success: false, message: 'Subscription not found.' });
+    }
+    
+    if (subscription.user.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Unauthorized' });
+    }
+
+    if (!['active', 'expired'].includes(subscription.status)) {
+      return res.status(400).json({ success: false, message: 'Can only renew active or expired subscriptions.' });
+    }
+
+    const ticketPackage = subscription.ticketPackage;
+    if (!ticketPackage || !ticketPackage.isActive) {
+      return res.status(400).json({ success: false, message: 'Package is no longer available.' });
+    }
+
+    const amount = ticketPackage.price * Math.max(1, subscription.slots.length);
+    
+    // Determine the base date for renewal
+    const now = new Date();
+    const baseDate = (subscription.status === 'active' && subscription.expireAt > now) 
+                     ? subscription.expireAt 
+                     : now;
+                     
+    const newExpireAt = buildExpirationDate(ticketPackage.type, baseDate);
+
+    if (paymentMethod === 'WALLET') {
+      try {
+        await walletService.debitWallet(req.user._id, amount, `Renew VIP Package - ${ticketPackage.type}`, {
+          refSource: 'subscription_renewal',
+          refSourceId: subscription._id.toString()
+        });
+        
+        subscription.expireAt = newExpireAt;
+        subscription.status = 'active';
+        subscription.expireWarningSent = false;
+        
+        // Also update User membership and Slot reservedFor to ensure they are active
+        const user = await User.findById(req.user._id);
+        user.membership.isVip = true;
+        user.membership.expireAt = newExpireAt;
+        if (ticketPackage.type === 'yearly') {
+           user.membership.freeServiceCount = 12;
+        }
+        await user.save();
+
+        for (const slot of subscription.slots) {
+          await Slot.updateOne(
+            { floorID: slot.floorId, slotNumber: slot.slotCode },
+            { reservedFor: user._id }
+          );
+        }
+
+        await subscription.save();
+        return res.status(200).json({ success: true, message: 'Renewed successfully via Valo Wallet.', data: subscription });
+      } catch (err) {
+        return res.status(400).json({ success: false, message: err.message || 'Insufficient wallet balance.' });
+      }
+    } else if (paymentMethod === 'PAYOS') {
+      const orderCode = Number(String(Date.now()).slice(-6) + Math.floor(Math.random() * 100));
+      const paymentData = {
+        orderCode,
+        amount: parseInt(amount),
+        description: `Renew VIP ${ticketPackage.type}`,
+        returnUrl: process.env.PAYOS_RETURN_URL || `${process.env.CLIENT_URL}/membership?orderCode=${orderCode}`,
+        cancelUrl: process.env.PAYOS_CANCEL_URL || `${process.env.CLIENT_URL}/membership?orderCode=${orderCode}&cancel=true`,
+        items: [{ name: `Renew VIP ${ticketPackage.type}`, quantity: 1, price: parseInt(amount) }]
+      };
+
+      const paymentLink = await payos.paymentRequests.create(paymentData);
+      
+      subscription.pendingRenewal = {
+        orderCode,
+        newExpireAt,
+        amount
+      };
+      await subscription.save();
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          subscriptionId: subscription._id,
+          orderCode,
+          amount,
+          checkoutUrl: paymentLink.checkoutUrl
+        }
+      });
+    } else {
+      return res.status(400).json({ success: false, message: 'Invalid payment method.' });
+    }
+
   } catch (error) {
     next(error);
   }

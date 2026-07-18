@@ -85,11 +85,21 @@ exports.verifyPlate = async (req, res, next) => {
               parkingSlot: normalizeSlotCode(slotCode),
               status: 'active'
             });
+
+            // Handle race condition: check if slot is held by another process (like Vehicle 1 at Step 3)
+            const holding = await BookingHold.findOne({
+              floorId,
+              slotCode: normalizeSlotCode(slotCode),
+              status: 'active',
+              expiresAt: { $gt: new Date() }
+            });
             
-            if (!occupyingSession) {
+            if (!occupyingSession && !holding) {
               availableSlot = slot;
               break;
-            } else if (occupyingSession.userId && occupyingSession.userId.toString() === userId.toString()) {
+            } else if (occupyingSession && occupyingSession.userId && occupyingSession.userId.toString() === userId.toString()) {
+              occupiedBySelfCount++;
+            } else if (holding && holding.userId && holding.userId.toString() === userId.toString()) {
               occupiedBySelfCount++;
             }
           }
@@ -99,6 +109,18 @@ exports.verifyPlate = async (req, res, next) => {
           isMonthly = true;
           subscription = activeSubscription;
           subscription.assignedSlot = availableSlot;
+          
+          // CRITICAL: We MUST create a short hold for the fast-pass to prevent race condition with Vehicle 2
+          const holdEnd = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes hold
+          const fastPassHold = new BookingHold({
+            floorId: availableSlot.floorId?._id || availableSlot.floorId,
+            slotCode: normalizeSlotCode(availableSlot.slotCode),
+            userId,
+            licensePlate: cleanPlate,
+            status: 'active',
+            expiresAt: holdEnd
+          });
+          await fastPassHold.save();
         } else if (occupiedBySelfCount < activeSubscription.slots.length) {
           // If all slots are occupied, but AT LEAST ONE is occupied by a stranger, we still consider them VIP for TC4
           isMonthly = true;
@@ -229,17 +251,8 @@ exports.verifyPlate = async (req, res, next) => {
         }
       }
 
-      // If the number of unique unavailable slots is >= total slots, the lot is full
       if (unavailableKeys.size >= totalSlots) {
         isFull = true;
-      } else if (isVIP) {
-        // Auto assign a slot for VIP vehicles
-        const availableSlot = allSlots.find(s => !unavailableKeys.has(`${s.floorId.toString()}_${s.slotCode}`));
-        if (availableSlot) {
-          vipAssignedSlot = availableSlot.slotCode;
-          vipAssignedFloorId = availableSlot.floorId;
-          vipAssignedFloorName = availableSlot.floorName;
-        }
       }
     }
 
@@ -451,7 +464,15 @@ exports.createKioskSession = async (req, res, next) => {
     let vipRedirected = false;
     let originalVipSlot = null;
     
+    let isVehicleApprovedForVIP = false;
     if (userId) {
+      const checkApproved = await Vehicle.findOne({ licensePlate: { $regex: new RegExp(`^${cleanPlate}$`, 'i') }, owner: userId, status: 'approved' });
+      if (checkApproved) {
+        isVehicleApprovedForVIP = true;
+      }
+    }
+
+    if (isVehicleApprovedForVIP) {
       const sub = await mongoose.model('Subscription').findOne({
         user: userId,
         status: 'active',
@@ -811,7 +832,22 @@ exports.kioskExitScan = async (req, res, next) => {
           servicesTotal += bs.price;
         }
 
-        const totalIncurred = totalCostObj.finalTotal + servicesTotal;
+        let parkingCost = totalCostObj.finalTotal;
+
+        // CHECK IF COVERED BY VIP
+        if (session.userId) {
+          const Subscription = require('../models/Subscription');
+          const sub = await Subscription.findOne({
+            user: session.userId,
+            status: 'active',
+            expireAt: { $gt: session.checkInTime }
+          });
+          if (sub && sub.slots.some(s => normalizeSlotCode(s.slotCode) === normalizeSlotCode(session.parkingSlot))) {
+            parkingCost = 0; // VIP slot parking is free
+          }
+        }
+
+        const totalIncurred = parkingCost + servicesTotal;
         const totalPaidSoFar = booking.prepaidAmount + previousSpent;
 
         if (totalIncurred > totalPaidSoFar) {
@@ -932,7 +968,21 @@ exports.kioskCheckout = async (req, res, next) => {
           servicesTotal += bs.price;
         }
 
-        const totalIncurred = totalCostObj.finalTotal + servicesTotal;
+        let parkingCost = totalCostObj.finalTotal;
+
+        if (session.userId) {
+          const Subscription = require('../models/Subscription');
+          const sub = await Subscription.findOne({
+            user: session.userId,
+            status: 'active',
+            expireAt: { $gt: session.checkInTime }
+          });
+          if (sub && sub.slots.some(s => normalizeSlotCode(s.slotCode) === normalizeSlotCode(session.parkingSlot))) {
+            parkingCost = 0;
+          }
+        }
+
+        const totalIncurred = parkingCost + servicesTotal;
         const totalPaidSoFar = booking.prepaidAmount + previousSpent;
 
         if (totalIncurred > totalPaidSoFar) {

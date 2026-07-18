@@ -55,6 +55,11 @@ const subscriptionSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    pendingRenewal: {
+      orderCode: Number,
+      newExpireAt: Date,
+      amount: Number
+    },
   },
   {
     timestamps: true,
