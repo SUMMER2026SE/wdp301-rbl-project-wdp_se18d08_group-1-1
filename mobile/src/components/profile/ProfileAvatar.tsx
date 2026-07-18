@@ -16,7 +16,7 @@ export const ProfileAvatar = ({ uri, name, editable = false, size = 80, onPress 
     <Avatar name={name} size={size} uri={uri} />
     {editable ? (
       <View style={styles.badge}>
-        <AppText color={colors.neutral.white} variant="caption">+</AppText>
+        <AppText color={colors.light.text.inverse} variant="caption">+</AppText>
       </View>
     ) : null}
   </Pressable>

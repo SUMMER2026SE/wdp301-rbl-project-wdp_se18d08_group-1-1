@@ -4,7 +4,9 @@ import type { WalletTransaction } from '@/types/models';
 
 import {
   calculateExpirationDate,
+  calculateSubscriptionTotal,
   calculateWalletBalanceFromTransactions,
+  getSubscriptionPackageRestriction,
   isValidTopUpAmount,
   isVipActive,
   TOP_UP_MIN_AMOUNT,
@@ -62,6 +64,23 @@ describe('walletSubscription properties', () => {
       ),
       { numRuns: 100 },
     );
+  });
+
+  it('calculates the subscription price for every reserved slot', () => {
+    expect(calculateSubscriptionTotal(100_000, 0)).toBe(100_000);
+    expect(calculateSubscriptionTotal(100_000, 1)).toBe(100_000);
+    expect(calculateSubscriptionTotal(100_000, 3)).toBe(300_000);
+  });
+
+  it('prevents buying the active package or downgrading a yearly package', () => {
+    const membership = {
+      isVip: true,
+      package: { id: 'year', type: 'yearly' },
+    } as any;
+
+    expect(getSubscriptionPackageRestriction(membership, { _id: 'year', type: 'yearly' } as any)).toBeTruthy();
+    expect(getSubscriptionPackageRestriction(membership, { _id: 'month', type: 'monthly' } as any)).toBeTruthy();
+    expect(getSubscriptionPackageRestriction({ ...membership, package: { id: 'month', type: 'monthly' } }, { _id: 'year', type: 'yearly' } as any)).toBeNull();
   });
 
   // Feature: wallet-subscription-management, Property 22: Subscription Expiration Calculation

@@ -7,7 +7,7 @@ export type AuthStackParamList = {
   Login: undefined;
   Register: undefined;
   ForgotPassword: undefined;
-  VerifyOTP: { email: string };
+  VerifyOTP: { email: string; purpose: 'register' | 'reset' };
   ResetPassword: { email: string; otp: string };
 };
 
@@ -45,8 +45,12 @@ export type ProfileStackParamList = {
   VehicleList: undefined;
   AddVehicle: undefined;
   EditVehicle: { vehicleId: string };
+  Services: undefined;
   Policies: undefined;
   PolicyDetail: { slug: string };
+  ParkingHistory: undefined;
+  BookingList: undefined;
+  BookingDetail: { bookingId: string };
 };
 
 export type NotificationStackParamList = {
@@ -66,5 +70,6 @@ export type WalletStackParamList = {
     checkoutUrl?: string;
     qrCode?: string;
     amount?: number;
+    renewal?: boolean;
   };
 };

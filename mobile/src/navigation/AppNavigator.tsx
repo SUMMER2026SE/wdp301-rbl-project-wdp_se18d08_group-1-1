@@ -13,7 +13,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { NAVIGATION_STATE_KEY } from '@/utils/constants';
 
 import { AuthNavigator } from './AuthNavigator';
-import { MainNavigator } from './MainNavigator';
+import CustomerNavigator from './CustomerNavigator';
+import StaffNavigator from './StaffNavigator';
 
 const linking: LinkingOptions<Record<string, unknown>> = {
   prefixes: ['valo://'],
@@ -22,8 +23,10 @@ const linking: LinkingOptions<Record<string, unknown>> = {
       Login: 'login',
       Register: 'register',
       ForgotPassword: 'forgot-password',
-      HomeTab: 'home',
+      Home: 'home',
+      Bookings: 'bookings',
       WalletTab: 'wallet',
+      NotificationsTab: 'notifications',
       ProfileTab: 'profile',
     },
   },
@@ -35,7 +38,7 @@ const AppLifecycleBridge = () => {
 };
 
 export const AppNavigator = () => {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const [initialState, setInitialState] = useState<PartialState<NavigationState>>();
   const [isReady, setIsReady] = useState(false);
 
@@ -69,7 +72,13 @@ export const AppNavigator = () => {
       }}
     >
       <AppLifecycleBridge />
-      {isAuthenticated ? <MainNavigator /> : <AuthNavigator />}
+      {!isAuthenticated ? (
+        <AuthNavigator />
+      ) : user?.role === 'staff' || user?.role === 'admin' ? (
+        <StaffNavigator />
+      ) : (
+        <CustomerNavigator />
+      )}
     </NavigationContainer>
   );
 };

@@ -1,26 +1,48 @@
+import { Ionicons } from '@expo/vector-icons';
+import type { NavigationProp } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AppText, Button, Card, LoadingSpinner } from '@/components/common';
-import { Screen } from '@/components/layout/Screen';
+import { EmptyState, ErrorState, ScreenHeader, SectionTitle } from '@/components/common';
+import { ParkingMap2D } from '@/components/booking/ParkingMap2D';
+import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
+import type { CustomerTabParamList } from '@/navigation/CustomerNavigator';
 import type { WalletStackParamList } from '@/navigation/types';
 import parkingFloorService from '@/services/ParkingFloorService';
 import { subscriptionsService } from '@/services/api/subscriptions';
 import { vehiclesService } from '@/services/api/vehicles';
 import { walletService } from '@/services/api/wallet';
-import { borderRadius, colors, spacing } from '@/theme';
-import type { Slot } from '@/types/booking.types';
+import type { ParkingFloor, Slot } from '@/types/booking.types';
 import type { Wallet } from '@/types/models';
-import type { SubscriptionPackage, SubscriptionPaymentMethod, SubscriptionSlotSelection } from '@/types/subscription.types';
+import type { MembershipStatus, SubscriptionPackage, SubscriptionPaymentMethod, SubscriptionSlotSelection } from '@/types/subscription.types';
 import { formatCurrency } from '@/utils/formatters';
-import { calculateExpirationDate, validateSubscriptionSlots } from '@/utils/walletSubscription';
+import { isPolicyAcceptanceRequired } from '@/utils/policyErrors';
+import {
+  calculateExpirationDate,
+  calculateSubscriptionTotal,
+  getSubscriptionPackageRestriction,
+  validateSubscriptionSlots,
+} from '@/utils/walletSubscription';
 
 type Props = NativeStackScreenProps<WalletStackParamList, 'SubscriptionCheckout'>;
 
 export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
   const [packages, setPackages] = useState<SubscriptionPackage[]>([]);
+  const [floors, setFloors] = useState<ParkingFloor[]>([]);
+  const [selectedFloorId, setSelectedFloorId] = useState('');
   const [slots, setSlots] = useState<Slot[]>([]);
+  const [membership, setMembership] = useState<MembershipStatus | null>(null);
   const [vehicleCount, setVehicleCount] = useState(0);
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [selectedSlots, setSelectedSlots] = useState<SubscriptionSlotSelection[]>([]);
@@ -28,30 +50,38 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [policyRequired, setPolicyRequired] = useState(false);
 
   const pkg = useMemo(
     () => packages.find((item) => item._id === route.params.packageId),
     [packages, route.params.packageId],
   );
 
+  const maxSlots = Math.min(3, vehicleCount);
+  const subscriptionTotal = calculateSubscriptionTotal(pkg?.price || 0, selectedSlots.length);
+  const hasEnoughWallet = (wallet?.balance || 0) >= subscriptionTotal;
+  const packageRestriction = getSubscriptionPackageRestriction(membership, pkg);
+  const selectedFloor = floors.find((floor) => String(floor._id ?? floor.id) === selectedFloorId) || null;
+
   const loadData = useCallback(async () => {
-    setLoading(true);
+    setError('');
     try {
-      const [packageResponse, vehicleResponse, walletResponse, floors] = await Promise.all([
+      const [packageResponse, vehicleResponse, walletResponse, floorResponse, membershipResponse] = await Promise.all([
         subscriptionsService.getPackages(),
         vehiclesService.getMyVehicles(),
         walletService.getWallet(),
         parkingFloorService.getParkingFloors(),
+        subscriptionsService.getMembership(),
       ]);
       setPackages(packageResponse.data || []);
       setVehicleCount((vehicleResponse.data || []).length);
       setWallet(walletResponse.data || null);
-
-      const firstFloor = floors[0];
-      if (firstFloor?._id) {
-        const floorSlots = await parkingFloorService.getSlotsByFloor(firstFloor._id);
-        setSlots(floorSlots.filter((slot) => slot.status !== 'occupied'));
-      }
+      setMembership(membershipResponse.data || null);
+      setFloors(floorResponse);
+      setSelectedFloorId((current) => current || String(floorResponse[0]?._id ?? floorResponse[0]?.id ?? ''));
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Unable to load plan details.');
+      setSlots([]);
     } finally {
       setLoading(false);
     }
@@ -61,33 +91,59 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
     void loadData();
   }, [loadData]);
 
-  const toggleSlot = (slot: Slot) => {
-    const floorId = slot.floorId || '';
-    const slotCode = slot.slotCode || slot.code || '';
+  useEffect(() => {
+    let active = true;
+    if (!selectedFloorId) {
+      setSlots([]);
+      return () => { active = false; };
+    }
+    setSlots([]);
+    void parkingFloorService.getSlotsByFloor(selectedFloorId)
+      .then((floorSlots) => {
+        if (active) setSlots(floorSlots);
+      })
+      .catch((loadError) => {
+        if (active) setError(loadError instanceof Error ? loadError.message : 'Unable to load parking spaces.');
+      });
+    return () => { active = false; };
+  }, [selectedFloorId]);
+
+  const toggleSlot = ({ floorId, slotCode }: SubscriptionSlotSelection) => {
     setSelectedSlots((current) => {
       const exists = current.some((item) => item.floorId === floorId && item.slotCode === slotCode);
       if (exists) {
         return current.filter((item) => !(item.floorId === floorId && item.slotCode === slotCode));
       }
+      if (current.length >= maxSlots) {
+        setError(`You can select up to ${maxSlots} spaces based on your registered vehicles.`);
+        return current;
+      }
+      setError('');
       return [...current, { floorId, slotCode }];
     });
   };
 
   const handlePurchase = async () => {
     if (!pkg) {
+      setError('The selected plan was not found.');
+      return;
+    }
+    if (packageRestriction) {
+      setError(packageRestriction);
       return;
     }
     if (!validateSubscriptionSlots(selectedSlots.length, vehicleCount)) {
-      setError(`Select 1-${Math.min(3, vehicleCount)} slots based on your registered vehicles.`);
+      setError(`Select 1-${maxSlots} spaces based on your registered vehicles.`);
       return;
     }
-    if (method === 'wallet' && (wallet?.balance || 0) < pkg.price) {
+    if (method === 'wallet' && !hasEnoughWallet) {
       setError('Insufficient wallet balance.');
       return;
     }
 
     setSubmitting(true);
     setError('');
+    setPolicyRequired(false);
     try {
       if (method === 'wallet') {
         await subscriptionsService.payWithWallet({ packageId: pkg._id, slots: selectedSlots });
@@ -102,99 +158,299 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
         });
       }
     } catch (purchaseError) {
-      setError(purchaseError instanceof Error ? purchaseError.message : 'Subscription purchase failed.');
+      if (isPolicyAcceptanceRequired(purchaseError)) {
+        setPolicyRequired(true);
+        setError('You must accept the latest policy before purchasing a plan.');
+      } else {
+        setError(purchaseError instanceof Error ? purchaseError.message : 'Plan purchase failed.');
+      }
     } finally {
       setSubmitting(false);
     }
   };
 
-  if (loading) {
-    return (
-      <Screen>
-        <LoadingSpinner />
-      </Screen>
-    );
-  }
-
   return (
-    <Screen scrollable>
-      <AppText variant="h1">Checkout</AppText>
-      {pkg ? (
-        <Card style={styles.card}>
-          <AppText variant="h2">{pkg.name}</AppText>
-          <AppText variant="h1">{formatCurrency(pkg.price)}</AppText>
-          <AppText>Expires: {calculateExpirationDate(pkg.type).toLocaleDateString('vi-VN')}</AppText>
-        </Card>
-      ) : null}
-      <Card style={styles.card}>
-        <AppText variant="h3">Payment method</AppText>
-        {(['wallet', 'payos'] as const).map((option) => (
-          <Pressable
-            key={option}
-            style={[styles.option, method === option && styles.optionActive]}
-            onPress={() => setMethod(option)}
-          >
-            <AppText>{option === 'wallet' ? 'Wallet' : 'PayOS QR'}</AppText>
-          </Pressable>
-        ))}
-        <AppText color={colors.light.text.secondary}>Wallet balance: {formatCurrency(wallet?.balance || 0)}</AppText>
-      </Card>
-      <Card style={styles.card}>
-        <AppText variant="h3">Select reserved slots</AppText>
-        <AppText color={colors.light.text.secondary}>Maximum {Math.min(3, vehicleCount)} slots.</AppText>
-        <View style={styles.slotGrid}>
-          {slots.map((slot) => {
-            const floorId = slot.floorId || '';
-            const slotCode = slot.slotCode || slot.code || '';
-            const selected = selectedSlots.some((item) => item.floorId === floorId && item.slotCode === slotCode);
-            return (
-              <Pressable
-                key={`${floorId}-${slotCode}`}
-                style={[styles.slot, selected && styles.slotActive]}
-                onPress={() => toggleSlot(slot)}
-              >
-                <AppText color={selected ? colors.neutral.white : colors.light.text.primary}>{slotCode}</AppText>
-              </Pressable>
-            );
-          })}
+    <SafeAreaView edges={['top']} style={styles.safe}>
+      <StatusBar barStyle="light-content" backgroundColor="#080808" />
+      <ScreenHeader title="Plan checkout" onBack={() => navigation.goBack()} />
+
+      {loading ? (
+        <View style={styles.stateWrap}>
+          <ActivityIndicator color={COLORS.gold} size="large" />
         </View>
-      </Card>
-      {error ? <AppText color={colors.error.main}>{error}</AppText> : null}
-      <Button loading={submitting} title="Confirm Purchase" onPress={handlePurchase} />
-    </Screen>
+      ) : error && !pkg ? (
+        <ErrorState message={error} onRetry={loadData} />
+      ) : (
+        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+          {pkg ? (
+            <View style={styles.packageCard}>
+              <Text style={styles.packageName}>{pkg.name}</Text>
+              <Text style={styles.packagePrice}>{formatCurrency(pkg.price)}</Text>
+              <Text style={styles.packageMeta}>Total for selected spaces: {formatCurrency(subscriptionTotal)}</Text>
+              <Text style={styles.packageMeta}>
+                Expires: {calculateExpirationDate(pkg.type).toLocaleDateString('en-GB')}
+              </Text>
+            </View>
+          ) : (
+            <EmptyState icon="cube-outline" title="Plan not found" message="Please go back and choose another plan." />
+          )}
+
+          <View style={styles.section}>
+            <SectionTitle>Payment method</SectionTitle>
+            {(['wallet', 'payos'] as const).map((option) => {
+              const active = method === option;
+              return (
+                <Pressable
+                  key={option}
+                  style={[styles.methodCard, active && styles.methodCardActive]}
+                  onPress={() => setMethod(option)}
+                >
+                  <View style={styles.methodLeft}>
+                    <Ionicons
+                      name={option === 'wallet' ? 'wallet-outline' : 'qr-code-outline'}
+                      size={20}
+                      color={active ? COLORS.gold : COLORS.textMuted}
+                    />
+                    <Text style={[styles.methodText, active && styles.methodTextActive]}>
+                      {option === 'wallet' ? 'VALO Wallet' : 'PayOS QR'}
+                    </Text>
+                  </View>
+                  {active ? <Ionicons name="checkmark-circle" size={20} color={COLORS.gold} /> : null}
+                </Pressable>
+              );
+            })}
+            <Text style={[styles.walletBalance, { color: hasEnoughWallet ? COLORS.success : COLORS.error }]}>
+              Wallet balance: {formatCurrency(wallet?.balance || 0)}
+            </Text>
+          </View>
+
+          <View style={styles.section}>
+            <SectionTitle>Select reserved spaces</SectionTitle>
+            <Text style={styles.helperText}>
+              {maxSlots > 0
+                ? `Select 1-${maxSlots} spaces based on your registered vehicles. Gold spaces are already reserved; blue spaces are your selection.`
+                : 'Add at least one vehicle before purchasing a plan.'}
+            </Text>
+            <View style={styles.floorTabs}>
+              {floors.map((floor) => {
+                const floorId = String(floor._id ?? floor.id);
+                const active = floorId === selectedFloorId;
+                return (
+                  <Pressable key={floorId} style={[styles.floorTab, active && styles.floorTabActive]} onPress={() => setSelectedFloorId(floorId)}>
+                    <Text style={[styles.floorTabText, active && styles.floorTabTextActive]}>{floor.name || `Floor ${floor.floorNumber}`}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            {!selectedFloor ? (
+              <EmptyState icon="car-outline" title="No spaces available" message="Please try again later." />
+            ) : (
+              <View style={styles.mapCard}>
+                <ParkingMap2D
+                  floor={selectedFloor}
+                  floorSlots={[]}
+                  selectedSlot={null}
+                  onSelectSlot={() => undefined}
+                  dbSlots={slots}
+                  selectionMode="membership"
+                  selectedSlots={selectedSlots}
+                  onToggleSlot={toggleSlot}
+                />
+              </View>
+            )}
+            <Text style={styles.selectedCount}>Selected: {selectedSlots.length}/{maxSlots}</Text>
+          </View>
+
+          {error || packageRestriction ? (
+            <View style={styles.warningBox}>
+              <Ionicons name="alert-circle-outline" size={18} color={COLORS.error} />
+              <Text style={styles.warningText}>{error || packageRestriction}</Text>
+            </View>
+          ) : null}
+
+          {policyRequired ? (
+            <TouchableOpacity
+              activeOpacity={0.8}
+              style={styles.policyButton}
+              onPress={() => navigation.getParent<NavigationProp<CustomerTabParamList>>()?.navigate('ProfileTab', { screen: 'Policies' })}
+            >
+              <Text style={styles.policyButtonText}>Review and accept policy</Text>
+            </TouchableOpacity>
+          ) : null}
+
+          <TouchableOpacity activeOpacity={0.85} disabled={submitting || !pkg || Boolean(packageRestriction)} style={[styles.primaryButton, (submitting || !pkg || Boolean(packageRestriction)) && styles.disabled]} onPress={handlePurchase}>
+            {submitting ? (
+              <ActivityIndicator color={COLORS.textInverse} size="small" />
+            ) : (
+              <>
+                <Ionicons name="checkmark-circle-outline" size={20} color={COLORS.textInverse} />
+                <Text style={styles.primaryButtonText}>Confirm purchase</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </ScrollView>
+      )}
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  card: {
-    gap: spacing.md,
+  safe: {
+    backgroundColor: COLORS.background,
+    flex: 1,
   },
-  option: {
-    borderColor: colors.light.border,
-    borderRadius: borderRadius.md,
+  stateWrap: {
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+  },
+  scroll: {
+    gap: SPACING.lg,
+    padding: SPACING.lg,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.xxl,
+  },
+  packageCard: {
+    backgroundColor: COLORS.surface,
+    borderColor: 'rgba(212,175,55,0.28)',
+    borderRadius: RADIUS.xl,
     borderWidth: 1,
-    padding: spacing.md,
+    padding: SPACING.lg,
   },
-  optionActive: {
-    borderColor: colors.primary[500],
-    borderWidth: 2,
+  packageName: {
+    color: COLORS.textPrimary,
+    fontSize: FONT_SIZES.xl,
+    fontWeight: '900',
   },
-  slotGrid: {
+  packagePrice: {
+    color: COLORS.gold,
+    fontSize: 30,
+    fontWeight: '900',
+    marginTop: SPACING.sm,
+  },
+  packageMeta: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.sm,
+    marginTop: SPACING.xs,
+  },
+  section: {
+    gap: SPACING.sm,
+  },
+  methodCard: {
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 54,
+    paddingHorizontal: SPACING.md,
+  },
+  methodCardActive: {
+    backgroundColor: 'rgba(212,175,55,0.1)',
+    borderColor: COLORS.gold,
+  },
+  methodLeft: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  methodText: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '700',
+  },
+  methodTextActive: {
+    color: COLORS.gold,
+  },
+  walletBalance: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '700',
+    marginTop: SPACING.xs,
+  },
+  helperText: {
+    color: COLORS.textMuted,
+    fontSize: FONT_SIZES.sm,
+  },
+  floorTabs: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.sm,
+    gap: SPACING.sm,
   },
-  slot: {
-    alignItems: 'center',
-    borderColor: colors.light.border,
-    borderRadius: borderRadius.md,
+  floorTab: {
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.round,
     borderWidth: 1,
-    height: 48,
-    justifyContent: 'center',
-    width: 72,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
   },
-  slotActive: {
-    backgroundColor: colors.primary[500],
-    borderColor: colors.primary[500],
+  floorTabActive: {
+    backgroundColor: 'rgba(212,175,55,0.14)',
+    borderColor: COLORS.gold,
+  },
+  floorTabText: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.xs,
+    fontWeight: '800',
+  },
+  floorTabTextActive: {
+    color: COLORS.gold,
+  },
+  mapCard: {
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  selectedCount: {
+    color: COLORS.staffBlue,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '800',
+  },
+  warningBox: {
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(255,77,77,0.1)',
+    borderColor: 'rgba(255,77,77,0.24)',
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    padding: SPACING.md,
+  },
+  warningText: {
+    color: COLORS.error,
+    flex: 1,
+    fontSize: FONT_SIZES.sm,
+    lineHeight: 20,
+  },
+  policyButton: {
+    alignItems: 'center',
+    borderColor: COLORS.gold,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 48,
+  },
+  policyButtonText: { color: COLORS.gold, fontSize: FONT_SIZES.sm, fontWeight: '800' },
+  primaryButton: {
+    alignItems: 'center',
+    backgroundColor: COLORS.gold,
+    borderRadius: RADIUS.md,
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    height: 54,
+    justifyContent: 'center',
+  },
+  disabled: {
+    opacity: 0.6,
+  },
+  primaryButtonText: {
+    color: COLORS.textInverse,
+    fontSize: FONT_SIZES.md,
+    fontWeight: '800',
   },
 });

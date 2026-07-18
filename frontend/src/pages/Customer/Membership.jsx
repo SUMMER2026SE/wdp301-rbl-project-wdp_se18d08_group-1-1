@@ -1,17 +1,34 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Crown, Sparkles, Check, Loader2, ArrowRight, AlertCircle, QrCode, Wallet } from 'lucide-react';
-import { getTicketPackages, createSubscriptionPayment, verifySubscriptionPayment, paySubscriptionWithWallet, getMembership } from '../../services/subscriptionService';
+import { Crown, Sparkles, Check, Loader2, ArrowRight, AlertCircle, QrCode, Wallet, CalendarClock, MapPin, RotateCcw, X } from 'lucide-react';
+import {
+  getTicketPackages,
+  createSubscriptionPayment,
+  verifySubscriptionPayment,
+  paySubscriptionWithWallet,
+  getMembershipStatus,
+  getRenewalQuote,
+  renewSubscriptionWithWallet,
+  createRenewalPayment,
+  verifyRenewalPayment,
+} from '../../services/subscriptionService';
 import { getWalletInfo } from '../../services/walletService';
 import { getMyVehicles } from '../../services/vehicleService';
 import { apiFetch } from '../../services/api';
 import { notifyAuthChange } from '../../services/authStorage';
 import ParkingMapViewer from '../../components/ParkingMapViewer';
 import PolicyAcceptancePrompt from '../../components/policies/PolicyAcceptancePrompt';
-import BookingPolicyModal from '../../components/policies/BookingPolicyModal';
 import { extractMissingPolicies, isPolicyAcceptanceRequired } from '../../utils/policyErrors';
-import { getPolicyAcceptanceStatus } from '../../services/policyService';
 import toast, { Toaster } from 'react-hot-toast';
+
+const RenewDate = ({ label, value, align = 'left' }) => (
+  <div className={align === 'right' ? 'text-right' : ''}>
+    <p className="text-xs text-white/35">{label}</p>
+    <p className="mt-1 text-sm font-black">
+      {new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(value))}
+    </p>
+  </div>
+);
 
 export default function Membership() {
   const navigate = useNavigate();
@@ -19,7 +36,6 @@ export default function Membership() {
   const [vehicles, setVehicles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [user, setUser] = useState(null);
-  const [membershipData, setMembershipData] = useState(null);
 
   const [selectedPackage, setSelectedPackage] = useState(null);
   const [showSlotModal, setShowSlotModal] = useState(false);
@@ -32,11 +48,15 @@ export default function Membership() {
   const [success, setSuccess] = useState(false);
   const [walletBalance, setWalletBalance] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState('payos');
+  const [membership, setMembership] = useState(null);
+  const [renewQuote, setRenewQuote] = useState(null);
+  const [renewOpen, setRenewOpen] = useState(false);
+  const [renewMethod, setRenewMethod] = useState('wallet');
+  const [renewLoading, setRenewLoading] = useState(false);
   const [policyPrompt, setPolicyPrompt] = useState({
     open: false,
     missingPolicies: [],
   });
-  const [showPolicyModal, setShowPolicyModal] = useState(false);
 
   const subscriptionPackages = packages
     .filter(pkg => ['monthly', 'yearly'].includes(pkg.type))
@@ -45,18 +65,19 @@ export default function Membership() {
       return (typeOrder[a.type] ?? 2) - (typeOrder[b.type] ?? 2) || (a.price || 0) - (b.price || 0);
     });
 
-  const activePackage = subscriptionPackages.find(pkg => user?.membership?.packageId === pkg._id);
-  const activePackageType = activePackage?.type || user?.membership?.packageType;
-  const isVipActive = Boolean(user?.membership?.isVip);
+  const activePackage = subscriptionPackages.find(pkg =>
+    [membership?.package?.id, user?.membership?.packageId].filter(Boolean).some(id => String(id) === String(pkg._id))
+  );
+  const activePackageType = membership?.package?.type || activePackage?.type || user?.membership?.packageType;
+  const isVipActive = Boolean(membership?.isVip ?? user?.membership?.isVip);
 
   const syncCurrentUserProfile = async () => {
     const token = localStorage.getItem('accessToken');
     if (!token) return;
 
-    const [{ ok, data }, membershipRes] = await Promise.all([
-      apiFetch('/profile', { headers: { Authorization: `Bearer ${token}` } }),
-      getMembership()
-    ]);
+    const { ok, data } = await apiFetch('/profile', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
 
     if (ok && data?.success) {
       const cached = JSON.parse(sessionStorage.getItem('valo_user') || 'null');
@@ -69,24 +90,65 @@ export default function Membership() {
       setUser(data.data);
       notifyAuthChange();
     }
-    
-    if (membershipRes.ok && membershipRes.data?.success) {
-      setMembershipData(membershipRes.data.data);
-    }
   };
+
+  const refreshMembership = async () => {
+    const response = await getMembershipStatus();
+    if (response.ok && response.data?.success) {
+      setMembership(response.data.data);
+      return response.data.data;
+    }
+    return null;
+  };
+
+  const makeIdempotencyKey = () =>
+    window.crypto?.randomUUID?.() ||
+    `renew-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
   // Check URL for PayOS return
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const orderCode = urlParams.get('orderCode');
+    const renewOrderCode = urlParams.get('renewOrderCode');
     const cancel = urlParams.get('cancel');
+
+    if (renewOrderCode) {
+      if (cancel === 'true') {
+        toast.error('Renewal payment was cancelled.');
+        window.history.replaceState({}, document.title, window.location.pathname);
+        return undefined;
+      }
+
+      const verifyingTimerId = window.setTimeout(() => setVerifying(true), 0);
+      let attempts = 0;
+      const intervalId = setInterval(async () => {
+        attempts += 1;
+        const response = await verifyRenewalPayment(renewOrderCode);
+        if (response.ok && response.data?.success) {
+          clearInterval(intervalId);
+          await Promise.all([refreshMembership(), syncCurrentUserProfile()]);
+          setVerifying(false);
+          setSuccess(true);
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } else if (attempts >= 100 || response.data?.code !== 'PAYMENT_NOT_COMPLETED') {
+          clearInterval(intervalId);
+          setVerifying(false);
+          toast.error(response.data?.message || 'Renewal verification failed.');
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      }, 3000);
+      return () => {
+        window.clearTimeout(verifyingTimerId);
+        clearInterval(intervalId);
+      };
+    }
 
     if (orderCode) {
       if (cancel === 'true') {
         toast.error('Payment transaction was cancelled.');
         window.history.replaceState({}, document.title, window.location.pathname);
       } else {
-        setVerifying(true);
+        const verifyingTimerId = window.setTimeout(() => setVerifying(true), 0);
         let attempts = 0;
         
         const intervalId = setInterval(async () => {
@@ -117,9 +179,13 @@ export default function Membership() {
           }
         }, 3000);
 
-        return () => clearInterval(intervalId);
+        return () => {
+          window.clearTimeout(verifyingTimerId);
+          clearInterval(intervalId);
+        };
       }
     }
+    return undefined;
   }, []);
 
   useEffect(() => {
@@ -153,7 +219,7 @@ export default function Membership() {
             headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
           }).then(r => r.json()),
           getWalletInfo(),
-          getMembership()
+          getMembershipStatus(),
         ]);
         
         if (pkgRes.ok && pkgRes.data?.data) {
@@ -176,7 +242,7 @@ export default function Membership() {
           setWalletBalance(walletRes.data.data.balance || 0);
         }
         if (membershipRes.ok && membershipRes.data?.success) {
-          setMembershipData(membershipRes.data.data);
+          setMembership(membershipRes.data.data);
         }
       } catch (err) {
         console.error(err);
@@ -260,19 +326,12 @@ export default function Membership() {
   };
 
   const getPackageButton = (pkg) => {
-    const totalReservedSlots = membershipData?.reservedSlots?.length || 0;
-    const maxSlots = Math.min(3, vehicles.length);
-    
-    if (totalReservedSlots >= maxSlots && maxSlots > 0) {
-      return { disabled: true, label: 'In use (Max slots)' };
+    if (isVipActive && activePackage?._id === pkg._id) {
+      return { disabled: true, label: 'In use' };
     }
 
     if (isVipActive && activePackageType === 'yearly' && pkg.type === 'monthly') {
-      return { disabled: true, label: 'Included in Yearly' };
-    }
-
-    if (totalReservedSlots > 0) {
-      return { disabled: false, label: 'Add slot' };
+      return { disabled: true, label: 'Included in the Yearly plan' };
     }
 
     return { disabled: false, label: 'Upgrade now' };
@@ -286,15 +345,12 @@ export default function Membership() {
     } else {
       // Add
       const maxSlots = Math.min(3, vehicles.length);
-      const totalReservedSlots = membershipData?.reservedSlots?.length || 0;
-      const availableSlots = Math.max(0, maxSlots - totalReservedSlots);
-      
       if (vehicles.length === 0) {
         toast.error("You need to add a vehicle before buying a VIP pass.");
         return;
       }
-      if (selectedSlots.length >= availableSlots) {
-        toast.error(`You can select at most ${availableSlots} additional slot(s) based on your vehicles.`);
+      if (selectedSlots.length >= maxSlots) {
+        toast.error(`You can select at most ${maxSlots} parking slots (matching your number of vehicles).`);
         return;
       }
       setSelectedSlots(prev => [...prev, { floorId, slotCode: slotData.slotNumber }]);
@@ -320,29 +376,6 @@ export default function Membership() {
     
     try {
       setShowSlotModal(false);
-      setShowPolicyModal(true);
-    } catch {
-      toast.error("Network error");
-    }
-  };
-
-  const executeConfirmSlots = async () => {
-    setShowPolicyModal(false);
-    try {
-
-      // Proactively check policy acceptance status before confirming booking
-      const statusRes = await getPolicyAcceptanceStatus();
-      if (statusRes.ok && statusRes.data?.success) {
-        const missingPolicies = statusRes.data.data?.missingPolicies || [];
-        if (missingPolicies.length > 0) {
-          setPolicyPrompt({
-            open: true,
-            missingPolicies: missingPolicies,
-          });
-          return;
-        }
-      }
-
       setVerifying(true); // Show the processing state
 
       if (paymentMethod === 'wallet') {
@@ -381,6 +414,65 @@ export default function Membership() {
     }
   };
 
+  const handleOpenRenewal = async () => {
+    if (!membership?.subscriptionId) return;
+    setRenewLoading(true);
+    try {
+      const response = await getRenewalQuote(membership.subscriptionId);
+      if (!response.ok || !response.data?.success) {
+        toast.error(response.data?.message || 'Renewal is not available yet.');
+        return;
+      }
+      setRenewQuote(response.data.data);
+      setRenewMethod(walletBalance >= response.data.data.amount ? 'wallet' : 'payos');
+      setRenewOpen(true);
+    } finally {
+      setRenewLoading(false);
+    }
+  };
+
+  const handleConfirmRenewal = async () => {
+    if (!membership?.subscriptionId || !renewQuote) return;
+    if (renewMethod === 'wallet' && walletBalance < renewQuote.amount) {
+      toast.error('Your wallet balance is not enough for this renewal.');
+      return;
+    }
+
+    setRenewLoading(true);
+    const idempotencyKey = makeIdempotencyKey();
+    try {
+      const response = renewMethod === 'wallet'
+        ? await renewSubscriptionWithWallet(membership.subscriptionId, idempotencyKey)
+        : await createRenewalPayment(membership.subscriptionId, idempotencyKey);
+
+      if (isPolicyAcceptanceRequired(response.data)) {
+        setRenewOpen(false);
+        setPolicyPrompt({
+          open: true,
+          missingPolicies: extractMissingPolicies(response.data),
+        });
+        return;
+      }
+      if (!response.ok || !response.data?.success) {
+        toast.error(response.data?.message || 'Unable to renew this membership.');
+        return;
+      }
+
+      if (renewMethod === 'payos' && response.data.data?.checkoutUrl) {
+        window.location.href = response.data.data.checkoutUrl;
+        return;
+      }
+
+      await Promise.all([refreshMembership(), syncCurrentUserProfile()]);
+      setWalletBalance(response.data.data?.walletBalance ?? walletBalance - renewQuote.amount);
+      setRenewOpen(false);
+      setRenewQuote(null);
+      setSuccess(true);
+    } finally {
+      setRenewLoading(false);
+    }
+  };
+
   if (verifying) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
@@ -414,8 +506,66 @@ export default function Membership() {
         </div>
       </div>
 
+      {membership?.package && (
+        <section className="relative z-20 mx-auto -mt-10 max-w-6xl px-4 sm:px-6">
+          <div className="overflow-hidden rounded-3xl border border-[#DCA11D]/20 bg-[#111318] text-white shadow-[0_24px_70px_rgba(15,23,42,0.24)]">
+            <div className="grid lg:grid-cols-[1.25fr_0.75fr]">
+              <div className="relative p-6 sm:p-8">
+                <div className="absolute inset-y-0 left-0 w-1 bg-[#DCA11D]" />
+                <div className="flex flex-wrap items-start justify-between gap-6">
+                  <div>
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#DCA11D]/10 text-[#E8B63E]">
+                        <Crown size={21} />
+                      </span>
+                      <div>
+                        <p className="text-xs font-bold text-white/45">Current membership</p>
+                        <h2 className="mt-1 text-2xl font-black tracking-tight">{membership.package.name}</h2>
+                      </div>
+                    </div>
+                    <div className="mt-6 flex flex-wrap gap-x-7 gap-y-3 text-sm text-white/60">
+                      <span className="flex items-center gap-2">
+                        <CalendarClock size={16} className="text-[#E8B63E]" />
+                        {membership.daysUntilExpiration > 0
+                          ? `${membership.daysUntilExpiration} days remaining`
+                          : 'Expired'}
+                      </span>
+                      <span className="flex items-center gap-2">
+                        <MapPin size={16} className="text-[#E8B63E]" />
+                        {membership.reservedSlots?.length || 0} reserved spaces
+                      </span>
+                    </div>
+                  </div>
+                  <span className={`rounded-full border px-3 py-1.5 text-xs font-black ${
+                    membership.status === 'active'
+                      ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300'
+                      : 'border-rose-500/20 bg-rose-500/10 text-rose-300'
+                  }`}>
+                    {membership.status === 'active' ? 'Active' : 'Expired'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex flex-col justify-center border-t border-white/5 bg-white/[0.025] p-6 sm:p-8 lg:border-l lg:border-t-0">
+                <p className="text-xs font-bold text-white/45">Renewal</p>
+                <p className="mt-2 text-sm leading-6 text-white/65">{membership.renewal?.message}</p>
+                <button
+                  type="button"
+                  onClick={handleOpenRenewal}
+                  disabled={!membership.renewal?.canRenew || renewLoading}
+                  className="mt-5 inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#DCA11D] px-5 text-sm font-black text-[#16130B] transition hover:bg-[#E8B63E] active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-white/10 disabled:text-white/35"
+                >
+                  {renewLoading ? <Loader2 size={17} className="animate-spin" /> : <RotateCcw size={17} />}
+                  {membership.renewal?.canRenew ? 'Review renewal' : `Opens ${membership.renewal?.renewalWindowDays || 7} days before expiry`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
       {/* Cards */}
-      <div className="mx-auto -mt-10 max-w-6xl px-4 sm:px-6">
+      <div className={`mx-auto max-w-6xl px-4 sm:px-6 ${membership?.package ? 'mt-8' : '-mt-10'}`}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-5 lg:grid-cols-3 xl:gap-6">
           
           {/* Member Card */}
@@ -686,6 +836,86 @@ export default function Membership() {
         </div>
       )}
 
+      {renewOpen && renewQuote && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0A0B0E]/80 p-4 backdrop-blur-md">
+          <div className="w-full max-w-lg overflow-hidden rounded-3xl border border-white/10 bg-[#13151A] text-white shadow-2xl">
+            <div className="flex items-start justify-between border-b border-white/5 p-6">
+              <div>
+                <p className="text-xs font-bold text-[#DCA11D]">Keep your place</p>
+                <h3 className="mt-2 text-2xl font-black tracking-tight">Renew {renewQuote.package?.name}</h3>
+                <p className="mt-2 text-sm text-white/50">Review the new period before payment.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRenewOpen(false)}
+                className="flex h-10 w-10 items-center justify-center rounded-xl text-white/45 transition hover:bg-white/5 hover:text-white"
+                aria-label="Close renewal review"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-6 p-6">
+              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-2xl bg-white/[0.035] p-4">
+                <RenewDate label="Current expiry" value={renewQuote.currentExpireAt} />
+                <ArrowRight size={18} className="text-[#DCA11D]" />
+                <RenewDate label="New expiry" value={renewQuote.newExpireAt} align="right" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="border-l border-white/10 pl-4">
+                  <p className="text-xs text-white/40">Spaces retained</p>
+                  <p className="mt-1 text-xl font-black">{renewQuote.retainedSlots?.length || 0}</p>
+                </div>
+                <div className="border-l border-white/10 pl-4">
+                  <p className="text-xs text-white/40">Renewal total</p>
+                  <p className="mt-1 text-xl font-black text-[#E8B63E]">{Number(renewQuote.amount || 0).toLocaleString('vi-VN')} VND</p>
+                </div>
+              </div>
+
+              <div>
+                <p className="mb-3 text-xs font-bold text-white/45">Payment method</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { id: 'wallet', label: 'VALO Wallet', Icon: Wallet },
+                    { id: 'payos', label: 'PayOS QR', Icon: QrCode },
+                  ].map(({ id, label, Icon }) => (
+                    <button
+                      type="button"
+                      key={id}
+                      onClick={() => setRenewMethod(id)}
+                      className={`flex min-h-14 items-center justify-center gap-2 rounded-2xl border text-sm font-bold transition active:scale-[0.98] ${
+                        renewMethod === id
+                          ? 'border-[#DCA11D]/60 bg-[#DCA11D]/10 text-[#E8B63E]'
+                          : 'border-white/10 bg-white/[0.025] text-white/55 hover:border-white/20'
+                      }`}
+                    >
+                      <Icon size={18} />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {renewMethod === 'wallet' && walletBalance < renewQuote.amount && (
+                  <p className="mt-3 text-xs text-rose-300">
+                    Wallet shortfall: {Number(renewQuote.amount - walletBalance).toLocaleString('vi-VN')} VND
+                  </p>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={handleConfirmRenewal}
+                disabled={renewLoading || (renewMethod === 'wallet' && walletBalance < renewQuote.amount)}
+                className="flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-[#DCA11D] px-5 py-4 text-sm font-black text-[#16130B] transition hover:bg-[#E8B63E] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {renewLoading ? <Loader2 size={18} className="animate-spin" /> : <RotateCcw size={18} />}
+                Pay {Number(renewQuote.amount || 0).toLocaleString('vi-VN')} VND
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Success Modal */}
       {success && (
         <div className="fixed inset-0 bg-[#181C23]/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -697,10 +927,10 @@ export default function Membership() {
             <p className="text-gray-500 mb-8">Transaction successful. Your benefits are active and your slot has been reserved.</p>
             
             <button 
-              onClick={() => navigate('/profile')}
+              onClick={() => window.location.href = '/'}
               className="w-full py-4 rounded-xl font-bold text-white bg-gray-900 hover:bg-black transition"
             >
-              Back to profile
+              Back to home
             </button>
           </div>
         </div>
@@ -712,14 +942,8 @@ export default function Membership() {
         onClose={() => setPolicyPrompt({ open: false, missingPolicies: [] })}
         onAccepted={() => {
           setPolicyPrompt({ open: false, missingPolicies: [] });
-          executeConfirmSlots();
+          handleConfirmSlots();
         }}
-      />
-
-      <BookingPolicyModal
-        open={showPolicyModal}
-        onClose={() => setShowPolicyModal(false)}
-        onConfirm={executeConfirmSlots}
       />
     </div>
   );

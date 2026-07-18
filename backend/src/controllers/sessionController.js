@@ -251,8 +251,17 @@ exports.verifyPlate = async (req, res, next) => {
         }
       }
 
+      // If the number of unique unavailable slots is >= total slots, the lot is full
       if (unavailableKeys.size >= totalSlots) {
         isFull = true;
+      } else if (isVIP || isRegisteredVehicle) {
+        // Auto assign a slot for VIP/Registered vehicles
+        const availableSlot = allSlots.find(s => !unavailableKeys.has(`${s.floorId.toString()}_${s.slotCode}`));
+        if (availableSlot) {
+          vipAssignedSlot = availableSlot.slotCode;
+          vipAssignedFloorId = availableSlot.floorId;
+          vipAssignedFloorName = availableSlot.floorName;
+        }
       }
     }
 
@@ -1201,7 +1210,7 @@ exports.getMyHistory = async (req, res, next) => {
 exports.getActiveParkingStatus = async (req, res, next) => {
   try {
     const activeSessions = await Session.find({ status: 'active', parkingSlot: { $ne: null } })
-      .select('licensePlate parkingSlot floorId vehicleType checkInTime expectedDurationHours phone userId')
+      .select('licensePlate parkingSlot floorId vehicleType checkInTime expectedDurationHours phone userId status')
       .populate('userId', 'email username');
 
     res.status(200).json({

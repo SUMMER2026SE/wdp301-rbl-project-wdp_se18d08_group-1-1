@@ -57,7 +57,7 @@ const styles = StyleSheet.create({
   },
   input: {
     ...typography.body1,
-    backgroundColor: colors.neutral.white,
+    backgroundColor: colors.light.surface,
     borderColor: colors.light.border,
     borderRadius: borderRadius.md,
     borderWidth: 1,

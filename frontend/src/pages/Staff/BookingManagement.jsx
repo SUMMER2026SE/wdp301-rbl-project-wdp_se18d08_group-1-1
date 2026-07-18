@@ -3,7 +3,7 @@ import { format, addDays, subDays, startOfDay, differenceInMinutes } from 'date-
 import {
   ChevronLeft, ChevronRight, Clock, MapPin, User, CheckCircle,
   Search, Filter, Loader2, Car, CreditCard, Calendar, LayoutGrid,
-  ArrowRight, ShieldCheck, Activity, XCircle, X
+  ArrowRight, ShieldCheck, Activity, XCircle
 } from 'lucide-react';
 import { getAllFloors } from '../../services/parkingFloorService';
 import { getAllBookings } from '../../services/bookingService';
@@ -168,11 +168,11 @@ export default function BookingManagement() {
         )}
 
         <div className="flex justify-between items-center gap-3 mb-2 relative z-10">
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-2">
             <LicensePlate plate={booking.licensePlate} />
-            <p className="text-xs font-semibold text-white/80 line-clamp-1 truncate">{booking.userId?.fullName || 'Guest'}</p>
+            <p className="text-xs font-semibold text-white/80 line-clamp-1">{booking.userId?.fullName || 'Guest'}</p>
           </div>
-          <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full border shrink-0 ${s.bg} ${s.text} ${s.border} ${s.glow}`}>
+          <span className={`text-[9px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full border ${s.bg} ${s.text} ${s.border} ${s.glow}`}>
             {booking.status}
           </span>
         </div>
@@ -349,21 +349,7 @@ export default function BookingManagement() {
         </div>
 
         {/* RIGHT PANEL: Details View */}
-        <div className={`
-          flex-1 bg-[#121214]/60 backdrop-blur-2xl border border-white/10 md:rounded-[40px] rounded-3xl shadow-2xl overflow-hidden
-          fixed inset-4 z-[100] md:relative md:inset-auto md:z-auto
-          ${selectedBooking ? 'flex' : 'hidden'} md:flex flex-col
-        `}>
-          {/* Mobile Close Button */}
-          <button 
-            onClick={(e) => {
-              e.stopPropagation();
-              setSelectedBooking(null);
-            }}
-            className="md:hidden absolute top-6 right-6 z-[200] w-10 h-10 bg-black/50 hover:bg-black/80 transition-colors rounded-full flex items-center justify-center text-white backdrop-blur-md border border-white/20 shadow-xl"
-          >
-            <X size={20} />
-          </button>
+        <div className="flex-1 bg-[#121214]/60 backdrop-blur-2xl border border-white/10 rounded-[40px] shadow-2xl overflow-hidden hidden md:flex flex-col relative">
           {!currentBooking ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-white/30 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-white/5 to-transparent">
               <div className="w-24 h-24 rounded-full border border-white/10 flex items-center justify-center mb-6 bg-[#09090b] shadow-inner shadow-white/5">
@@ -374,7 +360,7 @@ export default function BookingManagement() {
           ) : (
             <div className="h-full flex flex-col">
               {/* Hero Header */}
-              <div className="relative shrink-0 bg-gradient-to-b from-[#18181b] to-[#121214] border-b border-white/5 p-6 lg:p-8 overflow-hidden">
+              <div className="relative shrink-0 bg-gradient-to-b from-[#18181b] to-[#121214] border-b border-white/5 p-10 overflow-hidden">
                 <div className="absolute -right-20 -top-20 w-80 h-80 bg-emerald-500 rounded-full mix-blend-overlay blur-[100px] opacity-10" />
                 <div className="absolute left-0 bottom-0 w-64 h-64 bg-blue-500 rounded-full mix-blend-overlay blur-[80px] opacity-10" />
 
@@ -387,9 +373,9 @@ export default function BookingManagement() {
                       </p>
                       <div className="flex items-end gap-5">
                         <LicensePlate plate={currentBooking.licensePlate} size="lg" />
-                        <div className="mb-1 min-w-0">
+                        <div className="mb-1">
                           <p className="text-xs font-semibold text-white/50 mb-1">Internal Ref ID</p>
-                          <p className="text-sm font-mono text-white bg-black/40 px-3 py-1 rounded-lg border border-white/10 truncate max-w-[120px] sm:max-w-[180px]">
+                          <p className="text-sm font-mono text-white bg-black/40 px-3 py-1 rounded-lg border border-white/10">
                             {currentBooking._id?.toUpperCase() || 'N/A'}
                           </p>
                         </div>
@@ -414,146 +400,140 @@ export default function BookingManagement() {
               </div>
 
               {/* Scrollable Details */}
-              <div className="flex-1 overflow-y-auto custom-scrollbar p-6 lg:p-8">
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-10">
                 <div className="max-w-4xl mx-auto space-y-8">
 
-                  <div className="max-w-3xl mx-auto relative py-4">
-                    {/* Vertical Line */}
-                    <div className="absolute left-7 top-10 bottom-10 w-0.5 bg-gradient-to-b from-sky-500/50 via-white/10 to-amber-500/50 rounded-full" />
+                  {/* Timeline Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 relative">
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-10 hidden md:flex items-center justify-center w-10 h-10 rounded-full bg-[#121214] border border-white/10 text-white/40">
+                      <ArrowRight size={18} />
+                    </div>
 
-                    {/* ENTRY NODE */}
-                    <div className="relative pl-16 py-4">
-                      <div className="absolute left-[23px] top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-[#121214] border-[3px] border-sky-400 shadow-[0_0_12px_rgba(56,189,248,0.6)] z-10" />
-                      <div className="flex flex-col">
-                        <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-sky-400 mb-1 flex items-center gap-2"><Clock size={12}/> Scheduled Entry</span>
-                        <div className="flex items-baseline gap-3">
-                          <h3 className="text-4xl font-black text-white tracking-tight">{safeFormat(currentBooking.scheduledStart, 'HH:mm')}</h3>
-                          <span className="text-sm font-medium text-white/50">{safeFormat(currentBooking.scheduledStart, 'MMM dd, yyyy')}</span>
+                    <div className="group rounded-[32px] bg-gradient-to-br from-[#18181b] to-[#121214] border border-white/5 p-8 hover:border-white/10 transition-all shadow-xl">
+                      <p className="text-xs font-bold uppercase tracking-[0.3em] text-white/40 mb-6 flex items-center gap-2">
+                        <Clock size={14} className="text-sky-400" /> Start Schedule
+                      </p>
+                      <div className="flex items-baseline gap-3">
+                        <p className="text-5xl font-extrabold text-white tracking-tight">{safeFormat(currentBooking.scheduledStart, 'HH:mm')}</p>
+                        <p className="text-sm font-medium text-white/50">{safeFormat(currentBooking.scheduledStart, 'MMM dd, yyyy')}</p>
+                      </div>
+                    </div>
+
+                    <div className="group rounded-[32px] bg-gradient-to-br from-[#18181b] to-[#121214] border border-white/5 p-8 hover:border-white/10 transition-all shadow-xl">
+                      <p className="text-xs font-bold uppercase tracking-[0.3em] text-white/40 mb-6 flex items-center gap-2">
+                        <Clock size={14} className="text-amber-400" /> End Schedule
+                      </p>
+                      <div className="flex items-baseline gap-3">
+                        <p className="text-5xl font-extrabold text-white tracking-tight">{safeFormat(currentBooking.scheduledEnd, 'HH:mm')}</p>
+                        <p className="text-sm font-medium text-white/50">{safeFormat(currentBooking.scheduledEnd, 'MMM dd, yyyy')}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Info Grid */}
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                    {/* Customer */}
+                    <div className="rounded-[28px] bg-[#09090b]/50 border border-white/5 p-6 hover:bg-white/[0.02] transition-colors overflow-hidden">
+                      <div className="flex items-center gap-4 mb-5">
+                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500/20 to-purple-500/20 flex items-center justify-center border border-indigo-500/30 text-indigo-400 shrink-0">
+                          <User size={20} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/40 mb-1">Customer</p>
+                          <p className="text-lg font-bold text-white truncate" title={currentBooking.userId?.fullName}>{currentBooking.userId?.fullName || 'Guest User'}</p>
+                        </div>
+                      </div>
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                          <p className="text-xs font-medium text-white/40 shrink-0">Email</p>
+                          <p className="text-xs font-semibold text-white truncate max-w-[60%] text-right" title={currentBooking.userId?.email}>{currentBooking.userId?.email || 'N/A'}</p>
+                        </div>
+                        <div className="flex items-center justify-between pt-1">
+                          <p className="text-xs font-medium text-white/40 shrink-0">Phone</p>
+                          <p className="text-xs font-semibold text-white truncate">{currentBooking.userId?.phone || 'N/A'}</p>
                         </div>
                       </div>
                     </div>
 
-                    {/* PARKING SESSION INFO */}
-                    <div className="relative pl-16 py-6">
-                      <div className="flex flex-col gap-4">
-                        {/* Customer */}
-                        <div className="rounded-2xl bg-[#18181b]/50 border border-white/5 p-5 hover:bg-white/[0.02] transition-colors overflow-hidden relative group shadow-lg">
-                          <div className="absolute top-0 right-0 w-16 h-16 bg-indigo-500/10 rounded-bl-full -z-10 transition-transform group-hover:scale-110" />
-                          <div className="flex items-center gap-3 mb-4">
-                            <div className="w-10 h-10 rounded-lg bg-indigo-500/20 flex items-center justify-center text-indigo-400">
-                              <User size={18} />
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/40 mb-0.5">Driver</p>
-                              <p className="text-base font-bold text-white truncate" title={currentBooking.userId?.fullName}>{currentBooking.userId?.fullName || 'Guest User'}</p>
-                            </div>
-                          </div>
-                          <div className="space-y-2">
-                            <div className="flex justify-between items-center text-xs">
-                              <span className="text-white/40">Email</span>
-                              <span className="text-white font-medium truncate max-w-[60%] text-right">{currentBooking.userId?.email || 'N/A'}</span>
-                            </div>
-                            <div className="flex justify-between items-center text-xs">
-                              <span className="text-white/40">Phone</span>
-                              <span className="text-white font-medium text-right">{currentBooking.userId?.phone || 'N/A'}</span>
-                            </div>
-                          </div>
+                    {/* Location */}
+                    <div className="rounded-[28px] bg-[#09090b]/50 border border-white/5 p-6 hover:bg-white/[0.02] transition-colors overflow-hidden">
+                      <div className="flex items-center gap-4 mb-5">
+                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 flex items-center justify-center border border-emerald-500/30 text-emerald-400 shrink-0">
+                          <MapPin size={20} />
                         </div>
-
-                        {/* Location */}
-                        <div className="rounded-2xl bg-[#18181b]/50 border border-white/5 p-5 hover:bg-white/[0.02] transition-colors overflow-hidden relative group shadow-lg">
-                          <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-500/10 rounded-bl-full -z-10 transition-transform group-hover:scale-110" />
-                          <div className="flex items-center gap-3 mb-4">
-                            <div className="w-10 h-10 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-400">
-                              <MapPin size={18} />
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/40 mb-0.5">Assigned Slot</p>
-                              <p className="text-base font-bold text-white truncate" title={currentBooking.floorId?.name}>{currentBooking.floorId?.name || 'Unknown Floor'} - {currentBooking.parkingSlot || '—'}</p>
-                            </div>
-                          </div>
-                          <div className="space-y-2">
-                            <div className="flex justify-between items-center text-xs">
-                              <span className="text-white/40">Floor Level</span>
-                              <span className="text-white font-medium text-right">{currentBooking.floorId?.floorNumber || '—'}</span>
-                            </div>
-                            <div className="flex justify-between items-center text-xs">
-                              <span className="text-white/40">Vehicle Plate</span>
-                              <span className="text-white font-medium font-mono bg-white/5 px-2 py-0.5 rounded text-right">{currentBooking.licensePlate}</span>
-                            </div>
-                          </div>
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/40 mb-1">Location</p>
+                          <p className="text-lg font-bold text-white truncate" title={currentBooking.floorId?.name}>{currentBooking.floorId?.name || 'Unknown Floor'}</p>
+                        </div>
+                      </div>
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                          <p className="text-xs font-medium text-white/40 shrink-0">Allocated Slot</p>
+                          <p className="text-xs font-bold text-emerald-400 bg-emerald-400/10 px-2 py-1 rounded-md border border-emerald-400/20">
+                            {currentBooking.parkingSlot || '—'}
+                          </p>
+                        </div>
+                        <div className="flex items-center justify-between pt-1">
+                          <p className="text-xs font-medium text-white/40 shrink-0">Floor Level</p>
+                          <p className="text-xs font-semibold text-white">{currentBooking.floorId?.floorNumber || '—'}</p>
                         </div>
                       </div>
                     </div>
 
-                    {/* EXIT NODE */}
-                    <div className="relative pl-16 py-4">
-                      <div className="absolute left-[23px] top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-[#121214] border-[3px] border-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.6)] z-10" />
-                      <div className="flex flex-col">
-                        <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-400 mb-1 flex items-center gap-2"><Clock size={12}/> Scheduled Exit</span>
-                        <div className="flex items-baseline gap-3">
-                          <h3 className="text-4xl font-black text-white tracking-tight">{safeFormat(currentBooking.scheduledEnd, 'HH:mm')}</h3>
-                          <span className="text-sm font-medium text-white/50">{safeFormat(currentBooking.scheduledEnd, 'MMM dd, yyyy')}</span>
+                    {/* Payment */}
+                    <div className="rounded-[28px] bg-[#09090b]/50 border border-white/5 p-6 hover:bg-white/[0.02] transition-colors overflow-hidden">
+                      <div className="flex items-center gap-4 mb-5">
+                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center border border-amber-500/30 text-amber-400 shrink-0">
+                          <CreditCard size={20} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/40 mb-1">Payment</p>
+                          <p className="text-lg font-bold text-white truncate">{(currentBooking.totalAmount || 0).toLocaleString()} VND</p>
+                        </div>
+                      </div>
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                          <p className="text-xs font-medium text-white/40 shrink-0">Method</p>
+                          <p className="text-xs font-semibold text-white capitalize truncate">{currentBooking.paymentMethod || 'Wallet'}</p>
+                        </div>
+                        <div className="flex items-center justify-between pt-1">
+                          <p className="text-xs font-medium text-white/40 shrink-0">Status</p>
+                          <p className={`text-xs font-bold uppercase tracking-widest truncate ${currentBooking.paymentStatus === 'PAID' ? 'text-emerald-400' :
+                              currentBooking.paymentStatus === 'PENDING' ? 'text-amber-400' : 'text-red-400'
+                            }`}>
+                            {currentBooking.paymentStatus || currentBooking.status}
+                          </p>
                         </div>
                       </div>
                     </div>
 
-                    {/* CHECKOUT INFO */}
-                    <div className="relative pl-16 py-6">
-                      <div className="flex flex-col gap-4">
-                        {/* Payment */}
-                        <div className="rounded-2xl bg-[#18181b]/50 border border-white/5 p-5 hover:bg-white/[0.02] transition-colors overflow-hidden relative group shadow-lg">
-                          <div className="absolute top-0 right-0 w-16 h-16 bg-amber-500/10 rounded-bl-full -z-10 transition-transform group-hover:scale-110" />
-                          <div className="flex items-center gap-3 mb-4">
-                            <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center text-amber-400">
-                              <CreditCard size={18} />
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/40 mb-0.5">Total Payment</p>
-                              <p className="text-base font-bold text-white truncate">{(currentBooking.totalAmount || 0).toLocaleString()} VND</p>
-                            </div>
-                          </div>
-                          <div className="space-y-2">
-                            <div className="flex justify-between items-center text-xs">
-                              <span className="text-white/40">Method</span>
-                              <span className="text-white font-medium capitalize text-right">{currentBooking.paymentMethod || 'Wallet'}</span>
-                            </div>
-                            <div className="flex justify-between items-center text-xs">
-                              <span className="text-white/40">Status</span>
-                              <span className={`font-bold uppercase tracking-wider text-right ${currentBooking.paymentStatus === 'PAID' ? 'text-emerald-400' :
-                                currentBooking.paymentStatus === 'PENDING' ? 'text-amber-400' : 'text-red-400'
-                              }`}>{currentBooking.paymentStatus || currentBooking.status}</span>
-                            </div>
-                          </div>
+                    {/* Summary */}
+                    <div className="rounded-[28px] bg-[#09090b]/50 border border-white/5 p-6 hover:bg-white/[0.02] transition-colors overflow-hidden">
+                      <div className="flex items-center gap-4 mb-5">
+                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-sky-500/20 to-blue-500/20 flex items-center justify-center border border-sky-500/30 text-sky-400 shrink-0">
+                          <Activity size={20} />
                         </div>
-
-                        {/* Summary */}
-                        <div className="rounded-2xl bg-[#18181b]/50 border border-white/5 p-5 hover:bg-white/[0.02] transition-colors overflow-hidden relative group shadow-lg">
-                          <div className="absolute top-0 right-0 w-16 h-16 bg-sky-500/10 rounded-bl-full -z-10 transition-transform group-hover:scale-110" />
-                          <div className="flex items-center gap-3 mb-4">
-                            <div className="w-10 h-10 rounded-lg bg-sky-500/20 flex items-center justify-center text-sky-400">
-                              <Activity size={18} />
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-white/40 mb-0.5">Duration</p>
-                              <p className="text-base font-bold text-white truncate">{currentBooking.durationHours || Math.max(1, Math.round(differenceInMinutes(new Date(currentBooking.scheduledEnd), new Date(currentBooking.scheduledStart)) / 60))} Hours</p>
-                            </div>
-                          </div>
-                          <div className="space-y-2">
-                            <div className="flex justify-between items-center text-xs">
-                              <span className="text-white/40">Booked On</span>
-                              <span className="text-white/80 font-medium truncate text-right">{safeFormat(currentBooking.createdAt, 'MMM dd, HH:mm')}</span>
-                            </div>
-                            <div className="flex justify-between items-center text-xs">
-                              <span className="text-white/40">Updated On</span>
-                              <span className="text-white/80 font-medium truncate text-right">{safeFormat(currentBooking.updatedAt, 'MMM dd, HH:mm')}</span>
-                            </div>
-                          </div>
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/40 mb-1">Summary</p>
+                          <p className="text-lg font-bold text-white truncate">
+                            {currentBooking.durationHours || Math.max(1, Math.round(differenceInMinutes(new Date(currentBooking.scheduledEnd), new Date(currentBooking.scheduledStart)) / 60))} Hours Total
+                          </p>
+                        </div>
+                      </div>
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                          <p className="text-xs font-medium text-white/40 shrink-0">Created At</p>
+                          <p className="text-xs font-semibold text-white/80 truncate text-right">{safeFormat(currentBooking.createdAt, 'MMM dd, yyyy HH:mm')}</p>
+                        </div>
+                        <div className="flex items-center justify-between pt-1">
+                          <p className="text-xs font-medium text-white/40 shrink-0">Last Updated</p>
+                          <p className="text-xs font-semibold text-white/80 truncate text-right">{safeFormat(currentBooking.updatedAt, 'MMM dd, yyyy HH:mm')}</p>
                         </div>
                       </div>
                     </div>
                   </div>
                 </div>
+
               </div>
             </div>
           )}

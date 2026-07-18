@@ -22,10 +22,10 @@ export const ForgotPasswordScreen = ({ navigation }: Props) => {
     }
 
     setLoading(true);
-    setError('');
+      setError('');
     try {
       await authService.forgotPassword({ email: email.trim() });
-      navigation.navigate('VerifyOTP', { email: email.trim() });
+      navigation.navigate('VerifyOTP', { email: email.trim(), purpose: 'reset' });
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : 'Unable to send OTP.');
     } finally {

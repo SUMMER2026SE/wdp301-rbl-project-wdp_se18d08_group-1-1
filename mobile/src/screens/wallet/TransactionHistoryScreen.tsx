@@ -1,31 +1,76 @@
+import { Ionicons } from '@expo/vector-icons';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useCallback, useEffect, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, View } from 'react-native';
+import {
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  RefreshControl,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AppText, Card, LoadingSpinner } from '@/components/common';
-import { Screen } from '@/components/layout/Screen';
+import { EmptyState, ErrorState, ScreenHeader } from '@/components/common';
+import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
+import type { WalletStackParamList } from '@/navigation/types';
 import { walletService } from '@/services/api/wallet';
-import { borderRadius, colors, spacing } from '@/theme';
 import type { TransactionStatus, TransactionType, WalletTransaction } from '@/types/models';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 
-export const TransactionHistoryScreen = () => {
+type Props = NativeStackScreenProps<WalletStackParamList, 'TransactionHistory'>;
+type TypeFilter = 'ALL' | 'TOP_UP' | 'PAYMENT' | 'REFUND';
+type StatusFilter = 'ALL' | 'PENDING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+
+const TYPE_LABELS: Record<TypeFilter, string> = {
+  ALL: 'All',
+  TOP_UP: 'Top up',
+  PAYMENT: 'Payment',
+  REFUND: 'Refund',
+};
+
+const STATUS_LABELS: Record<StatusFilter, string> = {
+  ALL: 'All statuses',
+  PENDING: 'Pending',
+  COMPLETED: 'Completed',
+  FAILED: 'Failed',
+  CANCELLED: 'Cancelled',
+};
+
+const STATUS_COLORS: Record<StatusFilter, string> = {
+  ALL: COLORS.gold,
+  PENDING: COLORS.warning,
+  COMPLETED: COLORS.success,
+  FAILED: COLORS.error,
+  CANCELLED: COLORS.textMuted,
+};
+
+export const TransactionHistoryScreen = ({ navigation }: Props) => {
   const [transactions, setTransactions] = useState<WalletTransaction[]>([]);
   const [loading, setLoading] = useState(true);
-  const [type, setType] = useState<'ALL' | 'TOP_UP' | 'PAYMENT' | 'REFUND'>('ALL');
-  const [status, setStatus] = useState<'ALL' | 'PENDING' | 'COMPLETED' | 'FAILED' | 'CANCELLED'>('ALL');
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState('');
+  const [type, setType] = useState<TypeFilter>('ALL');
+  const [status, setStatus] = useState<StatusFilter>('ALL');
 
   const loadTransactions = useCallback(async () => {
-    setLoading(true);
+    setError('');
     try {
       const response = await walletService.getTransactions({
         page: 1,
-        limit: 10,
+        limit: 20,
         type: type === 'ALL' ? undefined : type,
         status: status === 'ALL' ? undefined : status,
       });
       setTransactions(response.data || []);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : 'Unable to load transactions.');
+      setTransactions([]);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [status, type]);
 
@@ -33,76 +78,209 @@ export const TransactionHistoryScreen = () => {
     void loadTransactions();
   }, [loadTransactions]);
 
+  const onRefresh = () => {
+    setRefreshing(true);
+    void loadTransactions();
+  };
+
+  const renderTransaction = ({ item }: { item: WalletTransaction }) => {
+    const itemType = String(item.type as TransactionType) as TypeFilter;
+    const itemStatus = String(item.status as TransactionStatus) as StatusFilter;
+    const isCredit = itemType === 'TOP_UP' || itemType === 'REFUND';
+    const amountColor = isCredit ? COLORS.success : COLORS.warning;
+    const statusColor = STATUS_COLORS[itemStatus] ?? COLORS.textMuted;
+
+    return (
+      <View style={styles.transactionCard}>
+        <View style={[styles.transactionIcon, { backgroundColor: `${amountColor}18` }]}>
+          <Ionicons name={isCredit ? 'arrow-down-circle-outline' : 'arrow-up-circle-outline'} size={22} color={amountColor} />
+        </View>
+        <View style={styles.transactionBody}>
+          <View style={styles.transactionTop}>
+            <Text style={styles.transactionTitle} numberOfLines={1}>
+              {item.description || TYPE_LABELS[itemType] || itemType}
+            </Text>
+            <Text style={[styles.amount, { color: amountColor }]}>
+              {isCredit ? '+' : '-'}{formatCurrency(Math.abs(item.amount))}
+            </Text>
+          </View>
+          <View style={styles.metaRow}>
+            <Text style={styles.metaText}>{TYPE_LABELS[itemType] || itemType}</Text>
+            <View style={[styles.statusPill, { backgroundColor: `${statusColor}18` }]}>
+              <Text style={[styles.statusText, { color: statusColor }]}>{STATUS_LABELS[itemStatus] || itemStatus}</Text>
+            </View>
+          </View>
+          {item.balanceBefore !== undefined && item.balanceAfter !== undefined ? (
+            <Text style={styles.balanceMeta}>
+              {formatCurrency(item.balanceBefore)} {'->'} {formatCurrency(item.balanceAfter)}
+            </Text>
+          ) : null}
+          <Text style={styles.dateText}>{formatDate(item.createdAt)}</Text>
+        </View>
+      </View>
+    );
+  };
+
   return (
-    <Screen>
-      <AppText variant="h1">Transactions</AppText>
-      <View style={styles.filters}>
-        {(['ALL', 'TOP_UP', 'PAYMENT', 'REFUND'] as const).map((option) => (
-          <Pressable
-            key={option}
-            style={[styles.chip, type === option && styles.activeChip]}
-            onPress={() => setType(option)}
-          >
-            <AppText color={type === option ? colors.neutral.white : colors.light.text.primary} variant="caption">
-              {option}
-            </AppText>
-          </Pressable>
-        ))}
+    <SafeAreaView edges={['top']} style={styles.safe}>
+      <StatusBar barStyle="light-content" backgroundColor="#080808" />
+      <ScreenHeader title="Wallet history" onBack={() => navigation.goBack()} />
+
+      <View style={styles.filtersBlock}>
+        <FlatList
+          horizontal
+          data={Object.keys(TYPE_LABELS) as TypeFilter[]}
+          keyExtractor={(item) => item}
+          renderItem={({ item }) => (
+            <Pressable style={[styles.chip, type === item && styles.chipActive]} onPress={() => setType(item)}>
+              <Text style={[styles.chipText, type === item && styles.chipTextActive]}>{TYPE_LABELS[item]}</Text>
+            </Pressable>
+          )}
+          showsHorizontalScrollIndicator={false}
+        />
+        <FlatList
+          horizontal
+          data={Object.keys(STATUS_LABELS) as StatusFilter[]}
+          keyExtractor={(item) => item}
+          renderItem={({ item }) => (
+            <Pressable style={[styles.chip, status === item && styles.chipActive]} onPress={() => setStatus(item)}>
+              <Text style={[styles.chipText, status === item && styles.chipTextActive]}>{STATUS_LABELS[item]}</Text>
+            </Pressable>
+          )}
+          showsHorizontalScrollIndicator={false}
+        />
       </View>
-      <View style={styles.filters}>
-        {(['ALL', 'PENDING', 'COMPLETED', 'FAILED', 'CANCELLED'] as const).map((option) => (
-          <Pressable
-            key={option}
-            style={[styles.chip, status === option && styles.activeChip]}
-            onPress={() => setStatus(option)}
-          >
-            <AppText color={status === option ? colors.neutral.white : colors.light.text.primary} variant="caption">
-              {option}
-            </AppText>
-          </Pressable>
-        ))}
-      </View>
+
       {loading ? (
-        <LoadingSpinner />
+        <View style={styles.stateWrap}>
+          <ActivityIndicator color={COLORS.gold} size="large" />
+        </View>
+      ) : error ? (
+        <ErrorState message={error} onRetry={loadTransactions} />
       ) : (
         <FlatList
+          contentContainerStyle={styles.list}
           data={transactions}
           keyExtractor={(item, index) => item.id || item._id || String(index)}
-          renderItem={({ item }) => (
-            <Card style={{ marginBottom: 12 }}>
-              <AppText variant="h3">{formatCurrency(item.amount)}</AppText>
-              <AppText>{item.description}</AppText>
-              <AppText>{String(item.type as TransactionType)} - {String(item.status as TransactionStatus)}</AppText>
-              {item.balanceBefore !== undefined && item.balanceAfter !== undefined ? (
-                <AppText variant="caption">
-                  Balance: {formatCurrency(item.balanceBefore)} to {formatCurrency(item.balanceAfter)}
-                </AppText>
-              ) : null}
-              {item.payosOrderCode ? <AppText variant="caption">PayOS: {item.payosOrderCode}</AppText> : null}
-              <AppText variant="caption">{formatDate(item.createdAt)}</AppText>
-            </Card>
-          )}
+          ListEmptyComponent={
+            <EmptyState
+              icon="receipt-outline"
+              title="No transactions yet"
+              message="Top-ups, payments, and refunds will appear here."
+            />
+          }
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.gold} colors={[COLORS.gold]} />
+          }
+          renderItem={renderTransaction}
+          showsVerticalScrollIndicator={false}
         />
       )}
-    </Screen>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  filters: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
+  safe: {
+    backgroundColor: COLORS.background,
+    flex: 1,
+  },
+  filtersBlock: {
+    gap: SPACING.sm,
+    paddingHorizontal: SPACING.lg,
+    paddingBottom: SPACING.sm,
   },
   chip: {
-    borderColor: colors.light.border,
-    borderRadius: borderRadius.pill,
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.round,
     borderWidth: 1,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
+    justifyContent: 'center',
+    marginRight: SPACING.sm,
+    minHeight: 36,
+    paddingHorizontal: SPACING.md,
   },
-  activeChip: {
-    backgroundColor: colors.primary[500],
-    borderColor: colors.primary[500],
+  chipActive: {
+    backgroundColor: 'rgba(212,175,55,0.12)',
+    borderColor: COLORS.gold,
+  },
+  chipText: {
+    color: COLORS.textMuted,
+    fontSize: FONT_SIZES.xs,
+    fontWeight: '700',
+  },
+  chipTextActive: {
+    color: COLORS.gold,
+  },
+  stateWrap: {
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+  },
+  list: {
+    gap: SPACING.md,
+    padding: SPACING.lg,
+    paddingTop: SPACING.sm,
+  },
+  transactionCard: {
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: SPACING.md,
+    padding: SPACING.md,
+  },
+  transactionIcon: {
+    alignItems: 'center',
+    borderRadius: RADIUS.md,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
+  transactionBody: {
+    flex: 1,
+    gap: 5,
+  },
+  transactionTop: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  transactionTitle: {
+    color: COLORS.textPrimary,
+    flex: 1,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '700',
+  },
+  amount: {
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '900',
+  },
+  metaRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  metaText: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.xs,
+  },
+  statusPill: {
+    borderRadius: RADIUS.round,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 3,
+  },
+  statusText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: '700',
+  },
+  balanceMeta: {
+    color: COLORS.textMuted,
+    fontSize: FONT_SIZES.xs,
+  },
+  dateText: {
+    color: COLORS.textMuted,
+    fontSize: FONT_SIZES.xs,
   },
 });

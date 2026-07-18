@@ -4,6 +4,10 @@ const User = require('../models/User');
 const Slot = require('../models/Slot');
 const payos = require('../config/payos');
 const walletService = require('../services/walletService');
+const {
+  validateNewSubscriptionEligibility,
+} = require('../services/subscriptionEligibilityService');
+const { isEnabled, defaultForCurrentEnvironment } = require('../utils/featureFlags');
 
 const buildExpirationDate = (packageType, fromDate = new Date()) => {
   const expireAt = new Date(fromDate);
@@ -171,7 +175,11 @@ exports.verifyPayment = async (req, res, next) => {
       for (const slot of subscription.slots) {
         await Slot.updateOne(
           { floorID: slot.floorId, slotNumber: slot.slotCode },
-          { reservedFor: user._id }
+          {
+            reservedFor: user._id,
+            reservedBySubscriptionId: subscription._id,
+            reservedUntil: subscription.expireAt,
+          }
         );
       }
 
@@ -285,7 +293,11 @@ exports.paySubscriptionWithWallet = async (req, res, next) => {
     for (const slot of subscription.slots) {
       await Slot.updateOne(
         { floorID: slot.floorId, slotNumber: slot.slotCode },
-        { reservedFor: user._id }
+        {
+          reservedFor: user._id,
+          reservedBySubscriptionId: subscription._id,
+          reservedUntil: subscription.expireAt,
+        }
       );
     }
 
@@ -299,7 +311,10 @@ exports.getMembership = async (req, res, next) => {
   try {
     const user = await User.findById(req.user._id)
       .select('membership')
-      .populate('membership.packageId', 'name type price description isActive')
+      .populate(
+        'membership.packageId',
+        'name type price description isActive isRenewable renewalWindowDays maxSlots'
+      )
       .lean();
 
     const activeSubscriptions = await Subscription.find({
@@ -309,7 +324,10 @@ exports.getMembership = async (req, res, next) => {
       expireAt: { $gt: new Date() }
     })
       .sort({ expireAt: -1 })
-      .populate('ticketPackage', 'name type price description isActive')
+      .populate(
+        'ticketPackage',
+        'name type price description isActive isRenewable renewalWindowDays maxSlots'
+      )
       .populate('slots.floorId', 'name floorNumber')
       .lean();
 
@@ -319,10 +337,19 @@ exports.getMembership = async (req, res, next) => {
     const daysUntilExpiration = expireAt
       ? Math.ceil((expireAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
       : null;
-      
     // Use the latest subscription package for general info
     const latestSubscription = activeSubscriptions[0];
     const pkg = latestSubscription?.ticketPackage || user?.membership?.packageId || null;
+
+    const renewalWindowDays = Number(pkg?.renewalWindowDays || 7);
+    const canRenew = Boolean(
+      isEnabled('SUBSCRIPTION_RENEWAL_ENABLED', defaultForCurrentEnvironment()) &&
+      isActive &&
+      latestSubscription?._id &&
+      pkg?.isRenewable !== false &&
+      daysUntilExpiration !== null &&
+      daysUntilExpiration <= renewalWindowDays
+    );
 
     const reservedSlots = activeSubscriptions.flatMap(sub => 
       (sub.slots || []).map(slot => ({
@@ -338,7 +365,9 @@ exports.getMembership = async (req, res, next) => {
       data: {
         isVip: isActive,
         status: isActive ? 'active' : 'expired',
+        subscriptionId: latestSubscription?._id || null,
         expireAt,
+        daysUntilExpiration,
         expirationWarning: Boolean(isActive && daysUntilExpiration !== null && daysUntilExpiration <= 7),
         freeServiceCount: user?.membership?.freeServiceCount || 0,
         package: pkg
@@ -358,7 +387,11 @@ exports.getMembership = async (req, res, next) => {
           status: 'manual',
           nextRenewalDate: expireAt,
           price: pkg?.price || 0,
-          message: 'Auto-renewal is not yet supported.',
+          canRenew,
+          renewalWindowDays,
+          message: canRenew
+            ? 'Your renewal window is open. Renew now to keep your reserved spaces.'
+            : 'Manual renewal opens before your membership expires.',
         },
       },
     });

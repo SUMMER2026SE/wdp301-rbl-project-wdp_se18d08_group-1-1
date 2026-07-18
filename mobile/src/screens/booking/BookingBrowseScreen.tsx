@@ -217,7 +217,7 @@ export const BookingBrowseScreen = ({ navigation }: Props) => {
       ) : null}
       <PriceBreakdown parkingCost={parkingCost} serviceCost={serviceCost} finalTotal={totalCost} />
       <Card>
-        <AppText>Wallet balance: {walletBalance.toLocaleString('vi-VN')} VND</AppText>
+        <AppText>Wallet balance: {walletBalance.toLocaleString('en-US')} VND</AppText>
         {!balanceValidation.valid ? (
           <>
             <AppText color={colors.error.main}>{balanceValidation.error}</AppText>

@@ -33,6 +33,7 @@ import TicketPackages from "./pages/Admin/TicketPackages";
 import AccountManagement from "./pages/Admin/AccountManagement";
 import PolicyManagement from "./pages/Admin/PolicyManagement";
 import SubscriptionManagement from "./pages/Admin/SubscriptionManagement";
+import RevenueAnalytics from "./pages/Admin/RevenueAnalytics";
 
 // Pages – Staff
 import StaffDashboard from "./pages/Staff/Dashboard";
@@ -132,6 +133,7 @@ export default function App() {
             <Route path="/admin/pricing" element={<PricingManagement />} />
             <Route path="/admin/tickets" element={<TicketPackages />} />
             <Route path="/admin/subscriptions" element={<SubscriptionManagement />} />
+            <Route path="/admin/revenue" element={<RevenueAnalytics />} />
             <Route path="/admin/profile" element={<AdminProfile />} />
           </Route>
 

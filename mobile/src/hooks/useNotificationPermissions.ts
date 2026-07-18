@@ -1,16 +1,23 @@
-import * as Notifications from 'expo-notifications';
 import { useCallback, useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 
-type PermissionStatus = 'undetermined' | 'granted' | 'denied';
+import { isExpoGo } from '@/utils/notificationRuntime';
+
+type PermissionStatus = 'undetermined' | 'granted' | 'denied' | 'unsupported';
 
 export const useNotificationPermissions = () => {
-  const [status, setStatus] = useState<PermissionStatus>('undetermined');
-  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<PermissionStatus>(isExpoGo ? 'unsupported' : 'undetermined');
+  const [loading, setLoading] = useState(!isExpoGo);
 
   const checkPermissionStatus = useCallback(async () => {
+    if (isExpoGo) {
+      setStatus('unsupported');
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
+      const Notifications = await import('expo-notifications');
       const permission = await Notifications.getPermissionsAsync();
       setStatus(permission.status as PermissionStatus);
     } finally {
@@ -19,8 +26,13 @@ export const useNotificationPermissions = () => {
   }, []);
 
   const requestPermission = useCallback(async () => {
+    if (isExpoGo) {
+      setStatus('unsupported');
+      return false;
+    }
     setLoading(true);
     try {
+      const Notifications = await import('expo-notifications');
       if (Platform.OS === 'android') {
         await Notifications.setNotificationChannelAsync('default', {
           name: 'Default',

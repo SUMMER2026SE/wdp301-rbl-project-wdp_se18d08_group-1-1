@@ -299,6 +299,7 @@ const findVipRegisteredVehicleBookingRestriction = async ({ userId, licensePlate
     }
   }
 
+
   return {
     membershipType,
     registeredVehicle,
@@ -519,6 +520,7 @@ exports.createBooking = async (req, res, next) => {
     if (subscriptionInfo && subscriptionInfo.user.toString() === userId.toString()) {
       prepaidAmount = 0;
     }
+
 
     const { services = [] } = req.body;
 
@@ -1566,7 +1568,6 @@ exports.quoteBulkBooking = async (req, res, next) => {
 
       const durationHours = (end - start) / (1000 * 60 * 60);
       if (durationHours <= 0) throw new Error('Thời lượng không hợp lệ');
-
       // Check VIP Restriction
       if (vehicle.licensePlate) {
         const restriction = await findVipRegisteredVehicleBookingRestriction({
@@ -1711,7 +1712,6 @@ exports.createBulkBooking = async (req, res, next) => {
 
       const durationHours = (end - start) / (1000 * 60 * 60);
       if (durationHours <= 0) throw new Error('Thời lượng không hợp lệ');
-
       // Check VIP Restriction
       if (vehicle.licensePlate) {
         const restriction = await findVipRegisteredVehicleBookingRestriction({

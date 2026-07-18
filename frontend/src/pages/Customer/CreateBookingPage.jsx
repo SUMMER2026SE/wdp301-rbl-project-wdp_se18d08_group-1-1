@@ -1546,14 +1546,14 @@ export default function CreateBookingPage() {
         onClose={() => setPolicyPrompt({ open: false, missingPolicies: [] })}
         onAccepted={() => {
           setPolicyPrompt({ open: false, missingPolicies: [] });
-          executeCheckoutCart();
+          handleCheckoutCart();
         }}
       />
 
       <BookingPolicyModal
         open={showPolicyModal}
         onClose={() => setShowPolicyModal(false)}
-        onConfirm={executeCheckoutCart}
+        onConfirm={handleCheckoutCart}
       />
     </div>
   );
