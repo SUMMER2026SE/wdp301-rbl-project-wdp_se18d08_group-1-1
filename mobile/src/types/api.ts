@@ -9,6 +9,7 @@ export interface RegisterRequest {
   username: string;
   email: string;
   password: string;
+  confirmPassword?: string;
   name?: string;
   phone?: string;
   role?: string;

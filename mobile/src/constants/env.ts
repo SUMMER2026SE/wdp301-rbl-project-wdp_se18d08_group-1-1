@@ -1,4 +1,4 @@
-const DEFAULT_API_URL = 'http://localhost:5000/api';
+const DEFAULT_API_URL = 'http://10.0.2.2:5001/api';
 
 export const API_URL = (
   process.env.EXPO_PUBLIC_API_URL || DEFAULT_API_URL
