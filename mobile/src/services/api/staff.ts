@@ -7,14 +7,17 @@ export interface StaffCustomerProfile {
   lastName?: string;
   fullName?: string;
   phone?: string;
+  avatar?: string;
 }
 
 export interface StaffCustomer {
   _id: string;
   username?: string;
   email: string;
-  status?: 'active' | 'blocked' | 'inactive' | string;
+  role?: 'customer';
+  status?: boolean;
   createdAt?: string;
+  updatedAt?: string;
   profile?: StaffCustomerProfile;
 }
 
@@ -56,27 +59,31 @@ export interface TicketPackage {
   createdAt?: string;
 }
 
-export interface TicketPackageInput {
-  name: string;
-  type: TicketPackage['type'];
-  price: number;
-  description?: string;
-  isActive: boolean;
-}
-
 export interface StaffSession {
   _id: string;
   licensePlate: string;
   parkingSlot?: string;
-  floorId?: string;
+  floorId?: string | { _id?: string; name?: string; floorNumber?: number };
   checkInTime: string;
   checkOutTime?: string;
-  status: string;
+  status: 'active' | 'completed' | 'cancelled';
+  phone?: string;
+  vehicleType?: string;
+  source?: 'kiosk' | 'app_booking' | 'booking' | 'walk_in';
+  totalPrice?: number;
+  paymentStatus?: string;
+  expectedDurationHours?: number;
+  entryImage_url?: string;
+  exitImage_url?: string;
+  entryCamera?: string;
+  exitCamera?: string;
+  entryGate?: string;
+  exitGate?: string;
 }
 
 export const staffService = {
   getCustomers: () => apiClient.get<APIResponse<StaffCustomer[]>>('/staff/users'),
-  updateCustomerStatus: (id: string, status: string) =>
+  updateCustomerStatus: (id: string, status: boolean) =>
     apiClient.put<APIResponse<StaffCustomer>>(`/staff/users/${id}/status`, { status }),
   updateCustomer: (id: string, data: StaffCustomerProfile) =>
     apiClient.put<APIResponse<StaffCustomer>>(`/staff/users/${id}`, data),
@@ -84,10 +91,5 @@ export const staffService = {
     apiClient.get<APIResponse<StaffBooking[]>>('/bookings/all', { params }),
   getSubscriptions: () => apiClient.get<APIResponse<StaffSubscription[]>>('/subscriptions/all'),
   getTicketPackages: () => apiClient.get<APIResponse<TicketPackage[]>>('/ticket-packages'),
-  createTicketPackage: (data: TicketPackageInput) =>
-    apiClient.post<APIResponse<TicketPackage>>('/ticket-packages', data),
-  updateTicketPackage: (id: string, data: TicketPackageInput) =>
-    apiClient.put<APIResponse<TicketPackage>>(`/ticket-packages/${id}`, data),
-  deleteTicketPackage: (id: string) => apiClient.delete<APIResponse>(`/ticket-packages/${id}`),
   getSessions: () => apiClient.get<APIResponse<StaffSession[]>>('/sessions'),
 };

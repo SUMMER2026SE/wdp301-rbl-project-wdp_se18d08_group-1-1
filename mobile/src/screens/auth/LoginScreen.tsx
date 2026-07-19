@@ -124,19 +124,21 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
     selectAccount: true,
   });
 
-  const handleGoogleLogin = useCallback(async (idToken: string) => {
-    setGoogleLoading(true);
-    try {
-      await googleLogin({ idToken });
-    } catch (err: unknown) {
-      const message = err instanceof Error
-        ? err.message
-        : 'Google sign-in failed. Please try again.';
-      alert('Google sign-in failed', message);
-    } finally {
-      setGoogleLoading(false);
-    }
-  }, [alert, googleLogin]);
+  const handleGoogleLogin = useCallback(
+    async (idToken: string) => {
+      setGoogleLoading(true);
+      try {
+        await googleLogin({ idToken });
+      } catch (err: unknown) {
+        const message =
+          err instanceof Error ? err.message : 'Google sign-in failed. Please try again.';
+        alert('Google sign-in failed', message);
+      } finally {
+        setGoogleLoading(false);
+      }
+    },
+    [alert, googleLogin],
+  );
 
   useEffect(() => {
     if (googleResponse?.type !== 'success') return;
@@ -182,9 +184,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
     try {
       await login({ email: trimEmail, password: trimPass });
     } catch (err: unknown) {
-      const message = err instanceof Error
-        ? err.message
-        : 'Sign-in failed. Please try again.';
+      const message = err instanceof Error ? err.message : 'Sign-in failed. Please try again.';
       alert('Sign-in failed', message);
     } finally {
       setLoading(false);
@@ -263,7 +263,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
 
             <Pressable
               style={({ pressed }) => [styles.forgotRow, pressed && styles.pressed]}
-              onPress={() => navigation?.navigate('ForgotPassword')}
+              onPress={() => navigation.navigate('ForgotPassword')}
             >
               <Text style={styles.forgotText}>Forgot password?</Text>
             </Pressable>
@@ -315,7 +315,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
 
             <Pressable
               style={({ pressed }) => [styles.registerRow, pressed && styles.pressed]}
-              onPress={() => navigation?.navigate('Register')}
+              onPress={() => navigation.navigate('Register')}
             >
               <Text style={styles.registerText}>New to VALO? </Text>
               <Text style={[styles.registerText, styles.registerLink]}>Create account</Text>

@@ -33,7 +33,8 @@ export default function SubscriptionManagement() {
   };
 
   useEffect(() => {
-    fetchSubscriptions();
+    const timerId = window.setTimeout(fetchSubscriptions, 0);
+    return () => window.clearTimeout(timerId);
   }, []);
 
   const filteredSubscriptions = subscriptions.filter(sub => {

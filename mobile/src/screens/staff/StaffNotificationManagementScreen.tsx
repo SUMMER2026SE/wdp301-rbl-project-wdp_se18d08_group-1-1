@@ -57,7 +57,7 @@ export function StaffNotificationManagementScreen({ navigation }: Props) {
   };
 
   return <SafeAreaView edges={['top']} style={styles.safe}><StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
-    <ScreenHeader title="Notifications" onBack={navigation.goBack} />
+    <ScreenHeader title="Notifications" onBack={() => navigation.navigate('ManagementHome')} />
     <View style={styles.tabs}>{(['history','compose'] as const).map(value => <Pressable key={value} onPress={() => setTab(value)} style={[styles.tab,tab===value&&styles.tabActive]}><Text style={[styles.tabText,tab===value&&styles.tabTextActive]}>{value === 'history' ? 'History' : 'Compose'}</Text></Pressable>)}</View>
     {loading ? <View style={styles.center}><ActivityIndicator color={COLORS.gold} size="large" /></View> : error ? <ErrorState message={error} onRetry={load} /> : tab === 'history' ?
       <ScrollView contentContainerStyle={styles.scroll} refreshControl={<RefreshControl refreshing={refreshing} tintColor={COLORS.gold} onRefresh={async()=>{setRefreshing(true);await load();setRefreshing(false);}} />}>

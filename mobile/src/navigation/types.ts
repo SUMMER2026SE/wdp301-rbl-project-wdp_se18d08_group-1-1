@@ -70,5 +70,6 @@ export type WalletStackParamList = {
     checkoutUrl?: string;
     qrCode?: string;
     amount?: number;
+    renewal?: boolean;
   };
 };

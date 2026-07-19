@@ -34,3 +34,43 @@ export const paySubscriptionWithWallet = async (packageId, slots) => {
     body: JSON.stringify({ packageId, slots }),
   });
 };
+
+export const getMembership = async () => {
+  return apiFetch('/subscriptions/membership', {
+    method: 'GET',
+    headers: authHeader(),
+  });
+};
+
+export const getMembershipStatus = async () =>
+  apiFetch('/subscriptions/membership', {
+    method: 'GET',
+    headers: authHeader(),
+  });
+
+export const getRenewalQuote = async (subscriptionId) =>
+  apiFetch(`/subscriptions/${subscriptionId}/renew/quote`, {
+    method: 'POST',
+    headers: authHeader(),
+  });
+
+export const renewSubscriptionWithWallet = async (subscriptionId, idempotencyKey) =>
+  apiFetch(`/subscriptions/${subscriptionId}/renew/pay-with-wallet`, {
+    method: 'POST',
+    headers: authHeader(),
+    body: JSON.stringify({ idempotencyKey }),
+  });
+
+export const createRenewalPayment = async (subscriptionId, idempotencyKey) =>
+  apiFetch(`/subscriptions/${subscriptionId}/renew/create-payment`, {
+    method: 'POST',
+    headers: authHeader(),
+    body: JSON.stringify({ idempotencyKey }),
+  });
+
+export const verifyRenewalPayment = async (orderCode) =>
+  apiFetch('/subscriptions/renew/verify-payment', {
+    method: 'POST',
+    headers: authHeader(),
+    body: JSON.stringify({ orderCode: Number(orderCode) }),
+  });

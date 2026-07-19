@@ -11,7 +11,7 @@ import * as notifApi from '../services/notificationService';
  *
  * Listens to socket 'notification:new' and 'notification:unreadCount' events.
  */
-export function useNotifications({ autoFetch = true, limit = 20 } = {}) {
+export function useNotifications({ autoFetch = true, limit = 20, contextRole } = {}) {
   const socket = useSocket();
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -28,14 +28,14 @@ export function useNotifications({ autoFetch = true, limit = 20 } = {}) {
       const token = localStorage.getItem('accessToken');
       if (!token) return;
 
-      const res = await notifApi.getUnreadCount();
+      const res = await notifApi.getUnreadCount({ contextRole });
       if (res.ok && isMounted.current) {
         setUnreadCount(res.data?.data?.count ?? 0);
       }
     } catch {
       // Silent fail
     }
-  }, []);
+  }, [contextRole]);
 
   // ── Fetch notifications ──
   const fetchNotifications = useCallback(async (pageNum = 1, replace = true) => {
@@ -46,6 +46,7 @@ export function useNotifications({ autoFetch = true, limit = 20 } = {}) {
       if (isMounted.current) setLoading(true);
 
       const params = { page: pageNum, limit };
+      if (contextRole) params.contextRole = contextRole;
       if (filters.type) params.type = filters.type;
       if (filters.isRead !== null && filters.isRead !== undefined && filters.isRead !== '')
         params.isRead = filters.isRead;

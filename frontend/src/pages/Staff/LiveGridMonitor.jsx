@@ -3,6 +3,7 @@ import ParkingMapGrid from "../../components/ParkingMapGrid";
 import { getAllFloors } from "../../services/parkingFloorService";
 import { apiFetch } from "../../services/api";
 import { MonitorCheck, X } from "lucide-react";
+import StaffCheckoutModal from "./StaffCheckoutModal";
 
 export default function LiveGridMonitor() {
   const [floors, setFloors] = useState([]);
@@ -11,6 +12,7 @@ export default function LiveGridMonitor() {
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [activeSessions, setActiveSessions] = useState([]);
   const [dbSlots, setDbSlots] = useState([]);
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
 
   useEffect(() => {
     const fetchDbSlots = async () => {
@@ -221,7 +223,9 @@ export default function LiveGridMonitor() {
 
             {selectedSlot.session && (
               <div className="mt-auto flex-shrink-0 pt-2 pb-2">
-                 <button className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-extrabold uppercase tracking-wider py-4 rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.3)] transition-all flex items-center justify-center gap-2">
+                 <button 
+                    onClick={() => setShowCheckoutModal(true)}
+                    className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-extrabold uppercase tracking-wider py-4 rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.3)] transition-all flex items-center justify-center gap-2">
                     <X size={18} />
                     Process Check-out
                  </button>
@@ -231,6 +235,18 @@ export default function LiveGridMonitor() {
         )}
       </div>
 
+      {showCheckoutModal && selectedSlot?.session && (
+        <StaffCheckoutModal 
+          isOpen={showCheckoutModal}
+          onClose={() => setShowCheckoutModal(false)}
+          session={{...selectedSlot.session, parkingSlot: selectedSlot.id}}
+          onSuccess={() => {
+            setShowCheckoutModal(false);
+            setSelectedSlot(null);
+            fetchLiveStatus();
+          }}
+        />
+      )}
     </div>
   );
 }

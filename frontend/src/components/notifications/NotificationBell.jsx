@@ -4,7 +4,7 @@ import { Bell, CheckCheck, ExternalLink } from 'lucide-react';
 import { useNotifications } from '../../hooks/useNotifications';
 import NotificationItem from './NotificationItem';
 
-export default function NotificationBell({ dark = false }) {
+export default function NotificationBell({ dark = false, contextRole }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   const {
@@ -13,7 +13,7 @@ export default function NotificationBell({ dark = false }) {
     loading,
     markAsRead,
     markAllAsRead,
-  } = useNotifications({ autoFetch: true, limit: 5 });
+  } = useNotifications({ autoFetch: true, limit: 5, contextRole });
 
   useEffect(() => {
     const handler = (e) => {

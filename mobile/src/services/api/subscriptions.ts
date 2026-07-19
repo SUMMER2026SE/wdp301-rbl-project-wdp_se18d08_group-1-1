@@ -4,6 +4,8 @@ import type {
   CreateSubscriptionPaymentRequest,
   CreateSubscriptionPaymentResponse,
   MembershipStatus,
+  SubscriptionRenewalQuote,
+  SubscriptionRenewalResult,
   SubscriptionPackage,
 } from '@/types/subscription.types';
 
@@ -16,4 +18,23 @@ export const subscriptionsService = {
     apiClient.post<APIResponse>('/subscriptions/verify-payment', data),
   payWithWallet: (data: CreateSubscriptionPaymentRequest) =>
     apiClient.post<APIResponse>('/subscriptions/pay-with-wallet', data),
+  getRenewalQuote: (subscriptionId: string) =>
+    apiClient.post<APIResponse<SubscriptionRenewalQuote>>(
+      `/subscriptions/${subscriptionId}/renew/quote`,
+    ),
+  renewWithWallet: (subscriptionId: string, idempotencyKey: string) =>
+    apiClient.post<APIResponse<SubscriptionRenewalResult>>(
+      `/subscriptions/${subscriptionId}/renew/pay-with-wallet`,
+      { idempotencyKey },
+    ),
+  createRenewalPayment: (subscriptionId: string, idempotencyKey: string) =>
+    apiClient.post<APIResponse<SubscriptionRenewalResult>>(
+      `/subscriptions/${subscriptionId}/renew/create-payment`,
+      { idempotencyKey },
+    ),
+  verifyRenewalPayment: (orderCode: number) =>
+    apiClient.post<APIResponse<SubscriptionRenewalResult>>(
+      '/subscriptions/renew/verify-payment',
+      { orderCode },
+    ),
 };

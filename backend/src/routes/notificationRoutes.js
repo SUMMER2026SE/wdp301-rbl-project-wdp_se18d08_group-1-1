@@ -15,6 +15,7 @@ const {
   getAutoRules,
   updateAutoRule,
   testAutoRule,
+  createInternalReport,
 } = require('../controllers/notificationController');
 const { protect, authorize } = require('../middlewares/authMiddleware');
 const {
@@ -33,6 +34,7 @@ router.put('/:id/read', markAsRead);
 router.delete('/:id', deleteUserNotification);
 
 // ── Admin/Staff routes ──
+router.post('/internal-report', authorize('staff', 'admin'), createInternalReport);
 router.post('/', authorize('admin', 'staff'), createNotificationValidator, createNotification);
 router.get('/admin/history', authorize('admin', 'staff'), queryNotificationValidator, getAdminHistory);
 router.put('/admin/history/read-all', authorize('admin', 'staff'), markAllAdminHistoryAsRead);

@@ -1,7 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import React from 'react';
+import React, { useState } from 'react';
 import {
+  ActivityIndicator,
+  Image,
+  Modal,
+  Pressable,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -54,8 +58,117 @@ const VEHICLE_TYPE_LABELS: Record<string, string> = {
 };
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
+function SecurityRecord({
+  type,
+  time,
+  imageUrl,
+  camera,
+  gate,
+  onPreview,
+}: {
+  type: 'entry' | 'exit';
+  time?: string;
+  imageUrl?: string;
+  camera?: string;
+  gate?: string;
+  onPreview: (url: string) => void;
+}) {
+  const [imageLoading, setImageLoading] = useState(Boolean(imageUrl));
+  const [imageFailed, setImageFailed] = useState(false);
+  const isEntry = type === 'entry';
+  const accent = isEntry ? COLORS.staffBlue : '#34D399';
+
+  return (
+    <View style={styles.recordCard}>
+      <View style={styles.recordHeader}>
+        <View style={[styles.recordIcon, { backgroundColor: `${accent}18` }]}>
+          <Ionicons name="camera-outline" size={18} color={accent} />
+        </View>
+        <View style={styles.recordHeading}>
+          <Text style={styles.recordTitle}>
+            {isEntry ? 'Entry record' : 'Exit record'}
+          </Text>
+          <Text style={styles.recordSubtitle}>
+            {isEntry ? 'Vehicle arrival evidence' : 'Vehicle departure evidence'}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.recordTimeCard}>
+        <Text style={styles.recordTimeLabel}>
+          {isEntry ? 'Check-in time' : 'Check-out time'}
+        </Text>
+        <Text style={styles.recordTimeValue}>
+          {time ? format(new Date(time), 'HH:mm:ss dd/MM/yyyy') : 'Not recorded yet'}
+        </Text>
+        {camera || gate ? (
+          <Text style={styles.recordMeta}>
+            {[camera, gate].filter(Boolean).join(' · ')}
+          </Text>
+        ) : null}
+      </View>
+
+      {imageUrl && !imageFailed ? (
+        <TouchableOpacity
+          accessibilityLabel={`Open ${type} image`}
+          accessibilityRole="imagebutton"
+          activeOpacity={0.86}
+          onPress={() => onPreview(imageUrl)}
+          style={styles.imageFrame}
+        >
+          <Image
+            accessibilityLabel={`${type} security image`}
+            onError={() => {
+              setImageFailed(true);
+              setImageLoading(false);
+            }}
+            onLoadEnd={() => setImageLoading(false)}
+            onLoadStart={() => setImageLoading(true)}
+            resizeMode="cover"
+            source={{ uri: imageUrl }}
+            style={styles.securityImage}
+          />
+          {imageLoading ? (
+            <View style={styles.imageLoading}>
+              <ActivityIndicator color={accent} />
+              <Text style={styles.imageLoadingText}>Loading image...</Text>
+            </View>
+          ) : null}
+          {!imageLoading ? (
+            <View style={styles.previewHint}>
+              <Ionicons name="expand-outline" size={14} color="#FFFFFF" />
+              <Text style={styles.previewHintText}>View full image</Text>
+            </View>
+          ) : null}
+        </TouchableOpacity>
+      ) : (
+        <View style={styles.imagePlaceholder}>
+          <View style={[styles.placeholderIcon, { backgroundColor: `${accent}12` }]}>
+            <Ionicons
+              name={imageFailed ? 'cloud-offline-outline' : 'camera-outline'}
+              size={28}
+              color={COLORS.textMuted}
+            />
+          </View>
+          <Text style={styles.placeholderTitle}>
+            {imageFailed
+              ? 'Image could not be loaded'
+              : `No ${isEntry ? 'entry' : 'exit'} image`}
+          </Text>
+          <Text style={styles.placeholderText}>
+            {imageFailed
+              ? 'Check the image URL or network connection.'
+              : 'No security image was recorded for this event.'}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
 export const SessionDetailScreen = ({ navigation, route }: Props) => {
   const { session } = route.params;
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   const checkIn  = new Date(session.checkInTime);
   const checkOut = session.checkOutTime ? new Date(session.checkOutTime) : null;
@@ -135,6 +248,43 @@ export const SessionDetailScreen = ({ navigation, route }: Props) => {
           </View>
         </View>
 
+        <View style={styles.section}>
+          <View style={styles.sectionHeading}>
+            <View>
+              <Text style={styles.sectionTitleStrong}>Security records</Text>
+              <Text style={styles.sectionDescription}>
+                Vehicle entry and exit evidence
+              </Text>
+            </View>
+            <View style={styles.evidenceBadge}>
+              <Ionicons
+                name="shield-checkmark-outline"
+                size={14}
+                color={COLORS.staffBlue}
+              />
+              <Text style={styles.evidenceBadgeText}>
+                {[session.entryImage_url, session.exitImage_url].filter(Boolean).length}/2 images
+              </Text>
+            </View>
+          </View>
+          <SecurityRecord
+            type="entry"
+            time={session.checkInTime}
+            imageUrl={session.entryImage_url}
+            camera={session.entryCamera}
+            gate={session.entryGate}
+            onPreview={setPreviewImage}
+          />
+          <SecurityRecord
+            type="exit"
+            time={session.checkOutTime}
+            imageUrl={session.exitImage_url}
+            camera={session.exitCamera}
+            gate={session.exitGate}
+            onPreview={setPreviewImage}
+          />
+        </View>
+
         {/* Vehicle info */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Vehicle information</Text>
@@ -183,6 +333,39 @@ export const SessionDetailScreen = ({ navigation, route }: Props) => {
         {/* ID reference */}
         <Text style={styles.idRef}>ID: {session._id}</Text>
       </ScrollView>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={() => setPreviewImage(null)}
+        statusBarTranslucent
+        transparent
+        visible={Boolean(previewImage)}
+      >
+        <View style={styles.previewModal}>
+          <Pressable
+            accessibilityLabel="Close image preview"
+            accessibilityRole="button"
+            onPress={() => setPreviewImage(null)}
+            style={StyleSheet.absoluteFill}
+          />
+          <TouchableOpacity
+            accessibilityLabel="Close image preview"
+            accessibilityRole="button"
+            onPress={() => setPreviewImage(null)}
+            style={styles.previewClose}
+          >
+            <Ionicons name="close" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          {previewImage ? (
+            <Image
+              accessibilityLabel="Security image preview"
+              resizeMode="contain"
+              source={{ uri: previewImage }}
+              style={styles.previewImage}
+            />
+          ) : null}
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -237,6 +420,141 @@ const styles = StyleSheet.create({
   pulsingDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#7EE8A2', marginTop: 4 },
 
   section: { gap: SPACING.sm },
+  sectionHeading: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  sectionTitleStrong: {
+    color: COLORS.textPrimary,
+    fontSize: FONT_SIZES.md,
+    fontWeight: '800',
+  },
+  sectionDescription: {
+    color: COLORS.textMuted,
+    fontSize: FONT_SIZES.xs,
+    marginTop: 2,
+  },
+  evidenceBadge: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(96,180,255,0.1)',
+    borderRadius: RADIUS.round,
+    flexDirection: 'row',
+    gap: 5,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 5,
+  },
+  evidenceBadgeText: {
+    color: COLORS.staffBlue,
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  recordCard: {
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    overflow: 'hidden',
+    padding: SPACING.md,
+  },
+  recordHeader: { alignItems: 'center', flexDirection: 'row' },
+  recordIcon: {
+    alignItems: 'center',
+    borderRadius: RADIUS.sm,
+    height: 38,
+    justifyContent: 'center',
+    marginRight: SPACING.sm,
+    width: 38,
+  },
+  recordHeading: { flex: 1 },
+  recordTitle: {
+    color: COLORS.textPrimary,
+    fontSize: FONT_SIZES.md,
+    fontWeight: '700',
+  },
+  recordSubtitle: {
+    color: COLORS.textMuted,
+    fontSize: 10,
+    marginTop: 2,
+  },
+  recordTimeCard: {
+    backgroundColor: COLORS.surfaceElevated,
+    borderRadius: RADIUS.sm,
+    marginTop: SPACING.sm,
+    padding: SPACING.sm,
+  },
+  recordTimeLabel: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs },
+  recordTimeValue: {
+    color: COLORS.textPrimary,
+    fontSize: FONT_SIZES.sm,
+    fontVariant: ['tabular-nums'],
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  recordMeta: { color: COLORS.textMuted, fontSize: 10, marginTop: 3 },
+  imageFrame: {
+    aspectRatio: 16 / 9,
+    backgroundColor: '#0A0C0F',
+    borderColor: COLORS.borderLight,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    marginTop: SPACING.sm,
+    overflow: 'hidden',
+  },
+  securityImage: { height: '100%', width: '100%' },
+  imageLoading: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    backgroundColor: COLORS.surfaceElevated,
+    gap: SPACING.sm,
+    justifyContent: 'center',
+  },
+  imageLoadingText: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs },
+  previewHint: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    borderRadius: RADIUS.sm,
+    bottom: SPACING.sm,
+    flexDirection: 'row',
+    gap: 5,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 5,
+    position: 'absolute',
+    right: SPACING.sm,
+  },
+  previewHintText: { color: '#FFFFFF', fontSize: 10, fontWeight: '600' },
+  imagePlaceholder: {
+    alignItems: 'center',
+    aspectRatio: 16 / 9,
+    backgroundColor: COLORS.surfaceElevated,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    justifyContent: 'center',
+    marginTop: SPACING.sm,
+    padding: SPACING.md,
+  },
+  placeholderIcon: {
+    alignItems: 'center',
+    borderRadius: RADIUS.round,
+    height: 48,
+    justifyContent: 'center',
+    width: 48,
+  },
+  placeholderTitle: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '700',
+    marginTop: SPACING.sm,
+  },
+  placeholderText: {
+    color: COLORS.textMuted,
+    fontSize: 10,
+    lineHeight: 15,
+    marginTop: 3,
+    maxWidth: 230,
+    textAlign: 'center',
+  },
   sectionTitle: {
     fontSize: FONT_SIZES.sm, fontWeight: '600', color: COLORS.textMuted,
     textTransform: 'uppercase', letterSpacing: 0.5,
@@ -260,4 +578,23 @@ const styles = StyleSheet.create({
   totalValue: { fontSize: FONT_SIZES.xl, fontWeight: '800', color: COLORS.gold },
 
   idRef: { textAlign: 'center', color: COLORS.textMuted, fontSize: FONT_SIZES.xs, marginTop: SPACING.sm },
+  previewModal: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.94)',
+    flex: 1,
+    justifyContent: 'center',
+  },
+  previewClose: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: RADIUS.round,
+    height: 44,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: SPACING.lg,
+    top: 52,
+    width: 44,
+    zIndex: 2,
+  },
+  previewImage: { height: '82%', width: '100%' },
 });

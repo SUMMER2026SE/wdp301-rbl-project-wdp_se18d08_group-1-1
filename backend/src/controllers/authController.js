@@ -14,14 +14,6 @@ const notifTriggers = require('../services/notificationTriggers');
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
-const getGoogleAudiences = () =>
-  [
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_WEB_CLIENT_ID,
-    process.env.GOOGLE_IOS_CLIENT_ID,
-    process.env.GOOGLE_ANDROID_CLIENT_ID,
-  ].filter(Boolean);
-
 /**
  * @desc    Register a new user
  * @route   POST /api/auth/register
@@ -184,6 +176,7 @@ const login = async (req, res, next) => {
           username: user.username,
           email: user.email,
           role: user.role,
+          membership: user.membership,
         },
         accessToken,
         refreshToken,
@@ -310,6 +303,7 @@ const getMe = async (req, res, next) => {
           role: user.role,
           status: user.status,
           createdAt: user.createdAt,
+          membership: user.membership,
         },
         profile: userDetail || null,
       },
@@ -363,7 +357,7 @@ const googleLogin = async (req, res, next) => {
     try {
       const ticket = await googleClient.verifyIdToken({
         idToken,
-        audience: getGoogleAudiences(),
+        audience: process.env.GOOGLE_CLIENT_ID,
       });
       payload = ticket.getPayload();
     } catch {
@@ -373,7 +367,7 @@ const googleLogin = async (req, res, next) => {
       });
     }
 
-    const { sub: googleId, email, name, picture, given_name: givenName, family_name: familyName } = payload;
+    const { sub: googleId, email, name, picture } = payload;
 
     // Find existing user by googleId or email
     let user = await User.findOne({ $or: [{ googleId }, { email }] });
@@ -417,9 +411,8 @@ const googleLogin = async (req, res, next) => {
       // Create empty user detail profile
       await UserDetail.create({
         userId: user._id,
-        firstName: givenName || name?.split(' ')[0] || '',
-        lastName: familyName || name?.split(' ').slice(1).join(' ') || '',
-        avatar: picture || '',
+        fullName: name || '',
+        avatarUrl: picture || '',
       });
     }
 
@@ -448,6 +441,7 @@ const googleLogin = async (req, res, next) => {
           username: user.username,
           email: user.email,
           role: user.role,
+          membership: user.membership,
         },
         accessToken,
         refreshToken,
