@@ -87,13 +87,13 @@ export const RegisterScreen = ({ navigation }: Props) => {
   const handleSubmit = async () => {
     setError('');
 
-    if (!username.trim()) {
-      setError('Please enter your full name.');
+    setError('');
+    if (!normalizedName) {
+      setError('Please enter your name.');
       return;
     }
-
-    if (!isValidEmail(email)) {
-      setError('Please enter a valid email address.');
+    if (!isValidEmail(normalizedEmail)) {
+      setError('Please enter a valid email.');
       return;
     }
 
