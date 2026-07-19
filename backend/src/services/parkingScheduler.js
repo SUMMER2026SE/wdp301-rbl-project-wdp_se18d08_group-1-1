@@ -1,9 +1,8 @@
 const Session = require('../models/Session');
 const Booking = require('../models/Booking');
 const notifTriggers = require('./notificationTriggers');
-const pricingEngine = require('./pricingEngine');
-const walletService = require('./walletService');
 const contractService = require('./contractService');
+const bookingRefundService = require('./bookingRefundService');
 
 const CHECK_INTERVAL_MS = 60 * 1000; // 1 minute
 const CONTRACT_EXPIRATION_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -64,19 +63,34 @@ async function checkBookings(app) {
     });
 
     for (const booking of noShowBookings) {
-      booking.status = 'CANCELLED';
-      await booking.save();
+      try {
+      const refundBreakdown = await bookingRefundService.quoteNoShow(booking);
+      await bookingRefundService.settleBookingEvent({
+        bookingId: booking._id,
+        eventKey: `booking:${booking._id}:no-show`,
+        eventType: 'no_show',
+        calculation: refundBreakdown,
+        description: `Settle no-show booking ${booking._id}`,
+        applyState: async ({ booking: currentBooking }) => {
+          if (currentBooking.status !== 'EXPIRED') {
+            throw Object.assign(new Error('Booking is no longer expired'), {
+              statusCode: 409,
+            });
+          }
+          currentBooking.status = 'CANCELLED';
+        },
+      });
       console.log(`[ParkingScheduler] Đặt chỗ ${booking._id} của xe ${booking.licensePlate} bị hủy hoàn toàn do trễ quá 30 phút.`);
 
       if (booking.userId) {
         notifTriggers.notifyBookingCancelled(app, booking.userId, {
           bookingId: booking._id.toString(),
           slotInfo: booking.parkingSlot,
-          reason: 'Quá 30 phút từ giờ bắt đầu. Booking đã bị hủy và không được hoàn tiền (0%).'
+          reason: `Quá 30 phút từ giờ bắt đầu. Booking đã bị hủy và hoàn ${refundBreakdown.appliedRefundPercent || 0}% theo policy.`
         }).catch(err => console.error('Failed to send cancelled no-show notification:', err));
-
-        // Không hoàn tiền cho lỗi No-show theo chính sách mới
-        // (Booking tự động huỷ sau 30 phút do khách không đến -> Hoàn 0%)
+      }
+      } catch (error) {
+        console.error(`[ParkingScheduler] Failed to settle no-show booking ${booking._id}:`, error);
       }
     }
 
@@ -88,34 +102,30 @@ async function checkBookings(app) {
     });
 
     for (const booking of pausedBookingsToComplete) {
-      booking.status = 'COMPLETED';
-      await booking.save();
-      console.log(`[ParkingScheduler] Booking PAUSED ${booking._id} tự động chuyển sang COMPLETED do hết thời gian chờ quay lại.`);
-
-      // Tính tiền thực tế đã sử dụng và hoàn phần còn thừa
-      if (booking.userId && booking.prepaidAmount > 0) {
-        try {
-          const sessions = await Session.find({ bookingId: booking._id });
-          let totalSpent = 0;
-          for (const sess of sessions) {
-            const checkout = sess.checkOutTime || now;
-            const pricing = await pricingEngine.calculatePrice(sess.checkInTime, checkout);
-            totalSpent += pricing.finalTotal;
-          }
-
-          const refundAmount = booking.prepaidAmount - totalSpent;
-          if (refundAmount > 0) {
-            await walletService.creditWallet(
-              booking.userId,
-              refundAmount,
-              'REFUND',
-              `Hoàn tiền trả sớm tự động (PAUSED) - Biển số ${booking.licensePlate}`,
-              { refSource: 'booking', refSourceId: booking._id }
-            );
-          }
-        } catch (refundErr) {
-          console.error(`[ParkingScheduler] Lỗi hoàn phí tự động cho booking PAUSED ${booking._id}:`, refundErr.message);
-        }
+      try {
+        const refundBreakdown = await bookingRefundService.quoteEarlyCheckout(
+          booking,
+          null,
+          now
+        );
+        await bookingRefundService.settleBookingEvent({
+          bookingId: booking._id,
+          eventKey: `booking:${booking._id}:early-checkout`,
+          eventType: 'paused_completion',
+          calculation: refundBreakdown,
+          description: `Settle paused booking ${booking._id}`,
+          applyState: async ({ booking: currentBooking }) => {
+            if (currentBooking.status !== 'PAUSED') {
+              throw Object.assign(new Error('Booking is no longer paused'), {
+                statusCode: 409,
+              });
+            }
+            currentBooking.status = 'COMPLETED';
+          },
+        });
+        console.log(`[ParkingScheduler] Booking PAUSED ${booking._id} tự động chuyển sang COMPLETED do hết thời gian chờ quay lại.`);
+      } catch (refundErr) {
+        console.error(`[ParkingScheduler] Lỗi hoàn phí tự động cho booking PAUSED ${booking._id}:`, refundErr.message);
       }
     }
   } catch (err) {

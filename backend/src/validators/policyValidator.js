@@ -2,6 +2,15 @@ const { body, query } = require('express-validator');
 const { POLICY_CATEGORIES } = require('../models/Policy');
 
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const { normalizeRule } = require('../services/refundEngine');
+
+const optionalRefundRuleValidator = () =>
+  body('refundRule')
+    .optional()
+    .custom((value) => {
+      normalizeRule(value);
+      return true;
+    });
 
 const policyMetadataValidator = [
   body('title')
@@ -26,6 +35,10 @@ const policyMetadataValidator = [
     .optional()
     .custom((value) => ['true', 'false'].includes(String(value)) || typeof value === 'boolean')
     .withMessage('requiresAcceptance must be a boolean'),
+  body('controlsBookingRefunds')
+    .optional()
+    .custom((value) => ['true', 'false'].includes(String(value)) || typeof value === 'boolean')
+    .withMessage('controlsBookingRefunds must be a boolean'),
 ];
 
 const policyVersionValidator = [
@@ -51,6 +64,7 @@ const policyVersionValidator = [
     .optional()
     .isLength({ max: 1000 })
     .withMessage('Change note must not exceed 1000 characters'),
+  optionalRefundRuleValidator(),
 ];
 
 const createPolicyValidator = [
@@ -79,6 +93,7 @@ const createPolicyValidator = [
     .optional()
     .isLength({ max: 1000 })
     .withMessage('Change note must not exceed 1000 characters'),
+  optionalRefundRuleValidator(),
 ];
 
 const acceptanceQueryValidator = [
