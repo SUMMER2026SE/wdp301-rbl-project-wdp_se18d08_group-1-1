@@ -105,7 +105,15 @@ export const FindParkingScreen = ({ navigation, route }: Props) => {
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor="#080808" />
-      <ScreenHeader title="Parking map" onBack={() => navigation.goBack()} />
+      <ScreenHeader
+        accentColor="#7EE8A2"
+        headerIcon="map-outline"
+        headerIconBackground="rgba(126,232,162,0.12)"
+        headerIconColor="#7EE8A2"
+        subtitle="Select a parking space"
+        title="Parking map"
+        onBack={() => navigation.goBack()}
+      />
 
       <View style={styles.statsBar}>
         <View style={styles.statItem}>

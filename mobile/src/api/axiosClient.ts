@@ -43,6 +43,10 @@ axiosClient.interceptors.request.use((config) => {
     config.headers.Authorization = `Bearer ${accessToken}`;
   }
 
+  if (__DEV__) {
+    console.log('[API Request]', config.method?.toUpperCase(), config.baseURL, config.url);
+  }
+
   return config;
 });
 
