@@ -23,13 +23,13 @@ export const RegisterScreen = ({ navigation }: Props) => {
     const normalizedEmail = email.trim().toLowerCase();
     const normalizedPhone = phone.trim();
 
-    if (!username.trim()) {
-      setError('Please enter your full name.');
+    setError('');
+    if (!normalizedName) {
+      setError('Please enter your name.');
       return;
     }
-
-    if (!isValidEmail(email)) {
-      setError('Please enter a valid email address.');
+    if (!isValidEmail(normalizedEmail)) {
+      setError('Please enter a valid email.');
       return;
     }
     if (!isValidPassword(password)) {
@@ -47,8 +47,12 @@ export const RegisterScreen = ({ navigation }: Props) => {
         password,
         role: 'customer',
       });
-    } catch (submitError) {
+      await authService.sendOTP({ email: normalizedEmail });
+      navigation.navigate('VerifyOTP', { email: normalizedEmail, purpose: 'register' });
+    } catch (submitError: unknown) {
       setError(submitError instanceof Error ? submitError.message : 'Registration failed.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -63,107 +67,12 @@ export const RegisterScreen = ({ navigation }: Props) => {
         onChangeText={setEmail}
         value={email}
       />
-      <View pointerEvents="none" style={styles.cornerGlow} />
-
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.kav}
-      >
-        <ScrollView
-          bounces={false}
-          contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.hero}>
-            <View style={styles.logoGlow}>
-              <Image resizeMode="contain" source={LogoImg} style={styles.logoImg} />
-            </View>
-            <Text style={styles.brandName}>VALO</Text>
-            <Text style={styles.brandSub}>PARKING</Text>
-          </View>
-
-          <View style={styles.card}>
-            <LinearGradient
-              colors={[COLORS.gold, 'transparent']}
-              end={{ x: 1, y: 0 }}
-              start={{ x: 0, y: 0 }}
-              style={styles.cardTopLine}
-            />
-            <Text style={styles.cardTitle}>Create account</Text>
-            <Text style={styles.cardSub}>Book parking and manage your VALO wallet</Text>
-
-            <Field
-              icon={<Ionicons color={COLORS.textMuted} name="person-outline" size={18} />}
-              placeholder="Full name"
-              value={username}
-              onChangeText={setUsername}
-            />
-            <Field
-              autoCapitalize="none"
-              icon={<Ionicons color={COLORS.textMuted} name="mail-outline" size={18} />}
-              keyboardType="email-address"
-              placeholder="Email"
-              value={email}
-              onChangeText={setEmail}
-            />
-            <Field
-              icon={<Ionicons color={COLORS.textMuted} name="call-outline" size={18} />}
-              keyboardType="phone-pad"
-              placeholder="Phone number"
-              value={phone}
-              onChangeText={setPhone}
-            />
-            <Field
-              autoCapitalize="none"
-              icon={<Ionicons color={COLORS.textMuted} name="lock-closed-outline" size={18} />}
-              placeholder="Password"
-              secureTextEntry
-              value={password}
-              onChangeText={setPassword}
-            />
-
-            {error ? (
-              <View style={styles.errorBox}>
-                <Ionicons color={COLORS.error} name="warning-outline" size={16} />
-                <Text style={styles.errorText}>{error}</Text>
-              </View>
-            ) : null}
-
-            <TouchableOpacity
-              activeOpacity={0.85}
-              disabled={isLoading}
-              style={[styles.submitBtn, isLoading && styles.disabled]}
-              onPress={handleSubmit}
-            >
-              <LinearGradient
-                colors={[COLORS.goldLight, COLORS.gold, COLORS.goldDark]}
-                end={{ x: 1, y: 0 }}
-                start={{ x: 0, y: 0 }}
-                style={styles.submitGrad}
-              >
-                {isLoading ? (
-                  <ActivityIndicator color={COLORS.textInverse} size="small" />
-                ) : (
-                  <>
-                    <Text style={styles.submitText}>Create account</Text>
-                    <Ionicons color={COLORS.textInverse} name="arrow-forward" size={18} />
-                  </>
-                )}
-              </LinearGradient>
-            </TouchableOpacity>
-
-            <Pressable
-              style={({ pressed }) => [styles.loginRow, pressed && styles.pressed]}
-              onPress={() => navigation.goBack()}
-            >
-              <Text style={styles.loginText}>Already have an account? </Text>
-              <Text style={[styles.loginText, styles.loginLink]}>Sign in</Text>
-            </Pressable>
-          </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+      <Input keyboardType="phone-pad" label="Phone" onChangeText={setPhone} value={phone} />
+      <Input label="Password" onChangeText={setPassword} secureTextEntry value={password} />
+      {error ? <AppText color={colors.error.main}>{error}</AppText> : null}
+      <Button loading={loading} title="Register" onPress={handleSubmit} />
+      <Button title="Back to login" variant="ghost" onPress={() => navigation.goBack()} />
+    </Screen>
   );
 };
 
