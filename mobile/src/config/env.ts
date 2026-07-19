@@ -6,8 +6,9 @@ const envName = process.env.EXPO_PUBLIC_ENV || 'development';
 
 const defaults = {
   development: {
-    apiBaseUrl: 'http://192.168.1.143:5001/api',
-    socketUrl: 'http://192.168.1.143:5001',
+    // Android Emulator maps the host machine to 10.0.2.2.
+    apiBaseUrl: 'http://10.0.2.2:5001/api',
+    socketUrl: 'http://10.0.2.2:5001',
   },
   staging: {
     apiBaseUrl: 'https://staging-api.valoparking.com/api',
