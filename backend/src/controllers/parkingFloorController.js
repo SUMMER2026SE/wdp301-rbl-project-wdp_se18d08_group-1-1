@@ -147,6 +147,56 @@ exports.updateFloorLayout = async (req, res) => {
         });
       }
 
+      // --- 3.5 STRICT PREVENTION: Check if deleted slots have active subscriptions or sessions ---
+      const slotsToDelete = await Slot.find({
+        floorID: id,
+        slotNumber: { $nin: validSlotNames }
+      }).select('slotNumber');
+
+      if (slotsToDelete.length > 0) {
+        const deletedSlotNames = slotsToDelete.map(s => s.slotNumber);
+        
+        // Check Subscriptions
+        const Subscription = require('../models/Subscription');
+        const activeSubs = await Subscription.find({
+          status: 'active',
+          expireAt: { $gt: new Date() },
+          'slots.slotCode': { $in: deletedSlotNames }
+        });
+
+        if (activeSubs.length > 0) {
+           const problematicSlots = new Set();
+           activeSubs.forEach(sub => {
+              if (sub.slots) {
+                 sub.slots.forEach(s => {
+                    if (deletedSlotNames.includes(s.slotCode)) problematicSlots.add(s.slotCode);
+                 });
+              }
+           });
+           
+           return res.status(400).json({ 
+             success: false, 
+             message: `Lỗi Hệ Thống: Không thể xoá các ô đỗ (${Array.from(problematicSlots).join(', ')}) vì khách hàng đang thuê gói VIP tại các ô này. Vui lòng chuyển ô đỗ cho khách trước khi xoá.`
+           });
+        }
+        
+        // Check active sessions (Parked Cars)
+        const Session = require('../models/Session');
+        const activeSessions = await Session.find({
+           status: 'active',
+           parkingSlot: { $in: deletedSlotNames }
+        });
+        
+        if (activeSessions.length > 0) {
+           const problematicSlots = activeSessions.map(s => s.parkingSlot);
+           return res.status(400).json({ 
+             success: false, 
+             message: `Lỗi Hệ Thống: Không thể xoá các ô đỗ (${problematicSlots.join(', ')}) vì đang có xe đậu tại các ô này.`
+           });
+        }
+      }
+      // -----------------------------------------------------------------------------------------
+
       // Execute bulk write for slots
       if (bulkSlotOps.length > 0) {
         await Slot.bulkWrite(bulkSlotOps);

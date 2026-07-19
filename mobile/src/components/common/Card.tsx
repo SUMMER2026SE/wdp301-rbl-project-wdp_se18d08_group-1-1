@@ -24,7 +24,7 @@ const styles = StyleSheet.create({
   base: {
     backgroundColor: colors.light.surface,
     borderColor: colors.light.border,
-    borderRadius: borderRadius.md,
+    borderRadius: borderRadius.xl,
     borderWidth: StyleSheet.hairlineWidth,
   },
 });

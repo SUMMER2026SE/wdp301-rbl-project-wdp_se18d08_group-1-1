@@ -16,7 +16,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import ParkingMapViewer from '../../components/ParkingMapViewer';
-import PolicyAcceptancePrompt from '../../components/policies/PolicyAcceptancePrompt';
+
 import BookingPolicyModal from '../../components/policies/BookingPolicyModal';
 import { extractMissingPolicies, isPolicyAcceptanceRequired } from '../../utils/policyErrors';
 import { getPolicyAcceptanceStatus } from '../../services/policyService';
@@ -223,10 +223,7 @@ export default function CreateBookingPage() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [bookingInfo, setBookingInfo] = useState(null);
   const [successRedirectCountdown, setSuccessRedirectCountdown] = useState(4);
-  const [policyPrompt, setPolicyPrompt] = useState({
-    open: false,
-    missingPolicies: [],
-  });
+
   const [showPolicyModal, setShowPolicyModal] = useState(false);
 
   // Map state
@@ -814,11 +811,7 @@ export default function CreateBookingPage() {
     );
   };
 
-  const handleCheckoutCart = () => {
-    if (cartItems.length === 0) {
-      setError('Add at least one vehicle to the booking list before checkout.');
-      return;
-    }
+  const handleBookingClick = () => {
     if (Object.keys(cartItemErrors).length > 0) {
       setError('Fix highlighted booking items before checkout.');
       return;
@@ -862,33 +855,12 @@ export default function CreateBookingPage() {
         holdId: cartItems.find(c => c.clientItemId === item.clientItemId)?.holdId,
       }));
 
-      // Proactively check policy acceptance status before confirming booking
-      const statusRes = await getPolicyAcceptanceStatus();
-      if (statusRes.ok && statusRes.data?.success) {
-        const missingPolicies = statusRes.data.data?.missingPolicies || [];
-        if (missingPolicies.length > 0) {
-          setPolicyPrompt({
-            open: true,
-            missingPolicies: missingPolicies,
-          });
-          setSubmitting(false);
-          return;
-        }
-      }
-
       const res = await createBulkBooking({
         idempotencyKey: createClientItemId(),
         items: checkoutItems,
       });
 
       if (!res.ok) {
-        if (isPolicyAcceptanceRequired(res.data)) {
-          setPolicyPrompt({
-            open: true,
-            missingPolicies: extractMissingPolicies(res.data),
-          });
-          return;
-        }
 
         const errorMessage = res.data?.message || '';
         const itemErrors = res.data?.data?.itemErrors || [];
@@ -926,7 +898,7 @@ export default function CreateBookingPage() {
   };
 
   useEffect(() => {
-    latestActions.current.handleCreateBooking = handleCheckoutCart;
+    latestActions.current.handleCreateBooking = executeCheckoutCart;
   });
 
   const successBookingCards = bookingInfo?.bookings || (
@@ -1308,7 +1280,7 @@ export default function CreateBookingPage() {
 
                   <button
                     type="button"
-                    onClick={handleCheckoutCart}
+                    onClick={handleBookingClick}
                     disabled={submitting || topUpLoading  || cartItems.length === 0}
                     className="w-full rounded-2xl bg-gray-900 hover:bg-black disabled:opacity-50 text-white px-4 py-4 font-black transition flex items-center justify-center gap-2 shadow-sm active:scale-[0.98]"
                   >
@@ -1540,15 +1512,7 @@ export default function CreateBookingPage() {
         </div>
       )}
 
-      <PolicyAcceptancePrompt
-        open={policyPrompt.open}
-        missingPolicies={policyPrompt.missingPolicies}
-        onClose={() => setPolicyPrompt({ open: false, missingPolicies: [] })}
-        onAccepted={() => {
-          setPolicyPrompt({ open: false, missingPolicies: [] });
-          executeCheckoutCart();
-        }}
-      />
+
 
       <BookingPolicyModal
         open={showPolicyModal}

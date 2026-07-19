@@ -55,10 +55,27 @@ const subscriptionSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    pendingRenewal: {
+      orderCode: Number,
+      newExpireAt: Date,
+      amount: Number
+    },
+    renewalCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    lastRenewedAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,
   }
 );
+
+subscriptionSchema.index({ user: 1, status: 1, expireAt: -1 });
+subscriptionSchema.index({ status: 1, paymentStatus: 1, expireAt: 1 });
 
 module.exports = mongoose.model('Subscription', subscriptionSchema);

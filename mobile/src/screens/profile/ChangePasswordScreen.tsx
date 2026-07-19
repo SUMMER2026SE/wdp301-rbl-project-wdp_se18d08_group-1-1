@@ -1,13 +1,23 @@
 import { useState } from 'react';
+import {
+  ActivityIndicator,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { AppText, Button, Input } from '@/components/common';
-import { Screen } from '@/components/layout/Screen';
+import { ScreenHeader } from '@/components/common';
+import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
 import { useToast } from '@/hooks/useToast';
 import { profileService } from '@/services/api/profile';
-import { colors } from '@/theme';
 import { calculatePasswordStrength } from '@/utils/profileValidation';
 
-export const ChangePasswordScreen = () => {
+export const ChangePasswordScreen = ({ navigation }: { navigation: { goBack: () => void } }) => {
   const toast = useToast();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -17,17 +27,17 @@ export const ChangePasswordScreen = () => {
 
   const handleSubmit = async () => {
     if (newPassword.length < 6) {
-      setError('New password must be at least 6 characters.');
+      setError('The new password must be at least 6 characters.');
       return;
     }
 
     if (newPassword === currentPassword) {
-      setError('New password must be different from the current password.');
+      setError('The new password must differ from your current password.');
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      setError('Passwords do not match.');
+      setError('The password confirmation does not match.');
       return;
     }
 
@@ -35,26 +45,183 @@ export const ChangePasswordScreen = () => {
     setError('');
     try {
       await profileService.changePassword({ currentPassword, newPassword, confirmPassword });
-      toast.showSuccess('Password changed');
+      toast.showSuccess('Password changed successfully');
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
+      navigation.goBack();
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'Password change failed.');
+      setError(submitError instanceof Error ? submitError.message : 'Unable to change password.');
     } finally {
       setLoading(false);
     }
   };
 
+  const strength = calculatePasswordStrength(newPassword);
+  
+  const getStrengthColor = () => {
+    switch (strength) {
+      case 'strong': return COLORS.success;
+      case 'medium': return COLORS.warning;
+      case 'weak': return COLORS.error;
+      default: return COLORS.textMuted;
+    }
+  };
+
+  const getStrengthText = () => {
+    switch (strength) {
+      case 'strong': return 'Strong';
+      case 'medium': return 'Medium';
+      case 'weak': return 'Weak';
+      default: return 'Not entered';
+    }
+  };
+
   return (
-    <Screen>
-      <AppText variant="h1">Change Password</AppText>
-      <Input label="Current password" onChangeText={setCurrentPassword} secureTextEntry value={currentPassword} />
-      <Input label="New password" onChangeText={setNewPassword} secureTextEntry value={newPassword} />
-      <AppText color={colors.light.text.secondary}>Strength: {calculatePasswordStrength(newPassword)}</AppText>
-      <Input label="Confirm password" onChangeText={setConfirmPassword} secureTextEntry value={confirmPassword} />
-      {error ? <AppText color={colors.error.main}>{error}</AppText> : null}
-      <Button loading={loading} title="Update Password" onPress={handleSubmit} />
-    </Screen>
+    <SafeAreaView edges={['top']} style={styles.safe}>
+      <StatusBar barStyle="light-content" backgroundColor="#080808" />
+      <ScreenHeader title="Change password" onBack={() => navigation.goBack()} />
+
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        <View style={styles.formCard}>
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Current password</Text>
+            <View style={styles.inputWrap}>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter current password"
+                placeholderTextColor={COLORS.textMuted}
+                secureTextEntry
+                value={currentPassword}
+                onChangeText={setCurrentPassword}
+              />
+            </View>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <View style={styles.labelRow}>
+              <Text style={styles.label}>New password</Text>
+              {newPassword.length > 0 ? (
+                <Text style={[styles.strengthText, { color: getStrengthColor() }]}>
+                  {getStrengthText()}
+                </Text>
+              ) : null}
+            </View>
+            <View style={styles.inputWrap}>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter new password"
+                placeholderTextColor={COLORS.textMuted}
+                secureTextEntry
+                value={newPassword}
+                onChangeText={setNewPassword}
+              />
+            </View>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Confirm password</Text>
+            <View style={styles.inputWrap}>
+              <TextInput
+                style={styles.input}
+                placeholder="Re-enter new password"
+                placeholderTextColor={COLORS.textMuted}
+                secureTextEntry
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+              />
+            </View>
+          </View>
+        </View>
+
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+        <TouchableOpacity 
+          activeOpacity={0.8} 
+          style={[styles.primaryButton, loading && styles.disabled]} 
+          onPress={handleSubmit}
+          disabled={loading}
+        >
+          {loading ? (
+            <ActivityIndicator color={COLORS.textInverse} size="small" />
+          ) : (
+            <Text style={styles.primaryButtonText}>Change password</Text>
+          )}
+        </TouchableOpacity>
+      </ScrollView>
+    </SafeAreaView>
   );
 };
+
+const styles = StyleSheet.create({
+  safe: {
+    backgroundColor: COLORS.background,
+    flex: 1,
+  },
+  scroll: {
+    padding: SPACING.lg,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.xxl,
+    gap: SPACING.lg,
+  },
+  formCard: {
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderWidth: 1,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.lg,
+    gap: SPACING.md,
+  },
+  inputGroup: {
+    gap: SPACING.xs,
+  },
+  labelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  label: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '500',
+  },
+  strengthText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: '600',
+  },
+  inputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surfaceElevated,
+    borderColor: COLORS.border,
+    borderWidth: 1,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    height: 48,
+  },
+  input: {
+    flex: 1,
+    color: COLORS.textPrimary,
+    fontSize: FONT_SIZES.md,
+  },
+  errorText: {
+    color: COLORS.error,
+    fontSize: FONT_SIZES.sm,
+    textAlign: 'center',
+  },
+  primaryButton: {
+    backgroundColor: COLORS.gold,
+    borderRadius: RADIUS.md,
+    height: 52,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  disabled: {
+    opacity: 0.6,
+  },
+  primaryButtonText: {
+    color: COLORS.textInverse,
+    fontSize: FONT_SIZES.md,
+    fontWeight: '700',
+  },
+});

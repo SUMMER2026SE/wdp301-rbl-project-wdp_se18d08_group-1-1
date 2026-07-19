@@ -26,6 +26,22 @@ const ticketPackageSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    maxSlots: {
+      type: Number,
+      default: 3,
+      min: 1,
+      max: 10,
+    },
+    renewalWindowDays: {
+      type: Number,
+      default: 7,
+      min: 1,
+      max: 60,
+    },
+    isRenewable: {
+      type: Boolean,
+      default: true,
+    },
   },
   { timestamps: true }
 );

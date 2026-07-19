@@ -9,7 +9,7 @@ export const MembershipBadge = ({ membership }: { membership?: UserMembership })
   return (
     <Card style={styles.card}>
       <AppText color={colors.warning.dark} variant="h3">VIP Membership</AppText>
-      <AppText>Expires: {membership.expireAt ? new Date(membership.expireAt).toLocaleDateString('vi-VN') : 'N/A'}</AppText>
+      <AppText>Expires: {membership.expireAt ? new Date(membership.expireAt).toLocaleDateString('en-GB') : 'N/A'}</AppText>
       <AppText>{membership.freeServiceCount || 0} free services remaining</AppText>
     </Card>
   );

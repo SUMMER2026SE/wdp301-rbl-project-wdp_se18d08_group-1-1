@@ -39,6 +39,6 @@ const styles = StyleSheet.create({
   },
   initials: {
     ...typography.h3,
-    color: colors.primary[700],
+    color: colors.primary[600],
   },
 });

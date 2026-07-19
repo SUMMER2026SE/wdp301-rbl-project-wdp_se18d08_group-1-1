@@ -236,26 +236,68 @@ async function checkVIPSubscriptions(app) {
     });
 
     const Slot = require('../models/Slot');
+    const User = require('../models/User');
+    const useOwnerGuard = isEnabled(
+      'SUBSCRIPTION_SLOT_OWNER_GUARD_ENABLED',
+      false
+    );
     for (const sub of expiredSubscriptions) {
-      sub.status = 'expired';
-      await sub.save();
-      
-      // Release slots
-      for (const slot of sub.slots) {
-        await Slot.updateOne(
-          { floorID: slot.floorId, slotNumber: slot.slotCode },
-          { $unset: { reservedFor: "" } }
-        );
+      const expiringSubscription = useOwnerGuard
+        ? await Subscription.findOneAndUpdate(
+          { _id: sub._id, status: 'active', expireAt: { $lte: now } },
+          { status: 'expired' },
+          { new: true }
+        )
+        : sub;
+
+      if (!expiringSubscription) {
+        continue;
+      }
+      if (!useOwnerGuard) {
+        expiringSubscription.status = 'expired';
+        await expiringSubscription.save();
       }
       
-      if (sub.user) {
-        notifTriggers.notifySystemMessage(app, sub.user, {
+      // Release slots
+      for (const slot of expiringSubscription.slots) {
+        const slotFilter = {
+          floorID: slot.floorId,
+          slotNumber: slot.slotCode,
+        };
+        if (useOwnerGuard) {
+          slotFilter.reservedBySubscriptionId = expiringSubscription._id;
+        }
+        await Slot.updateOne(slotFilter, {
+          $unset: {
+            reservedFor: '',
+            reservedBySubscriptionId: '',
+            reservedUntil: '',
+          },
+        });
+      }
+
+      await User.updateOne(
+        {
+          _id: expiringSubscription.user,
+          'membership.expireAt': { $lte: now },
+        },
+        {
+          $set: {
+            'membership.isVip': false,
+            'membership.expireAt': null,
+            'membership.packageId': null,
+          },
+        }
+      );
+      
+      if (expiringSubscription.user) {
+        notifTriggers.notifySystemMessage(app, expiringSubscription.user, {
           title: 'Hết hạn VIP Pass / VIP Pass Expired',
           body: `Gói đỗ xe tháng của bạn đã hết hạn. Vị trí ô đỗ cố định đã được mở lại cho mọi người. / Your monthly pass has expired. Your fixed parking slot has been released.`,
           type: 'SYSTEM'
         }).catch(err => console.error('Failed to send VIP expired:', err));
       }
-      console.log(`[ParkingScheduler] Marked subscription ${sub._id} as expired and released slots.`);
+      console.log(`[ParkingScheduler] Marked subscription ${expiringSubscription._id} as expired and released slots.`);
     }
 
   } catch (err) {

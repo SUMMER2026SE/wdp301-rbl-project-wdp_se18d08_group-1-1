@@ -18,12 +18,19 @@ const buildMembershipPayload = async (membership = {}, userId = null) => {
   }
 
   let reservedSlots = [];
+  let subscriptionId = null;
   if (userId && raw?.isVip) {
     const slots = await Slot.find({ reservedFor: userId }).populate('floorID', 'name').lean();
     reservedSlots = slots.map(s => ({
       floorName: s.floorID?.name || 'Unknown Floor',
       slotNumber: s.slotNumber
     }));
+    
+    const Subscription = require("../models/Subscription");
+    const sub = await Subscription.findOne({ user: userId }).sort({ createdAt: -1 }).lean();
+    if (sub) {
+       subscriptionId = sub._id.toString();
+    }
   }
 
   return {
@@ -33,6 +40,7 @@ const buildMembershipPayload = async (membership = {}, userId = null) => {
     freeServiceCount: raw?.freeServiceCount || 0,
     packageType,
     reservedSlots,
+    subscriptionId,
   };
 };
 

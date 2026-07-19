@@ -1,18 +1,21 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useEffect, useState } from 'react';
-import { Alert } from 'react-native';
+import { ActivityIndicator, ScrollView, StatusBar, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 
-import { AppText, Button, Input, LoadingSpinner } from '@/components/common';
-import { Screen } from '@/components/layout/Screen';
+import { ScreenHeader } from '@/components/common';
 import { useToast } from '@/hooks/useToast';
 import type { ProfileStackParamList } from '@/navigation/types';
 import { vehiclesService } from '@/services/api/vehicles';
-import { colors } from '@/theme';
+import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
+import { useAppAlert } from '@/contexts/AppAlertContext';
 
 type Props = NativeStackScreenProps<ProfileStackParamList, 'EditVehicle'>;
 
 export const EditVehicleScreen = ({ navigation, route }: Props) => {
   const toast = useToast();
+  const { alert } = useAppAlert();
   const [brand, setBrand] = useState('');
   const [model, setModel] = useState('');
   const [color, setColor] = useState('');
@@ -52,17 +55,17 @@ export const EditVehicleScreen = ({ navigation, route }: Props) => {
         nickname: nickname.trim(),
         hexColor,
       });
-      toast.showSuccess('Vehicle updated');
+      toast.showSuccess('Vehicle updated successfully');
       navigation.goBack();
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'Vehicle update failed.');
+      setError(submitError instanceof Error ? submitError.message : 'Unable to update the vehicle.');
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = () => {
-    Alert.alert('Delete vehicle', 'This vehicle will be permanently deleted.', [
+    alert('Delete vehicle', 'Are you sure you want to delete this vehicle?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete',
@@ -71,10 +74,10 @@ export const EditVehicleScreen = ({ navigation, route }: Props) => {
           setSaving(true);
           try {
             await vehiclesService.deleteVehicle(route.params.vehicleId);
-            toast.showSuccess('Vehicle deleted successfully');
+            toast.showSuccess('Vehicle deleted');
             navigation.goBack();
           } catch (deleteError) {
-            setError(deleteError instanceof Error ? deleteError.message : 'Vehicle delete failed.');
+            setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete the vehicle.');
           } finally {
             setSaving(false);
           }
@@ -89,6 +92,8 @@ export const EditVehicleScreen = ({ navigation, route }: Props) => {
       await vehiclesService.setDefaultVehicle(route.params.vehicleId);
       toast.showSuccess('Default vehicle updated');
       navigation.goBack();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unable to set the default vehicle.');
     } finally {
       setSaving(false);
     }
@@ -96,24 +101,230 @@ export const EditVehicleScreen = ({ navigation, route }: Props) => {
 
   if (loading) {
     return (
-      <Screen>
-        <LoadingSpinner />
-      </Screen>
+      <SafeAreaView edges={['top']} style={styles.safe}>
+        <StatusBar barStyle="light-content" backgroundColor="#080808" />
+        <ScreenHeader title="Edit vehicle" onBack={() => navigation.goBack()} />
+        <View style={styles.center}>
+          <ActivityIndicator color={COLORS.gold} size="large" />
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <Screen>
-      <AppText variant="h1">Edit Vehicle</AppText>
-      <Input label="Brand" onChangeText={setBrand} value={brand} />
-      <Input label="Model" onChangeText={setModel} value={model} />
-      <Input label="Color" onChangeText={setColor} value={color} />
-      <Input label="Nickname" onChangeText={setNickname} value={nickname} />
-      <Input label="Hex color" onChangeText={setHexColor} value={hexColor} />
-      {error ? <AppText color={colors.error.main}>{error}</AppText> : null}
-      <Button loading={saving} title="Save" onPress={handleSubmit} />
-      <Button loading={saving} title="Set Default" variant="outline" onPress={handleSetDefault} />
-      <Button loading={saving} title="Delete Vehicle" variant="ghost" onPress={handleDelete} />
-    </Screen>
+    <SafeAreaView edges={['top']} style={styles.safe}>
+      <StatusBar barStyle="light-content" backgroundColor="#080808" />
+      <ScreenHeader title="Edit vehicle" onBack={() => navigation.goBack()} />
+
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+        <View style={styles.formCard}>
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Make</Text>
+            <View style={styles.inputWrap}>
+              <TextInput
+                style={styles.input}
+                placeholder="VD: TOYOTA"
+                placeholderTextColor={COLORS.textMuted}
+                value={brand}
+                onChangeText={setBrand}
+              />
+            </View>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Model</Text>
+            <View style={styles.inputWrap}>
+              <TextInput
+                style={styles.input}
+                placeholder="VD: VIOS"
+                placeholderTextColor={COLORS.textMuted}
+                value={model}
+                onChangeText={setModel}
+              />
+            </View>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Color</Text>
+            <View style={styles.inputWrap}>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. White"
+                placeholderTextColor={COLORS.textMuted}
+                value={color}
+                onChangeText={setColor}
+              />
+            </View>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Vehicle nickname</Text>
+            <View style={styles.inputWrap}>
+              <TextInput
+                style={styles.input}
+                placeholder="Name or nickname"
+                placeholderTextColor={COLORS.textMuted}
+                value={nickname}
+                onChangeText={setNickname}
+              />
+            </View>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Hex color code</Text>
+            <View style={styles.inputWrap}>
+              <View style={[styles.colorPreview, { backgroundColor: hexColor }]} />
+              <TextInput
+                style={styles.input}
+                placeholder="#ffffff"
+                placeholderTextColor={COLORS.textMuted}
+                value={hexColor}
+                onChangeText={setHexColor}
+              />
+            </View>
+          </View>
+        </View>
+
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+        <TouchableOpacity 
+          activeOpacity={0.8} 
+          style={[styles.primaryButton, saving && styles.disabled]} 
+          onPress={handleSubmit}
+          disabled={saving}
+        >
+          {saving ? (
+            <ActivityIndicator color={COLORS.textInverse} size="small" />
+          ) : (
+            <Text style={styles.primaryButtonText}>Save changes</Text>
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          activeOpacity={0.8} 
+          style={[styles.outlineButton, saving && styles.disabled]} 
+          onPress={handleSetDefault}
+          disabled={saving}
+        >
+          <Ionicons name="star-outline" size={20} color={COLORS.gold} />
+          <Text style={styles.outlineButtonText}>Set as default vehicle</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          activeOpacity={0.8} 
+          style={[styles.ghostButton, saving && styles.disabled]} 
+          onPress={handleDelete}
+          disabled={saving}
+        >
+          <Ionicons name="trash-outline" size={20} color={COLORS.error} />
+          <Text style={styles.ghostButtonText}>Delete vehicle</Text>
+        </TouchableOpacity>
+
+      </ScrollView>
+    </SafeAreaView>
   );
 };
+
+const styles = StyleSheet.create({
+  safe: {
+    backgroundColor: COLORS.background,
+    flex: 1,
+  },
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  scroll: {
+    padding: SPACING.lg,
+    paddingTop: SPACING.sm,
+    paddingBottom: SPACING.xxl,
+    gap: SPACING.lg,
+  },
+  formCard: {
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderWidth: 1,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.lg,
+    gap: SPACING.md,
+  },
+  inputGroup: {
+    gap: SPACING.xs,
+  },
+  label: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '500',
+  },
+  inputWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surfaceElevated,
+    borderColor: COLORS.border,
+    borderWidth: 1,
+    borderRadius: RADIUS.md,
+    paddingHorizontal: SPACING.md,
+    height: 48,
+  },
+  input: {
+    flex: 1,
+    color: COLORS.textPrimary,
+    fontSize: FONT_SIZES.md,
+  },
+  colorPreview: {
+    width: 20,
+    height: 20,
+    borderRadius: RADIUS.round,
+    marginRight: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  errorText: {
+    color: COLORS.error,
+    fontSize: FONT_SIZES.sm,
+    textAlign: 'center',
+  },
+  primaryButton: {
+    backgroundColor: COLORS.gold,
+    borderRadius: RADIUS.md,
+    height: 52,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  outlineButton: {
+    borderColor: 'rgba(212,175,55,0.3)',
+    borderWidth: 1,
+    borderRadius: RADIUS.md,
+    height: 52,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: SPACING.xs,
+  },
+  ghostButton: {
+    height: 52,
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: SPACING.xs,
+  },
+  disabled: {
+    opacity: 0.6,
+  },
+  primaryButtonText: {
+    color: COLORS.textInverse,
+    fontSize: FONT_SIZES.md,
+    fontWeight: '700',
+  },
+  outlineButtonText: {
+    color: COLORS.gold,
+    fontSize: FONT_SIZES.md,
+    fontWeight: '600',
+  },
+  ghostButtonText: {
+    color: COLORS.error,
+    fontSize: FONT_SIZES.md,
+    fontWeight: '600',
+  },
+});

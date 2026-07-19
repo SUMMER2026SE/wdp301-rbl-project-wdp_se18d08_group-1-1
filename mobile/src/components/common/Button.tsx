@@ -77,7 +77,7 @@ export const Button = ({
       {...props}
     >
       {loading ? (
-        <ActivityIndicator color={variant === 'primary' ? colors.neutral.white : colors.primary[600]} />
+        <ActivityIndicator color={variant === 'primary' ? colors.light.text.inverse : colors.primary[600]} />
       ) : (
         <AppText style={[styles.text, variantStyle.text, textStyle]}>{title}</AppText>
       )}
@@ -101,16 +101,16 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary[500],
   },
   primaryText: {
-    color: colors.neutral.white,
+    color: colors.light.text.inverse,
   },
   secondary: {
     backgroundColor: colors.secondary[500],
   },
   secondaryText: {
-    color: colors.neutral.white,
+    color: colors.light.text.inverse,
   },
   outline: {
-    backgroundColor: colors.neutral.white,
+    backgroundColor: colors.light.surface,
     borderColor: colors.primary[500],
     borderWidth: 1,
   },
@@ -127,6 +127,7 @@ const styles = StyleSheet.create({
     opacity: 0.55,
   },
   pressed: {
-    opacity: 0.85,
+    opacity: 0.92,
+    transform: [{ scale: 0.98 }],
   },
 });

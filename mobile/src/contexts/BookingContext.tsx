@@ -5,7 +5,11 @@ import bookingService from '@/services/BookingService';
 import parkingFloorService from '@/services/ParkingFloorService';
 import serviceService from '@/services/ServiceService';
 import { walletService } from '@/services/api/wallet';
-import type { CreateBookingRequest } from '@/types/api.types';
+import type {
+  BookingMembershipPolicy,
+  CreateBookingRequest,
+  ModifyBookingTimeRequest,
+} from '@/types/api.types';
 import type {
   AvailableSlot,
   Booking,
@@ -21,6 +25,7 @@ type BookingFilter = BookingStatus | 'all';
 interface BookingContextValue {
   bookings: Booking[];
   availableSlots: AvailableSlot[];
+  bookingPolicy: BookingMembershipPolicy | null;
   parkingFloors: ParkingFloor[];
   services: Service[];
   filterStatus: BookingFilter;
@@ -28,10 +33,17 @@ interface BookingContextValue {
   error: string;
   walletBalance: number;
   fetchBookings: () => Promise<void>;
-  getAvailableSlots: (startTime: Date, endTime: Date) => Promise<void>;
+  getAvailableSlots: (
+    startTime: Date,
+    endTime: Date,
+    options?: { silent?: boolean },
+  ) => Promise<void>;
   createBooking: (data: CreateBookingRequest) => Promise<Booking>;
   checkInBooking: (bookingId: string) => Promise<void>;
   checkOutBooking: (bookingId: string) => Promise<void>;
+  cancelBooking: (bookingId: string) => Promise<void>;
+  extendBooking: (bookingId: string, data: ModifyBookingTimeRequest) => Promise<void>;
+  updateBookingVehicle: (bookingId: string, vehicleId: string) => Promise<void>;
   getBookingById: (bookingId: string) => Booking | undefined;
   fetchParkingFloors: () => Promise<void>;
   fetchServices: () => Promise<void>;
@@ -46,6 +58,7 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
   const socket = useSocket();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [availableSlots, setAvailableSlots] = useState<AvailableSlot[]>([]);
+  const [bookingPolicy, setBookingPolicy] = useState<BookingMembershipPolicy | null>(null);
   const [parkingFloors, setParkingFloors] = useState<ParkingFloor[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [filterStatus, setFilterStatus] = useState<BookingFilter>('all');
@@ -66,16 +79,28 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
     }
   }, []);
 
-  const getAvailableSlots = useCallback(async (startTime: Date, endTime: Date) => {
-    setIsLoading(true);
-    setError('');
+  const getAvailableSlots = useCallback(async (
+    startTime: Date,
+    endTime: Date,
+    options: { silent?: boolean } = {},
+  ) => {
+    if (!options.silent) {
+      setIsLoading(true);
+      setError('');
+      setBookingPolicy(null);
+    }
     try {
       const response = await bookingService.getAvailableSlots(startTime, endTime);
-      setAvailableSlots(response.data || []);
+      setAvailableSlots(bookingService.normalizeAvailableSlots(response));
+      setBookingPolicy(bookingService.normalizeBookingPolicy(response));
     } catch (fetchError) {
-      setError(fetchError instanceof Error ? fetchError.message : 'Unable to load slots.');
+      if (!options.silent) {
+        setError(fetchError instanceof Error ? fetchError.message : 'Unable to load slots.');
+        setAvailableSlots([]);
+        setBookingPolicy(null);
+      }
     } finally {
-      setIsLoading(false);
+      if (!options.silent) setIsLoading(false);
     }
   }, []);
 
@@ -110,7 +135,7 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
       setError('');
       try {
         const response = await bookingService.createBooking(data);
-        const booking = response.data;
+        const booking = bookingService.normalizeBookingResponse(response);
 
         if (!booking) {
           throw new Error('Booking response was empty.');
@@ -134,7 +159,7 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
     setIsLoading(true);
     try {
       const response = await bookingService.checkInBooking(bookingId);
-      const updated = response.data?.booking;
+      const updated = bookingService.normalizeBooking(response.data?.booking);
       if (updated) {
         setBookings((current) => current.map((item) => (item._id === bookingId ? updated : item)));
       }
@@ -148,7 +173,7 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
       setIsLoading(true);
       try {
         const response = await bookingService.checkOutBooking(bookingId);
-        const updated = response.data?.booking;
+        const updated = bookingService.normalizeBooking(response.data?.booking);
         if (updated) {
           setBookings((current) => current.map((item) => (item._id === bookingId ? updated : item)));
         }
@@ -159,6 +184,65 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
     },
     [fetchWalletBalance],
   );
+
+  const cancelBooking = useCallback(
+    async (bookingId: string) => {
+      setIsLoading(true);
+      setError('');
+      try {
+        const response = await bookingService.cancelBooking(bookingId);
+        const updated = bookingService.normalizeBooking(response.data);
+        if (!updated) throw new Error('Booking response was empty.');
+
+        setBookings((current) => current.map((item) => (item._id === bookingId ? updated : item)));
+        await fetchWalletBalance();
+      } catch (cancelError) {
+        setError(cancelError instanceof Error ? cancelError.message : 'Unable to cancel booking.');
+        throw cancelError;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [fetchWalletBalance],
+  );
+
+  const extendBooking = useCallback(
+    async (bookingId: string, data: ModifyBookingTimeRequest) => {
+      setIsLoading(true);
+      setError('');
+      try {
+        const response = await bookingService.extendBooking(bookingId, data);
+        const updated = bookingService.normalizeBooking(response.data);
+        if (!updated) throw new Error('Booking response was empty.');
+
+        setBookings((current) => current.map((item) => (item._id === bookingId ? updated : item)));
+        await fetchWalletBalance();
+      } catch (extendError) {
+        setError(extendError instanceof Error ? extendError.message : 'Unable to extend booking.');
+        throw extendError;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [fetchWalletBalance],
+  );
+
+  const updateBookingVehicle = useCallback(async (bookingId: string, vehicleId: string) => {
+    setIsLoading(true);
+    setError('');
+    try {
+      const response = await bookingService.updateBookingVehicle(bookingId, vehicleId);
+      const updated = bookingService.normalizeBooking(response.data);
+      if (!updated) throw new Error('Booking response was empty.');
+
+      setBookings((current) => current.map((item) => (item._id === bookingId ? updated : item)));
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : 'Unable to update booking vehicle.');
+      throw updateError;
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   const getBookingById = useCallback(
     (bookingId: string) => bookings.find((booking) => booking._id === bookingId),
@@ -177,11 +261,15 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
     const bookingHandler = (payload: unknown) => {
       const event = payload as BookingChangedEvent;
       setBookings((current) =>
-        current.map((booking) =>
-          booking._id === event.bookingId
-            ? ({ ...booking, ...(event.booking || {}), status: event.status } as Booking)
-            : booking,
-        ),
+        current.map((booking) => {
+          if (booking._id !== event.bookingId) return booking;
+
+          const update =
+            event.booking && typeof event.booking === 'object'
+              ? (event.booking as Record<string, unknown>)
+              : {};
+          return bookingService.normalizeBooking({ ...booking, ...update, status: event.status }) ?? booking;
+        }),
       );
     };
     const slotHandler = (payload: unknown) => {
@@ -202,6 +290,7 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
     () => ({
       bookings,
       availableSlots,
+      bookingPolicy,
       parkingFloors,
       services,
       filterStatus,
@@ -213,6 +302,9 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
       createBooking,
       checkInBooking,
       checkOutBooking,
+      cancelBooking,
+      extendBooking,
+      updateBookingVehicle,
       getBookingById,
       fetchParkingFloors,
       fetchServices,
@@ -223,6 +315,7 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
     [
       bookings,
       availableSlots,
+      bookingPolicy,
       parkingFloors,
       services,
       filterStatus,
@@ -234,6 +327,9 @@ export const BookingProvider = ({ children }: { children: ReactNode }) => {
       createBooking,
       checkInBooking,
       checkOutBooking,
+      cancelBooking,
+      extendBooking,
+      updateBookingVehicle,
       getBookingById,
       fetchParkingFloors,
       fetchServices,

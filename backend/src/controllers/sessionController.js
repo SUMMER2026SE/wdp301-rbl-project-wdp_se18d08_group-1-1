@@ -86,11 +86,21 @@ exports.verifyPlate = async (req, res, next) => {
               parkingSlot: normalizeSlotCode(slotCode),
               status: 'active'
             });
+
+            // Handle race condition: check if slot is held by another process (like Vehicle 1 at Step 3)
+            const holding = await BookingHold.findOne({
+              floorId,
+              slotCode: normalizeSlotCode(slotCode),
+              status: 'active',
+              expiresAt: { $gt: new Date() }
+            });
             
-            if (!occupyingSession) {
+            if (!occupyingSession && !holding) {
               availableSlot = slot;
               break;
-            } else if (occupyingSession.userId && occupyingSession.userId.toString() === userId.toString()) {
+            } else if (occupyingSession && occupyingSession.userId && occupyingSession.userId.toString() === userId.toString()) {
+              occupiedBySelfCount++;
+            } else if (holding && holding.userId && holding.userId.toString() === userId.toString()) {
               occupiedBySelfCount++;
             }
           }
@@ -100,6 +110,18 @@ exports.verifyPlate = async (req, res, next) => {
           isMonthly = true;
           subscription = activeSubscription;
           subscription.assignedSlot = availableSlot;
+          
+          // CRITICAL: We MUST create a short hold for the fast-pass to prevent race condition with Vehicle 2
+          const holdEnd = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes hold
+          const fastPassHold = new BookingHold({
+            floorId: availableSlot.floorId?._id || availableSlot.floorId,
+            slotCode: normalizeSlotCode(availableSlot.slotCode),
+            userId,
+            licensePlate: cleanPlate,
+            status: 'active',
+            expiresAt: holdEnd
+          });
+          await fastPassHold.save();
         } else if (occupiedBySelfCount < activeSubscription.slots.length) {
           // If all slots are occupied, but AT LEAST ONE is occupied by a stranger, we still consider them VIP for TC4
           isMonthly = true;
@@ -452,7 +474,15 @@ exports.createKioskSession = async (req, res, next) => {
     let vipRedirected = false;
     let originalVipSlot = null;
     
+    let isVehicleApprovedForVIP = false;
     if (userId) {
+      const checkApproved = await Vehicle.findOne({ licensePlate: { $regex: new RegExp(`^${cleanPlate}$`, 'i') }, owner: userId, status: 'approved' });
+      if (checkApproved) {
+        isVehicleApprovedForVIP = true;
+      }
+    }
+
+    if (isVehicleApprovedForVIP) {
       const sub = await mongoose.model('Subscription').findOne({
         user: userId,
         status: 'active',
@@ -1253,7 +1283,7 @@ exports.getMyHistory = async (req, res, next) => {
 exports.getActiveParkingStatus = async (req, res, next) => {
   try {
     const activeSessions = await Session.find({ status: 'active', parkingSlot: { $ne: null } })
-      .select('licensePlate parkingSlot floorId vehicleType checkInTime expectedDurationHours phone userId')
+      .select('licensePlate parkingSlot floorId vehicleType checkInTime expectedDurationHours phone userId status')
       .populate('userId', 'email username');
 
     res.status(200).json({

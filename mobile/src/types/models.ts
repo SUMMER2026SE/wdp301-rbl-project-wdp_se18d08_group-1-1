@@ -16,6 +16,7 @@ export interface User {
   status: boolean;
   isEmailVerified: boolean;
   googleId?: string;
+  avatar?: string;
   membership?: UserMembership;
   createdAt?: string;
 }
@@ -110,6 +111,18 @@ export interface UserNotification {
 
 export type PolicyCategory = 'terms' | 'privacy' | 'refund' | 'parking_rules' | 'safety' | 'other';
 
+export interface PolicyVersion {
+  _id?: string;
+  policyId?: string;
+  versionNumber: string | number;
+  title?: string;
+  summary?: string;
+  content?: string;
+  effectiveDate?: string;
+  changeNote?: string;
+  publishedAt?: string;
+}
+
 export interface Policy {
   id?: string;
   _id?: string;
@@ -117,8 +130,9 @@ export interface Policy {
   title: string;
   description?: string;
   category: PolicyCategory;
-  currentVersion?: string;
-  versionNumber?: string;
+  currentVersion?: PolicyVersion | null;
+  currentVersionNumber?: string | number;
+  versionNumber?: string | number;
   requiresAcceptance?: boolean;
   acceptedAt?: string | null;
   isAccepted?: boolean;
@@ -129,10 +143,23 @@ export interface Policy {
 export interface PolicyDetail extends Policy {
   content: string;
   versionHistory?: Array<{
-    versionNumber: string;
+    versionNumber: string | number;
     publishedAt?: string;
     changeSummary?: string;
   }>;
+}
+
+export interface MissingPolicyAcceptance {
+  policyId: string;
+  policyVersionId?: string;
+  slug: string;
+  title: string;
+  versionNumber: string | number;
+}
+
+export interface PolicyAcceptanceStatus {
+  hasMissingRequiredPolicies: boolean;
+  missingPolicies: MissingPolicyAcceptance[];
 }
 
 export type TransactionType =

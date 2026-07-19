@@ -25,6 +25,9 @@ export default function KioskFastPass({ formData, isMonthly, onAutoCheckIn, onCo
   const [errorMessage, setErrorMessage] = useState('');
   const [floors, setFloors] = useState([]);
   const [dbSlots, setDbSlots] = useState([]);
+  const [activeSessions, setActiveSessions] = useState([]);
+  const [availableSlots, setAvailableSlots] = useState(null);
+  const [activeHolds, setActiveHolds] = useState([]);
   const [vipRedirectInfo, setVipRedirectInfo] = useState(null);
   const [currentSlot, setCurrentSlot] = useState(formData.selectedSlot);
   const hasStartedRef = useRef(false);
@@ -93,16 +96,36 @@ export default function KioskFastPass({ formData, isMonthly, onAutoCheckIn, onCo
 
     const fetchMapData = async () => {
       try {
-        const [floorsRes, slotsRes] = await Promise.all([
+        const effectiveHours = Number(formData.durationHours || 1);
+        const startTimeStr = new Date().toISOString();
+        const endTimeStr = new Date(Date.now() + effectiveHours * 60 * 60 * 1000).toISOString();
+
+        const [floorsRes, slotsRes, sessionsRes, availableRes, holdsRes] = await Promise.all([
           fetch(`${API_BASE}/parking-floors`),
           fetch(`${API_BASE}/parking-floors/${formData.floorId}/slots`),
+          fetch(`${API_BASE}/sessions/active-status`),
+          fetch(`${API_BASE}/bookings/available-slots?startTime=${startTimeStr}&endTime=${endTimeStr}`, {
+            headers: { 'Authorization': `Bearer ${sessionStorage.getItem('accessToken')}` }
+          }),
+          fetch(`${API_BASE}/bookings/active-holds`, {
+            headers: { 'Authorization': `Bearer ${sessionStorage.getItem('accessToken')}` }
+          })
         ]);
 
-        const [floorsData, slotsData] = await Promise.all([floorsRes.json(), slotsRes.json()]);
+        const [floorsData, slotsData, sessionsData] = await Promise.all([floorsRes.json(), slotsRes.json(), sessionsRes.json()]);
+        
+        let availableData = { success: false };
+        let holdsData = { success: false };
+        if (availableRes.ok) availableData = await availableRes.json();
+        if (holdsRes.ok) holdsData = await holdsRes.json();
+
         if (ignore) return;
 
         if (floorsData.success) setFloors(floorsData.data || []);
         if (slotsData.success) setDbSlots(slotsData.data || []);
+        if (sessionsData.success) setActiveSessions(sessionsData.data || []);
+        if (availableData.success && availableData.data?.slots) setAvailableSlots(availableData.data.slots);
+        if (holdsData.success) setActiveHolds(holdsData.data || []);
       } catch (error) {
         console.error('Failed to load fast-pass map data', error);
       }
@@ -112,7 +135,7 @@ export default function KioskFastPass({ formData, isMonthly, onAutoCheckIn, onCo
     return () => {
       ignore = true;
     };
-  }, [formData.floorId]);
+  }, [formData.floorId, formData.durationHours]);
 
   const isSubscriptionFlow = Boolean(isMonthly);
   const floorRecord = floors.find((floor) => floor._id === formData.floorId);
@@ -176,8 +199,10 @@ export default function KioskFastPass({ formData, isMonthly, onAutoCheckIn, onCo
               floors={floors.filter((floor) => floor._id === formData.floorId)}
               currentFloorId={formData.floorId}
               onFloorSelect={() => {}}
-              activeSessions={[]}
+              activeSessions={activeSessions}
               dbSlots={dbSlots}
+              availableSlots={availableSlots}
+              activeHolds={activeHolds}
               selectedSlotId={currentSlot}
               onSelectSlot={null}
               is2DMode={true}

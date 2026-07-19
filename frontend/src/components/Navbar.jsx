@@ -98,7 +98,7 @@ export default function Navbar() {
 
   // Hook for notifications
   const { notifications, unreadCount, markAsRead, markAllAsRead } =
-    useNotifications();
+    useNotifications({ contextRole: 'customer' });
 
   // Sync user
   const syncUser = useCallback(() => {

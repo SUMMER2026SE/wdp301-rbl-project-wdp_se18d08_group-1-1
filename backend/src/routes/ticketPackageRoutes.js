@@ -1,17 +1,19 @@
 const express = require('express');
 const router = express.Router();
 const ticketPackageController = require('../controllers/ticketPackageController');
-
-// TODO: Add auth middleware if needed (e.g. authMiddleware, requireAdmin)
+const { protect, authorize } = require('../middlewares/authMiddleware');
 
 // Public/Customer/Kiosk routes
 router.get('/active', ticketPackageController.getActivePackages);
 
-// Admin routes
+// Staff console routes
+router.use(protect, authorize('staff', 'admin'));
 router.get('/', ticketPackageController.getAllPackages);
-router.post('/', ticketPackageController.createPackage);
 router.get('/:id', ticketPackageController.getPackageById);
-router.put('/:id', ticketPackageController.updatePackage);
-router.delete('/:id', ticketPackageController.deletePackage);
+
+// Package management is reserved for administrators.
+router.post('/', authorize('admin'), ticketPackageController.createPackage);
+router.put('/:id', authorize('admin'), ticketPackageController.updatePackage);
+router.delete('/:id', authorize('admin'), ticketPackageController.deletePackage);
 
 module.exports = router;

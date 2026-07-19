@@ -27,9 +27,16 @@ const notificationSchema = new mongoose.Schema(
     },
     targetType: {
       type: String,
-      enum: ['ALL_USERS', 'SINGLE_USER', 'MULTI_USER'],
+      enum: ['ALL_USERS', 'SINGLE_USER', 'MULTI_USER', 'ROLE_BASED'],
       required: true,
     },
+    targetRoles: [
+      {
+        type: String,
+        enum: ['customer', 'staff', 'admin'],
+        default: 'customer'
+      },
+    ],
     targetUsers: [
       {
         type: mongoose.Schema.Types.ObjectId,
