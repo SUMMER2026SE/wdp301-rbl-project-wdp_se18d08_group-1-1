@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import ParkingMapViewer from '../../components/ParkingMapViewer';
 
-import BookingPolicyModal from '../../components/policies/BookingPolicyModal';
+import PolicyAcceptancePrompt from '../../components/policies/PolicyAcceptancePrompt';
 import { extractMissingPolicies, isPolicyAcceptanceRequired } from '../../utils/policyErrors';
 import { getPolicyAcceptanceStatus } from '../../services/policyService';
 import { getServices } from '../../services/extraServiceApi';
@@ -224,7 +224,9 @@ export default function CreateBookingPage() {
   const [bookingInfo, setBookingInfo] = useState(null);
   const [successRedirectCountdown, setSuccessRedirectCountdown] = useState(4);
 
-  const [showPolicyModal, setShowPolicyModal] = useState(false);
+  const [showGlobalPolicyModal, setShowGlobalPolicyModal] = useState(false);
+  const [missingPolicies, setMissingPolicies] = useState([]);
+  const [pendingPolicyAction, setPendingPolicyAction] = useState(null);
 
   // Map state
   const [floors, setFloors] = useState([]);
@@ -543,6 +545,11 @@ export default function CreateBookingPage() {
       });
 
       if (!res.ok) {
+        if (isPolicyAcceptanceRequired(res.data)) {
+          setMissingPolicies(extractMissingPolicies(res.data));
+          setPendingPolicyAction(() => handleFindSlots);
+          setShowGlobalPolicyModal(true);
+        }
         setError(res.data?.message || 'Could not check available slots.');
         setSelectedSlotKey('');
         return;
@@ -816,11 +823,10 @@ export default function CreateBookingPage() {
       setError('Fix highlighted booking items before checkout.');
       return;
     }
-    setShowPolicyModal(true);
+    executeCheckoutCart();
   };
 
   const executeCheckoutCart = async () => {
-    setShowPolicyModal(false);
     setSubmitting(true);
     setError('');
     setSuccess('');
@@ -847,9 +853,6 @@ export default function CreateBookingPage() {
         return;
       }
 
-
-
-
       const checkoutItems = cartApiItems.map((item) => ({
         ...item,
         holdId: cartItems.find(c => c.clientItemId === item.clientItemId)?.holdId,
@@ -861,9 +864,15 @@ export default function CreateBookingPage() {
       });
 
       if (!res.ok) {
-
         const errorMessage = res.data?.message || '';
         const itemErrors = res.data?.data?.itemErrors || [];
+        
+        if (isPolicyAcceptanceRequired(res.data)) {
+          setMissingPolicies(extractMissingPolicies(res.data));
+          setPendingPolicyAction(() => executeCheckoutCart);
+          setShowGlobalPolicyModal(true);
+        }
+
         if (itemErrors.length > 0) {
           setCartItemErrors(toItemErrorMap(itemErrors));
           setError(errorMessage || 'One or more booking items need attention.');
@@ -1514,10 +1523,17 @@ export default function CreateBookingPage() {
 
 
 
-      <BookingPolicyModal
-        open={showPolicyModal}
-        onClose={() => setShowPolicyModal(false)}
-        onConfirm={executeCheckoutCart}
+
+      <PolicyAcceptancePrompt
+        open={showGlobalPolicyModal}
+        missingPolicies={missingPolicies}
+        onClose={() => setShowGlobalPolicyModal(false)}
+        onAccepted={() => {
+          setShowGlobalPolicyModal(false);
+          if (pendingPolicyAction) {
+            pendingPolicyAction();
+          }
+        }}
       />
     </div>
   );
