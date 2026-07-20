@@ -61,7 +61,14 @@ export interface StaffSubscription {
   expireAt: string;
   user?: { _id?: string; username?: string; email?: string; status?: string; vehicles?: string[] };
   ticketPackage?: { _id?: string; name?: string; type?: string; price?: number };
-  slots?: Array<{ floorId?: { _id?: string; name?: string; floorNumber?: number } | string; slotCode: string }>;
+  slots?: Array<{
+    entitlementId?: string;
+    sourceSubscriptionId?: string;
+    floorId?: { _id?: string; name?: string; floorNumber?: number } | string;
+    slotCode: string;
+    status?: string;
+    expireAt?: string;
+  }>;
 }
 
 export interface StaffMembershipVehicle {
@@ -82,6 +89,7 @@ export interface StaffMembershipQrResolution {
 }
 
 export interface StaffMembershipTransitionPayload extends StaffBookingTransitionPayload {
+  entitlementId?: string;
   vehicleId?: string;
   floorId?: string;
   parkingSlot?: string;
@@ -140,9 +148,9 @@ export const staffService = {
       '/staff/memberships/qr/resolve',
       { payload },
     ),
-  transitionMembershipByQr: (subscriptionId: string, data: StaffMembershipTransitionPayload) =>
+  transitionMembershipByQr: (credentialId: string, data: StaffMembershipTransitionPayload) =>
     apiClient.post<APIResponse<{ session: StaffSession }>>(
-      `/staff/memberships/${subscriptionId}/transition`,
+      `/staff/memberships/${credentialId}/transition`,
       data,
     ),
   getSubscriptions: () => apiClient.get<APIResponse<StaffSubscription[]>>('/subscriptions/all'),

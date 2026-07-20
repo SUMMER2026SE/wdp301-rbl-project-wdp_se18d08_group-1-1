@@ -260,7 +260,7 @@ const debitWallet = async (userId, amount, description, options = {}) => {
         {
           userId,
           walletId: wallet._id,
-          type: 'PAYMENT',
+          type: options.transactionType || 'PAYMENT',
           amount,
           balanceBefore,
           balanceAfter,

@@ -5,6 +5,8 @@ const TicketPackage = require('../models/TicketPackage');
 const Vehicle = require('../models/Vehicle');
 const Slot = require('../models/Slot');
 const User = require('../models/User');
+const MembershipSlotEntitlement = require('../models/MembershipSlotEntitlement');
+const { isEnabled } = require('../utils/featureFlags');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -70,34 +72,57 @@ const validateNewSubscriptionEligibility = async ({
   const normalizedSlots = normalizeRequestedSlots(slots);
 
   let vehicleQuery = Vehicle.countDocuments({ owner: userId, status: 'approved' });
-  let activeSubscriptionQuery = Subscription.findOne({
-    user: userId,
-    status: 'active',
-    paymentStatus: 'paid',
-    expireAt: { $gt: now },
-  }).select('_id expireAt');
+  const entitlementMode = isEnabled(
+    'MEMBERSHIP_ENTITLEMENTS_ENABLED',
+    true
+  );
+  let activeOwnershipQuery = entitlementMode
+    ? MembershipSlotEntitlement.countDocuments({
+        ownerId: userId,
+        status: { $in: ['active', 'transfer_locked'] },
+        expireAt: { $gt: now },
+      })
+    : Subscription.find({
+        user: userId,
+        status: 'active',
+        paymentStatus: 'paid',
+        expireAt: { $gt: now },
+      }).select('slots');
   if (session) {
     vehicleQuery = vehicleQuery.session(session);
-    activeSubscriptionQuery = activeSubscriptionQuery.session(session);
+    activeOwnershipQuery = activeOwnershipQuery.session(session);
   }
 
-  const [eligibleVehicleCount, activeSubscription] = await Promise.all([
+  const [eligibleVehicleCount, activeOwnership] = await Promise.all([
     vehicleQuery,
-    activeSubscriptionQuery,
+    activeOwnershipQuery,
   ]);
-  if (activeSubscription) {
-    throw businessError(
-      'You already have an active package. Please renew the current package instead.',
-      'ACTIVE_SUBSCRIPTION_EXISTS',
-      409
+  let activeSlotCount = entitlementMode
+    ? Number(activeOwnership || 0)
+    : (activeOwnership || []).reduce(
+        (total, subscription) => total + (subscription.slots || []).length,
+        0
+      );
+  if (entitlementMode && activeSlotCount === 0) {
+    let legacyQuery = Subscription.find({
+      user: userId,
+      status: 'active',
+      paymentStatus: 'paid',
+      expireAt: { $gt: now },
+    }).select('slots');
+    if (session) legacyQuery = legacyQuery.session(session);
+    const legacySubscriptions = await legacyQuery;
+    activeSlotCount = legacySubscriptions.reduce(
+      (total, subscription) => total + (subscription.slots || []).length,
+      0
     );
   }
 
-  const packageSlotLimit = Number(ticketPackage.maxSlots || 3);
-  const maxSlots = Math.min(packageSlotLimit, eligibleVehicleCount);
-  if (!eligibleVehicleCount || normalizedSlots.length > maxSlots) {
+  const maxSlots = Math.min(3, eligibleVehicleCount);
+  const availableSlots = Math.max(0, maxSlots - activeSlotCount);
+  if (!eligibleVehicleCount || normalizedSlots.length > availableSlots) {
     throw businessError(
-      `You can select up to ${maxSlots} slot(s) based on your approved vehicles.`,
+      `You can select up to ${availableSlots} additional slot(s) based on your approved vehicles.`,
       'INSUFFICIENT_ELIGIBLE_VEHICLES'
     );
   }
@@ -107,7 +132,9 @@ const validateNewSubscriptionEligibility = async ({
       floorID: slot.floorId,
       slotNumber: slot.slotCode,
     })),
-  }).select('floorID slotNumber status reservedFor reservedBySubscriptionId');
+  }).select(
+    'floorID slotNumber status reservedFor reservedBySubscriptionId reservedByEntitlementId'
+  );
   if (session) slotsQuery = slotsQuery.session(session);
   const slotDocuments = await slotsQuery;
   const slotMap = new Map(
@@ -130,7 +157,7 @@ const validateNewSubscriptionEligibility = async ({
         409
       );
     }
-    if (slot.reservedFor || slot.reservedBySubscriptionId) {
+    if (slot.reservedFor || slot.reservedBySubscriptionId || slot.reservedByEntitlementId) {
       throw businessError(
         `Slot ${selectedSlot.slotCode} is already reserved.`,
         'SLOT_ALREADY_RESERVED',
@@ -143,6 +170,8 @@ const validateNewSubscriptionEligibility = async ({
     normalizedSlots,
     eligibleVehicleCount,
     maxSlots,
+    activeSlotCount,
+    availableSlots,
   };
 };
 
@@ -162,6 +191,17 @@ const validateRenewalEligibility = async ({
 
   if (!subscription) {
     throw businessError('Subscription not found.', 'SUBSCRIPTION_NOT_FOUND', 404);
+  }
+  let entitlementCountQuery = MembershipSlotEntitlement.countDocuments({
+    sourceSubscriptionId: subscription._id,
+  });
+  if (session) entitlementCountQuery = entitlementCountQuery.session(session);
+  if ((await entitlementCountQuery) > 0) {
+    throw businessError(
+      'Renew each membership space separately.',
+      'USE_ENTITLEMENT_RENEWAL',
+      409
+    );
   }
   if (subscription.status !== 'active' || subscription.paymentStatus !== 'paid') {
     throw businessError(

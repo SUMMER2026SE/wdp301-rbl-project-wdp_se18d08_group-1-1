@@ -1019,7 +1019,20 @@ export default function CustomerProfile() {
                   </p>
                 )}
                 {profile.membership.expireAt && (
-                  <button onClick={() => setShowRenewModal(true)} className="text-[11px] bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 px-6 py-2.5 rounded-full font-bold hover:bg-yellow-500/20 transition-all uppercase tracking-wider shadow-[0_0_15px_rgba(234,179,8,0.15)] hover:shadow-[0_0_25px_rgba(234,179,8,0.3)] hover:-translate-y-0.5">
+                  <button
+                    onClick={() => {
+                      if (
+                        profile.membership.reservedSlots?.some(
+                          (slot) => slot.entitlementId
+                        )
+                      ) {
+                        window.location.href = "/membership";
+                        return;
+                      }
+                      setShowRenewModal(true);
+                    }}
+                    className="text-[11px] bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 px-6 py-2.5 rounded-full font-bold hover:bg-yellow-500/20 transition-all uppercase tracking-wider shadow-[0_0_15px_rgba(234,179,8,0.15)] hover:shadow-[0_0_25px_rgba(234,179,8,0.3)] hover:-translate-y-0.5"
+                  >
                     Renew Pass
                   </button>
                 )}

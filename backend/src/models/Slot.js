@@ -44,6 +44,11 @@ const slotSchema = new mongoose.Schema(
       ref: "Subscription",
       default: null,
     },
+    reservedByEntitlementId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "MembershipSlotEntitlement",
+      default: null,
+    },
     reservedUntil: {
       type: Date,
       default: null,
@@ -57,5 +62,6 @@ const slotSchema = new mongoose.Schema(
 // Ensure slotNumber is unique within a zone or floor
 slotSchema.index({ floorID: 1, slotNumber: 1 }, { unique: true });
 slotSchema.index({ reservedBySubscriptionId: 1 });
+slotSchema.index({ reservedByEntitlementId: 1 });
 
 module.exports = mongoose.model("Slot", slotSchema);

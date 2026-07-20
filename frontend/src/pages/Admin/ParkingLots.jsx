@@ -49,8 +49,8 @@ export default function ParkingLots() {
   const [activeSessions, setActiveSessions] = useState([]);
 
   useEffect(() => {
-    document.body.classList.add("bg-[#0b0e16]");
-    return () => document.body.classList.remove("bg-[#0b0e16]");
+    document.body.classList.add("bg-[#080808]");
+    return () => document.body.classList.remove("bg-[#080808]");
   }, []);
 
   const currentFloor = floors.find(f => f._id === currentFloorId);
@@ -369,11 +369,11 @@ export default function ParkingLots() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-70px)] bg-[#0b0e16] text-gray-200 font-sans relative overflow-hidden"
+    <div className="flex flex-col h-[calc(100vh-70px)] bg-[#080808] text-gray-200 font-sans relative overflow-hidden"
          style={{ backgroundImage: `linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px)`, backgroundSize: '30px 30px' }}>
       
       {/* Top Toolbar */}
-      <div className="absolute top-4 left-8 z-50 flex items-center gap-4 bg-[#181c23]/80 backdrop-blur border border-white/10 p-2 rounded-xl shadow-lg">
+      <div className="absolute top-4 left-8 z-50 flex items-center gap-4 bg-[#171717]/80 backdrop-blur border border-white/10 p-2 rounded-xl shadow-lg">
         <select 
           className="bg-black/40 border border-white/20 rounded p-2 text-white text-sm outline-none font-bold min-w-[120px]"
           value={currentFloorId || ""}
@@ -425,7 +425,7 @@ export default function ParkingLots() {
 
       {/* Slide-over panel for slots */}
       <div className={`absolute inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity duration-300 ${selectedItem ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} onClick={() => setSelectedItem(null)}></div>
-      <div className={`absolute top-0 right-0 bottom-0 w-[420px] bg-[#0f172a]/80 backdrop-blur-2xl border-l border-cyan-500/20 p-8 flex flex-col shadow-[-20px_0_50px_rgba(8,145,178,0.1)] text-slate-200 z-50 transform transition-transform duration-300 ease-in-out ${selectedItem ? 'translate-x-0' : 'translate-x-full'}`}>
+      <div className={`absolute top-0 right-0 bottom-0 w-[420px] bg-[#111111]/95 backdrop-blur-2xl border-l border-white/10 p-8 flex flex-col shadow-[-20px_0_50px_rgba(0,0,0,0.5)] text-slate-200 z-50 transform transition-transform duration-300 ease-in-out ${selectedItem ? 'translate-x-0' : 'translate-x-full'}`}>
         {selectedItem && (() => {
            const isZone = selectedItem.type === 'zone';
            const dbSlotInfo = !isZone

@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const mongoose = require('mongoose');
 
 const QR_PREFIX = 'VALO_MEMBERSHIP';
+const ACCOUNT_QR_PREFIX = 'VALO_MEMBERSHIP_ACCOUNT';
 const DEFAULT_QR_VERSION = 1;
 
 const getSecret = () => {
@@ -21,6 +22,12 @@ const sign = (subscriptionId, version) =>
   crypto
     .createHmac('sha256', getSecret())
     .update(`${QR_PREFIX}:${version}:${subscriptionId}`)
+    .digest('base64url');
+
+const signAccount = (userId, version) =>
+  crypto
+    .createHmac('sha256', getSecret())
+    .update(`${ACCOUNT_QR_PREFIX}:${version}:${userId}`)
     .digest('base64url');
 
 const buildMembershipQrPayload = (subscription) => {
@@ -62,6 +69,47 @@ const parseAndVerifyMembershipQr = (payload) => {
   return { subscriptionId, version };
 };
 
+const buildAccountMembershipQrPayload = (user) => {
+  const userId = String(user?._id || user);
+  const version = Number(user?.membership?.qrVersion || DEFAULT_QR_VERSION);
+  if (!mongoose.Types.ObjectId.isValid(userId)) {
+    throw Object.assign(new Error('Invalid user ID'), { statusCode: 400 });
+  }
+  return `${ACCOUNT_QR_PREFIX}:${version}:${userId}:${signAccount(userId, version)}`;
+};
+
+const parseAndVerifyAnyMembershipQr = (payload) => {
+  if (typeof payload !== 'string' || payload.length > 512) {
+    throw Object.assign(new Error('Invalid membership QR code'), { statusCode: 400 });
+  }
+  if (!payload.trim().startsWith(`${ACCOUNT_QR_PREFIX}:`)) {
+    return {
+      credentialType: 'LEGACY_SUBSCRIPTION',
+      ...parseAndVerifyMembershipQr(payload),
+    };
+  }
+
+  const [prefix, rawVersion, userId, signature, ...extra] = payload.trim().split(':');
+  const version = Number(rawVersion);
+  if (
+    extra.length > 0 ||
+    prefix !== ACCOUNT_QR_PREFIX ||
+    !Number.isSafeInteger(version) ||
+    version < 1 ||
+    version > 1_000_000_000 ||
+    !mongoose.Types.ObjectId.isValid(userId) ||
+    !signature
+  ) {
+    throw Object.assign(new Error('Invalid membership QR code'), { statusCode: 400 });
+  }
+  const expected = Buffer.from(signAccount(userId, version));
+  const actual = Buffer.from(signature);
+  if (actual.length !== expected.length || !crypto.timingSafeEqual(actual, expected)) {
+    throw Object.assign(new Error('Membership QR signature is invalid'), { statusCode: 400 });
+  }
+  return { credentialType: 'ACCOUNT', userId, version };
+};
+
 const isMembershipQrAvailable = (subscription, now = new Date()) =>
   Boolean(
     subscription &&
@@ -71,7 +119,10 @@ const isMembershipQrAvailable = (subscription, now = new Date()) =>
   );
 
 module.exports = {
+  ACCOUNT_QR_PREFIX,
+  buildAccountMembershipQrPayload,
   buildMembershipQrPayload,
   isMembershipQrAvailable,
+  parseAndVerifyAnyMembershipQr,
   parseAndVerifyMembershipQr,
 };

@@ -30,6 +30,7 @@ import {
   ScrollText,
   BookOpen,
   CalendarCheck,
+  ArrowLeftRight,
   // Common
   Bell,
   LogOut,
@@ -60,7 +61,7 @@ const NAV_CONFIG = {
       to: "/admin/parking-lots",
     },
     {
-      label: "Pricing Config",
+      label: "Pricing",
       icon: <DollarSign size={18} />,
       to: "/admin/pricing",
     },
@@ -85,11 +86,6 @@ const NAV_CONFIG = {
       label: "Revenue Analytics",
       icon: <BarChart2 size={18} />,
       to: "/admin/revenue",
-    },
-    {
-      label: "Financial Export",
-      icon: <DollarSign size={18} />,
-      to: "/admin/financial",
     },
   ],
   staff: [
@@ -138,6 +134,11 @@ const NAV_CONFIG = {
   customer: [
     { label: "Home", icon: <Home size={18} />, to: "/" },
     { label: "Profile", icon: <User size={18} />, to: "/profile" },
+    {
+      label: "Membership Transfers",
+      icon: <ArrowLeftRight size={18} />,
+      to: "/customer/membership-transfers",
+    },
     { label: "My Vehicles", icon: <Car size={18} />, to: "/customer/vehicles" },
     {
       label: "My Bookings",
@@ -220,10 +221,10 @@ export default function DashboardLayout() {
   const theme = ROLE_THEME[role] || ROLE_THEME.admin;
   const displayName = user
     ? [user.profile?.firstName, user.profile?.lastName]
-        .filter(Boolean)
-        .join(" ") ||
-      user.username ||
-      "User"
+      .filter(Boolean)
+      .join(" ") ||
+    user.username ||
+    "User"
     : "User";
 
   // Always dark mode
@@ -357,11 +358,10 @@ export default function DashboardLayout() {
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold
                  transition-all duration-150 whitespace-nowrap overflow-hidden group
-                 ${
-                   isActive
-                     ? `${theme.activeBg} border`
-                     : `text-gray-500 hover:text-gray-300 hover:bg-white/5 border border-transparent`
-                 }`
+                 ${isActive
+                  ? `${theme.activeBg} border`
+                  : `text-gray-500 hover:text-gray-300 hover:bg-white/5 border border-transparent`
+                }`
               }
               title={collapsed ? item.label : undefined}
             >
@@ -494,9 +494,9 @@ export default function DashboardLayout() {
                             <p className="text-gray-400 dark:text-gray-600 text-[10px] mt-1">
                               {n.createdAt
                                 ? formatDistanceToNow(new Date(n.createdAt), {
-                                    addSuffix: true,
-                                    locale: enUS,
-                                  })
+                                  addSuffix: true,
+                                  locale: enUS,
+                                })
                                 : "Just now"}
                             </p>
                           </div>
@@ -553,9 +553,8 @@ export default function DashboardLayout() {
 
         {/* Page content */}
         <main
-          className={`flex-1 overflow-y-auto bg-gray-100 transition-colors duration-300 dark:bg-[#0D0D0D] ${
-            location.pathname === "/admin/revenue" ? "scrollbar-hidden" : ""
-          }`}
+          className={`flex-1 overflow-y-auto bg-gray-100 transition-colors duration-300 dark:bg-[#0D0D0D] ${location.pathname === "/admin/revenue" ? "scrollbar-hidden" : ""
+            }`}
         >
           <Outlet />
         </main>
@@ -577,12 +576,12 @@ export default function DashboardLayout() {
                 <X size={20} />
               </button>
             </div>
-            
+
             <div className="p-6">
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
                 Describe the issue you are experiencing in detail. This message will be sent directly to the Admin with high priority.
               </p>
-              
+
               <textarea
                 value={reportContent}
                 onChange={(e) => setReportContent(e.target.value)}
@@ -590,7 +589,7 @@ export default function DashboardLayout() {
                 className="w-full h-32 px-4 py-3 bg-gray-50 dark:bg-[#111111] border border-gray-200 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 text-gray-900 dark:text-white text-sm resize-none transition-all placeholder:text-gray-400 dark:placeholder:text-gray-600"
               />
             </div>
-            
+
             <div className="px-6 py-4 border-t border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-[#111111] flex justify-end gap-3">
               <button
                 onClick={() => setReportModalOpen(false)}
