@@ -27,7 +27,12 @@ const buildMembershipPayload = async (membership = {}, userId = null) => {
     }));
     
     const Subscription = require("../models/Subscription");
-    const sub = await Subscription.findOne({ user: userId }).sort({ createdAt: -1 }).lean();
+    const sub = await Subscription.findOne({
+      user: userId,
+      status: 'active',
+      paymentStatus: 'paid',
+      expireAt: { $gt: new Date() },
+    }).sort({ expireAt: -1 }).lean();
     if (sub) {
        subscriptionId = sub._id.toString();
     }

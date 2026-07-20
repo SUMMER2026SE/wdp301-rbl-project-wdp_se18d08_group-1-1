@@ -13,6 +13,7 @@ export type BookingStackParamList = {
         selectedFloorId?: string;
         selectedFloorName?: string;
         selectedSlotCode?: string;
+        selectedServiceId?: string;
       }
     | undefined;
   FindParking: { floorId?: string; startTime?: string; endTime?: string };

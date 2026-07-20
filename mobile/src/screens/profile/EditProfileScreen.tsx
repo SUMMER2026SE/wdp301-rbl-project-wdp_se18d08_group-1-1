@@ -2,18 +2,25 @@ import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
-  TextInput,
-  TouchableOpacity,
   View,
-  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { ScreenHeader } from '@/components/common';
+import {
+  AnimatedPressable,
+  PrimaryCTA,
+  ProfileFormField,
+  ProfileScreenHeader,
+  SectionHeader,
+  StaggeredView,
+} from '@/components/profile/ProfileUI';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useImageUpload } from '@/hooks/useImageUpload';
@@ -23,13 +30,16 @@ import { profileService } from '@/services/api/profile';
 import { validateDateOfBirth, validateVietnamesePhone } from '@/utils/profileValidation';
 
 type Props = { navigation: { goBack: () => void } };
+type GenderOption = 'male' | 'female' | 'other';
+
+const GENDER_OPTIONS: GenderOption[] = ['male', 'female', 'other'];
 
 export const EditProfileScreen = ({ navigation }: Props) => {
   const toast = useToast();
   const { user, refreshUser } = useAuth();
   const { profile, loading: profileLoading, updateProfile } = useProfileData();
   const imageUpload = useImageUpload();
-  
+
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
@@ -55,7 +65,7 @@ export const EditProfileScreen = ({ navigation }: Props) => {
     if (phone && !validateVietnamesePhone(phone)) next.phone = 'Please enter a valid phone number.';
     const dobResult = validateDateOfBirth(dob);
     if (!dobResult.valid && dobResult.error) next.dob = dobResult.error;
-    if (gender && !['male', 'female', 'other'].includes(gender)) next.gender = 'Choose male, female, or other.';
+    if (gender && !GENDER_OPTIONS.includes(gender as GenderOption)) next.gender = 'Choose male, female, or other.';
     return next;
   }, [dob, gender, phone]);
 
@@ -112,12 +122,13 @@ export const EditProfileScreen = ({ navigation }: Props) => {
   };
 
   const initial = (user?.username || 'C').charAt(0).toUpperCase();
+  const disabled = !hasChanges || Object.keys(errors).length > 0 || loading;
 
   if (profileLoading) {
     return (
       <SafeAreaView edges={['top']} style={styles.safe}>
-        <StatusBar barStyle="light-content" backgroundColor="#080808" />
-        <ScreenHeader title="Edit profile" onBack={() => navigation.goBack()} />
+        <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
+        <ProfileScreenHeader title="Edit profile" subtitle="Update your personal details" onBack={() => navigation.goBack()} />
         <View style={styles.center}>
           <ActivityIndicator color={COLORS.gold} size="large" />
         </View>
@@ -127,118 +138,123 @@ export const EditProfileScreen = ({ navigation }: Props) => {
 
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
-      <StatusBar barStyle="light-content" backgroundColor="#080808" />
-      <ScreenHeader title="Edit profile" onBack={() => navigation.goBack()} />
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
+        style={styles.keyboard}
+      >
+        <ProfileScreenHeader title="Edit profile" subtitle="Update your personal details" onBack={() => navigation.goBack()} />
 
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-        {/* Avatar Section */}
-        <View style={styles.avatarSection}>
-          <TouchableOpacity activeOpacity={0.8} onPress={uploadAvatar} style={styles.avatarWrap}>
-            <View style={[styles.avatarRing, { overflow: 'hidden' }]}>
-              {avatar ? (
-                <Image source={{ uri: avatar }} style={{ width: '100%', height: '100%' }} />
-              ) : (
-                <Text style={styles.avatarText}>{initial}</Text>
-              )}
-            </View>
-            <View style={styles.editBadge}>
-              {uploadingAvatar ? (
-                <ActivityIndicator color={COLORS.background} size="small" />
-              ) : (
-                <Ionicons name="camera" size={14} color={COLORS.background} />
-              )}
-            </View>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.formCard}>
-          <View style={styles.row}>
-            <View style={[styles.inputGroup, { flex: 1 }]}>
-              <Text style={styles.label}>Last name</Text>
-              <View style={styles.inputWrap}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g. Nguyen"
-                  placeholderTextColor={COLORS.textMuted}
-                  value={lastName}
-                  onChangeText={setLastName}
-                />
-              </View>
-            </View>
-
-            <View style={[styles.inputGroup, { flex: 1 }]}>
-              <Text style={styles.label}>First name</Text>
-              <View style={styles.inputWrap}>
-                <TextInput
-                  style={styles.input}
-                  placeholder="e.g. Van A"
-                  placeholderTextColor={COLORS.textMuted}
-                  value={firstName}
-                  onChangeText={setFirstName}
-                />
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Phone number</Text>
-            <View style={[styles.inputWrap, errors.phone && styles.inputError]}>
-              <TextInput
-                style={styles.input}
-                placeholder="VD: 0912345678"
-                placeholderTextColor={COLORS.textMuted}
-                keyboardType="phone-pad"
-                value={phone}
-                onChangeText={setPhone}
-              />
-            </View>
-            {errors.phone ? <Text style={styles.errorText}>{errors.phone}</Text> : null}
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Date of birth (YYYY-MM-DD)</Text>
-            <View style={[styles.inputWrap, errors.dob && styles.inputError]}>
-              <TextInput
-                style={styles.input}
-                placeholder="VD: 1990-01-01"
-                placeholderTextColor={COLORS.textMuted}
-                value={dob}
-                onChangeText={setDob}
-              />
-            </View>
-            {errors.dob ? <Text style={styles.errorText}>{errors.dob}</Text> : null}
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Gender</Text>
-            <View style={[styles.inputWrap, errors.gender && styles.inputError]}>
-              <TextInput
-                style={styles.input}
-                placeholder="male, female, or other"
-                placeholderTextColor={COLORS.textMuted}
-                value={gender}
-                onChangeText={setGender}
-              />
-            </View>
-            {errors.gender ? <Text style={styles.errorText}>{errors.gender}</Text> : null}
-          </View>
-        </View>
-
-        {error ? <Text style={[styles.errorText, { textAlign: 'center' }]}>{error}</Text> : null}
-
-        <TouchableOpacity 
-          activeOpacity={0.8} 
-          style={[styles.primaryButton, (!hasChanges || Object.keys(errors).length > 0 || loading) && styles.disabled]} 
-          onPress={handleSubmit}
-          disabled={!hasChanges || Object.keys(errors).length > 0 || loading}
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          {loading ? (
-            <ActivityIndicator color={COLORS.textInverse} size="small" />
-          ) : (
-            <Text style={styles.primaryButtonText}>Save changes</Text>
-          )}
-        </TouchableOpacity>
-      </ScrollView>
+          <StaggeredView delay={80} style={styles.avatarSection}>
+            <AnimatedPressable accessibilityLabel="Change profile photo" disabled={uploadingAvatar} onPress={() => void uploadAvatar()}>
+              <View style={styles.avatarWrap}>
+                <View style={styles.avatarHalo} />
+                <View style={styles.avatarRing}>
+                  {avatar ? (
+                    <Image source={{ uri: avatar }} style={styles.avatarImage} />
+                  ) : (
+                    <Text style={styles.avatarText}>{initial}</Text>
+                  )}
+                </View>
+                <View style={styles.editBadge}>
+                  {uploadingAvatar ? (
+                    <ActivityIndicator color={COLORS.background} size="small" />
+                  ) : (
+                    <Ionicons name="camera" size={14} color={COLORS.background} />
+                  )}
+                </View>
+              </View>
+            </AnimatedPressable>
+            <Text style={styles.avatarHint}>Tap to change photo</Text>
+          </StaggeredView>
+
+          <StaggeredView delay={180} style={styles.formSection}>
+            <SectionHeader title="Name" />
+            <ProfileFormField
+              autoCapitalize="words"
+              icon="person-outline"
+              label="Last name"
+              placeholder="e.g. Nguyen"
+              value={lastName}
+              onChangeText={setLastName}
+            />
+            <ProfileFormField
+              autoCapitalize="words"
+              icon="person-outline"
+              label="First name"
+              placeholder="e.g. Van A"
+              value={firstName}
+              onChangeText={setFirstName}
+            />
+          </StaggeredView>
+
+          <StaggeredView delay={270} style={styles.formSection}>
+            <SectionHeader title="Contact details" />
+            <ProfileFormField
+              error={errors.phone}
+              icon="call-outline"
+              keyboardType="phone-pad"
+              label="Phone number"
+              placeholder="VD: 0912345678"
+              value={phone}
+              onChangeText={setPhone}
+            />
+            <ProfileFormField
+              error={errors.dob}
+              icon="calendar-outline"
+              label="Date of birth"
+              placeholder="YYYY-MM-DD"
+              value={dob}
+              onChangeText={setDob}
+            />
+
+            <View style={styles.genderBlock}>
+              <Text style={[styles.genderLabel, errors.gender && styles.genderLabelError]}>Gender</Text>
+              <View style={styles.genderOptions}>
+                {GENDER_OPTIONS.map((option) => {
+                  const selected = gender === option;
+                  return (
+                    <AnimatedPressable
+                      key={option}
+                      accessibilityLabel={`Select ${option}`}
+                      onPress={() => setGender(option)}
+                      style={[styles.genderOption, selected && styles.genderOptionSelected]}
+                      tint="rgba(226,186,75,0.08)"
+                    >
+                      <Text style={[styles.genderText, selected && styles.genderTextSelected]}>
+                        {option.charAt(0).toUpperCase() + option.slice(1)}
+                      </Text>
+                    </AnimatedPressable>
+                  );
+                })}
+              </View>
+              {errors.gender ? <Text style={styles.errorText}>{errors.gender}</Text> : null}
+            </View>
+          </StaggeredView>
+
+          {error ? (
+            <StaggeredView delay={320} style={styles.errorBanner}>
+              <Ionicons name="alert-circle-outline" size={17} color={COLORS.error} />
+              <Text style={styles.errorBannerText}>{error}</Text>
+            </StaggeredView>
+          ) : null}
+
+          <StaggeredView delay={390} style={styles.cta}>
+            <PrimaryCTA
+              disabled={disabled}
+              label="Save changes"
+              loading={loading ? <ActivityIndicator color={COLORS.textInverse} size="small" /> : undefined}
+              onPress={handleSubmit}
+            />
+          </StaggeredView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
@@ -248,107 +264,138 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
     flex: 1,
   },
+  keyboard: {
+    flex: 1,
+  },
   center: {
+    alignItems: 'center',
     flex: 1,
     justifyContent: 'center',
-    alignItems: 'center',
   },
   scroll: {
-    padding: SPACING.lg,
-    paddingTop: SPACING.sm,
-    paddingBottom: SPACING.xxl,
-    gap: SPACING.lg,
+    gap: SPACING.xl,
+    paddingBottom: 118,
+    paddingHorizontal: SPACING.lg,
   },
   avatarSection: {
     alignItems: 'center',
-    marginBottom: SPACING.sm,
+    paddingTop: SPACING.sm,
   },
   avatarWrap: {
     position: 'relative',
   },
+  avatarHalo: {
+    backgroundColor: 'rgba(226,186,75,0.12)',
+    borderRadius: 66,
+    height: 132,
+    left: -18,
+    position: 'absolute',
+    top: -18,
+    width: 132,
+  },
   avatarRing: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: COLORS.goldDark,
-    borderWidth: 2.5,
-    borderColor: COLORS.gold,
-    justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: COLORS.goldDark,
+    borderColor: COLORS.gold,
+    borderRadius: 48,
+    borderWidth: 2.5,
+    height: 96,
+    justifyContent: 'center',
+    overflow: 'hidden',
+    width: 96,
+  },
+  avatarImage: {
+    height: '100%',
+    width: '100%',
   },
   avatarText: {
-    fontSize: FONT_SIZES.hero,
-    fontWeight: '800',
     color: COLORS.textInverse,
+    fontSize: FONT_SIZES.hero,
+    fontWeight: '900',
   },
   editBadge: {
-    position: 'absolute',
+    alignItems: 'center',
+    backgroundColor: COLORS.gold,
+    borderColor: COLORS.background,
+    borderRadius: 14,
+    borderWidth: 2,
     bottom: 0,
+    height: 28,
+    justifyContent: 'center',
+    position: 'absolute',
     right: 0,
     width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: COLORS.gold,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: COLORS.background,
   },
-  formCard: {
-    backgroundColor: COLORS.surface,
-    borderColor: COLORS.border,
-    borderWidth: 1,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.lg,
+  avatarHint: {
+    color: COLORS.textMuted,
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: SPACING.sm,
+  },
+  formSection: {
     gap: SPACING.md,
   },
-  row: {
-    flexDirection: 'row',
-    gap: SPACING.md,
+  genderBlock: {
+    gap: SPACING.sm,
   },
-  inputGroup: {
-    gap: SPACING.xs,
-  },
-  label: {
+  genderLabel: {
     color: COLORS.textSecondary,
-    fontSize: FONT_SIZES.sm,
-    fontWeight: '500',
+    fontSize: 13,
+    fontWeight: '700',
   },
-  inputWrap: {
+  genderLabelError: {
+    color: COLORS.error,
+  },
+  genderOptions: {
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.surfaceElevated,
-    borderColor: COLORS.border,
-    borderWidth: 1,
-    borderRadius: RADIUS.md,
-    paddingHorizontal: SPACING.md,
-    height: 48,
+    gap: SPACING.sm,
   },
-  input: {
+  genderOption: {
     flex: 1,
-    color: COLORS.textPrimary,
-    fontSize: FONT_SIZES.md,
   },
-  inputError: {
-    borderColor: COLORS.error,
+  genderOptionSelected: {
+    shadowColor: COLORS.gold,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 14,
+  },
+  genderText: {
+    backgroundColor: 'rgba(255,255,255,0.035)',
+    borderColor: 'rgba(255,255,255,0.08)',
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    color: COLORS.textMuted,
+    fontSize: 13,
+    fontWeight: '800',
+    minHeight: 46,
+    paddingTop: 14,
+    textAlign: 'center',
+  },
+  genderTextSelected: {
+    backgroundColor: 'rgba(226,186,75,0.13)',
+    borderColor: 'rgba(226,186,75,0.38)',
+    color: COLORS.goldLight,
   },
   errorText: {
     color: COLORS.error,
-    fontSize: FONT_SIZES.sm,
+    fontSize: FONT_SIZES.xs,
+    fontWeight: '600',
   },
-  primaryButton: {
-    backgroundColor: COLORS.gold,
-    borderRadius: RADIUS.md,
-    height: 52,
-    justifyContent: 'center',
+  errorBanner: {
     alignItems: 'center',
+    backgroundColor: 'rgba(255,77,77,0.08)',
+    borderRadius: RADIUS.md,
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    padding: SPACING.md,
   },
-  disabled: {
-    opacity: 0.5,
+  errorBannerText: {
+    color: COLORS.error,
+    flex: 1,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '600',
   },
-  primaryButtonText: {
-    color: COLORS.textInverse,
-    fontSize: FONT_SIZES.md,
-    fontWeight: '700',
+  cta: {
+    marginTop: SPACING.xs,
   },
 });

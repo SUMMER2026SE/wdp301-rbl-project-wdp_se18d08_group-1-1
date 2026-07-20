@@ -1,17 +1,25 @@
-import { useState } from 'react';
+import { Ionicons } from '@expo/vector-icons';
+import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
-  TextInput,
-  TouchableOpacity,
+  type DimensionValue,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { ScreenHeader } from '@/components/common';
+import {
+  PasswordField,
+  PrimaryCTA,
+  ProfileScreenHeader,
+  SectionHeader,
+  StaggeredView,
+} from '@/components/profile/ProfileUI';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
 import { useToast } from '@/hooks/useToast';
 import { profileService } from '@/services/api/profile';
@@ -58,97 +66,110 @@ export const ChangePasswordScreen = ({ navigation }: { navigation: { goBack: () 
   };
 
   const strength = calculatePasswordStrength(newPassword);
-  
-  const getStrengthColor = () => {
-    switch (strength) {
-      case 'strong': return COLORS.success;
-      case 'medium': return COLORS.warning;
-      case 'weak': return COLORS.error;
-      default: return COLORS.textMuted;
-    }
-  };
 
-  const getStrengthText = () => {
+  const strengthMeta = useMemo<{ color: string; label: string; width: DimensionValue }>(() => {
     switch (strength) {
-      case 'strong': return 'Strong';
-      case 'medium': return 'Medium';
-      case 'weak': return 'Weak';
-      default: return 'Not entered';
+      case 'strong':
+        return { color: COLORS.success, label: 'Strong', width: '100%' };
+      case 'medium':
+        return { color: COLORS.warning, label: 'Medium', width: '66%' };
+      case 'weak':
+        return { color: COLORS.error, label: 'Weak', width: '33%' };
+      default:
+        return { color: COLORS.textMuted, label: 'Not entered', width: '0%' };
     }
+  }, [strength]);
+
+  const fieldErrors = {
+    confirm: error === 'The password confirmation does not match.' ? error : undefined,
+    current: error === 'The new password must differ from your current password.' ? error : undefined,
+    next: error === 'The new password must be at least 6 characters.' ? error : undefined,
   };
 
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
-      <StatusBar barStyle="light-content" backgroundColor="#080808" />
-      <ScreenHeader title="Change password" onBack={() => navigation.goBack()} />
+      <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 12 : 0}
+        style={styles.keyboard}
+      >
+        <ProfileScreenHeader title="Change password" subtitle="Secure your VALO account" onBack={() => navigation.goBack()} />
 
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-        <View style={styles.formCard}>
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Current password</Text>
-            <View style={styles.inputWrap}>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter current password"
-                placeholderTextColor={COLORS.textMuted}
-                secureTextEntry
-                value={currentPassword}
-                onChangeText={setCurrentPassword}
-              />
-            </View>
-          </View>
-
-          <View style={styles.inputGroup}>
-            <View style={styles.labelRow}>
-              <Text style={styles.label}>New password</Text>
-              {newPassword.length > 0 ? (
-                <Text style={[styles.strengthText, { color: getStrengthColor() }]}>
-                  {getStrengthText()}
-                </Text>
-              ) : null}
-            </View>
-            <View style={styles.inputWrap}>
-              <TextInput
-                style={styles.input}
-                placeholder="Enter new password"
-                placeholderTextColor={COLORS.textMuted}
-                secureTextEntry
-                value={newPassword}
-                onChangeText={setNewPassword}
-              />
-            </View>
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Confirm password</Text>
-            <View style={styles.inputWrap}>
-              <TextInput
-                style={styles.input}
-                placeholder="Re-enter new password"
-                placeholderTextColor={COLORS.textMuted}
-                secureTextEntry
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-              />
-            </View>
-          </View>
-        </View>
-
-        {error ? <Text style={styles.errorText}>{error}</Text> : null}
-
-        <TouchableOpacity 
-          activeOpacity={0.8} 
-          style={[styles.primaryButton, loading && styles.disabled]} 
-          onPress={handleSubmit}
-          disabled={loading}
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          {loading ? (
-            <ActivityIndicator color={COLORS.textInverse} size="small" />
-          ) : (
-            <Text style={styles.primaryButtonText}>Change password</Text>
-          )}
-        </TouchableOpacity>
-      </ScrollView>
+          <StaggeredView delay={90} style={styles.formSection}>
+            <SectionHeader title="Credentials" />
+            <PasswordField
+              error={fieldErrors.current}
+              label="Current password"
+              placeholder="Enter current password"
+              value={currentPassword}
+              onChangeText={(value) => {
+                setCurrentPassword(value);
+                if (error) setError('');
+              }}
+            />
+            <PasswordField
+              error={fieldErrors.next}
+              label="New password"
+              placeholder="Enter new password"
+              value={newPassword}
+              onChangeText={(value) => {
+                setNewPassword(value);
+                if (error) setError('');
+              }}
+            />
+            <PasswordField
+              error={fieldErrors.confirm}
+              label="Confirm password"
+              placeholder="Re-enter new password"
+              value={confirmPassword}
+              onChangeText={(value) => {
+                setConfirmPassword(value);
+                if (error) setError('');
+              }}
+            />
+          </StaggeredView>
+
+          <StaggeredView delay={220} style={styles.requirements}>
+            <View style={styles.requirementHeader}>
+              <Text style={styles.requirementTitle}>Password strength</Text>
+              <Text style={[styles.strengthText, { color: strengthMeta.color }]}>{strengthMeta.label}</Text>
+            </View>
+            <View style={styles.strengthTrack}>
+              <View style={[styles.strengthFill, { backgroundColor: strengthMeta.color, width: strengthMeta.width }]} />
+            </View>
+            <View style={styles.requirementRow}>
+              <Ionicons
+                name={newPassword.length >= 6 ? 'checkmark-circle-outline' : 'ellipse-outline'}
+                size={16}
+                color={newPassword.length >= 6 ? COLORS.success : COLORS.textMuted}
+              />
+              <Text style={styles.requirementText}>At least 6 characters</Text>
+            </View>
+          </StaggeredView>
+
+          {error && !fieldErrors.current && !fieldErrors.next && !fieldErrors.confirm ? (
+            <StaggeredView delay={260} style={styles.errorBanner}>
+              <Ionicons name="alert-circle-outline" size={17} color={COLORS.error} />
+              <Text style={styles.errorBannerText}>{error}</Text>
+            </StaggeredView>
+          ) : null}
+
+          <StaggeredView delay={320} style={styles.cta}>
+            <PrimaryCTA
+              disabled={loading}
+              label="Change password"
+              loading={loading ? <ActivityIndicator color={COLORS.textInverse} size="small" /> : undefined}
+              onPress={handleSubmit}
+            />
+          </StaggeredView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
@@ -158,70 +179,76 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
     flex: 1,
   },
+  keyboard: {
+    flex: 1,
+  },
   scroll: {
-    padding: SPACING.lg,
-    paddingTop: SPACING.sm,
-    paddingBottom: SPACING.xxl,
-    gap: SPACING.lg,
+    gap: SPACING.xl,
+    paddingBottom: 118,
+    paddingHorizontal: SPACING.lg,
   },
-  formCard: {
-    backgroundColor: COLORS.surface,
-    borderColor: COLORS.border,
-    borderWidth: 1,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.lg,
+  formSection: {
     gap: SPACING.md,
+    paddingTop: SPACING.sm,
   },
-  inputGroup: {
-    gap: SPACING.xs,
+  requirements: {
+    borderBottomColor: 'rgba(255,255,255,0.08)',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.08)',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: SPACING.sm,
+    paddingVertical: SPACING.md,
   },
-  labelRow: {
+  requirementHeader: {
+    alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
   },
-  label: {
-    color: COLORS.textSecondary,
-    fontSize: FONT_SIZES.sm,
-    fontWeight: '500',
+  requirementTitle: {
+    color: COLORS.textPrimary,
+    fontSize: 15,
+    fontWeight: '800',
   },
   strengthText: {
     fontSize: FONT_SIZES.xs,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  strengthTrack: {
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderRadius: RADIUS.round,
+    height: 4,
+    overflow: 'hidden',
+  },
+  strengthFill: {
+    borderRadius: RADIUS.round,
+    height: 4,
+  },
+  requirementRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  requirementText: {
+    color: COLORS.textMuted,
+    fontSize: FONT_SIZES.sm,
     fontWeight: '600',
   },
-  inputWrap: {
+  errorBanner: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,77,77,0.08)',
+    borderRadius: RADIUS.md,
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.surfaceElevated,
-    borderColor: COLORS.border,
-    borderWidth: 1,
-    borderRadius: RADIUS.md,
-    paddingHorizontal: SPACING.md,
-    height: 48,
+    gap: SPACING.sm,
+    padding: SPACING.md,
   },
-  input: {
-    flex: 1,
-    color: COLORS.textPrimary,
-    fontSize: FONT_SIZES.md,
-  },
-  errorText: {
+  errorBannerText: {
     color: COLORS.error,
+    flex: 1,
     fontSize: FONT_SIZES.sm,
-    textAlign: 'center',
+    fontWeight: '600',
   },
-  primaryButton: {
-    backgroundColor: COLORS.gold,
-    borderRadius: RADIUS.md,
-    height: 52,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  disabled: {
-    opacity: 0.6,
-  },
-  primaryButtonText: {
-    color: COLORS.textInverse,
-    fontSize: FONT_SIZES.md,
-    fontWeight: '700',
+  cta: {
+    marginTop: SPACING.xs,
   },
 });

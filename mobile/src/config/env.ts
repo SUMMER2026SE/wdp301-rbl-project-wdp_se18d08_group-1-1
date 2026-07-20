@@ -25,12 +25,26 @@ type EnvName = keyof typeof defaults;
 const selectedEnv: EnvName =
   envName === 'staging' || envName === 'production' ? envName : 'development';
 
+const expoHostUri =
+  Constants.expoConfig?.hostUri ??
+  (Constants as unknown as { manifest?: { debuggerHost?: string } }).manifest?.debuggerHost;
+
+const expoDevHost = expoHostUri?.split(':')[0];
+const runtimeDevelopmentUrls = expoDevHost
+  ? {
+      apiBaseUrl: `http://${expoDevHost}:5001/api`,
+      socketUrl: `http://${expoDevHost}:5001`,
+    }
+  : undefined;
+
 const apiBaseUrl =
+  (selectedEnv === 'development' ? runtimeDevelopmentUrls?.apiBaseUrl : undefined) ||
   process.env.EXPO_PUBLIC_API_URL ||
   Constants.expoConfig?.extra?.apiBaseUrl ||
   defaults[selectedEnv].apiBaseUrl;
 
 const socketUrl =
+  (selectedEnv === 'development' ? runtimeDevelopmentUrls?.socketUrl : undefined) ||
   process.env.EXPO_PUBLIC_SOCKET_URL ||
   Constants.expoConfig?.extra?.socketUrl ||
   defaults[selectedEnv].socketUrl;

@@ -20,8 +20,10 @@ import {
   BookingActionModal,
   type BookingModalVariant,
 } from '@/components/booking/BookingActionModal';
+import { QRCodeDisplay } from '@/components/booking/QRCodeDisplay';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
 import { useBooking } from '@/hooks/useBooking';
+import { bookingService } from '@/services/BookingService';
 import type { BookingStackParamList } from '@/navigation/BookingStackNavigator';
 import { vehiclesService } from '@/services/api/vehicles';
 import type { BookingStatus, PaymentStatus } from '@/types/booking.types';
@@ -94,6 +96,9 @@ export const BookingDetailScreen = ({ navigation, route }: Props) => {
   const [selectedVehicleId, setSelectedVehicleId] = useState('');
   const [vehiclesLoading, setVehiclesLoading] = useState(false);
   const [actionDialog, setActionDialog] = useState<ActionDialog | null>(null);
+  const [qrPayload, setQrPayload] = useState<string | null>(null);
+  const [qrLoading, setQrLoading] = useState(false);
+  const [qrError, setQrError] = useState('');
   const booking = getBookingById(route.params.bookingId);
 
   useEffect(() => {
@@ -101,6 +106,34 @@ export const BookingDetailScreen = ({ navigation, route }: Props) => {
       void fetchBookings();
     }
   }, [booking, fetchBookings]);
+
+  useEffect(() => {
+    if (!booking || !['confirmed', 'active', 'paused'].includes(booking.status)) {
+      setQrPayload(null);
+      setQrError('');
+      return;
+    }
+
+    let active = true;
+    setQrLoading(true);
+    setQrError('');
+    void bookingService.getBookingQr(booking._id)
+      .then((response) => {
+        if (!active) return;
+        setQrPayload(response.data?.payload || null);
+      })
+      .catch((error) => {
+        if (!active) return;
+        setQrError(error instanceof Error ? error.message : 'Unable to load booking QR.');
+      })
+      .finally(() => {
+        if (active) setQrLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [booking?._id, booking?.status]);
 
   useEffect(() => {
     if (!vehicleModalVisible) return;
@@ -316,6 +349,28 @@ export const BookingDetailScreen = ({ navigation, route }: Props) => {
           </View>
           {floorName ? <Text style={styles.floorName}>Floor: {floorName}</Text> : null}
         </View>
+
+        {['confirmed', 'active', 'paused'].includes(booking.status) ? (
+          <View style={styles.section}>
+            <SectionTitle>Booking QR</SectionTitle>
+            {qrLoading ? (
+              <ActivityIndicator color={COLORS.gold} size="large" />
+            ) : qrPayload ? (
+              <>
+                <QRCodeDisplay
+                  value={qrPayload}
+                  reference={booking._id}
+                  showBrightnessControl
+                />
+                <Text style={styles.qrHint}>
+                  Present this same code on mobile or web to the kiosk or a staff member.
+                </Text>
+              </>
+            ) : (
+              <Text style={styles.qrError}>{qrError || 'This QR code is no longer available.'}</Text>
+            )}
+          </View>
+        ) : null}
 
         <View style={styles.section}>
           <SectionTitle>Booking time</SectionTitle>
@@ -650,6 +705,18 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.lg,
     borderWidth: 1,
     padding: SPACING.md,
+  },
+  qrHint: {
+    color: COLORS.textMuted,
+    fontSize: FONT_SIZES.sm,
+    lineHeight: 20,
+    marginTop: SPACING.sm,
+    textAlign: 'center',
+  },
+  qrError: {
+    color: COLORS.error,
+    fontSize: FONT_SIZES.sm,
+    textAlign: 'center',
   },
   plateBig: {
     alignSelf: 'center',
