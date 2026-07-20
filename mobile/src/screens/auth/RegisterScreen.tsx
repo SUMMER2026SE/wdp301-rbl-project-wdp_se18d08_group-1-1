@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { ReactNode } from 'react';
 import { useState } from 'react';
 import {
   ActivityIndicator,
@@ -39,7 +40,7 @@ function Field({
   keyboardType = 'default',
   autoCapitalize = 'sentences',
 }: {
-  icon: React.ReactNode;
+  icon: ReactNode;
   placeholder: string;
   value: string;
   onChangeText: (value: string) => void;
@@ -51,9 +52,7 @@ function Field({
 
   return (
     <View style={[styles.fieldWrap, focused ? styles.fieldFocused : styles.fieldDefault]}>
-      <View style={styles.fieldIcon}>
-        {icon}
-      </View>
+      <View style={styles.fieldIcon}>{icon}</View>
       <TextInput
         autoCapitalize={autoCapitalize}
         keyboardType={keyboardType}
@@ -85,19 +84,32 @@ export const RegisterScreen = ({ navigation }: Props) => {
   const [resending, setResending] = useState(false);
 
   const handleSubmit = async () => {
-    setError('');
+    const normalizedName = username.trim();
+    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedPhone = phone.trim();
+    const normalizedUsername = normalizedName
+      .replace(/\s+/g, '_')
+      .replace(/[^a-zA-Z0-9_]/g, '')
+      .slice(0, 30);
 
     setError('');
+
     if (!normalizedName) {
       setError('Please enter your name.');
       return;
     }
+
+    if (!normalizedUsername) {
+      setError('Please use letters or numbers in your name.');
+      return;
+    }
+
     if (!isValidEmail(normalizedEmail)) {
       setError('Please enter a valid email.');
       return;
     }
 
-    if (!/^[+()\-\s\d]{7,20}$/.test(phone.trim())) {
+    if (!/^[+()\-\s\d]{7,20}$/.test(normalizedPhone)) {
       setError('Please enter a valid phone number.');
       return;
     }
@@ -109,13 +121,11 @@ export const RegisterScreen = ({ navigation }: Props) => {
 
     setIsLoading(true);
     try {
-      const normalizedEmail = email.trim().toLowerCase();
-      const normalizedUsername = username.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '').slice(0, 30);
       await authService.register({
         username: normalizedUsername,
-        name: username.trim(),
+        name: normalizedName,
         email: normalizedEmail,
-        phone: phone.trim(),
+        phone: normalizedPhone,
         password,
         confirmPassword: password,
         role: 'customer',
@@ -167,10 +177,7 @@ export const RegisterScreen = ({ navigation }: Props) => {
       />
       <View pointerEvents="none" style={styles.cornerGlow} />
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.kav}
-      >
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.kav}>
         <ScrollView
           bounces={false}
           contentContainerStyle={styles.scroll}
@@ -265,6 +272,7 @@ export const RegisterScreen = ({ navigation }: Props) => {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
       <RegistrationOtpModal
         email={email.trim().toLowerCase()}
         error={otpError}
@@ -278,6 +286,8 @@ export const RegisterScreen = ({ navigation }: Props) => {
     </SafeAreaView>
   );
 };
+
+export default RegisterScreen;
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#080808' },

@@ -99,7 +99,7 @@ class APIClient {
       }
 
       if (__DEV__) {
-        console.log('[API Request]', config.method?.toUpperCase(), config.url);
+        console.log('[API Request]', config.method?.toUpperCase(), config.baseURL, config.url);
       }
 
       return config;

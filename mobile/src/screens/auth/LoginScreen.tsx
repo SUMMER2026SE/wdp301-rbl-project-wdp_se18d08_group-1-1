@@ -263,7 +263,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
 
             <Pressable
               style={({ pressed }) => [styles.forgotRow, pressed && styles.pressed]}
-              onPress={() => navigation.navigate('ForgotPassword')}
+              onPress={() => navigation?.navigate('ForgotPassword')}
             >
               <Text style={styles.forgotText}>Forgot password?</Text>
             </Pressable>
@@ -315,7 +315,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
 
             <Pressable
               style={({ pressed }) => [styles.registerRow, pressed && styles.pressed]}
-              onPress={() => navigation.navigate('Register')}
+              onPress={() => navigation?.navigate('Register')}
             >
               <Text style={styles.registerText}>New to VALO? </Text>
               <Text style={[styles.registerText, styles.registerLink]}>Create account</Text>
