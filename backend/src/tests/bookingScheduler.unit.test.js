@@ -4,7 +4,11 @@ const assert = require('node:assert/strict');
 const Booking = require('../models/Booking');
 const Session = require('../models/Session');
 const notificationTriggers = require('../services/notificationTriggers');
-const { checkBookings } = require('../services/parkingScheduler');
+const bookingRefundService = require('../services/bookingRefundService');
+const {
+  checkActiveSessions,
+  checkBookings,
+} = require('../services/parkingScheduler');
 
 const USER_ID = '507f1f77bcf86cd799439011';
 
@@ -37,9 +41,11 @@ describe('booking scheduler end-to-end decision flow', { concurrency: false }, (
   const originals = {};
   const triggerCalls = [];
   const atomicUpdates = [];
+  const settlementCalls = [];
   let pendingUpdate;
   let fixtures;
   let scheduleIsCurrent;
+  let sessionQuery;
 
   before(() => {
     originals.bookingUpdateMany = Booking.updateMany;
@@ -53,6 +59,9 @@ describe('booking scheduler end-to-end decision flow', { concurrency: false }, (
     originals.notifyBookingNoShowCancelled = notificationTriggers.notifyBookingNoShowCancelled;
     originals.notifyBookingEndingSoon = notificationTriggers.notifyBookingEndingSoon;
     originals.notifyBookingTimeExpired = notificationTriggers.notifyBookingTimeExpired;
+    originals.quoteNoShow = bookingRefundService.quoteNoShow;
+    originals.quoteEarlyCheckout = bookingRefundService.quoteEarlyCheckout;
+    originals.settleBookingEvent = bookingRefundService.settleBookingEvent;
 
     console.log = () => {};
     Booking.updateMany = async (filter, update) => {
@@ -85,7 +94,10 @@ describe('booking scheduler end-to-end decision flow', { concurrency: false }, (
       return fixtures.atomicResults[String(filter._id)] || null;
     };
     Booking.exists = async () => scheduleIsCurrent;
-    Session.find = async () => [];
+    Session.find = (query) => {
+      sessionQuery = query;
+      return queryResult([]);
+    };
 
     notificationTriggers.notifyBookingCheckinReminder = async (...args) => {
       triggerCalls.push(['checkin-reminder', ...args]);
@@ -107,6 +119,30 @@ describe('booking scheduler end-to-end decision flow', { concurrency: false }, (
       triggerCalls.push(['time-expired', ...args]);
       return {};
     };
+    bookingRefundService.quoteNoShow = async () => ({
+      refundAmount: 0,
+      extraAmount: 0,
+      appliedRefundPercent: 0,
+    });
+    bookingRefundService.quoteEarlyCheckout = async () => ({
+      refundAmount: 10000,
+      extraAmount: 0,
+    });
+    bookingRefundService.settleBookingEvent = async (options) => {
+      const currentBooking = fixtures.settlementInputs[String(options.bookingId)];
+      assert.ok(currentBooking, `Missing settlement input for ${options.bookingId}`);
+      await options.applyState({ booking: currentBooking });
+      settlementCalls.push(options);
+      return {
+        booking: currentBooking,
+        settlement: {
+          eventKey: options.eventKey,
+          eventType: options.eventType,
+          refundAmount: options.calculation.refundAmount,
+        },
+        alreadyProcessed: false,
+      };
+    };
   });
 
   after(() => {
@@ -121,6 +157,9 @@ describe('booking scheduler end-to-end decision flow', { concurrency: false }, (
     notificationTriggers.notifyBookingNoShowCancelled = originals.notifyBookingNoShowCancelled;
     notificationTriggers.notifyBookingEndingSoon = originals.notifyBookingEndingSoon;
     notificationTriggers.notifyBookingTimeExpired = originals.notifyBookingTimeExpired;
+    bookingRefundService.quoteNoShow = originals.quoteNoShow;
+    bookingRefundService.quoteEarlyCheckout = originals.quoteEarlyCheckout;
+    bookingRefundService.settleBookingEvent = originals.settleBookingEvent;
   });
 
   test('routes every booking state to the correct transition and notification', async () => {
@@ -137,9 +176,9 @@ describe('booking scheduler end-to-end decision flow', { concurrency: false }, (
       new Date(now - 20 * 60 * 1000),
       new Date(now + 40 * 60 * 1000)
     );
-    const cancelled = booking(
+    const noShow = booking(
       'booking-cancelled-3',
-      'CANCELLED',
+      'PAID',
       new Date(now - 31 * 60 * 1000),
       new Date(now + 29 * 60 * 1000)
     );
@@ -155,9 +194,9 @@ describe('booking scheduler end-to-end decision flow', { concurrency: false }, (
       new Date(now - 90 * 60 * 1000),
       new Date(now - 60 * 1000)
     );
-    const completed = booking(
+    const paused = booking(
       'booking-completed-6',
-      'COMPLETED',
+      'PAUSED',
       new Date(now - 60 * 60 * 1000),
       new Date(now + 20 * 60 * 1000)
     );
@@ -165,19 +204,22 @@ describe('booking scheduler end-to-end decision flow', { concurrency: false }, (
     fixtures = {
       upcoming: [upcoming],
       expiredCandidates: [{ _id: expired._id }],
-      noShowCandidates: [{ _id: cancelled._id }],
+      noShowCandidates: [noShow],
       endingSoon: [endingSoon],
       pastEnd: [pastEnd],
-      pausedCandidates: [{ _id: completed._id }],
+      pausedCandidates: [paused],
       atomicResults: {
         [expired._id]: expired,
-        [cancelled._id]: cancelled,
-        [completed._id]: completed,
+      },
+      settlementInputs: {
+        [noShow._id]: noShow,
+        [paused._id]: paused,
       },
     };
     scheduleIsCurrent = true;
     triggerCalls.length = 0;
     atomicUpdates.length = 0;
+    settlementCalls.length = 0;
     pendingUpdate = null;
 
     await checkBookings(null);
@@ -202,11 +244,23 @@ describe('booking scheduler end-to-end decision flow', { concurrency: false }, (
 
     assert.deepEqual(
       atomicUpdates.map((item) => item.update.$set.status),
-      ['EXPIRED', 'CANCELLED', 'COMPLETED']
+      ['EXPIRED']
     );
     assert.equal(atomicUpdates[0].filter.status, 'PAID');
-    assert.deepEqual(atomicUpdates[1].filter.status.$in, ['PAID', 'EXPIRED']);
-    assert.equal(atomicUpdates[2].filter.status, 'PAUSED');
+    assert.deepEqual(
+      settlementCalls.map((item) => item.eventType),
+      ['no_show', 'paused_completion']
+    );
+    assert.equal(noShow.status, 'CANCELLED');
+    assert.equal(paused.status, 'COMPLETED');
+  });
+
+  test('excludes booking sessions from generic parking-time reminders', async () => {
+    sessionQuery = null;
+
+    await checkActiveSessions(null);
+
+    assert.deepEqual(sessionQuery.type, { $ne: 'BOOKING' });
   });
 
   test('does not send a stale reminder after the booking schedule changes', async () => {
@@ -226,10 +280,12 @@ describe('booking scheduler end-to-end decision flow', { concurrency: false }, (
       pastEnd: [],
       pausedCandidates: [],
       atomicResults: {},
+      settlementInputs: {},
     };
     scheduleIsCurrent = false;
     triggerCalls.length = 0;
     atomicUpdates.length = 0;
+    settlementCalls.length = 0;
 
     await checkBookings(null);
 
