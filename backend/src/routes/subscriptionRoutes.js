@@ -21,6 +21,7 @@ const renewalEnabled = (req, res, next) => {
 router.use(protect);
 
 router.get('/membership', subscriptionController.getMembership);
+router.get('/:subscriptionId/qr', subscriptionIdValidator, subscriptionController.getMembershipQr);
 router.post(
   '/renew/verify-payment',
   renewalEnabled,

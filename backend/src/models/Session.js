@@ -18,6 +18,12 @@ const sessionSchema = new mongoose.Schema(
       ref: 'Booking',
       default: null,
     },
+    subscriptionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Subscription',
+      default: null,
+      index: true,
+    },
     type: {
       type: String,
       enum: ['BOOKING', 'WALK_IN', 'SUBSCRIPTION'],
@@ -30,7 +36,7 @@ const sessionSchema = new mongoose.Schema(
     },
     source: {
       type: String,
-      enum: ['kiosk', 'app_booking', 'booking', 'walk_in'],
+      enum: ['kiosk', 'app_booking', 'booking', 'walk_in', 'staff_manual'],
       default: 'kiosk',
     },
     bookingId: {

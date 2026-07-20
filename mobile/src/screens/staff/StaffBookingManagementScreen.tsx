@@ -159,6 +159,16 @@ export function StaffBookingManagementScreen({ navigation }: Props) {
         subtitle={`${bookings.length} on selected day`}
         accentColor={COLORS.staffBlue}
         onBack={() => navigation.navigate('ManagementHome')}
+        right={
+          <TouchableOpacity
+            accessibilityLabel="Scan booking QR"
+            accessibilityRole="button"
+            onPress={() => navigation.navigate('BookingScanner')}
+            style={styles.scanButton}
+          >
+            <Ionicons name="qr-code-outline" size={22} color={COLORS.textInverse} />
+          </TouchableOpacity>
+        }
       />
 
       <View style={styles.dateBar}>
@@ -434,6 +444,14 @@ const styles = StyleSheet.create({
   safe: {
     backgroundColor: COLORS.background,
     flex: 1,
+  },
+  scanButton: {
+    alignItems: 'center',
+    backgroundColor: COLORS.staffBlue,
+    borderRadius: RADIUS.md,
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
   },
   center: {
     alignItems: 'center',

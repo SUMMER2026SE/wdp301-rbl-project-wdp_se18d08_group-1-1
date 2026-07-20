@@ -51,6 +51,11 @@ const subscriptionSchema = new mongoose.Schema(
       enum: ['pending', 'active', 'expired', 'cancelled', 'failed'],
       default: 'pending',
     },
+    qrVersion: {
+      type: Number,
+      default: 1,
+      min: 1,
+    },
     expireWarningSent: {
       type: Boolean,
       default: false,

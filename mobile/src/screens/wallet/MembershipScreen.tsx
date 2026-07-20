@@ -18,6 +18,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { EmptyState, ErrorState, ScreenHeader } from '@/components/common';
+import { QRCodeDisplay } from '@/components/booking/QRCodeDisplay';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
 import type { WalletStackParamList } from '@/navigation/types';
 import { subscriptionsService } from '@/services/api/subscriptions';
@@ -533,6 +534,8 @@ export const MembershipScreen = ({ navigation }: Props) => {
   const [renewalLoading, setRenewalLoading] = useState(false);
   const [walletBalance, setWalletBalance] = useState(0);
   const [renewalKey, setRenewalKey] = useState('');
+  const [qrPayload, setQrPayload] = useState<string | null>(null);
+  const [qrError, setQrError] = useState('');
 
   const loadMembership = useCallback(async () => {
     setError('');
@@ -541,8 +544,28 @@ export const MembershipScreen = ({ navigation }: Props) => {
         subscriptionsService.getMembership(),
         walletService.getWallet(),
       ]);
-      setMembership(membershipResponse.data || null);
+      const membershipData = membershipResponse.data || null;
+      setMembership(membershipData);
       setWalletBalance(walletResponse.data?.balance || 0);
+      if (membershipData?.status === 'active' && membershipData.subscriptionId) {
+        try {
+          const qrResponse = await subscriptionsService.getMembershipQr(
+            membershipData.subscriptionId,
+          );
+          setQrPayload(qrResponse.data?.payload || null);
+          setQrError(qrResponse.data?.payload ? '' : 'Membership QR is unavailable.');
+        } catch (qrLoadError) {
+          setQrPayload(null);
+          setQrError(
+            qrLoadError instanceof Error
+              ? qrLoadError.message
+              : 'Unable to load membership QR.',
+          );
+        }
+      } else {
+        setQrPayload(null);
+        setQrError('');
+      }
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load membership.');
       setMembership(null);
@@ -649,6 +672,31 @@ export const MembershipScreen = ({ navigation }: Props) => {
               onConfirm={confirmRenewal}
               onMethodChange={setRenewalMethod}
             />
+            {active ? (
+              <StaggeredView delay={500} style={styles.sectionBlock}>
+                <MinimalHeading>Membership QR</MinimalHeading>
+                {qrPayload ? (
+                  <>
+                    <QRCodeDisplay
+                      value={qrPayload}
+                      reference={membership.subscriptionId || undefined}
+                      shareLabel="VALO membership"
+                      shareTitle="Share membership pass"
+                      showBrightnessControl
+                    />
+                    <Text style={styles.qrHint}>
+                      Use this pass for every membership visit. It expires with your plan.
+                    </Text>
+                  </>
+                ) : (
+                  <View style={styles.qrState}>
+                    <Text style={styles.qrError}>
+                      {qrError || 'Membership QR is unavailable.'}
+                    </Text>
+                  </View>
+                )}
+              </StaggeredView>
+            ) : null}
           </ScrollView>
           <StickyMembershipCTA onPress={() => navigation.navigate('SubscriptionPackages')} />
         </>
@@ -823,6 +871,27 @@ const styles = StyleSheet.create({
   },
   benefitsBlock: {
     gap: SPACING.md,
+  },
+  qrHint: {
+    color: COLORS.textMuted,
+    fontSize: FONT_SIZES.sm,
+    lineHeight: 20,
+    textAlign: 'center',
+  },
+  qrError: {
+    color: COLORS.error,
+    fontSize: FONT_SIZES.sm,
+    textAlign: 'center',
+  },
+  qrState: {
+    alignItems: 'center',
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    gap: SPACING.md,
+    justifyContent: 'center',
+    minHeight: 88,
+    padding: SPACING.md,
   },
   metricStrip: {
     alignItems: 'stretch',

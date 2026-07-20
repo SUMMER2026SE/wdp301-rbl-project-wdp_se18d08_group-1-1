@@ -48,6 +48,12 @@ export const getMembershipStatus = async () =>
     headers: authHeader(),
   });
 
+export const getMembershipQr = async (subscriptionId) =>
+  apiFetch(`/subscriptions/${subscriptionId}/qr`, {
+    method: 'GET',
+    headers: authHeader(),
+  });
+
 export const getRenewalQuote = async (subscriptionId) =>
   apiFetch(`/subscriptions/${subscriptionId}/renew/quote`, {
     method: 'POST',
