@@ -204,7 +204,15 @@ export default function DashboardLayout() {
   const [reportLoading, setReportLoading] = useState(false);
 
   // Hook for notifications
-  const { notifications, unreadCount, markAsRead, markAllAsRead } =
+  const {
+    notifications,
+    unreadCount,
+    loading: notificationsLoading,
+    hasMore,
+    fetchMore,
+    markAsRead,
+    markAllAsRead,
+  } =
     useNotifications({ contextRole: user?.role });
 
   const role = user?.role;
@@ -467,7 +475,7 @@ export default function DashboardLayout() {
                         <div
                           key={n._id || n.notificationId}
                           onClick={() =>
-                            !n.isRead && markAsRead(n._id || n.notificationId)
+                            !n.isRead && markAsRead(n.notificationId || n._id)
                           }
                           className={`flex items-start gap-3 px-4 py-3 hover:bg-gray-50 dark:hover:bg-white/5 border-b border-gray-100 dark:border-white/5 last:border-0 cursor-pointer transition-colors ${!n.isRead ? "bg-emerald-50/50 dark:bg-emerald-500/5" : ""}`}
                         >
@@ -498,16 +506,26 @@ export default function DashboardLayout() {
                   </div>
                   <div className="p-2 border-t border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-[#111]">
                     <button
-                      onClick={() =>
-                        navigate(
-                          role === "staff" || role === "admin"
-                            ? `/${role}/notifications`
-                            : "/customer/notifications",
-                        )
+                      onClick={() => {
+                        if (role === "staff" || role === "admin") {
+                          setNotifOpen(false);
+                          navigate(`/${role}/notification-inbox`);
+                        } else {
+                          fetchMore();
+                        }
+                      }}
+                      disabled={
+                        role === "customer" && (notificationsLoading || !hasMore)
                       }
                       className="w-full text-center text-xs text-gray-500 hover:text-gray-900 dark:hover:text-white py-1"
                     >
-                      View all
+                      {role === "customer"
+                        ? notificationsLoading
+                          ? "Loading earlier notifications..."
+                          : hasMore
+                            ? "View earlier notifications"
+                            : "All notifications loaded"
+                        : "Open notification inbox"}
                     </button>
                   </div>
                 </div>

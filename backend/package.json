@@ -7,7 +7,8 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "normalize:plates": "node src/scripts/normalizeLicensePlates.js",
-    "test": "node --test src/tests/statisticsService.test.js src/tests/subscriptionRenewalService.test.js"
+    "test": "node --test src/tests/statisticsService.test.js src/tests/subscriptionRenewalService.test.js",
+    "test:notifications": "node --test src/tests/notificationRecipients.unit.test.js src/tests/bookingNotificationFlow.unit.test.js src/tests/bookingScheduler.unit.test.js"
   },
   "keywords": [],
   "author": "",

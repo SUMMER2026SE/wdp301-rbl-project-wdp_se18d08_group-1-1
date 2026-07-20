@@ -135,6 +135,14 @@ export default function App() {
             <Route path="/admin/subscriptions" element={<SubscriptionManagement />} />
             <Route path="/admin/revenue" element={<RevenueAnalytics />} />
             <Route path="/admin/profile" element={<AdminProfile />} />
+            <Route
+              path="/admin/notifications"
+              element={<NotificationManagement />}
+            />
+            <Route
+              path="/admin/notification-inbox"
+              element={<CustomerNotifications contextRole="admin" />}
+            />
           </Route>
 
           {/* ══════════════════════════════════════════
@@ -162,6 +170,10 @@ export default function App() {
               path="/staff/notifications"
               element={<NotificationManagement />}
             />
+            <Route
+              path="/staff/notification-inbox"
+              element={<CustomerNotifications contextRole="staff" />}
+            />
             <Route path="/staff/live-grid" element={<LiveGridMonitor />} />
             <Route path="/staff/bookings" element={<BookingManagement />} />
             <Route path="/staff/subscriptions" element={<SubscriptionManagement />} />
@@ -182,10 +194,6 @@ export default function App() {
             <Route path="/customer/history" element={<ParkingHistory />} />
             <Route path="/customer/booking" element={<BookingPage />} />
             <Route path="/wallet/*" element={<RedirectOldWalletRoutes />} />
-            <Route
-              path="/customer/notifications"
-              element={<CustomerNotifications />}
-            />
           </Route>
 
           {/* ── 403 ── */}

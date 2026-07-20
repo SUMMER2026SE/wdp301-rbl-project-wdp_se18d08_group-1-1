@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   AlertCircle,
   CalendarClock,
@@ -13,7 +14,6 @@ import {
 } from 'lucide-react';
 import {
   cancelBooking,
-  checkOutBooking,
   extendBooking,
   getMyBookings,
   updateBookingVehicle,
@@ -70,6 +70,8 @@ const getBookingTiming = (booking) => {
 };
 
 export default function BookingPage() {
+  const location = useLocation();
+  const highlightedBookingId = new URLSearchParams(location.search).get('bookingId');
   const socket = useSocket();
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -237,20 +239,6 @@ export default function BookingPage() {
     }
   };
 
-  const handleComplete = async (booking) => {
-    const confirmed = window.confirm('Complete this parking session now? The system will calculate any refund or extra fee.');
-    if (!confirmed) return;
-
-    const res = await runBookingAction(`complete-${booking._id}`, () => checkOutBooking(booking._id));
-    if (res) {
-      const refund = res.data?.data?.refundAmount || 0;
-      const extra = res.data?.data?.extraAmount || 0;
-      if (refund > 0) setSuccess(`Booking completed. Refunded ${formatMoney(refund)}.`);
-      else if (extra > 0) setSuccess(`Booking completed. Extra fee charged ${formatMoney(extra)}.`);
-      else setSuccess('Booking completed.');
-    }
-  };
-
   const approvedVehicles = vehicles.filter(v => v.status === 'approved');
 
   if (loading) {
@@ -322,7 +310,11 @@ export default function BookingPage() {
 
               return (
                 <div key={booking._id} className={`rounded-2xl border bg-white/[0.03] p-5 flex flex-col lg:flex-row lg:items-center gap-4 justify-between transition hover:border-white/20 ${
-                  timing.isNearExpiry ? 'border-amber-400/40' : 'border-white/10'
+                  String(booking._id) === String(highlightedBookingId)
+                    ? 'border-yellow-400 ring-2 ring-yellow-400/20'
+                    : timing.isNearExpiry
+                      ? 'border-amber-400/40'
+                      : 'border-white/10'
                 }`}>
                   <div className="min-w-0">
                     <div className="flex items-center gap-3 flex-wrap">

@@ -92,13 +92,34 @@ export default function Navbar() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [expandedNotificationIds, setExpandedNotificationIds] = useState(
+    () => new Set(),
+  );
   const [scrollY, setScrollY] = useState(0);
   const profileRef = useRef(null);
   const notifRef = useRef(null);
 
   // Hook for notifications
-  const { notifications, unreadCount, markAsRead, markAllAsRead } =
-    useNotifications({ contextRole: 'customer' });
+  const {
+    notifications,
+    unreadCount,
+    loading: notificationsLoading,
+    hasMore,
+    fetchMore,
+    markAsRead,
+    markAllAsRead,
+  } =
+    useNotifications({ contextRole: 'customer', limit: 5 });
+
+  const toggleNotificationDetails = useCallback((notificationId) => {
+    const id = String(notificationId);
+    setExpandedNotificationIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   // Sync user
   const syncUser = useCallback(() => {
@@ -127,6 +148,21 @@ export default function Navbar() {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  // Keep the page behind the notification panel fixed while it is open.
+  useEffect(() => {
+    if (!notifOpen) return undefined;
+
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousBodyOverflow;
+      document.documentElement.style.overflow = previousHtmlOverflow;
+    };
+  }, [notifOpen]);
 
   // Close on outside click
   useEffect(() => {
@@ -372,20 +408,29 @@ export default function Navbar() {
                           </div>
                         </div>
 
-                        <div className="overflow-y-auto flex-1 text-left p-2 space-y-2">
-                          {notifications.length === 0 ? (
+                        <div className="scrollbar-hidden overflow-y-auto overscroll-contain flex-1 text-left p-2 space-y-2">
+                          {notificationsLoading && notifications.length === 0 ? (
+                            <div className="p-6 text-center text-gray-500 text-sm">
+                              Loading notifications...
+                            </div>
+                          ) : notifications.length === 0 ? (
                             <div className="p-6 text-center text-gray-500 text-sm">
                               No notifications
                             </div>
                           ) : (
-                            notifications.map((n) => (
+                            notifications.map((n) => {
+                              const notificationId = n.notificationId || n._id;
+                              const isExpanded = expandedNotificationIds.has(
+                                String(notificationId),
+                              );
+                              return (
                               <div
                                 key={n._id || n.notificationId}
                                 onClick={() =>
                                   !n.isRead &&
-                                  markAsRead(n._id || n.notificationId)
+                                  markAsRead(notificationId)
                                 }
-                                className={`flex items-start gap-3 p-3 rounded-xl hover:shadow-sm transition-all bg-white border ${!n.isRead ? "ring-1 ring-emerald-100" : "border-gray-100"}`}
+                                className={`flex items-start gap-3 p-3 rounded-xl hover:shadow-sm transition-all bg-white border cursor-pointer ${!n.isRead ? "ring-1 ring-emerald-100" : "border-gray-100"}`}
                               >
                                 <div className="flex flex-col items-center">
                                   <div
@@ -411,7 +456,7 @@ export default function Navbar() {
                                         : "Just now"}
                                     </div>
                                   </div>
-                                  <p className="text-gray-500 text-[13px] mt-1 line-clamp-2">
+                                  <p className={`text-gray-500 text-[13px] mt-1 ${isExpanded ? "whitespace-pre-wrap break-words" : "line-clamp-2"}`}>
                                     {n.content}
                                   </p>
                                   <div className="mt-2 flex items-center gap-2">
@@ -419,7 +464,7 @@ export default function Navbar() {
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          markAsRead(n._id || n.notificationId);
+                                          markAsRead(notificationId);
                                         }}
                                         className="text-xs text-emerald-600 hover:text-emerald-500 font-medium transition-colors"
                                       >
@@ -428,28 +473,52 @@ export default function Navbar() {
                                     )}
                                     <button
                                       onClick={(e) => {
-                                        e.stopPropagation(); /* placeholder: maybe delete later */
+                                        e.stopPropagation();
+                                        toggleNotificationDetails(notificationId);
                                       }}
                                       className="text-xs text-gray-400 hover:text-gray-600 font-medium transition-colors"
                                     >
-                                      More
+                                      {isExpanded ? "Less" : "More"}
                                     </button>
+                                    {n.type === "BOOKING" && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (!n.isRead) markAsRead(notificationId);
+                                          const bookingId = n.metadata?.bookingId;
+                                          navigate(
+                                            bookingId
+                                              ? `/customer/booking?bookingId=${bookingId}`
+                                              : "/customer/booking",
+                                          );
+                                          setNotifOpen(false);
+                                        }}
+                                        className="text-xs text-amber-600 hover:text-amber-700 font-medium transition-colors"
+                                      >
+                                        View booking
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
                               </div>
-                            ))
+                              );
+                            })
                           )}
                         </div>
 
                         <div className="p-3 border-t border-gray-100 bg-gray-50/50">
                           <button
-                            onClick={() => {
-                              navigate("/customer/notifications");
-                              setNotifOpen(false);
-                            }}
-                            className="w-full text-center text-xs text-gray-600 hover:text-gray-900 py-2 font-medium transition-colors rounded-xl bg-white/60"
+                            type="button"
+                            onClick={fetchMore}
+                            disabled={notificationsLoading || !hasMore}
+                            className="w-full text-center text-xs text-gray-600 hover:text-gray-900 py-2 font-medium transition-colors rounded-xl bg-white/60 disabled:cursor-default disabled:text-gray-400"
                           >
-                            View all notifications
+                            {notificationsLoading
+                              ? "Loading earlier notifications..."
+                              : hasMore
+                                ? "View all notifications"
+                                : "All notifications loaded"}
                           </button>
                         </div>
                       </div>
@@ -554,12 +623,6 @@ export default function Navbar() {
                               icon: History,
                               label: "Transaction History",
                               to: "/customer/wallet",
-                            },
-                            {
-                              id: "notifications",
-                              icon: Bell,
-                              label: "Notifications",
-                              to: "/customer/notifications",
                             },
                             {
                               id: "policy",
