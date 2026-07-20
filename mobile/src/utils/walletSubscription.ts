@@ -41,11 +41,9 @@ export const getSubscriptionPackageRestriction = (
   membership: MembershipStatus | null,
   pkg: SubscriptionPackage | undefined,
 ) => {
-  if (!membership?.isVip || !pkg || !membership.package) return null;
-  if (membership.package.id === pkg._id) return 'This is your current plan.';
-  if (membership.package.type === 'yearly' && pkg.type === 'monthly') {
-    return 'The monthly plan is already included in your annual plan.';
-  }
+  // Slot entitlements are independent, so an active membership does not block
+  // purchasing another slot or choosing a different duration for that slot.
+  if (!membership || !pkg) return null;
   return null;
 };
 

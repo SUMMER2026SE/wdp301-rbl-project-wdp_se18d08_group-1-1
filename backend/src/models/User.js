@@ -46,6 +46,7 @@ const userSchema = new mongoose.Schema(
       expireAt: { type: Date, default: null },
       packageId: { type: mongoose.Schema.Types.ObjectId, ref: 'TicketPackage', default: null },
       freeServiceCount: { type: Number, default: 0 },
+      qrVersion: { type: Number, default: 1, min: 1 },
     },
     expoPushTokens: {
       type: [String],

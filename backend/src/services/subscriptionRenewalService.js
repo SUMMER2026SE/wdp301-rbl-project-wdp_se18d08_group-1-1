@@ -254,10 +254,10 @@ const createPayosRenewal = async ({ userId, subscriptionId, idempotencyKey }) =>
       description: 'VALO Renew VIP',
       returnUrl:
         process.env.PAYOS_RENEWAL_RETURN_URL ||
-        `${clientUrl}/membership?renewOrderCode=${orderCode}`,
+        `${clientUrl}/customer/membership-transfers?renewOrderCode=${orderCode}`,
       cancelUrl:
         process.env.PAYOS_RENEWAL_CANCEL_URL ||
-        `${clientUrl}/membership?renewOrderCode=${orderCode}&cancel=true`,
+        `${clientUrl}/customer/membership-transfers?renewOrderCode=${orderCode}&cancel=true`,
       items: [{
         name: `Renew ${quote.ticketPackage.name}`,
         quantity: 1,

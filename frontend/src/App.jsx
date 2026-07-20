@@ -47,6 +47,7 @@ import BookingManagement from "./pages/Staff/BookingManagement";
 // Pages – Customer
 import CustomerProfile from "./pages/Customer/CustomerProfile";
 import Membership from "./pages/Customer/Membership";
+import MembershipTransfers from "./pages/Customer/MembershipTransfers";
 import MyVehicles from "./pages/Customer/MyVehicles";
 import WalletPage from "./pages/Wallet/WalletPage";
 import ParkingHistory from "./pages/Customer/ParkingHistory";
@@ -177,6 +178,10 @@ export default function App() {
             }
           >
             <Route path="/profile" element={<CustomerProfile />} />
+            <Route
+              path="/customer/membership-transfers"
+              element={<MembershipTransfers />}
+            />
             <Route path="/customer/vehicles" element={<MyVehicles />} />
             <Route path="/customer/wallet" element={<WalletPage />} />
             <Route path="/customer/history" element={<ParkingHistory />} />

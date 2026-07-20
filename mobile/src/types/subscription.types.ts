@@ -14,10 +14,18 @@ export interface SubscriptionPackage {
 }
 
 export interface ReservedSlot {
+  entitlementId?: string | null;
+  sourceSubscriptionId?: string;
   floorId: string;
   floorName: string;
   floorNumber?: number | null;
   slotCode: string;
+  status?: string;
+  validFrom?: string;
+  expireAt?: string;
+  unitAmount?: number;
+  transferCount?: number;
+  canTransfer?: boolean;
 }
 
 export interface MembershipStatus {
@@ -51,6 +59,7 @@ export interface SubscriptionRenewalQuote {
   quoteId: string;
   quoteExpiresAt: string;
   subscriptionId: string;
+  entitlementId?: string;
   currentExpireAt: string;
   newExpireAt: string;
   daysUntilExpiration: number;
@@ -101,4 +110,23 @@ export interface CreateSubscriptionPaymentResponse {
     checkoutUrl: string;
     qrCode?: string;
   };
+}
+
+export interface MembershipEntitlementTransfer {
+  _id: string;
+  status:
+    | 'PENDING_RECIPIENT'
+    | 'PENDING_ADMIN'
+    | 'AWAITING_PAYMENT'
+    | 'COMPLETED'
+    | 'REJECTED'
+    | 'CANCELLED'
+    | 'EXPIRED';
+  askingPrice: number;
+  transferFee: number;
+  fromUserId: { _id: string; username?: string; email?: string } | string;
+  toUserId: { _id: string; username?: string; email?: string } | string;
+  entitlementId:
+    | (ReservedSlot & { _id: string })
+    | string;
 }

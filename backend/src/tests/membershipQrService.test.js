@@ -1,11 +1,14 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const mongoose = require('mongoose');
 
 process.env.MEMBERSHIP_QR_SECRET = 'test-membership-qr-secret';
 
 const {
+  buildAccountMembershipQrPayload,
   buildMembershipQrPayload,
   isMembershipQrAvailable,
+  parseAndVerifyAnyMembershipQr,
   parseAndVerifyMembershipQr,
 } = require('../services/membershipQrService');
 
@@ -70,4 +73,29 @@ test('only exposes QR while membership is paid, active, and unexpired', () => {
     }),
     false
   );
+});
+
+test('builds an account membership QR and rejects an old rotated version', () => {
+  const userId = new mongoose.Types.ObjectId();
+  const payload = buildAccountMembershipQrPayload({
+    _id: userId,
+    membership: { qrVersion: 4 },
+  });
+  assert.deepEqual(parseAndVerifyAnyMembershipQr(payload), {
+    credentialType: 'ACCOUNT',
+    userId: String(userId),
+    version: 4,
+  });
+  assert.match(payload, /^VALO_MEMBERSHIP_ACCOUNT:4:/);
+});
+
+test('generic membership parser keeps legacy subscription QR compatibility', () => {
+  const subscription = {
+    _id: new mongoose.Types.ObjectId(),
+    qrVersion: 2,
+  };
+  const parsed = parseAndVerifyAnyMembershipQr(buildMembershipQrPayload(subscription));
+  assert.equal(parsed.credentialType, 'LEGACY_SUBSCRIPTION');
+  assert.equal(parsed.subscriptionId, String(subscription._id));
+  assert.equal(parsed.version, 2);
 });

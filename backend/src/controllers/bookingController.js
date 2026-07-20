@@ -8,6 +8,7 @@ const User = require('../models/User');
 const Vehicle = require('../models/Vehicle');
 const ParkingFloor = require('../models/ParkingFloor');
 const Session = require('../models/Session');
+const MembershipSlotEntitlement = require('../models/MembershipSlotEntitlement');
 const Slot = require('../models/Slot');
 const payos = require('../config/payos');
 const walletService = require('../services/walletService');
@@ -26,6 +27,9 @@ const {
   buildBookingQrPayload,
   isBookingQrAvailable,
 } = require('../services/bookingQrService');
+const {
+  findActiveSlotOwnership,
+} = require('../services/membershipSlotOwnershipService');
 
 const BOOKING_STATUSES_THAT_BLOCK_SLOT = ['PAID', 'ACTIVE', 'PAUSED'];
 
@@ -179,11 +183,33 @@ const getUnavailableSlotKeys = async (start, end, userId = null) => {
     .select('floorId slotCode')
     .lean();
 
-  const Subscription = require('../models/Subscription');
-  const activeSubscriptionsPromise = Subscription.find({
-    status: 'active',
-    expireAt: { $gt: new Date() }
-  }).select('slots user').lean();
+  const activeMembershipSlotsPromise = MembershipSlotEntitlement.find({
+    status: { $in: ['active', 'transfer_locked'] },
+    expireAt: { $gt: new Date() },
+  })
+    .select('floorId slotCode sourceSubscriptionId')
+    .lean()
+    .then(async (entitlements) => {
+      const Subscription = require('../models/Subscription');
+      const coveredSubscriptionIds = entitlements.map(
+        (item) => item.sourceSubscriptionId
+      );
+      const legacySubscriptions = await Subscription.find({
+        _id: { $nin: coveredSubscriptionIds },
+        status: 'active',
+        paymentStatus: 'paid',
+        expireAt: { $gt: new Date() },
+      })
+        .select('slots')
+        .lean();
+      return [
+        ...entitlements.map((item) => ({
+          floorId: item.floorId,
+          slotCode: item.slotCode,
+        })),
+        ...legacySubscriptions.flatMap((subscription) => subscription.slots || []),
+      ];
+    });
 
   // Find slots reserved for other users
   const reservedSlotsQuery = { reservedFor: { $ne: null } };
@@ -200,14 +226,14 @@ const getUnavailableSlotKeys = async (start, end, userId = null) => {
     maintenanceSlots,
     activeHolds,
     reservedSlots,
-    activeSubscriptions
+    activeMembershipSlots
   ] = await Promise.all([
     overlappingBookingsPromise,
     activeSessionsPromise,
     maintenanceSlotsPromise,
     activeHoldsPromise,
     reservedSlotsPromise,
-    activeSubscriptionsPromise
+    activeMembershipSlotsPromise
   ]);
 
   const unavailable = new Set();
@@ -232,11 +258,9 @@ const getUnavailableSlotKeys = async (start, end, userId = null) => {
     unavailable.add(buildSlotKey(slot.floorID, slot.slotNumber));
   });
 
-  activeSubscriptions.forEach((sub) => {
-    sub.slots.forEach(slot => {
-      const key = buildSlotKey(slot.floorId, slot.slotCode);
-      unavailable.add(key);
-    });
+  activeMembershipSlots.forEach((slot) => {
+    const key = buildSlotKey(slot.floorId, slot.slotCode);
+    unavailable.add(key);
   });
 
   return unavailable;
@@ -533,15 +557,14 @@ exports.createBooking = async (req, res, next) => {
     }
 
     // 3.5. Kiểm tra ô đỗ có thuộc Subscription (Gói tháng/năm) không
-    const Subscription = require('../models/Subscription');
-    const subscriptionInfo = await Subscription.findOne({
-      'slots.slotCode': parkingSlot,
-      status: 'active',
-      expireAt: { $gt: start }
+    const subscriptionInfo = await findActiveSlotOwnership({
+      floorId,
+      slotCode: parkingSlot,
+      at: start,
     });
     
     if (subscriptionInfo) {
-      if (subscriptionInfo.user.toString() !== userId.toString()) {
+      if (subscriptionInfo.ownerId.toString() !== userId.toString()) {
         return res.status(400).json({ success: false, message: 'Ô đỗ này đã được đăng ký gói thuê bao cố định và không thể đặt chỗ.' });
       } else if (vehicle.status !== 'approved') {
         return res.status(400).json({ success: false, message: 'Chỉ các xe đã được duyệt mới có thể đặt chỗ vào ô đỗ VIP của bạn.' });
@@ -958,13 +981,12 @@ exports.modifyBookingTime = async (req, res, next) => {
     }
 
     // Kiểm tra ô đỗ có thuộc Subscription (Gói tháng/năm) không
-    const Subscription = require('../models/Subscription');
-    const subscriptionInfo = await Subscription.findOne({
-      'slots.slotCode': booking.parkingSlot,
-      status: 'active',
-      expireAt: { $gt: start }
+    const subscriptionInfo = await findActiveSlotOwnership({
+      floorId: booking.floorId,
+      slotCode: booking.parkingSlot,
+      at: start,
     });
-    if (subscriptionInfo && subscriptionInfo.user.toString() !== booking.userId.toString()) {
+    if (subscriptionInfo && subscriptionInfo.ownerId.toString() !== booking.userId.toString()) {
       return res.status(400).json({ success: false, message: 'Ô đỗ này đã được đăng ký gói thuê bao cố định, không thể đổi sang giờ này.' });
     }
 
@@ -2037,13 +2059,13 @@ exports.createBulkBooking = async (req, res, next) => {
       }
 
       // Check subscription
-      const Subscription = require('../models/Subscription');
-      const subscriptionInfo = await Subscription.findOne({
-        'slots.slotCode': parkingSlot,
-        status: 'active',
-        expireAt: { $gt: start }
-      }).session(session);
-      if (subscriptionInfo && subscriptionInfo.user.toString() !== userId.toString()) {
+      const subscriptionInfo = await findActiveSlotOwnership({
+        floorId,
+        slotCode: parkingSlot,
+        at: start,
+        session,
+      });
+      if (subscriptionInfo && subscriptionInfo.ownerId.toString() !== userId.toString()) {
         throw new Error(`Ô đỗ ${parkingSlot} đã được đăng ký gói thuê bao cố định.`);
       }
 

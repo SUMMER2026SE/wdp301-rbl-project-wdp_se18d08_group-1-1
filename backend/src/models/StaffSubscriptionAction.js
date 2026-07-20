@@ -8,6 +8,12 @@ const staffSubscriptionActionSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    entitlementId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'MembershipSlotEntitlement',
+      default: null,
+      index: true,
+    },
     sessionId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Session',

@@ -8,6 +8,7 @@ export default function SubscriptionManagement() {
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all'); // all, active, expired, pending, etc.
+  const [transfers, setTransfers] = useState([]);
 
   const fetchSubscriptions = async () => {
     try {
@@ -15,14 +16,22 @@ export default function SubscriptionManagement() {
       setError('');
       const token = localStorage.getItem('accessToken');
       
-      const res = await apiFetch(`/subscriptions/all`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      const [res, transferRes] = await Promise.all([
+        apiFetch(`/subscriptions/all`, {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        apiFetch('/admin/membership-entitlement-transfers', {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+      ]);
       
       if (res.ok && res.data?.success) {
         setSubscriptions(res.data.data);
       } else {
         setError(res.data?.message || 'Failed to fetch subscriptions');
+      }
+      if (transferRes.ok && transferRes.data?.success) {
+        setTransfers(transferRes.data.data || []);
       }
     } catch (err) {
       console.error(err);
@@ -30,6 +39,27 @@ export default function SubscriptionManagement() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const reviewTransfer = async (transferId, approved) => {
+    const token = localStorage.getItem('accessToken');
+    const rejectionReason = approved
+      ? ''
+      : window.prompt('Rejection reason:')?.trim();
+    if (!approved && !rejectionReason) return;
+    const response = await apiFetch(
+      `/admin/membership-entitlement-transfers/${transferId}/${approved ? 'approve' : 'reject'}`,
+      {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${token}` },
+        body: approved ? undefined : JSON.stringify({ reason: rejectionReason }),
+      }
+    );
+    if (!response.ok || !response.data?.success) {
+      setError(response.data?.message || 'Unable to review transfer.');
+      return;
+    }
+    await fetchSubscriptions();
   };
 
   useEffect(() => {
@@ -119,6 +149,63 @@ export default function SubscriptionManagement() {
           {error}
         </div>
       )}
+
+      <section className="mb-6 rounded-2xl border border-white/5 bg-slate-900/50 p-5">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <h2 className="font-black text-white">Membership transfer reviews</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              Only recipient-accepted requests can be approved.
+            </p>
+          </div>
+          <span className="rounded-full bg-amber-500/10 px-3 py-1 text-xs font-bold text-amber-400">
+            {transfers.filter((item) => item.status === 'PENDING_ADMIN').length} pending
+          </span>
+        </div>
+        <div className="space-y-2">
+          {transfers.filter((item) => item.status === 'PENDING_ADMIN').length === 0 ? (
+            <p className="rounded-xl bg-slate-800/40 p-4 text-sm text-slate-500">
+              No transfer is waiting for review.
+            </p>
+          ) : (
+            transfers
+              .filter((item) => item.status === 'PENDING_ADMIN')
+              .map((transfer) => (
+                <div
+                  key={transfer._id}
+                  className="flex flex-col gap-3 rounded-xl border border-white/5 bg-slate-800/40 p-4 lg:flex-row lg:items-center"
+                >
+                  <div className="flex-1">
+                    <p className="font-bold text-slate-200">
+                      {transfer.entitlementId?.slotCode || 'Parking space'} ·{' '}
+                      {transfer.fromUserId?.email} → {transfer.toUserId?.email}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Price {Number(transfer.askingPrice || 0).toLocaleString('vi-VN')} VND ·
+                      Fee {Number(transfer.transferFee || 0).toLocaleString('vi-VN')} VND
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => reviewTransfer(transfer._id, false)}
+                      className="rounded-lg border border-rose-500/30 px-4 py-2 text-xs font-bold text-rose-400"
+                    >
+                      Reject
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => reviewTransfer(transfer._id, true)}
+                      className="rounded-lg bg-emerald-500 px-4 py-2 text-xs font-black text-slate-950"
+                    >
+                      Approve & lock 24h
+                    </button>
+                  </div>
+                </div>
+              ))
+          )}
+        </div>
+      </section>
 
       <div className="bg-slate-900/50 border border-white/5 rounded-2xl overflow-hidden backdrop-blur-md shadow-xl">
         <div className="overflow-x-auto">
