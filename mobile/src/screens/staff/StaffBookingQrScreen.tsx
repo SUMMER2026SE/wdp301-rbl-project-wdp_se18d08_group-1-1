@@ -83,7 +83,9 @@ export function StaffBookingQrScreen({ navigation }: Props) {
     setBusy(true);
     setError('');
     try {
-      const isMembershipQr = payload.startsWith('VALO_MEMBERSHIP:');
+      const isMembershipQr =
+        payload.startsWith('VALO_MEMBERSHIP:') ||
+        payload.startsWith('VALO_MEMBERSHIP_ACCOUNT:');
       const response = isMembershipQr
         ? await staffService.resolveMembershipQr(payload)
         : await staffService.resolveBookingQr(payload);
@@ -199,6 +201,8 @@ export function StaffBookingQrScreen({ navigation }: Props) {
           : selectedSlot?.floorId;
         await staffService.transitionMembershipByQr(membershipResolution.membership._id, {
           ...commonPayload,
+          entitlementId:
+            selectedAction === 'CHECK_IN' ? selectedSlot?.entitlementId : undefined,
           vehicleId: selectedAction === 'CHECK_IN' ? selectedVehicleId : undefined,
           floorId: selectedAction === 'CHECK_IN' ? floorId : undefined,
           parkingSlot: selectedAction === 'CHECK_IN' ? selectedSlot?.slotCode : undefined,

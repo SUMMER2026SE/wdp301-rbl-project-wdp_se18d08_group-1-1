@@ -6,6 +6,7 @@ const Booking = require('../models/Booking');
 const BookingHold = require('../models/BookingHold');
 const ParkingFloor = require('../models/ParkingFloor');
 const mongoose = require('mongoose');
+const MembershipSlotEntitlement = require('../models/MembershipSlotEntitlement');
 const payos = require('../config/payos');
 const cloudinary = require('../config/cloudinary');
 const { sendKioskCheckInEmail, sendCheckoutEmail } = require('../utils/emailUtils');
@@ -17,6 +18,37 @@ const { normalizeLicensePlate } = require('../utils/licensePlateUtils');
 
 const normalizeSlotCode = (slotCode = '') => String(slotCode || '').trim().toUpperCase();
 const sameObjectId = (a, b) => String(a || '') === String(b || '');
+
+const findActiveMembershipAccess = async (userId, now = new Date()) => {
+  const entitlements = await MembershipSlotEntitlement.find({
+    ownerId: userId,
+    status: { $in: ['active', 'transfer_locked'] },
+    expireAt: { $gt: now },
+  }).populate('floorId', 'name floorNumber');
+  if (entitlements.length) {
+    return {
+      _id: entitlements[0].sourceSubscriptionId,
+      user: userId,
+      expireAt: entitlements.reduce(
+        (latest, item) => (item.expireAt > latest ? item.expireAt : latest),
+        entitlements[0].expireAt
+      ),
+      slots: entitlements.map((item) => ({
+        floorId: item.floorId,
+        slotCode: item.slotCode,
+        entitlementId: item._id,
+        sourceSubscriptionId: item.sourceSubscriptionId,
+      })),
+      entitlementBacked: true,
+    };
+  }
+  return mongoose.model('Subscription').findOne({
+    user: userId,
+    status: 'active',
+    paymentStatus: 'paid',
+    expireAt: { $gt: now },
+  }).populate('slots.floorId');
+};
 
 /**
  * Xác thực biển số xe khi đến Kiosk
@@ -67,11 +99,7 @@ exports.verifyPlate = async (req, res, next) => {
       }
 
       // Check Subscription (gói tháng/năm)
-      const activeSubscription = await mongoose.model('Subscription').findOne({
-        user: userId,
-        status: 'active',
-        expireAt: { $gt: new Date() }
-      }).populate('slots.floorId');
+      const activeSubscription = await findActiveMembershipAccess(userId);
 
       if (activeSubscription && activeSubscription.slots && activeSubscription.slots.length > 0) {
         let availableSlot = null;
@@ -483,11 +511,7 @@ exports.createKioskSession = async (req, res, next) => {
     }
 
     if (isVehicleApprovedForVIP) {
-      const sub = await mongoose.model('Subscription').findOne({
-        user: userId,
-        status: 'active',
-        expireAt: { $gt: now }
-      });
+      const sub = await findActiveMembershipAccess(userId, now);
       if (sub && sub.slots && sub.slots.length > 0) {
         let availableSlot = null;
         let occupiedBySelfCount = 0;
@@ -539,12 +563,23 @@ exports.createKioskSession = async (req, res, next) => {
                 if (occupied) continue;
                 
                 // check if it's someone else's VIP slot
-                const isVIP = await mongoose.model('Subscription').findOne({
-                  status: 'active',
-                  expireAt: { $gt: now },
-                  "slots.floorId": floor._id,
-                  "slots.slotCode": slotCode
-                });
+                const isVIP =
+                  (await MembershipSlotEntitlement.findOne({
+                    floorId: floor._id,
+                    slotCode: normalizeSlotCode(slotCode),
+                    status: { $in: ['active', 'transfer_locked'] },
+                    expireAt: { $gt: now },
+                  })) ||
+                  (await mongoose.model('Subscription').findOne({
+                    status: 'active',
+                    expireAt: { $gt: now },
+                    slots: {
+                      $elemMatch: {
+                        floorId: floor._id,
+                        slotCode: normalizeSlotCode(slotCode),
+                      },
+                    },
+                  }));
                 if (isVIP) continue;
                 
                 // check if booked
@@ -568,7 +603,13 @@ exports.createKioskSession = async (req, res, next) => {
               activeSubscription = sub;
               vipRedirected = true;
               originalVipSlot = sub.slots[0].slotCode;
-              sub.assignedSlot = { slotCode: alternativeSlot, floorId: altFloorId };
+              sub.assignedSlot = {
+                slotCode: alternativeSlot,
+                floorId: altFloorId,
+                entitlementId: sub.slots[0]?.entitlementId || null,
+                sourceSubscriptionId:
+                  sub.slots[0]?.sourceSubscriptionId || sub._id || null,
+              };
             }
           }
         }
@@ -586,6 +627,8 @@ exports.createKioskSession = async (req, res, next) => {
     let finalSlot = parkingSlot;
     let finalFloorId = floorId;
     let finalExpectedDuration = durationHours ? Number(durationHours) : 1;
+    let finalSubscriptionId = null;
+    let finalEntitlementId = null;
     let holdToConsume = null;
     let requiresExpiredBookingHold = false;
 
@@ -635,9 +678,19 @@ exports.createKioskSession = async (req, res, next) => {
       if (activeSubscription.assignedSlot) {
         finalSlot = activeSubscription.assignedSlot.slotCode;
         finalFloorId = activeSubscription.assignedSlot.floorId;
+        finalEntitlementId = activeSubscription.assignedSlot.entitlementId || null;
+        finalSubscriptionId =
+          activeSubscription.assignedSlot.sourceSubscriptionId ||
+          activeSubscription._id ||
+          null;
       } else if (activeSubscription.slots && activeSubscription.slots.length > 0) {
         finalSlot = activeSubscription.slots[0].slotCode;
         finalFloorId = activeSubscription.slots[0].floorId;
+        finalEntitlementId = activeSubscription.slots[0].entitlementId || null;
+        finalSubscriptionId =
+          activeSubscription.slots[0].sourceSubscriptionId ||
+          activeSubscription._id ||
+          null;
       }
       finalExpectedDuration = 24; // Mặc định cho thuê bao
     }
@@ -718,6 +771,8 @@ exports.createKioskSession = async (req, res, next) => {
       licensePlate: cleanPlate,
       userId,
       bookingId,
+      subscriptionId: finalSubscriptionId,
+      entitlementId: finalEntitlementId,
       type: sessionType,
       phone: finalPhone || null,
       vehicleType: vehicleType || 'car',
@@ -846,13 +901,17 @@ exports.kioskExitScan = async (req, res, next) => {
       }
     } else if (session.type === 'SUBSCRIPTION') {
       let isSubActive = false;
-      if (session.userId) {
-        const sub = await mongoose.model('Subscription').findOne({
-          user: session.userId,
-          status: 'active',
-          expireAt: { $gt: now }
-        });
-        if (sub) isSubActive = true;
+      if (session.entitlementId) {
+        isSubActive = Boolean(
+          await MembershipSlotEntitlement.exists({
+            _id: session.entitlementId,
+            ownerId: session.userId,
+            status: { $in: ['active', 'transfer_locked'] },
+            expireAt: { $gt: now },
+          })
+        );
+      } else if (session.userId) {
+        isSubActive = Boolean(await findActiveMembershipAccess(session.userId, now));
       }
 
       if (isSubActive) {
@@ -949,13 +1008,17 @@ exports.kioskCheckout = async (req, res, next) => {
       }
     } else if (session.type === 'SUBSCRIPTION') {
       let isSubActive = false;
-      if (session.userId) {
-        const sub = await mongoose.model('Subscription').findOne({
-          user: session.userId,
-          status: 'active',
-          expireAt: { $gt: now }
-        });
-        if (sub) isSubActive = true;
+      if (session.entitlementId) {
+        isSubActive = Boolean(
+          await MembershipSlotEntitlement.exists({
+            _id: session.entitlementId,
+            ownerId: session.userId,
+            status: { $in: ['active', 'transfer_locked'] },
+            expireAt: { $gt: now },
+          })
+        );
+      } else if (session.userId) {
+        isSubActive = Boolean(await findActiveMembershipAccess(session.userId, now));
       }
 
       if (isSubActive) {

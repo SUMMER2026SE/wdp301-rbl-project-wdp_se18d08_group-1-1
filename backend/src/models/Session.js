@@ -24,6 +24,12 @@ const sessionSchema = new mongoose.Schema(
       default: null,
       index: true,
     },
+    entitlementId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'MembershipSlotEntitlement',
+      default: null,
+      index: true,
+    },
     type: {
       type: String,
       enum: ['BOOKING', 'WALK_IN', 'SUBSCRIPTION'],

@@ -73,6 +73,7 @@ async function generateContractPDF(contract) {
 }
 
 module.exports = {
+  buildPdf,
   generateContractPDF,
   formatCurrency,
   formatDate,

@@ -151,30 +151,24 @@ exports.updateFloorLayout = async (req, res) => {
       const slotsToDelete = await Slot.find({
         floorID: id,
         slotNumber: { $nin: validSlotNames }
-      }).select('slotNumber');
+      }).select('slotNumber reservedFor reservedByEntitlementId reservedBySubscriptionId');
 
       if (slotsToDelete.length > 0) {
         const deletedSlotNames = slotsToDelete.map(s => s.slotNumber);
         
-        // Check Subscriptions
-        const Subscription = require('../models/Subscription');
-        const activeSubs = await Subscription.find({
-          status: 'active',
-          expireAt: { $gt: new Date() },
-          'slots.slotCode': { $in: deletedSlotNames }
-        });
+        const problematicSlots = new Set(
+          slotsToDelete
+            .filter(
+              (slot) =>
+                slot.reservedFor ||
+                slot.reservedByEntitlementId ||
+                slot.reservedBySubscriptionId
+            )
+            .map((slot) => slot.slotNumber)
+        );
 
-        if (activeSubs.length > 0) {
-           const problematicSlots = new Set();
-           activeSubs.forEach(sub => {
-              if (sub.slots) {
-                 sub.slots.forEach(s => {
-                    if (deletedSlotNames.includes(s.slotCode)) problematicSlots.add(s.slotCode);
-                 });
-              }
-           });
-           
-           return res.status(400).json({ 
+        if (problematicSlots.size > 0) {
+           return res.status(400).json({
              success: false, 
              message: `Lỗi Hệ Thống: Không thể xoá các ô đỗ (${Array.from(problematicSlots).join(', ')}) vì khách hàng đang thuê gói VIP tại các ô này. Vui lòng chuyển ô đỗ cho khách trước khi xoá.`
            });
@@ -254,34 +248,30 @@ exports.deleteFloor = async (req, res) => {
 exports.getFloorSlots = async (req, res) => {
   try {
     const { id } = req.params;
-    const Subscription = require('../models/Subscription');
+    const MembershipSlotEntitlement = require('../models/MembershipSlotEntitlement');
 
     const slots = await Slot.find({ floorID: id }).populate('zoneID', 'zoneName zoneType').lean();
 
-    const activeSubscriptions = await Subscription.find({
-      status: 'active',
-      expireAt: { $gt: new Date() }
+    const activeEntitlements = await MembershipSlotEntitlement.find({
+      floorId: id,
+      status: { $in: ['active', 'transfer_locked'] },
+      expireAt: { $gt: new Date() },
     })
-      .populate('ticketPackage', 'type name price')
-      .populate('user', 'username email phone');
+      .populate('packageId', 'type name price')
+      .populate('ownerId', 'username email phone');
 
     const slotPackageMap = {};
     const slotSubscriptionMap = {};
-    activeSubscriptions.forEach(sub => {
-      if (sub.slots && sub.ticketPackage) {
-        sub.slots.forEach(s => {
-          if (s.floorId && s.floorId.toString() === id) {
-            slotPackageMap[s.slotCode] = sub.ticketPackage.type;
-            slotSubscriptionMap[s.slotCode] = {
-              _id: sub._id,
-              status: sub.status,
-              expireAt: sub.expireAt,
-              ticketPackage: sub.ticketPackage,
-              user: sub.user
-            };
-          }
-        });
-      }
+    activeEntitlements.forEach((entitlement) => {
+      slotPackageMap[entitlement.slotCode] = entitlement.packageId?.type || null;
+      slotSubscriptionMap[entitlement.slotCode] = {
+        _id: entitlement.sourceSubscriptionId,
+        entitlementId: entitlement._id,
+        status: entitlement.status,
+        expireAt: entitlement.expireAt,
+        ticketPackage: entitlement.packageId,
+        user: entitlement.ownerId,
+      };
     });
 
     const enrichedSlots = slots.map(slot => ({
@@ -303,7 +293,6 @@ exports.getLiveMapData = async (req, res) => {
     const Booking = require('../models/Booking');
     const BookingHold = require('../models/BookingHold');
     const SlotMaintenanceLog = require('../models/SlotMaintenanceLog');
-    const Subscription = require('../models/Subscription');
 
     const slots = await Slot.find()
       .populate('zoneID', 'zoneName zoneType')
@@ -319,7 +308,6 @@ exports.getLiveMapData = async (req, res) => {
       scheduledEnd: { $gt: now }
     });
     const activeHolds = await BookingHold.find({ status: 'active', expiresAt: { $gt: now } });
-    const activeSubscriptions = await Subscription.find({ status: 'active', expireAt: { $gt: now } });
     const maintenanceLogs = await SlotMaintenanceLog.find({
       status: 'in_progress',
       startTime: { $lte: now },
@@ -331,12 +319,16 @@ exports.getLiveMapData = async (req, res) => {
     const bookedSlots = new Set(upcomingBookings.map(b => b.parkingSlot));
     const heldSlots = new Set(activeHolds.map(h => h.slotCode));
     const maintenanceSet = new Set(maintenanceLogs.map(m => m.slotNumber));
-    const subscriptionSlots = new Set();
-    activeSubscriptions.forEach(sub => {
-      if (sub.slots && sub.slots.length > 0) {
-        sub.slots.forEach(s => subscriptionSlots.add(s.slotCode));
-      }
-    });
+    const subscriptionSlots = new Set(
+      slots
+        .filter(
+          (slot) =>
+            slot.reservedFor ||
+            slot.reservedByEntitlementId ||
+            slot.reservedBySubscriptionId
+        )
+        .map((slot) => slot.slotNumber)
+    );
 
     const mapData = slots.map(slot => {
       let status = 'available';

@@ -4,6 +4,8 @@ const subscriptionController = require('../controllers/subscriptionController');
 const { protect, authorize } = require('../middlewares/authMiddleware');
 const { requirePolicyAcceptance } = require('../middlewares/policyAcceptanceMiddleware');
 const renewalController = require('../controllers/subscriptionRenewalController');
+const entitlementRenewalController = require('../controllers/membershipEntitlementRenewalController');
+const { body, param } = require('express-validator');
 const {
   subscriptionIdValidator,
   renewalPaymentValidator,
@@ -21,6 +23,35 @@ const renewalEnabled = (req, res, next) => {
 router.use(protect);
 
 router.get('/membership', subscriptionController.getMembership);
+router.get('/membership/qr', subscriptionController.getAccountMembershipQr);
+router.post(
+  '/entitlements/renew/verify-payment',
+  renewalEnabled,
+  renewalVerifyValidator,
+  entitlementRenewalController.verifyPayment
+);
+router.post(
+  '/entitlements/:entitlementId/renew/quote',
+  renewalEnabled,
+  param('entitlementId').isMongoId(),
+  entitlementRenewalController.getQuote
+);
+router.post(
+  '/entitlements/:entitlementId/renew/pay-with-wallet',
+  renewalEnabled,
+  requirePolicyAcceptance({ action: 'membership-entitlement:renew-wallet' }),
+  param('entitlementId').isMongoId(),
+  body('idempotencyKey').isString().trim().isLength({ min: 16, max: 128 }),
+  entitlementRenewalController.payWithWallet
+);
+router.post(
+  '/entitlements/:entitlementId/renew/create-payment',
+  renewalEnabled,
+  requirePolicyAcceptance({ action: 'membership-entitlement:renew-payment' }),
+  param('entitlementId').isMongoId(),
+  body('idempotencyKey').isString().trim().isLength({ min: 16, max: 128 }),
+  entitlementRenewalController.createPayment
+);
 router.get('/:subscriptionId/qr', subscriptionIdValidator, subscriptionController.getMembershipQr);
 router.post(
   '/renew/verify-payment',

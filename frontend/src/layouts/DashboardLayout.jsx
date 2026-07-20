@@ -30,6 +30,7 @@ import {
   ScrollText,
   BookOpen,
   CalendarCheck,
+  ArrowLeftRight,
   // Common
   Bell,
   LogOut,
@@ -133,6 +134,11 @@ const NAV_CONFIG = {
   customer: [
     { label: "Home", icon: <Home size={18} />, to: "/" },
     { label: "Profile", icon: <User size={18} />, to: "/profile" },
+    {
+      label: "Membership Transfers",
+      icon: <ArrowLeftRight size={18} />,
+      to: "/customer/membership-transfers",
+    },
     { label: "My Vehicles", icon: <Car size={18} />, to: "/customer/vehicles" },
     {
       label: "My Bookings",
