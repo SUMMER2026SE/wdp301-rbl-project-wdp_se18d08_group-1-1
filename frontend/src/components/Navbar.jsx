@@ -499,7 +499,7 @@ export default function Navbar() {
                     </button>
 
                     {profileOpen && (
-                      <div className="absolute right-0 top-[calc(100%+8px)] w-[280px] bg-white/80 backdrop-blur-2xl rounded-2xl shadow-[0_16px_64px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.06)] border border-white/60 overflow-hidden nav-dropdown-enter">
+                      <div className="absolute right-0 top-[calc(100%+8px)] w-[280px] bg-white rounded-2xl shadow-[0_16px_64px_rgba(0,0,0,0.12),0_2px_8px_rgba(0,0,0,0.06)] border border-gray-100 overflow-hidden nav-dropdown-enter">
                         {/* User card */}
                         <div className="p-4 border-b border-gray-100/80">
                           <div className="flex items-center gap-3">
