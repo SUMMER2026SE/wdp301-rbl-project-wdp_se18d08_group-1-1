@@ -6,19 +6,10 @@ const Slot = require('../models/Slot');
 const payos = require('../config/payos');
 const walletService = require('../services/walletService');
 const {
-  validateNewSubscriptionEligibility,
-} = require('../services/subscriptionEligibilityService');
-const { isEnabled, defaultForCurrentEnvironment } = require('../utils/featureFlags');
-const {
   buildAccountMembershipQrPayload,
   buildMembershipQrPayload,
   isMembershipQrAvailable,
 } = require('../services/membershipQrService');
-const { validationResult } = require('express-validator');
-const MembershipSlotEntitlement = require('../models/MembershipSlotEntitlement');
-const {
-  activateSubscriptionEntitlements,
-} = require('../services/membershipEntitlementService');
 
 const buildExpirationDate = (packageType, fromDate = new Date()) => {
   const expireAt = new Date(fromDate);
@@ -28,6 +19,81 @@ const buildExpirationDate = (packageType, fromDate = new Date()) => {
     expireAt.setFullYear(expireAt.getFullYear() + 1);
   }
   return expireAt;
+};
+
+exports.getMembershipQr = async (req, res, next) => {
+  try {
+    const now = new Date();
+    const expireAt = req.user.membership?.expireAt ? new Date(req.user.membership.expireAt) : null;
+    const membershipActive = Boolean(req.user.membership?.isVip && expireAt && expireAt > now);
+    const activeSubscription = membershipActive ? null : await Subscription.findOne({
+      user: req.user._id,
+      status: 'active',
+      paymentStatus: 'paid',
+      expireAt: { $gt: now },
+    }).sort({ expireAt: -1 });
+
+    const effectiveExpiry = expireAt && expireAt > now ? expireAt : activeSubscription?.expireAt || null;
+    if (!membershipActive && !activeSubscription) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          available: false,
+          credentialType: 'ACCOUNT',
+          membershipStatus: 'inactive',
+          expireAt: effectiveExpiry,
+          payload: null,
+          reason: 'Membership QR is unavailable because there is no active membership.',
+        },
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        available: true,
+        credentialType: membershipActive ? 'ACCOUNT' : 'LEGACY_SUBSCRIPTION',
+        membershipStatus: 'active',
+        expireAt: effectiveExpiry,
+        payload: membershipActive
+          ? buildAccountMembershipQrPayload(req.user)
+          : buildMembershipQrPayload(activeSubscription),
+        reason: null,
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+exports.getSubscriptionMembershipQr = async (req, res, next) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.subscriptionId)) {
+      return res.status(400).json({ success: false, message: 'Invalid subscription ID' });
+    }
+    const query = { _id: req.params.subscriptionId };
+    if (req.user.role !== 'admin') query.user = req.user._id;
+
+    const subscription = await Subscription.findOne(query);
+    if (!subscription) {
+      return res.status(404).json({ success: false, message: 'Membership not found' });
+    }
+
+    const available = isMembershipQrAvailable(subscription);
+    return res.status(200).json({
+      success: true,
+      data: {
+        available,
+        credentialType: 'LEGACY_SUBSCRIPTION',
+        membershipStatus: available ? 'active' : subscription.status,
+        expireAt: subscription.expireAt,
+        payload: available ? buildMembershipQrPayload(subscription) : null,
+        reason: available ? null : 'MEMBERSHIP_QR_INACTIVE',
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
 };
 
 // Create payment order for subscription

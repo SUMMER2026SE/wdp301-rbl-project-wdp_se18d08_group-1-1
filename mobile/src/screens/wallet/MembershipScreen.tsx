@@ -18,7 +18,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { EmptyState, ErrorState, ScreenHeader } from '@/components/common';
+import { EmptyState, ErrorState, ScreenHeader, SectionTitle } from '@/components/common';
 import { QRCodeDisplay } from '@/components/booking/QRCodeDisplay';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
@@ -537,21 +537,9 @@ export const MembershipScreen = ({ navigation }: Props) => {
   const [membership, setMembership] = useState<MembershipStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [renewalError, setRenewalError] = useState('');
-  const [renewalQuote, setRenewalQuote] = useState<SubscriptionRenewalQuote | null>(null);
-  const [renewalMethod, setRenewalMethod] = useState<SubscriptionPaymentMethod>('wallet');
-  const [renewalLoading, setRenewalLoading] = useState(false);
-  const [walletBalance, setWalletBalance] = useState(0);
-  const [renewalKey, setRenewalKey] = useState('');
-  const [renewalEntitlementId, setRenewalEntitlementId] = useState('');
   const [qrPayload, setQrPayload] = useState<string | null>(null);
+  const [qrLoading, setQrLoading] = useState(false);
   const [qrError, setQrError] = useState('');
-  const [transfers, setTransfers] = useState<MembershipEntitlementTransfer[]>([]);
-  const [transferSlot, setTransferSlot] = useState<ReservedSlot | null>(null);
-  const [recipientEmail, setRecipientEmail] = useState('');
-  const [askingPrice, setAskingPrice] = useState('');
-  const [transferReason, setTransferReason] = useState('');
-  const [transferLoading, setTransferLoading] = useState(false);
 
   const loadMembership = useCallback(async () => {
     setError('');
@@ -598,130 +586,39 @@ export const MembershipScreen = ({ navigation }: Props) => {
 
   const active = membership?.status === 'active';
 
-  const openRenewal = async (entitlementId?: string | null) => {
-    if (!entitlementId && !membership?.subscriptionId) return;
-    setRenewalLoading(true);
-    setRenewalError('');
-    try {
-      const response = entitlementId
-        ? await subscriptionsService.getEntitlementRenewalQuote(entitlementId)
-        : await subscriptionsService.getRenewalQuote(membership!.subscriptionId!);
-      setRenewalQuote(response.data || null);
-      setRenewalEntitlementId(entitlementId || '');
-      setRenewalMethod(walletBalance >= (response.data?.amount || 0) ? 'wallet' : 'payos');
-      setRenewalKey(Crypto.randomUUID());
-    } catch (renewError) {
-      setRenewalError(renewError instanceof Error ? renewError.message : 'Unable to prepare renewal.');
-    } finally {
-      setRenewalLoading(false);
+  useEffect(() => {
+    if (!active) {
+      setQrPayload(null);
+      setQrLoading(false);
+      setQrError('');
+      return;
     }
-  };
 
-  const confirmRenewal = async () => {
-    if ((!membership?.subscriptionId && !renewalEntitlementId) || !renewalQuote || !renewalKey) return;
-    setRenewalLoading(true);
-    setRenewalError('');
-    try {
-      if (renewalMethod === 'wallet') {
-        const response = renewalEntitlementId
-          ? await subscriptionsService.renewEntitlementWithWallet(
-              renewalEntitlementId,
-              renewalKey,
-            )
-          : await subscriptionsService.renewWithWallet(
-              membership!.subscriptionId!,
-              renewalKey,
-            );
-        setWalletBalance(response.data?.walletBalance ?? Math.max(0, walletBalance - renewalQuote.amount));
-        setRenewalQuote(null);
-        await loadMembership();
-      } else {
-        const response = renewalEntitlementId
-          ? await subscriptionsService.createEntitlementRenewalPayment(
-              renewalEntitlementId,
-              renewalKey,
-            )
-          : await subscriptionsService.createRenewalPayment(
-              membership!.subscriptionId!,
-              renewalKey,
-            );
-        navigation.navigate('SubscriptionPaymentStatus', {
-          orderCode: response.data?.orderCode || 0,
-          checkoutUrl: response.data?.checkoutUrl,
-          qrCode: response.data?.qrCode,
-          amount: response.data?.amount,
-          renewal: true,
-        });
-      }
-    } catch (renewError) {
-      setRenewalError(renewError instanceof Error ? renewError.message : 'Renewal failed.');
-    } finally {
-      setRenewalLoading(false);
-    }
-  };
+    let mounted = true;
+    setQrLoading(true);
+    setQrError('');
+    setQrPayload(null);
+    void subscriptionsService.getMembershipQr()
+      .then((response) => {
+        if (!mounted) return;
+        const qr = response.data;
+        if (qr?.available && qr.payload) {
+          setQrPayload(qr.payload);
+        } else {
+          setQrError(qr?.reason || 'Membership QR is unavailable.');
+        }
+      })
+      .catch((loadError) => {
+        if (mounted) {
+          setQrError(loadError instanceof Error ? loadError.message : 'Unable to load the membership QR.');
+        }
+      })
+      .finally(() => {
+        if (mounted) setQrLoading(false);
+      });
 
-  const refreshTransfers = async () => {
-    const response = await subscriptionsService.getEntitlementTransfers();
-    setTransfers(response.data || []);
-  };
-
-  const submitTransfer = async () => {
-    if (
-      !transferSlot?.entitlementId ||
-      !recipientEmail.trim() ||
-      !transferReason.trim()
-    ) return;
-    setTransferLoading(true);
-    setRenewalError('');
-    try {
-      await subscriptionsService.createEntitlementTransfer(
-        transferSlot.entitlementId,
-        {
-          toUserEmail: recipientEmail.trim(),
-          askingPrice: Number(askingPrice || 0),
-          reason: transferReason.trim(),
-        },
-      );
-      setTransferSlot(null);
-      setRecipientEmail('');
-      setAskingPrice('');
-      setTransferReason('');
-      await refreshTransfers();
-    } catch (transferError) {
-      setRenewalError(
-        transferError instanceof Error
-          ? transferError.message
-          : 'Unable to create transfer.',
-      );
-    } finally {
-      setTransferLoading(false);
-    }
-  };
-
-  const updateTransfer = async (
-    transfer: MembershipEntitlementTransfer,
-    action: 'accept' | 'reject' | 'settle',
-  ) => {
-    setTransferLoading(true);
-    setRenewalError('');
-    try {
-      if (action === 'accept') {
-        await subscriptionsService.acceptEntitlementTransfer(transfer._id);
-      } else if (action === 'reject') {
-        await subscriptionsService.rejectEntitlementTransfer(transfer._id);
-      } else {
-        await subscriptionsService.settleEntitlementTransfer(transfer._id);
-        await loadMembership();
-      }
-      await refreshTransfers();
-    } catch (transferError) {
-      setRenewalError(
-        transferError instanceof Error ? transferError.message : 'Unable to update transfer.',
-      );
-    } finally {
-      setTransferLoading(false);
-    }
-  };
+    return () => { mounted = false; };
+  }, [active]);
 
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
@@ -788,24 +685,22 @@ export const MembershipScreen = ({ navigation }: Props) => {
           {active ? (
             <View style={styles.section}>
               <SectionTitle>Membership QR</SectionTitle>
-              {qrPayload ? (
-                <>
-                  <QRCodeDisplay
-                    value={qrPayload}
-                    reference={membership.subscriptionId || undefined}
-                    shareLabel="VALO membership"
-                    shareTitle="Share membership pass"
-                    showBrightnessControl
-                  />
-                  <Text style={styles.qrHint}>
-                    Use this pass for every membership visit. It expires with your plan.
-                  </Text>
-                </>
+              {qrLoading ? (
+                <View style={styles.qrState}>
+                  <ActivityIndicator color={COLORS.gold} size="large" />
+                  <Text style={styles.qrStateText}>Loading secure QR...</Text>
+                </View>
+              ) : qrPayload ? (
+                <QRCodeDisplay
+                  bookingId={membership.package?.id ?? 'membership'}
+                  shareButtonTitle="Share membership"
+                  shareLabel="VALO membership"
+                  value={qrPayload}
+                />
               ) : (
-                <View style={styles.softState}>
-                  <Text style={styles.qrError}>
-                    {qrError || 'Membership QR is unavailable.'}
-                  </Text>
+                <View style={styles.qrState}>
+                  <Ionicons color={COLORS.textMuted} name="qr-code-outline" size={28} />
+                  <Text style={styles.qrStateText}>{qrError || 'Membership QR is unavailable.'}</Text>
                 </View>
               )}
             </View>
@@ -1209,7 +1104,28 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: FONT_SIZES.xs,
   },
-  benefitsBlock: {
+  section: {
+    gap: SPACING.sm,
+  },
+  qrState: {
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    gap: SPACING.sm,
+    justifyContent: 'center',
+    minHeight: 132,
+    padding: SPACING.lg,
+  },
+  qrStateText: {
+    color: COLORS.textMuted,
+    fontSize: FONT_SIZES.sm,
+    lineHeight: 20,
+    textAlign: 'center',
+  },
+  grid: {
+    flexDirection: 'row',
     gap: SPACING.md,
   },
   qrHint: {

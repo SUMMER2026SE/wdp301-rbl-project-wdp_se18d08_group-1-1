@@ -1,6 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const mongoose = require('mongoose');
+const Subscription = require('../models/Subscription');
+const User = require('../models/User');
 
 process.env.MEMBERSHIP_QR_SECRET = 'test-membership-qr-secret';
 
@@ -15,72 +17,37 @@ const {
 const subscriptionId = '507f1f77bcf86cd799439011';
 
 test('builds and verifies a reusable membership QR payload', () => {
-  const payload = buildMembershipQrPayload({
-    _id: subscriptionId,
-    qrVersion: 1,
-  });
-
-  assert.deepEqual(parseAndVerifyMembershipQr(payload), {
-    subscriptionId,
-    version: 1,
-  });
+  const payload = buildMembershipQrPayload({ _id: subscriptionId, qrVersion: 1 });
+  assert.deepEqual(parseAndVerifyMembershipQr(payload), { subscriptionId, version: 1 });
 });
 
 test('supports revoking a membership QR by rotating its version', () => {
-  const payload = buildMembershipQrPayload({
-    _id: subscriptionId,
-    qrVersion: 2,
-  });
-
+  const payload = buildMembershipQrPayload({ _id: subscriptionId, qrVersion: 2 });
   assert.equal(parseAndVerifyMembershipQr(payload).version, 2);
 });
 
 test('rejects a tampered membership QR payload', () => {
   const payload = buildMembershipQrPayload(subscriptionId);
   const tampered = payload.replace(subscriptionId, '507f191e810c19729de860ea');
+  assert.throws(() => parseAndVerifyMembershipQr(tampered), /signature is invalid/);
+});
 
-  assert.throws(
-    () => parseAndVerifyMembershipQr(tampered),
-    /signature is invalid/
-  );
+test('rejects a payload with an omitted QR version', () => {
+  const payload = buildMembershipQrPayload(subscriptionId).replace(':1:', '::');
+  assert.throws(() => parseAndVerifyMembershipQr(payload), /Invalid membership QR code/);
 });
 
 test('only exposes QR while membership is paid, active, and unexpired', () => {
   const future = new Date(Date.now() + 60_000);
   const past = new Date(Date.now() - 60_000);
-
-  assert.equal(
-    isMembershipQrAvailable({
-      status: 'active',
-      paymentStatus: 'paid',
-      expireAt: future,
-    }),
-    true
-  );
-  assert.equal(
-    isMembershipQrAvailable({
-      status: 'expired',
-      paymentStatus: 'paid',
-      expireAt: future,
-    }),
-    false
-  );
-  assert.equal(
-    isMembershipQrAvailable({
-      status: 'active',
-      paymentStatus: 'paid',
-      expireAt: past,
-    }),
-    false
-  );
+  assert.equal(isMembershipQrAvailable({ status: 'active', paymentStatus: 'paid', expireAt: future }), true);
+  assert.equal(isMembershipQrAvailable({ status: 'expired', paymentStatus: 'paid', expireAt: future }), false);
+  assert.equal(isMembershipQrAvailable({ status: 'active', paymentStatus: 'paid', expireAt: past }), false);
 });
 
-test('builds an account membership QR and rejects an old rotated version', () => {
+test('builds and verifies an account membership QR', () => {
   const userId = new mongoose.Types.ObjectId();
-  const payload = buildAccountMembershipQrPayload({
-    _id: userId,
-    membership: { qrVersion: 4 },
-  });
+  const payload = buildAccountMembershipQrPayload({ _id: userId, membership: { qrVersion: 4 } });
   assert.deepEqual(parseAndVerifyAnyMembershipQr(payload), {
     credentialType: 'ACCOUNT',
     userId: String(userId),
@@ -90,12 +57,14 @@ test('builds an account membership QR and rejects an old rotated version', () =>
 });
 
 test('generic membership parser keeps legacy subscription QR compatibility', () => {
-  const subscription = {
-    _id: new mongoose.Types.ObjectId(),
-    qrVersion: 2,
-  };
+  const subscription = { _id: new mongoose.Types.ObjectId(), qrVersion: 2 };
   const parsed = parseAndVerifyAnyMembershipQr(buildMembershipQrPayload(subscription));
   assert.equal(parsed.credentialType, 'LEGACY_SUBSCRIPTION');
   assert.equal(parsed.subscriptionId, String(subscription._id));
   assert.equal(parsed.version, 2);
+});
+
+test('persists QR versions for account and legacy credential rotation', () => {
+  assert.equal(User.schema.path('membership.qrVersion').options.default, 1);
+  assert.equal(Subscription.schema.path('qrVersion').options.default, 1);
 });

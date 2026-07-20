@@ -15,12 +15,7 @@ const walletService = require('../services/walletService');
 const pricingEngine = require('../services/pricingEngine');
 const notifTriggers = require('../services/notificationTriggers');
 const contractService = require('../services/contractService');
-const bookingRefundService = require('../services/bookingRefundService');
-const {
-  attachPaidBookingSnapshots,
-  getEffectiveRefundPolicySnapshot,
-  transitionPendingBookingToPaid,
-} = require('../services/paidBookingPolicyService');
+const { buildBookingQrData } = require('../services/bookingQrService');
 const { normalizeLicensePlate } = require('../utils/licensePlateUtils');
 const { emitToUser } = require('../sockets/notificationSocket');
 const {
@@ -39,38 +34,18 @@ const buildSlotKey = (floorId, slotCode) => `${String(floorId)}:${normalizeSlotC
 
 const sameObjectId = (a, b) => String(a || '') === String(b || '');
 
-const uploadStaffEvidence = async (staffAction, bookingId, action) => {
-  if (!staffAction) return null;
-
-  const result = await cloudinary.uploader.upload(staffAction.evidenceImageBase64, {
-    folder: `valo-parking/staff-booking-evidence/${bookingId}`,
-    public_id: `${action.toLowerCase()}-${Date.now()}`,
-    resource_type: 'image',
-  });
-  return result.secure_url;
-};
-
-const recordStaffBookingAction = async ({
-  req,
-  booking,
-  session,
-  previousStatus,
-  newStatus,
-  evidenceImageUrl,
-}) => {
-  if (!req.staffBookingAction) return;
-
-  await StaffBookingAction.create({
-    bookingId: booking._id,
-    sessionId: session?._id || null,
-    staffId: req.user._id,
-    action: req.staffBookingAction.action,
-    previousStatus,
-    newStatus,
-    reason: req.staffBookingAction.reason,
-    evidenceImageUrl,
-    idempotencyKey: req.staffBookingAction.idempotencyKey,
-  });
+exports.getBookingQr = async (req, res, next) => {
+  try {
+    const query = { _id: req.params.id };
+    if (req.user.role !== 'admin') query.userId = req.user._id;
+    const booking = await Booking.findOne(query).select('_id status');
+    if (!booking) {
+      return res.status(404).json({ success: false, message: 'Booking not found.' });
+    }
+    return res.status(200).json({ success: true, data: buildBookingQrData(booking) });
+  } catch (error) {
+    return next(error);
+  }
 };
 
 exports.getPricingConfig = async (req, res, next) => {

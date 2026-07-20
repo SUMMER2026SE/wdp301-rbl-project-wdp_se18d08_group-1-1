@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import type { NavigationProp } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -15,9 +14,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { EmptyState, ErrorState, ScreenHeader, SectionTitle } from '@/components/common';
+import { BookingPolicyModal } from '@/components/booking/BookingPolicyModal';
 import { ParkingMap2D } from '@/components/booking/ParkingMap2D';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
-import type { CustomerTabParamList } from '@/navigation/CustomerNavigator';
 import type { WalletStackParamList } from '@/navigation/types';
 import parkingFloorService from '@/services/ParkingFloorService';
 import { subscriptionsService } from '@/services/api/subscriptions';
@@ -27,7 +26,7 @@ import type { ParkingFloor, Slot } from '@/types/booking.types';
 import type { Wallet } from '@/types/models';
 import type { MembershipStatus, SubscriptionPackage, SubscriptionPaymentMethod, SubscriptionSlotSelection } from '@/types/subscription.types';
 import { formatCurrency } from '@/utils/formatters';
-import { isPolicyAcceptanceRequired } from '@/utils/policyErrors';
+import { extractMissingPolicies, isPolicyAcceptanceRequired } from '@/utils/policyErrors';
 import {
   calculateExpirationDate,
   calculateSubscriptionTotal,
@@ -49,7 +48,10 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [policyRequired, setPolicyRequired] = useState(false);
+  const [showPolicyModal, setShowPolicyModal] = useState(false);
+  const [requiredPolicySlugs, setRequiredPolicySlugs] = useState<string[]>([]);
+  const policyRetryRef = useRef(false);
+  const purchaseInFlightRef = useRef(false);
 
   const pkg = useMemo(
     () => packages.find((item) => item._id === route.params.packageId),
@@ -128,6 +130,7 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
   };
 
   const handlePurchase = async () => {
+    if (purchaseInFlightRef.current) return;
     if (!pkg) {
       setError('The selected plan was not found.');
       return;
@@ -145,9 +148,9 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
       return;
     }
 
+    purchaseInFlightRef.current = true;
     setSubmitting(true);
     setError('');
-    setPolicyRequired(false);
     try {
       if (method === 'wallet') {
         await subscriptionsService.payWithWallet({ packageId: pkg._id, slots: selectedSlots });
@@ -161,14 +164,27 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
           amount: response.data.amount,
         });
       }
+      policyRetryRef.current = false;
     } catch (purchaseError) {
       if (isPolicyAcceptanceRequired(purchaseError)) {
-        setPolicyRequired(true);
-        setError('You must accept the latest policy before purchasing a plan.');
+        if (policyRetryRef.current) {
+          policyRetryRef.current = false;
+          setError('Policy acceptance could not be confirmed. Please try again.');
+          return;
+        }
+        const missingPolicies = extractMissingPolicies(purchaseError);
+        setRequiredPolicySlugs(
+          missingPolicies.length > 0
+            ? missingPolicies.map((policy) => policy.slug)
+            : ['booking-policy'],
+        );
+        setShowPolicyModal(true);
       } else {
+        policyRetryRef.current = false;
         setError(purchaseError instanceof Error ? purchaseError.message : 'Plan purchase failed.');
       }
     } finally {
+      purchaseInFlightRef.current = false;
       setSubmitting(false);
     }
   };
@@ -272,16 +288,6 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
             </View>
           ) : null}
 
-          {policyRequired ? (
-            <TouchableOpacity
-              activeOpacity={0.8}
-              style={styles.policyButton}
-              onPress={() => navigation.getParent<NavigationProp<CustomerTabParamList>>()?.navigate('ProfileTab', { screen: 'Policies' })}
-            >
-              <Text style={styles.policyButtonText}>Review and accept policy</Text>
-            </TouchableOpacity>
-          ) : null}
-
           <TouchableOpacity activeOpacity={0.85} disabled={submitting || !pkg || Boolean(packageRestriction)} style={[styles.primaryButton, (submitting || !pkg || Boolean(packageRestriction)) && styles.disabled]} onPress={handlePurchase}>
             {submitting ? (
               <ActivityIndicator color={COLORS.textInverse} size="small" />
@@ -294,6 +300,22 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
           </TouchableOpacity>
         </ScrollView>
       )}
+
+      <BookingPolicyModal
+        policySlugs={requiredPolicySlugs}
+        visible={showPolicyModal}
+        onClose={() => {
+          policyRetryRef.current = false;
+          setShowPolicyModal(false);
+          setRequiredPolicySlugs([]);
+        }}
+        onConfirm={async () => {
+          setShowPolicyModal(false);
+          policyRetryRef.current = true;
+          await handlePurchase();
+          setRequiredPolicySlugs([]);
+        }}
+      />
     </SafeAreaView>
   );
 };
@@ -431,15 +453,6 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     lineHeight: 20,
   },
-  policyButton: {
-    alignItems: 'center',
-    borderColor: COLORS.gold,
-    borderRadius: RADIUS.md,
-    borderWidth: 1,
-    justifyContent: 'center',
-    minHeight: 48,
-  },
-  policyButtonText: { color: COLORS.gold, fontSize: FONT_SIZES.sm, fontWeight: '800' },
   primaryButton: {
     alignItems: 'center',
     backgroundColor: COLORS.gold,

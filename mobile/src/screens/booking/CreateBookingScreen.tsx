@@ -27,6 +27,7 @@ import {
   BookingActionModal,
   type BookingModalVariant,
 } from '@/components/booking/BookingActionModal';
+import { BookingPolicyModal } from '@/components/booking/BookingPolicyModal';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
 import { useBooking } from '@/hooks/useBooking';
 import type { BookingStackParamList } from '@/navigation/BookingStackNavigator';
@@ -41,7 +42,7 @@ import type { MembershipStatus } from '@/types/subscription.types';
 import { formatCurrency } from '@/utils/formatters';
 import { subscriptionsService } from '@/services/api/subscriptions';
 import { walletService } from '@/services/api/wallet';
-import { isPolicyAcceptanceRequired } from '@/utils/policyErrors';
+import { extractMissingPolicies, isPolicyAcceptanceRequired } from '@/utils/policyErrors';
 
 type Props = NativeStackScreenProps<BookingStackParamList, 'CreateBooking'>;
 
@@ -893,6 +894,10 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
   const [serverQuoteTotal, setServerQuoteTotal] = useState<number | null>(null);
   const [confirmedTotal, setConfirmedTotal] = useState<number | null>(null);
   const [membership, setMembership] = useState<MembershipStatus | null>(null);
+  const [showPolicyModal, setShowPolicyModal] = useState(false);
+  const [requiredPolicySlugs, setRequiredPolicySlugs] = useState<string[]>([]);
+  const policyRetryRef = useRef(false);
+  const submissionInFlightRef = useRef(false);
 
   const selectedFloorId = route.params?.selectedFloorId;
   const selectedSlotCode = route.params?.selectedSlotCode;
@@ -1164,6 +1169,7 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
   };
 
   const handleSubmit = async () => {
+    if (submissionInFlightRef.current) return;
     if (!selectedSlot || !selectedVehicleId) return;
     const now = new Date();
     if (startTime < now) {
@@ -1194,6 +1200,7 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
       );
       return;
     }
+    submissionInFlightRef.current = true;
     setSubmitting(true);
     let holdId: string | null = null;
     let holdConsumed = false;
@@ -1252,28 +1259,34 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
       await Promise.all([fetchBookings(), fetchWalletBalance(), fetchExtraData()]);
       setCreatedBookingId(bookingId ?? null);
       setShowSuccessModal(true);
+      policyRetryRef.current = false;
     } catch (submitError) {
       if (holdId && !holdConsumed) {
         await bookingService.releaseBookingHold(holdId).catch(() => undefined);
       }
       if (isPolicyAcceptanceRequired(submitError)) {
-        setFeedback({
-          variant: 'warning',
-          title: 'Policy acceptance required',
-          message: 'Please read and accept the latest policy before booking.',
-          primaryLabel: 'View policy',
-          onPrimary: () => navigation
-            .getParent<BottomTabNavigationProp<CustomerTabParamList>>()
-            ?.navigate('ProfileTab', { screen: 'Policies' }),
-        });
+        if (policyRetryRef.current) {
+          policyRetryRef.current = false;
+          showFeedback('error', 'Booking failed', 'Policy acceptance could not be confirmed. Please try again.');
+          return;
+        }
+        const missingPolicies = extractMissingPolicies(submitError);
+        setRequiredPolicySlugs(
+          missingPolicies.length > 0
+            ? missingPolicies.map((policy) => policy.slug)
+            : ['booking-policy'],
+        );
+        setShowPolicyModal(true);
         return;
       }
+      policyRetryRef.current = false;
       showFeedback(
         'error',
         'Booking failed',
         submitError instanceof Error ? submitError.message : 'Please try again.',
       );
     } finally {
+      submissionInFlightRef.current = false;
       setSubmitting(false);
     }
   };
@@ -1653,6 +1666,22 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
           const callback = feedback?.onPrimary;
           setFeedback(null);
           callback?.();
+        }}
+      />
+
+      <BookingPolicyModal
+        policySlugs={requiredPolicySlugs}
+        visible={showPolicyModal}
+        onClose={() => {
+          policyRetryRef.current = false;
+          setShowPolicyModal(false);
+          setRequiredPolicySlugs([]);
+        }}
+        onConfirm={async () => {
+          setShowPolicyModal(false);
+          policyRetryRef.current = true;
+          await handleSubmit();
+          setRequiredPolicySlugs([]);
         }}
       />
 

@@ -34,7 +34,7 @@ const register = async (req, res, next) => {
       });
     }
 
-    const { username, email, password } = req.body;
+    const { username, email, password, name, phone } = req.body;
 
     // Check if user already exists
     const existingUser = await User.findOne({
@@ -49,6 +49,17 @@ const register = async (req, res, next) => {
       });
     }
 
+    const normalizedPhone = phone?.trim();
+    if (normalizedPhone) {
+      const existingPhone = await UserDetail.findOne({ phone: normalizedPhone });
+      if (existingPhone) {
+        return res.status(409).json({
+          success: false,
+          message: 'Phone number already exists.',
+        });
+      }
+    }
+
     // Create user
     const user = await User.create({
       username,
@@ -60,6 +71,8 @@ const register = async (req, res, next) => {
     // Create empty user detail profile
     await UserDetail.create({
       userId: user._id,
+      firstName: name?.trim() || username,
+      phone: normalizedPhone || '',
     });
 
     // Generate tokens
@@ -485,12 +498,24 @@ const sendOTP = async (req, res, next) => {
       });
     }
 
-    // Remove any existing OTP for this user
+    const existingOtp = await UserToken.findOne({
+      userId: user._id,
+      type: 'email_verification',
+    });
+
+    if (existingOtp && Date.now() - existingOtp.createdAt.getTime() < 60 * 1000) {
+      return res.status(429).json({
+        success: false,
+        message: 'Please wait before requesting another verification code.',
+      });
+    }
+
+    // Remove any existing OTP for this user so a resend invalidates the old code.
     await UserToken.deleteMany({ userId: user._id, type: 'email_verification' });
 
-    // Generate OTP and set 10-minute expiry
+    const otpMinutes = Number(process.env.OTP_EXPIRATION_MINUTES) || 5;
     const otp = generateOTP();
-    const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
+    const otpExpiry = new Date(Date.now() + otpMinutes * 60 * 1000);
 
     await UserToken.create({
       userId: user._id,
@@ -503,9 +528,9 @@ const sendOTP = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      message: 'OTP sent to your email. It will expire in 10 minutes.',
+      message: 'Verification code sent to your email.',
       data: {
-        expiresIn: 600,
+        expiresIn: otpMinutes * 60,
         autofillHint: buildOtpAutofillHint(),
       },
     });
