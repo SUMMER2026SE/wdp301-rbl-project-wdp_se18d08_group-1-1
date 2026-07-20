@@ -25,6 +25,13 @@ import type {
 
 type UnknownRecord = Record<string, unknown>;
 
+export interface BookingQrData {
+  available: boolean;
+  bookingStatus: string;
+  payload: string | null;
+  reason: string | null;
+}
+
 const asRecord = (value: unknown): UnknownRecord | undefined =>
   value !== null && typeof value === 'object' && !Array.isArray(value)
     ? (value as UnknownRecord)
@@ -155,6 +162,10 @@ class BookingService {
 
   getMyBookings() {
     return apiClient.get<GetMyBookingsResponse>('/bookings/my');
+  }
+
+  getBookingQr(bookingId: string) {
+    return apiClient.get<APIResponse<BookingQrData>>(`/bookings/${bookingId}/qr`);
   }
 
   checkInBooking(bookingId: string) {

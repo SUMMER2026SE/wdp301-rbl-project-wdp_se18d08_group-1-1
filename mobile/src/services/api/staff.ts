@@ -37,6 +37,21 @@ export interface StaffBooking {
   floorId?: { _id?: string; name?: string; floorNumber?: number } | string;
 }
 
+export type StaffBookingQrAction = 'CHECK_IN' | 'CHECK_OUT';
+
+export interface StaffBookingQrResolution {
+  booking: StaffBooking;
+  allowedActions: StaffBookingQrAction[];
+}
+
+export interface StaffBookingTransitionPayload {
+  action: StaffBookingQrAction;
+  payload: string;
+  evidenceImageBase64: string;
+  idempotencyKey: string;
+  reason: string;
+}
+
 export interface StaffSubscription {
   _id: string;
   amount: number;
@@ -89,6 +104,13 @@ export const staffService = {
     apiClient.put<APIResponse<StaffCustomer>>(`/staff/users/${id}`, data),
   getBookings: (params?: { date?: string; floorId?: string }) =>
     apiClient.get<APIResponse<StaffBooking[]>>('/bookings/all', { params }),
+  resolveBookingQr: (payload: string) =>
+    apiClient.post<APIResponse<StaffBookingQrResolution>>('/staff/bookings/qr/resolve', { payload }),
+  transitionBookingByQr: (bookingId: string, data: StaffBookingTransitionPayload) =>
+    apiClient.post<APIResponse<{ booking: StaffBooking }>>(
+      `/staff/bookings/${bookingId}/transition`,
+      data,
+    ),
   getSubscriptions: () => apiClient.get<APIResponse<StaffSubscription[]>>('/subscriptions/all'),
   getTicketPackages: () => apiClient.get<APIResponse<TicketPackage[]>>('/ticket-packages'),
   getSessions: () => apiClient.get<APIResponse<StaffSession[]>>('/sessions'),

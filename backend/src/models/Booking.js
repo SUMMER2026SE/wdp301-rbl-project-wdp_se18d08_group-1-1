@@ -130,6 +130,11 @@ const bookingSchema = new mongoose.Schema(
       enum: ['PENDING', 'PAID', 'ACTIVE', 'PAUSED', 'EXPIRED', 'COMPLETED', 'CANCELLED'],
       default: 'PENDING',
     },
+    qrVersion: {
+      type: Number,
+      default: 1,
+      min: 1,
+    },
     modificationCount: {
       type: Number,
       default: 0,

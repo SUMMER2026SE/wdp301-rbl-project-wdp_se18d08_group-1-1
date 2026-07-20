@@ -1,6 +1,8 @@
 const mongoose = require('mongoose');
+const cloudinary = require('../config/cloudinary');
 const Booking = require('../models/Booking');
 const BookingService = require('../models/BookingService');
+const StaffBookingAction = require('../models/StaffBookingAction');
 const TicketPackage = require('../models/TicketPackage');
 const User = require('../models/User');
 const Vehicle = require('../models/Vehicle');
@@ -20,6 +22,10 @@ const {
 } = require('../services/paidBookingPolicyService');
 const { normalizeLicensePlate } = require('../utils/licensePlateUtils');
 const { emitToUser } = require('../sockets/notificationSocket');
+const {
+  buildBookingQrPayload,
+  isBookingQrAvailable,
+} = require('../services/bookingQrService');
 
 const BOOKING_STATUSES_THAT_BLOCK_SLOT = ['PAID', 'ACTIVE', 'PAUSED'];
 
@@ -28,6 +34,40 @@ const normalizeSlotCode = (slotCode = '') => String(slotCode).trim().toUpperCase
 const buildSlotKey = (floorId, slotCode) => `${String(floorId)}:${normalizeSlotCode(slotCode)}`;
 
 const sameObjectId = (a, b) => String(a || '') === String(b || '');
+
+const uploadStaffEvidence = async (staffAction, bookingId, action) => {
+  if (!staffAction) return null;
+
+  const result = await cloudinary.uploader.upload(staffAction.evidenceImageBase64, {
+    folder: `valo-parking/staff-booking-evidence/${bookingId}`,
+    public_id: `${action.toLowerCase()}-${Date.now()}`,
+    resource_type: 'image',
+  });
+  return result.secure_url;
+};
+
+const recordStaffBookingAction = async ({
+  req,
+  booking,
+  session,
+  previousStatus,
+  newStatus,
+  evidenceImageUrl,
+}) => {
+  if (!req.staffBookingAction) return;
+
+  await StaffBookingAction.create({
+    bookingId: booking._id,
+    sessionId: session?._id || null,
+    staffId: req.user._id,
+    action: req.staffBookingAction.action,
+    previousStatus,
+    newStatus,
+    reason: req.staffBookingAction.reason,
+    evidenceImageUrl,
+    idempotencyKey: req.staffBookingAction.idempotencyKey,
+  });
+};
 
 exports.getPricingConfig = async (req, res, next) => {
   try {
@@ -399,7 +439,7 @@ const emitBookingChanged = (app, booking, extra = {}) => {
 
 const findOwnedBooking = (bookingId, user) => {
   const query = { _id: bookingId };
-  if (user?.role !== 'admin') {
+  if (!['admin', 'staff'].includes(user?.role)) {
     query.userId = user?._id;
   }
   return Booking.findOne(query);
@@ -1077,6 +1117,33 @@ exports.getMyBookings = async (req, res, next) => {
 };
 
 /**
+ * @desc    Get the signed, lifecycle-bound QR payload for one owned booking
+ * @route   GET /api/bookings/:id/qr
+ * @access  Private (Customer/Admin)
+ */
+exports.getBookingQr = async (req, res, next) => {
+  try {
+    const booking = await findOwnedBooking(req.params.id, req.user);
+    if (!booking) {
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+
+    const available = isBookingQrAvailable(booking);
+    return res.status(200).json({
+      success: true,
+      data: {
+        available,
+        bookingStatus: booking.status,
+        payload: available ? buildBookingQrPayload(booking) : null,
+        reason: available ? null : 'BOOKING_QR_INACTIVE',
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * @desc    Thay đổi phương tiện (Biển số xe) cho Đặt chỗ trước giờ Check-in
  * @route   PUT /api/bookings/:id/vehicle
  * @access  Private (Customer)
@@ -1206,6 +1273,13 @@ exports.checkInBooking = async (req, res, next) => {
       ? await Vehicle.findById(booking.vehicleId).select('vehicleType').lean()
       : null;
 
+    const previousStatus = booking.status;
+    const evidenceImageUrl = await uploadStaffEvidence(
+      req.staffBookingAction,
+      booking._id,
+      'CHECK_IN'
+    );
+
     booking.status = 'ACTIVE';
     await booking.save();
 
@@ -1214,7 +1288,7 @@ exports.checkInBooking = async (req, res, next) => {
       userId: booking.userId,
       bookingId: booking._id,
       type: 'BOOKING',
-      source: 'app_booking',
+      source: req.staffBookingAction ? 'staff_manual' : 'app_booking',
       vehicleType: vehicle?.vehicleType || 'car',
       parkingSlot: normalizeSlotCode(booking.parkingSlot),
       floorId: booking.floorId,
@@ -1222,6 +1296,22 @@ exports.checkInBooking = async (req, res, next) => {
       expectedDurationHours: booking.durationHours || 1,
       paymentStatus: 'unpaid',
       status: 'active',
+      ...(evidenceImageUrl
+        ? {
+            entryImage_url: evidenceImageUrl,
+            entryCamera: 'staff_mobile',
+            entryGate: 'manual_override',
+          }
+        : {}),
+    });
+
+    await recordStaffBookingAction({
+      req,
+      booking,
+      session,
+      previousStatus,
+      newStatus: booking.status,
+      evidenceImageUrl,
     });
 
     emitBookingChanged(req.app, booking, { action: 'checked-in' });
@@ -1273,6 +1363,12 @@ exports.checkOutBooking = async (req, res, next) => {
     }
 
     const now = new Date();
+    const previousStatus = booking.status;
+    const evidenceImageUrl = await uploadStaffEvidence(
+      req.staffBookingAction,
+      booking._id,
+      'CHECK_OUT'
+    );
     const refundBreakdown = await bookingRefundService.quoteEarlyCheckout(
       booking,
       session,
@@ -1299,6 +1395,13 @@ exports.checkOutBooking = async (req, res, next) => {
             totalPrice: refundBreakdown.actualParkingCharge,
             pricingBreakdown: refundBreakdown.pricingBreakdown,
             paymentStatus: 'paid',
+            ...(evidenceImageUrl
+              ? {
+                  exitImage_url: evidenceImageUrl,
+                  exitCamera: 'staff_mobile',
+                  exitGate: 'manual_override',
+                }
+              : {}),
           },
           { new: true, session: mongoSession }
         );
@@ -1318,6 +1421,20 @@ exports.checkOutBooking = async (req, res, next) => {
     session.totalPrice = refundBreakdown.actualParkingCharge;
     session.pricingBreakdown = pricing;
     session.paymentStatus = 'paid';
+    if (evidenceImageUrl) {
+      session.exitImage_url = evidenceImageUrl;
+      session.exitCamera = 'staff_mobile';
+      session.exitGate = 'manual_override';
+    }
+
+    await recordStaffBookingAction({
+      req,
+      booking: settled.booking,
+      session,
+      previousStatus,
+      newStatus: 'COMPLETED',
+      evidenceImageUrl,
+    });
 
     emitBookingChanged(req.app, booking, { action: 'checked-out' });
     notifTriggers.notifyVehicleExit(

@@ -6,28 +6,38 @@ import { AppText, Button, Card } from '@/components/common';
 import { colors, spacing } from '@/theme';
 
 interface QRCodeDisplayProps {
-  bookingId: string;
+  bookingId?: string;
+  value?: string;
+  reference?: string;
   size?: number;
   showBrightnessControl?: boolean;
 }
 
-export const isValidBookingQrValue = (value: string) => /^[a-f\d]{24}$/i.test(value);
+export const isValidBookingQrValue = (value: string) =>
+  /^[a-f\d]{24}$/i.test(value) ||
+  /^VALO_BOOKING:[1-9]\d*:[a-f\d]{24}:[A-Za-z0-9_-]{20,}$/i.test(value);
 
 export const QRCodeDisplay = ({
   bookingId,
+  value,
+  reference,
   size = 200,
   showBrightnessControl = true,
 }: QRCodeDisplayProps) => {
   const [bright, setBright] = useState(false);
+  const qrValue = value || bookingId || '';
+  const displayReference = reference || bookingId;
 
   return (
     <Card style={[styles.card, bright && styles.bright]}>
       <View style={styles.qrWrap}>
-        <QRCode backgroundColor="white" color="black" ecl="M" size={size} value={bookingId} />
+        <QRCode backgroundColor="white" color="black" ecl="M" size={size} value={qrValue} />
       </View>
-      <AppText color={colors.light.text.secondary} style={styles.center} variant="caption">
-        Ref: {bookingId}
-      </AppText>
+      {displayReference ? (
+        <AppText color={colors.light.text.secondary} style={styles.center} variant="caption">
+          Ref: {displayReference}
+        </AppText>
+      ) : null}
       {showBrightnessControl ? (
         <Button
           title={bright ? 'Normal Brightness' : 'Boost Brightness'}
@@ -38,7 +48,7 @@ export const QRCodeDisplay = ({
       <Button
         title="Share Booking"
         variant="ghost"
-        onPress={() => Share.share({ message: `VALO booking: ${bookingId}` })}
+        onPress={() => Share.share({ message: `VALO booking: ${qrValue}` })}
       />
     </Card>
   );

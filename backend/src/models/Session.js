@@ -30,7 +30,7 @@ const sessionSchema = new mongoose.Schema(
     },
     source: {
       type: String,
-      enum: ['kiosk', 'app_booking', 'booking', 'walk_in'],
+      enum: ['kiosk', 'app_booking', 'booking', 'walk_in', 'staff_manual'],
       default: 'kiosk',
     },
     bookingId: {

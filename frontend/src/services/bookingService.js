@@ -103,6 +103,12 @@ export const getMyBookings = () =>
     headers: authHeader(),
   });
 
+export const getBookingQr = (bookingId) =>
+  apiFetch(`/bookings/${bookingId}/qr`, {
+    method: 'GET',
+    headers: authHeader(),
+  });
+
 export const checkInBooking = (bookingId) =>
   apiFetch(`/bookings/${bookingId}/check-in`, {
     method: 'POST',
