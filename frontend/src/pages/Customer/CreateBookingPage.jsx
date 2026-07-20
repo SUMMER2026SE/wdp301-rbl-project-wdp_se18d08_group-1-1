@@ -1394,7 +1394,7 @@ export default function CreateBookingPage() {
                       <span className="text-[10px] text-gray-300 font-bold tracking-wide">Available</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <div className="w-3.5 h-3.5 rounded-sm bg-red-500/20 border border-red-500"></div>
+                      <div className="w-3.5 h-3.5 rounded-sm bg-rose-200 border border-rose-600"></div>
                       <span className="text-[10px] text-gray-300 font-bold tracking-wide">Occupied</span>
                     </div>
                     <div className="flex items-center gap-1.5">
@@ -1411,7 +1411,7 @@ export default function CreateBookingPage() {
                     </div>
                     <div className="flex items-center gap-1.5">
                       <div className="w-3.5 h-3.5 rounded-sm bg-orange-100 border border-orange-500"></div>
-                      <span className="text-[10px] text-orange-500 font-bold tracking-wide">Hold</span>
+                      <span className="text-[10px] text-orange-500 font-bold tracking-wide">Hold/Booked</span>
                     </div>
                   </div>
                 </div>

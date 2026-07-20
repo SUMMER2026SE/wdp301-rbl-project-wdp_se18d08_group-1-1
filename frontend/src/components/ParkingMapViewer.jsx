@@ -53,9 +53,9 @@ const SlotElement = React.memo(({ el, floorId, style, isOccupied, isSelected, is
       textColor = '#ca8a04'; // yellow-600
     }
   } else if (isOccupied) {
-    finalBgColor = '#fee2e2'; // red-100
-    finalBorderColor = '#ef4444'; // red-500
-    textColor = '#ef4444';
+    finalBgColor = '#fecdd3'; // rose-200
+    finalBorderColor = '#e11d48'; // rose-600
+    textColor = '#e11d48';
   }
 
   const slotStatusLabel = isMaintenance
@@ -311,12 +311,15 @@ export default function ParkingMapViewer({ floors, currentFloorId, onFloorSelect
         
         let isReserved = !!dbSlot?.subscriptionType;
 
-        const isHeld = activeHolds.some(h => String(h.floorId) === String(floorId) && String(h.slotCode).toUpperCase() === String(slotCode).toUpperCase());
+        let isHeld = false;
+        if (activeHolds) {
+          isHeld = activeHolds.some(h => String(h.floorId) === String(floorId) && String(h.slotCode).toUpperCase() === String(slotCode).toUpperCase());
+        }
 
         if (availableSlotMap) {
           // If availableSlots logic is active, unavailable means it's not in the map
           if (!availableSlotMap[`${floorId}-${slotCode}`] && !isOccupied && !isHeld && !isMaintenance && !isReserved) {
-            isOccupied = true; 
+            isHeld = true; 
           }
         }
 

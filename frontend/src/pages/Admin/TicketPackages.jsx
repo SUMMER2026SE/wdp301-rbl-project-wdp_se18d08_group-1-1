@@ -126,18 +126,22 @@ export default function TicketPackages() {
 
   if (loading && packages.length === 0) {
     return (
-      <div className="flex justify-center items-center h-full min-h-[400px]">
+      <div className="flex justify-center items-center h-full min-h-[calc(100vh-70px)] bg-[#080808]">
         <Loader2 className="animate-spin text-gold w-8 h-8" />
       </div>
     );
   }
 
   return (
-    <div className="p-6 md:p-8 max-w-7xl mx-auto h-full overflow-auto">
+    <div className="p-6 md:p-8 mx-auto min-h-[calc(100vh-70px)] overflow-auto bg-[#080808]">
+      <div className="max-w-7xl mx-auto">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-3xl lg:text-4xl font-black text-white tracking-tight">Ticket Packages</h1>
-          <p className="text-gray-400 font-medium mt-1">Manage parking rates and ticket packages.</p>
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-yellow-500/20 bg-yellow-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-yellow-300">
+            <Tag size={12} /> Packages
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">Ticket Packages</h1>
+          <p className="text-gray-400 text-sm mt-1">Manage parking rates and ticket packages.</p>
         </div>
         {isAdmin && (
           <button
@@ -158,7 +162,7 @@ export default function TicketPackages() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {packages.map(pkg => (
-          <div key={pkg._id} className={`bg-[#181C23] rounded-3xl p-6 border shadow-sm relative overflow-hidden transition-all ${pkg.isActive ? 'border-white/10 hover:border-gold/50' : 'border-white/5 opacity-60'}`}>
+          <div key={pkg._id} className={`bg-[#171717] rounded-3xl p-6 border shadow-sm relative overflow-hidden transition-all ${pkg.isActive ? 'border-white/10 hover:border-gold/50' : 'border-white/5 opacity-60'}`}>
             <div className="flex justify-between items-start mb-4">
               <div className="w-12 h-12 rounded-2xl bg-gold/10 text-gold flex items-center justify-center">
                 <Tag size={24} />
@@ -195,7 +199,7 @@ export default function TicketPackages() {
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="bg-[#181C23] border border-white/10 rounded-3xl p-6 md:p-8 w-full max-w-md shadow-2xl">
+          <div className="bg-[#171717] border border-white/10 rounded-3xl p-6 md:p-8 w-full max-w-md shadow-2xl">
             <h2 className="text-2xl font-black text-white mb-6">{editingPackage ? 'Edit Package' : 'Create Package'}</h2>
             
             {error && (
@@ -212,7 +216,7 @@ export default function TicketPackages() {
                   required
                   value={formData.name}
                   onChange={e => setFormData({...formData, name: e.target.value})}
-                  className="w-full bg-[#0B0E17] border border-white/10 rounded-xl px-4 py-3 text-sm font-semibold text-white outline-none focus:border-gold focus:ring-1 focus:ring-gold"
+                  className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm font-semibold text-white outline-none focus:border-gold focus:ring-1 focus:ring-gold"
                   placeholder="e.g. Standard Hourly"
                 />
               </div>
@@ -223,7 +227,7 @@ export default function TicketPackages() {
                   <select
                     value={formData.type}
                     onChange={e => setFormData({...formData, type: e.target.value})}
-                    className="w-full bg-[#0B0E17] border border-white/10 rounded-xl px-4 py-3 text-sm font-semibold text-white outline-none focus:border-gold focus:ring-1 focus:ring-gold"
+                    className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm font-semibold text-white outline-none focus:border-gold focus:ring-1 focus:ring-gold"
                   >
                     <option value="hourly">Hourly</option>
                     <option value="monthly">Monthly</option>
@@ -238,7 +242,7 @@ export default function TicketPackages() {
                     min="0"
                     value={formData.price}
                     onChange={e => setFormData({...formData, price: e.target.value})}
-                    className="w-full bg-[#0B0E17] border border-white/10 rounded-xl px-4 py-3 text-sm font-semibold text-white outline-none focus:border-gold focus:ring-1 focus:ring-gold"
+                    className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm font-semibold text-white outline-none focus:border-gold focus:ring-1 focus:ring-gold"
                     placeholder="e.g. 10000"
                   />
                 </div>
@@ -249,7 +253,7 @@ export default function TicketPackages() {
                 <textarea
                   value={formData.description}
                   onChange={e => setFormData({...formData, description: e.target.value})}
-                  className="w-full bg-[#0B0E17] border border-white/10 rounded-xl px-4 py-3 text-sm font-semibold text-white outline-none focus:border-gold focus:ring-1 focus:ring-gold min-h-[80px]"
+                  className="w-full bg-black border border-white/10 rounded-xl px-4 py-3 text-sm font-semibold text-white outline-none focus:border-gold focus:ring-1 focus:ring-gold min-h-[80px]"
                   placeholder="Optional description"
                 />
               </div>
@@ -286,6 +290,7 @@ export default function TicketPackages() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

@@ -5,7 +5,7 @@ import {
   Pencil, Trash2, Plus, X, CheckCircle, 
   Package, Clock, DollarSign, Sparkles, ImagePlus, 
   Eye, Search, Calendar, LayoutGrid, List as ListIcon,
-  UploadCloud, AlertTriangle, ChevronDown, Check, Star
+  UploadCloud, AlertTriangle, ChevronDown, Check, Star, Wrench
 } from 'lucide-react';
 import { getServices, createService, updateService, deleteService } from '../../services/extraServiceApi';
 import toast, { Toaster } from 'react-hot-toast';
@@ -31,13 +31,10 @@ function AnimatedCounter({ target, duration = 1200, isCurrency, isTime }) {
   if (isCurrency) {
     return (
       <span className="flex items-baseline gap-1">
-        <span className="text-lg text-white/70 font-semibold">$</span>
         <span>
-          {count.toLocaleString('en-US', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}
+          {Math.round(count).toLocaleString('vi-VN')}
         </span>
+        <span className="text-lg text-white/70 font-semibold">₫</span>
       </span>
     );
   }
@@ -384,7 +381,7 @@ const AdminServiceManager = () => {
 
             <div className="flex gap-2">
               <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-[#ffd555]/[0.16] text-[#ffe083] text-xs font-bold border border-[#ffd555]/[0.35] shadow-[0_0_16px_rgba(255,213,85,0.10)]">
-                <DollarSign size={12}/> {service.price.toFixed(2)}
+                {service.price.toLocaleString('vi-VN')} ₫
               </span>
               <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-sky-400/10 text-sky-100/80 text-xs font-semibold border border-sky-300/15">
                 <Clock size={12}/> {service.timeCost}m
@@ -446,7 +443,7 @@ const AdminServiceManager = () => {
             <p className="text-[11px] text-white/[0.55] truncate mt-0.5">{service.description}</p>
           </div>
           <div className="col-span-2 flex items-center gap-1 text-[#ffd555] font-bold text-sm">
-            <DollarSign size={14}/> {service.price.toFixed(2)}
+            {service.price.toLocaleString('vi-VN')} ₫
           </div>
           <div className="col-span-2 flex items-center gap-1 text-sky-100/75 text-xs">
             <Clock size={12}/> {service.timeCost}m
@@ -502,8 +499,11 @@ const AdminServiceManager = () => {
           <div className="absolute inset-x-8 bottom-0 h-px bg-gradient-to-r from-transparent via-[#ffd555]/20 to-transparent" />
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-[#ffe083] via-white to-[#6ee7f9] tracking-tight">Services</h1>
-              <p className="text-sm text-white/[0.58] mt-1">Manage extra parking services, pricing, time cost, and availability.</p>
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-yellow-500/20 bg-yellow-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-yellow-300">
+                <Wrench size={12} /> Service Manager
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">Services</h1>
+              <p className="text-sm text-gray-400 mt-1">Manage extra parking services, pricing, time cost, and availability.</p>
             </div>
             <button
               onClick={() => openModal()}
@@ -694,7 +694,7 @@ const AdminServiceManager = () => {
                   <div className="grid grid-cols-2 gap-4 mb-6">
                     <div className="bg-white/[0.07] p-4 rounded-xl border border-[#ffd555]/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
                       <p className="text-[10px] text-[#f4d675]/80 uppercase font-bold tracking-widest mb-1">Pricing</p>
-                      <p className="text-2xl font-extrabold text-[#ffe083]">${viewingService.price.toFixed(2)}</p>
+                      <p className="text-2xl font-extrabold text-[#ffe083]">{viewingService.price.toLocaleString('vi-VN')} ₫</p>
                     </div>
                     <div className="bg-white/[0.07] p-4 rounded-xl border border-sky-300/[0.18] shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
                       <p className="text-[10px] text-sky-100/[0.62] uppercase font-bold tracking-widest mb-1">Duration</p>
@@ -833,7 +833,7 @@ const AdminServiceManager = () => {
                           <div className="flex-1 min-w-0">
                             <h4 className="text-sm font-bold text-white truncate">{formData.name || 'Service Name'}</h4>
                             <div className="flex gap-2 mt-1.5">
-                              <span className="text-[10px] font-bold text-[#ffd555] bg-[#ffd555]/10 px-1.5 py-0.5 rounded border border-[#ffd555]/20">${Number(formData.price || 0).toFixed(2)}</span>
+                              <span className="text-[10px] font-bold text-[#ffd555] bg-[#ffd555]/10 px-1.5 py-0.5 rounded border border-[#ffd555]/20">{Number(formData.price || 0).toLocaleString('vi-VN')} ₫</span>
                               <span className="text-[10px] font-medium text-sky-100/75 bg-sky-400/10 px-1.5 py-0.5 rounded border border-sky-300/15">{formData.timeCost || 0}m</span>
                             </div>
                           </div>
@@ -851,10 +851,10 @@ const AdminServiceManager = () => {
 
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className={labelClass}>Price (USD)</label>
+                        <label className={labelClass}>Price (VND)</label>
                         <div className="relative">
-                          <DollarSign size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#ffe083]/70" />
-                          <input type="number" name="price" value={formData.price} onChange={handleInputChange} min="0" step="0.01" className={`${inputClass} pl-9`} placeholder="0.00" required />
+                          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#ffe083]/70 font-bold text-sm">₫</span>
+                          <input type="number" name="price" value={formData.price} onChange={handleInputChange} min="0" step="1000" className={`${inputClass} pl-9`} placeholder="0" required />
                         </div>
                       </div>
                       <div>

@@ -4,6 +4,7 @@ import { getAllFloors } from "../../services/parkingFloorService";
 import { apiFetch } from "../../services/api";
 import { MonitorCheck, X } from "lucide-react";
 import StaffCheckoutModal from "./StaffCheckoutModal";
+import { getAvailableBookingSlots, getActiveHolds, getActiveMapBookings } from "../../services/bookingService";
 
 export default function LiveGridMonitor() {
   const [floors, setFloors] = useState([]);
@@ -11,6 +12,9 @@ export default function LiveGridMonitor() {
   const [loading, setLoading] = useState(true);
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [activeSessions, setActiveSessions] = useState([]);
+  const [availableSlots, setAvailableSlots] = useState(null);
+  const [activeHolds, setActiveHolds] = useState([]);
+  const [activeBookings, setActiveBookings] = useState([]);
   const [dbSlots, setDbSlots] = useState([]);
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
 
@@ -68,8 +72,28 @@ export default function LiveGridMonitor() {
       if (res.ok && res.data.success) {
         setActiveSessions(res.data.data);
       }
+
+      const startTimeStr = new Date().toISOString();
+      const endTimeStr = new Date(Date.now() + 60 * 1000).toISOString();
+      const availableRes = await getAvailableBookingSlots({
+        startTime: startTimeStr,
+        endTime: endTimeStr,
+      });
+      if (availableRes.ok && availableRes.data?.data?.slots) {
+        setAvailableSlots(availableRes.data.data.slots);
+      }
+
+      const holdsRes = await getActiveHolds();
+      if (holdsRes.ok && holdsRes.data?.data) {
+        setActiveHolds(holdsRes.data.data);
+      }
+      
+      const bookingsRes = await getActiveMapBookings();
+      if (bookingsRes.ok && bookingsRes.data?.data) {
+        setActiveBookings(bookingsRes.data.data);
+      }
     } catch (err) {
-      console.error("Failed to fetch active status", err);
+      console.error("Failed to fetch live status", err);
     }
   };
 
@@ -120,6 +144,9 @@ export default function LiveGridMonitor() {
           onSlotClick={setSelectedSlot}
           activeSessions={activeSessions}
           dbSlots={dbSlots}
+          availableSlots={availableSlots}
+          activeHolds={activeHolds}
+          activeBookings={activeBookings}
           loading={loading}
           isEditMode={false} // Staff cannot edit layout
         />

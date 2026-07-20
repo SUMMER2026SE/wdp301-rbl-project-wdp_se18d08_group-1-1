@@ -191,12 +191,14 @@ export default function RevenueAnalytics() {
   );
 
   return (
-    <div className="mx-auto max-w-7xl p-6 text-gray-200 md:p-8">
+    <div className="p-6 md:p-8 mx-auto min-h-[calc(100vh-70px)] overflow-auto bg-[#080808]">
+      <div className="max-w-7xl mx-auto text-gray-200">
       <header className="mb-8 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-3xl font-black tracking-tight text-white lg:text-4xl">
-            Revenue Analytics
-          </h1>
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-yellow-500/20 bg-yellow-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-yellow-300">
+            <BarChart3 size={12} /> Analytics
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">Revenue Analytics</h1>
           <p className="mt-1 max-w-2xl text-sm font-medium leading-6 text-gray-400">
             Booking cash flow, refunds and parking package performance with each source
             kept separate.
@@ -221,7 +223,7 @@ export default function RevenueAnalytics() {
               leaveFrom="opacity-100 translate-y-0"
               leaveTo="opacity-0 translate-y-1"
             >
-              <Menu.Items className="absolute right-0 mt-2 w-44 origin-top-right overflow-hidden rounded-xl border border-white/10 bg-[#111] shadow-2xl shadow-black/60 backdrop-blur-xl focus:outline-none">
+              <Menu.Items className="absolute right-0 mt-2 w-44 origin-top-right overflow-hidden rounded-xl border border-white/10 bg-[#171717] shadow-2xl shadow-black/60 backdrop-blur-xl focus:outline-none">
                 <div className="p-1.5">
                   {RANGE_OPTIONS.map((option) => (
                     <Menu.Item key={option.value}>
@@ -309,7 +311,7 @@ export default function RevenueAnalytics() {
           />
 
           <section className="mt-8 grid gap-6 xl:grid-cols-[1.25fr_0.75fr]">
-            <div className="overflow-hidden rounded-3xl border border-white/5 bg-[#181C23] shadow-sm">
+            <div className="overflow-hidden rounded-3xl border border-white/10 bg-[#171717] shadow-sm">
               <SectionHeader
                 title="Booking flow"
                 description="Operational outcomes and recorded booking value."
@@ -360,7 +362,7 @@ export default function RevenueAnalytics() {
               </div>
             </div>
 
-            <div className="overflow-hidden rounded-3xl border border-white/5 bg-[#181C23] shadow-sm">
+            <div className="overflow-hidden rounded-3xl border border-white/10 bg-[#171717] shadow-sm">
               <SectionHeader
                 title="Package health"
                 description="Current entitlement health with period sales."
@@ -394,7 +396,7 @@ export default function RevenueAnalytics() {
                     packageRows.slice(0, 5).map((row) => (
                       <div
                         key={row.packageId || row.packageName}
-                        className="flex items-center justify-between gap-4 rounded-2xl border border-white/5 bg-[#12161C] px-4 py-3 transition hover:border-gold/20"
+                        className="flex items-center justify-between gap-4 rounded-2xl border border-white/5 bg-black px-4 py-3 transition hover:border-gold/20"
                       >
                         <div className="min-w-0">
                           <p className="truncate text-sm font-bold text-white">
@@ -439,13 +441,14 @@ export default function RevenueAnalytics() {
           </section>
         </>
       )}
+      </div>
     </div>
   );
 }
 
 function Metric({ icon, label, value, note, tone = 'default' }) {
   return (
-    <div className="group rounded-3xl border border-white/10 bg-[#181C23] p-6 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-gold/40">
+    <div className="group rounded-3xl border border-white/10 bg-[#171717] p-6 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-gold/40">
       <div
         className={`flex h-12 w-12 items-center justify-center rounded-2xl ${
           tone === 'negative'
@@ -464,7 +467,7 @@ function Metric({ icon, label, value, note, tone = 'default' }) {
 
 function CompactMetric({ label, value, note }) {
   return (
-    <div className="bg-[#181C23] p-5">
+    <div className="bg-[#171717] p-5">
       <p className="text-xs font-bold text-gray-500">{label}</p>
       <p className="mt-2 text-lg font-black tabular-nums text-white">{value}</p>
       <p className="mt-1 text-xs text-gray-600">{note}</p>
@@ -483,7 +486,7 @@ function SectionHeader({ title, description }) {
 
 function SourceNote({ icon, title, value, text }) {
   return (
-    <div className="flex items-start gap-3 rounded-3xl border border-white/5 bg-[#181C23] p-5 shadow-sm">
+    <div className="flex items-start gap-3 rounded-3xl border border-white/10 bg-[#171717] p-5 shadow-sm">
       <div className="mt-0.5 text-gold">{icon}</div>
       <div>
         <p className="text-xs font-bold text-gray-500">{title}</p>
@@ -538,7 +541,7 @@ function SalesTrendChart({ points, granularity }) {
   const totalRefunds = points.reduce((sum, point) => sum + point.refunds, 0);
 
   return (
-    <section className="mt-6 overflow-hidden rounded-3xl border border-white/5 bg-[#181C23] shadow-sm">
+    <section className="mt-6 overflow-hidden rounded-3xl border border-white/10 bg-[#171717] shadow-sm">
       <div className="flex flex-col gap-4 border-b border-white/5 px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-lg font-bold text-white">Sales trend</h2>
@@ -617,7 +620,7 @@ function SalesTrendChart({ points, granularity }) {
                     cx={xForIndex(index)}
                     cy={yForValue(point.recordedSales)}
                     r="4.5"
-                    fill="#181C23"
+                    fill="#171717"
                     stroke="#D4AF37"
                     strokeWidth="3"
                   >
@@ -631,7 +634,7 @@ function SalesTrendChart({ points, granularity }) {
                     cx={xForIndex(index)}
                     cy={yForValue(point.refunds)}
                     r="4"
-                    fill="#181C23"
+                    fill="#171717"
                     stroke="#FB7185"
                     strokeWidth="2.5"
                   >
@@ -686,3 +689,4 @@ function RevenueSkeleton() {
     </div>
   );
 }
+
