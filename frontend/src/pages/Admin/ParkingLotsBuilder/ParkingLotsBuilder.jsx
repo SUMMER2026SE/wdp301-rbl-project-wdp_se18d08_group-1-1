@@ -5,10 +5,11 @@ import { Save, Box, Type, Minus, ArrowRight, Square, AlertCircle, Zap, Accessibi
 const createElementId = (prefix, suffix = "") =>
   `${prefix}-${Date.now()}${suffix ? `-${suffix}` : ""}-${Math.random().toString(36).substring(7)}`;
 
-export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
+export default function ParkingLotsBuilder({ floor, dbSlots = [], onSave, onCancel }) {
   const [elements, setElements] = useState(floor?.layoutData?.elements || []);
   const [selectedElementIds, setSelectedElementIds] = useState([]);
   const [activeCategory, setActiveCategory] = useState("spaces");
+  const [deleteWarning, setDeleteWarning] = useState(null);
   
   // Canvas Pan & Zoom state
   const [scale, setScale] = useState(1);
@@ -146,6 +147,25 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
   };
 
   const handleRemoveElements = (idsToRemove) => {
+    const slotsToRemove = elements.filter(el => {
+      if (!el.type.startsWith('slot')) return false;
+      if (idsToRemove.includes(el.id)) return true;
+      if (el.parentId && idsToRemove.includes(el.parentId)) return true;
+      return false;
+    });
+
+    const vipSlots = slotsToRemove.filter(slot => {
+      if (!slot.name) return false;
+      const dbSlot = dbSlots.find(dbs => String(dbs.slotNumber).trim().toUpperCase() === String(slot.name).trim().toUpperCase());
+      return dbSlot && dbSlot.subscriptionType;
+    });
+
+    if (vipSlots.length > 0) {
+      const slotNames = vipSlots.map(s => s.name).join(", ");
+      setDeleteWarning({ idsToRemove, slotNames });
+      return;
+    }
+
     setElements(prev => prev.filter(el => {
       if (idsToRemove.includes(el.id)) return false;
       // If the element has a parentId, check if its parent is being removed
@@ -153,6 +173,7 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
       return true;
     }));
     setSelectedElementIds(prev => prev.filter(id => !idsToRemove.includes(id)));
+    if (deleteWarning) setDeleteWarning(null);
   };
 
   const generateNextName = (baseName, existingElements) => {
@@ -634,7 +655,7 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
             
             {/* Zone Name Tag (floating outside the box) */}
             <div 
-               className={`absolute -top-6 left-0 px-3 py-1 rounded-t-md bg-[#181c23] border border-b-0 shadow-md font-bold text-[10px] tracking-widest uppercase select-none pointer-events-auto cursor-pointer hover:bg-slate-800 transition-colors ${!el.name ? 'text-red-400 border-red-500/50 z-50' : 'text-cyan-300 border-cyan-500/50 z-20'}`}
+               className={`absolute -top-6 left-0 px-3 py-1 rounded-t-md bg-[#171717] border border-b-0 shadow-md font-bold text-[10px] tracking-widest uppercase select-none pointer-events-auto cursor-pointer hover:bg-slate-800 transition-colors ${!el.name ? 'text-red-400 border-red-500/50 z-50' : 'text-cyan-300 border-cyan-500/50 z-20'}`}
                onMouseDown={(e) => {
                   e.stopPropagation();
                   if (e.shiftKey) {
@@ -655,10 +676,10 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
   };
 
   return (
-    <div className="flex h-full w-full bg-[#12151c] text-white">
+    <div className="flex h-full w-full bg-[#080808] text-white">
       {/* Left Sidebar Palette */}
       <div 
-        className="border-r border-white/10 bg-[#181c23] flex flex-col relative shrink-0"
+        className="border-r border-white/10 bg-[#171717] flex flex-col relative shrink-0"
         style={{ width: leftSidebarWidth }}
       >
         <div className="p-4 border-b border-white/10">
@@ -901,7 +922,7 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
 
       {/* Right Sidebar Properties */}
       <div 
-        className="border-l border-white/10 bg-[#181c23] p-6 flex flex-col gap-4 relative shrink-0"
+        className="border-l border-white/10 bg-[#171717] p-6 flex flex-col gap-4 relative shrink-0"
         style={{ width: rightSidebarWidth }}
       >
         {/* Resizer Handle */}
@@ -1094,6 +1115,39 @@ export default function ParkingLotsBuilder({ floor, onSave, onCancel }) {
           </div>
         )}
       </div>
+
+      {/* Delete Warning Modal */}
+      {deleteWarning && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm">
+          <div className="bg-[#171717] border border-red-500/50 shadow-[0_0_40px_rgba(239,68,68,0.2)] rounded-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-6">
+              <div className="flex items-center gap-4 mb-4 text-red-500">
+                <AlertCircle size={32} />
+                <h3 className="text-xl font-black uppercase tracking-wider">Critical Warning</h3>
+              </div>
+              <p className="text-gray-300 mb-4 leading-relaxed">
+                You are about to delete the following parking slots which currently have <strong className="text-white">active VIP subscriptions</strong>:
+              </p>
+              <div className="bg-black/40 border border-white/5 rounded-lg p-3 mb-6">
+                <p className="text-red-400 font-mono font-bold text-center text-lg">{deleteWarning.slotNames}</p>
+              </div>
+              <div className="bg-red-500/10 border-l-4 border-red-500 p-4 rounded-r mb-6 text-sm text-red-200">
+                <strong>System Error Risk:</strong> Deleting these slots without first cancelling or reassigning their VIP subscriptions in the management portal may cause data corruption and ghost slots.
+                <br /><br />
+                <span className="font-bold text-white uppercase tracking-wider">Action Blocked:</span> You MUST reassign these slots in the VIP management portal before deleting them.
+              </div>
+              <div className="flex justify-end">
+                <button 
+                  onClick={() => setDeleteWarning(null)}
+                  className="px-6 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors shadow-lg shadow-red-500/20 font-bold flex items-center gap-2"
+                >
+                  I Understand
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

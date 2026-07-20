@@ -482,7 +482,7 @@ export default function AdminProfile() {
   return (
     <div
       className="relative h-full flex flex-col overflow-hidden"
-      style={{ backgroundColor: "#050505", fontFamily: "'Plus Jakarta Sans', 'Montserrat', sans-serif" }}
+      style={{ backgroundColor: "#080808", fontFamily: "'Plus Jakarta Sans', 'Montserrat', sans-serif" }}
     >
       {/* ── Cursor spotlight ── */}
       <div

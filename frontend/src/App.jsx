@@ -33,6 +33,7 @@ import TicketPackages from "./pages/Admin/TicketPackages";
 import AccountManagement from "./pages/Admin/AccountManagement";
 import PolicyManagement from "./pages/Admin/PolicyManagement";
 import SubscriptionManagement from "./pages/Admin/SubscriptionManagement";
+import RevenueAnalytics from "./pages/Admin/RevenueAnalytics";
 
 // Pages – Staff
 import StaffDashboard from "./pages/Staff/Dashboard";
@@ -46,6 +47,7 @@ import BookingManagement from "./pages/Staff/BookingManagement";
 // Pages – Customer
 import CustomerProfile from "./pages/Customer/CustomerProfile";
 import Membership from "./pages/Customer/Membership";
+import MembershipTransfers from "./pages/Customer/MembershipTransfers";
 import MyVehicles from "./pages/Customer/MyVehicles";
 import WalletPage from "./pages/Wallet/WalletPage";
 import ParkingHistory from "./pages/Customer/ParkingHistory";
@@ -132,6 +134,7 @@ export default function App() {
             <Route path="/admin/pricing" element={<PricingManagement />} />
             <Route path="/admin/tickets" element={<TicketPackages />} />
             <Route path="/admin/subscriptions" element={<SubscriptionManagement />} />
+            <Route path="/admin/revenue" element={<RevenueAnalytics />} />
             <Route path="/admin/profile" element={<AdminProfile />} />
           </Route>
 
@@ -175,6 +178,10 @@ export default function App() {
             }
           >
             <Route path="/profile" element={<CustomerProfile />} />
+            <Route
+              path="/customer/membership-transfers"
+              element={<MembershipTransfers />}
+            />
             <Route path="/customer/vehicles" element={<MyVehicles />} />
             <Route path="/customer/wallet" element={<WalletPage />} />
             <Route path="/customer/history" element={<ParkingHistory />} />

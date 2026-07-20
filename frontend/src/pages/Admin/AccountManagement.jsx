@@ -114,10 +114,8 @@ function SkeletonRow() {
 function StatCard({ icon: Icon, label, value, gradient, glow, loading }) {
   return (
     <div
-      className="relative rounded-2xl p-5 overflow-hidden cursor-default group transition-all duration-300 hover:scale-[1.035]"
+      className="relative bg-[#171717] border border-white/10 rounded-2xl p-5 overflow-hidden cursor-default group transition-all duration-300 hover:scale-[1.035]"
       style={{
-        background: 'rgba(255,255,255,0.03)',
-        border: '1px solid rgba(255,255,255,0.08)',
         boxShadow: '0 4px 24px rgba(0,0,0,0.3)',
       }}
       onMouseEnter={e => { e.currentTarget.style.boxShadow = `0 8px 40px ${glow}, 0 0 0 1px rgba(255,255,255,0.12)`; }}
@@ -405,8 +403,11 @@ export default function AccountManagement() {
         <div className="bg-[#080808] px-8 pt-7 pb-6 border-b border-white/[0.06] flex-shrink-0">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-[#ffd555] tracking-tight">Account Management</h1>
-              <p className="text-sm text-white/40 mt-0.5">Manage user accounts, roles, and access permissions</p>
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-yellow-500/20 bg-yellow-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-yellow-300">
+                <Users size={12} /> User Management
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">Account Management</h1>
+              <p className="text-gray-400 text-sm mt-1">Manage user accounts, roles, and access permissions</p>
             </div>
             <button onClick={fetchUsers} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 border border-white/10 text-white/60 hover:text-white hover:bg-white/8 transition-all text-sm">
               <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
@@ -520,7 +521,7 @@ export default function AccountManagement() {
         <div className="flex-1 overflow-auto min-h-0">
           <table className="w-full min-w-[800px] border-collapse">
             <thead className="sticky top-0 z-20">
-              <tr className="bg-[#14120c] border-b border-[#ffd555]/20">
+              <tr className="bg-[#171717] border-b border-white/10">
                 <th className="w-6"></th>
                 {['Account','Email','Phone','Role','Status','Joined Date'].map(label => (
                   <th key={label} className="px-4 py-4 text-left">
@@ -543,7 +544,7 @@ export default function AccountManagement() {
               {!loading && pageUsers.map(u => {
                 const isActive = panelUser?._id === u._id;
                 return (
-                  <tr key={u._id} className={`group border-b border-white/[0.04] cursor-pointer hover:bg-white/[0.02] hover:-translate-y-[1px] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_4px_12px_rgba(0,0,0,0.2)] transition-all duration-200 ease-out ${isActive ? 'bg-[#ffd555]/[0.04]' : 'even:bg-white/[0.01]'}`}
+                  <tr key={u._id} className={`group border-b border-white/10 cursor-pointer hover:bg-[#171717] hover:-translate-y-[1px] hover:shadow-lg transition-all duration-200 ease-out ${isActive ? 'bg-[#ffd555]/[0.04]' : 'even:bg-white/[0.01]'}`}
                     onClick={() => openPanel(u)}>
                     <td className="w-4"></td>
                     <td className="px-4 py-3">
@@ -619,7 +620,7 @@ export default function AccountManagement() {
               animate={{ x: 0 }}
               exit={{ x: '100%' }}
               transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed inset-y-0 right-0 z-50 w-[440px] flex flex-col bg-[#1B2027] border-l border-white/[0.05] shadow-2xl"
+              className="fixed inset-y-0 right-0 z-50 w-[440px] flex flex-col bg-[#111111] border-l border-[#ffd555]/[0.18] shadow-2xl"
             >
               {/* Panel Header */}
               <div className="flex items-center justify-between px-6 py-5 border-b border-white/[0.05] flex-shrink-0">
@@ -654,7 +655,7 @@ export default function AccountManagement() {
 
                   {!isEditing ? (
                     <div className="space-y-4">
-                      <div className="bg-[#171B20] rounded-2xl p-4 border border-white/[0.03] space-y-3">
+                      <div className="bg-[#171717] rounded-2xl p-4 border border-white/10 space-y-3">
                         <h4 className="text-xs font-bold uppercase tracking-widest text-[#ffd555]/80 mb-1">Basic Info</h4>
                         {[
                           { icon: Mail, label: 'Email Address', val: panelUser.email },
@@ -673,7 +674,7 @@ export default function AccountManagement() {
                         ))}
                       </div>
 
-                      <div className="bg-[#171B20] rounded-2xl p-4 border border-white/[0.03]">
+                      <div className="bg-[#171717] rounded-2xl p-4 border border-white/10">
                         <h4 className="text-xs font-bold uppercase tracking-widest text-[#ffd555]/80 mb-3">Account Activity</h4>
                         <div className="relative pl-3 border-l border-white/10 space-y-4">
                           {[
@@ -703,7 +704,7 @@ export default function AccountManagement() {
                             <div className="relative group">
                               <User size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 group-focus-within:text-[#ffd555] transition-colors" />
                               <input type="text" value={editForm.fullName || ''} onChange={e => setEditForm(f => ({ ...f, fullName: e.target.value }))} placeholder="e.g. John Doe"
-                                className="w-full bg-[#171B20] border border-white/[0.05] rounded-xl pl-9 pr-3 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-[#ffd555]/50 focus:ring-1 focus:ring-[#ffd555]/30 focus:shadow-[0_0_15px_rgba(255,213,85,0.15)] transition-all" />
+                                className="w-full bg-black border border-white/10 rounded-xl pl-9 pr-3 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-[#ffd555]/50 focus:ring-1 focus:ring-[#ffd555]/30 focus:shadow-[0_0_15px_rgba(255,213,85,0.15)] transition-all" />
                             </div>
                           </div>
                         </div>
@@ -712,7 +713,7 @@ export default function AccountManagement() {
                           <div className="relative group">
                             <Phone size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 group-focus-within:text-[#ffd555] transition-colors" />
                             <input type="text" value={editForm.phone || ''} onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} placeholder="e.g. 0901234567"
-                              className="w-full bg-[#171B20] border border-white/[0.05] rounded-xl pl-9 pr-3 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-[#ffd555]/50 focus:ring-1 focus:ring-[#ffd555]/30 focus:shadow-[0_0_15px_rgba(255,213,85,0.15)] transition-all" />
+                              className="w-full bg-black border border-white/10 rounded-xl pl-9 pr-3 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-[#ffd555]/50 focus:ring-1 focus:ring-[#ffd555]/30 focus:shadow-[0_0_15px_rgba(255,213,85,0.15)] transition-all" />
                           </div>
                         </div>
                       </div>
@@ -722,7 +723,7 @@ export default function AccountManagement() {
                         <div>
                           <label className="block text-[10px] font-medium text-white/50 mb-1">User Role</label>
                           <Menu as="div" className="relative">
-                            <Menu.Button className="w-full bg-[#171B20] border border-white/[0.05] rounded-xl px-3 py-2.5 flex items-center justify-between text-sm text-white focus:outline-none focus:border-[#ffd555]/50 focus:ring-1 focus:ring-[#ffd555]/30 focus:shadow-[0_0_15px_rgba(255,213,85,0.15)] transition-all cursor-pointer">
+                            <Menu.Button className="w-full bg-black border border-white/10 rounded-xl px-3 py-2.5 flex items-center justify-between text-sm text-white focus:outline-none focus:border-[#ffd555]/50 focus:ring-1 focus:ring-[#ffd555]/30 focus:shadow-[0_0_15px_rgba(255,213,85,0.15)] transition-all cursor-pointer">
                               <div className="flex items-center gap-2">
                                 <Shield size={14} className="text-[#ffd555]" />
                                 <span className="capitalize">{editForm.role || 'customer'}</span>

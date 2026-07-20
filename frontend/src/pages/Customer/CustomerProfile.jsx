@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { QRCodeSVG } from "qrcode.react";
+import RenewModal from "./RenewModal";
 import Logo from "../../assets/images/logo.png";
 import { apiFetch, API_BASE } from "../../services/api";
+import { getMembershipQr } from "../../services/subscriptionService";
 import {
   forgotPassword as apiForgotPassword,
   verifyResetPasswordOTP as apiVerifyResetOTP,
@@ -22,9 +24,10 @@ import {
   Shield,
   Lock,
   LockOpen,
-  MapPin,
   Car,
-  Wifi,
+  QrCode,
+  ArrowLeft,
+  RotateCw,
 } from "lucide-react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -206,12 +209,16 @@ function GoldUnderlineField({
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function CustomerProfile() {
-  const navigate = useNavigate();
   const avatarInputRef = useRef(null);
   const spotlightRef = useRef(null);
   const orbRef = useRef(null);
   const magneticRef = useRef(null);
   const fpOtpRefs = useRef([]);
+  const [showRenewModal, setShowRenewModal] = useState(false);
+  const [membershipQrOpen, setMembershipQrOpen] = useState(false);
+  const [membershipQr, setMembershipQr] = useState("");
+  const [membershipQrLoading, setMembershipQrLoading] = useState(false);
+  const [membershipQrError, setMembershipQrError] = useState("");
 
   // ── Profile state ──────────────────────────────────────────────────────────
   const [profile, setProfile] = useState({
@@ -311,6 +318,56 @@ export default function CustomerProfile() {
     };
     fetchUserData();
   }, []);
+
+  useEffect(() => {
+    const subscriptionId = profile.membership?.subscriptionId;
+    const expireAt = profile.membership?.expireAt
+      ? new Date(profile.membership.expireAt)
+      : null;
+    const membershipIsActive =
+      profile.membership?.isVip &&
+      subscriptionId &&
+      (!expireAt || Number.isNaN(expireAt.getTime()) || expireAt > new Date());
+
+    if (!membershipIsActive) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    const fetchMembershipQr = async () => {
+      setMembershipQrLoading(true);
+      setMembershipQrError("");
+      try {
+        const response = await getMembershipQr(subscriptionId);
+        if (cancelled) return;
+
+        if (response.ok && response.data?.success && response.data.data?.available) {
+          setMembershipQr(response.data.data.payload);
+        } else {
+          setMembershipQr("");
+          setMembershipQrError(
+            response.data?.message || "Membership QR is currently unavailable.",
+          );
+        }
+      } catch {
+        if (!cancelled) {
+          setMembershipQr("");
+          setMembershipQrError("Unable to load membership QR.");
+        }
+      } finally {
+        if (!cancelled) setMembershipQrLoading(false);
+      }
+    };
+
+    fetchMembershipQr();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    profile.membership?.expireAt,
+    profile.membership?.isVip,
+    profile.membership?.subscriptionId,
+  ]);
 
   // ── Toast helper ───────────────────────────────────────────────────────────
   const showToast = (msg, type = "success") => {
@@ -947,8 +1004,35 @@ export default function CustomerProfile() {
                     </p>
                   </div>
                 )}
+                <button
+                  type="button"
+                  onClick={() => setMembershipQrOpen(true)}
+                  disabled={membershipQrLoading || !membershipQr}
+                  className="inline-flex items-center gap-2 text-[11px] bg-yellow-400 text-black px-6 py-2.5 rounded-full font-black hover:bg-yellow-300 transition-all uppercase tracking-wider shadow-[0_0_18px_rgba(234,179,8,0.25)] hover:shadow-[0_0_28px_rgba(234,179,8,0.4)] hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0"
+                >
+                  <QrCode size={15} />
+                  {membershipQrLoading ? "Loading QR..." : membershipQr ? "Show QR" : "QR unavailable"}
+                </button>
+                {membershipQrError && (
+                  <p className="max-w-52 text-center text-[10px] leading-4 text-red-300 md:text-right">
+                    {membershipQrError}
+                  </p>
+                )}
                 {profile.membership.expireAt && (
-                  <button onClick={() => navigate('/membership')} className="text-[11px] bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 px-6 py-2.5 rounded-full font-bold hover:bg-yellow-500/20 transition-all uppercase tracking-wider shadow-[0_0_15px_rgba(234,179,8,0.15)] hover:shadow-[0_0_25px_rgba(234,179,8,0.3)] hover:-translate-y-0.5">
+                  <button
+                    onClick={() => {
+                      if (
+                        profile.membership.reservedSlots?.some(
+                          (slot) => slot.entitlementId
+                        )
+                      ) {
+                        window.location.href = "/membership";
+                        return;
+                      }
+                      setShowRenewModal(true);
+                    }}
+                    className="text-[11px] bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 px-6 py-2.5 rounded-full font-bold hover:bg-yellow-500/20 transition-all uppercase tracking-wider shadow-[0_0_15px_rgba(234,179,8,0.15)] hover:shadow-[0_0_25px_rgba(234,179,8,0.3)] hover:-translate-y-0.5"
+                  >
                     Renew Pass
                   </button>
                 )}
@@ -2114,6 +2198,70 @@ export default function CustomerProfile() {
           )}
         </div>
       </section>
+
+      <RenewModal
+        isOpen={showRenewModal}
+        membership={profile.membership}
+        onClose={() => setShowRenewModal(false)}
+        onSuccess={() => {
+          setShowRenewModal(false);
+          window.location.reload();
+        }}
+      />
+
+      {membershipQrOpen && membershipQr && (
+        <div
+          className="fixed inset-0 z-[180] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="profile-membership-qr-title"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setMembershipQrOpen(false);
+          }}
+        >
+          <div className="w-full max-w-sm rounded-3xl border border-yellow-500/25 bg-[#11100c] p-6 text-center shadow-[0_30px_100px_rgba(0,0,0,0.7)]">
+            <div className="flex items-start justify-between text-left">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-yellow-500/65">
+                  Kiosk fallback access
+                </p>
+                <h3
+                  id="profile-membership-qr-title"
+                  className="mt-1 text-xl font-black text-yellow-300"
+                >
+                  Membership QR
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMembershipQrOpen(false)}
+                className="flex h-10 w-10 items-center justify-center rounded-xl text-white/40 transition hover:bg-white/5 hover:text-white"
+                aria-label="Close membership QR"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="mx-auto mt-6 inline-flex rounded-2xl bg-white p-4 shadow-[0_12px_45px_rgba(234,179,8,0.18)]">
+              <QRCodeSVG value={membershipQr} size={230} level="M" includeMargin />
+            </div>
+            <p className="mt-5 text-sm leading-6 text-white/55">
+              Show this code to staff when the kiosk is unavailable. Staff will verify the
+              vehicle and capture a check-in or check-out photo.
+            </p>
+            <p className="mt-2 text-xs font-semibold text-yellow-500/70">
+              Valid until{" "}
+              {profile.membership.expireAt
+                ? new Date(profile.membership.expireAt).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "2-digit",
+                    year: "numeric",
+                  })
+                : "your membership ends"}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ════════════════════ TOAST ════════════════════ */}
       {toast && (

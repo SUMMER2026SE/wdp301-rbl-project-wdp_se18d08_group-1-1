@@ -23,6 +23,7 @@ import {
 import { QRCodeDisplay } from '@/components/booking/QRCodeDisplay';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
 import { useBooking } from '@/hooks/useBooking';
+import { bookingService } from '@/services/BookingService';
 import type { BookingStackParamList } from '@/navigation/BookingStackNavigator';
 import bookingService from '@/services/BookingService';
 import { vehiclesService } from '@/services/api/vehicles';
@@ -357,6 +358,28 @@ export const BookingDetailScreen = ({ navigation, route }: Props) => {
           </View>
           {floorName ? <Text style={styles.floorName}>Floor: {floorName}</Text> : null}
         </View>
+
+        {['confirmed', 'active', 'paused'].includes(booking.status) ? (
+          <View style={styles.section}>
+            <SectionTitle>Booking QR</SectionTitle>
+            {qrLoading ? (
+              <ActivityIndicator color={COLORS.gold} size="large" />
+            ) : qrPayload ? (
+              <>
+                <QRCodeDisplay
+                  value={qrPayload}
+                  reference={booking._id}
+                  showBrightnessControl
+                />
+                <Text style={styles.qrHint}>
+                  Present this same code on mobile or web to the kiosk or a staff member.
+                </Text>
+              </>
+            ) : (
+              <Text style={styles.qrError}>{qrError || 'This QR code is no longer available.'}</Text>
+            )}
+          </View>
+        ) : null}
 
         <View style={styles.section}>
           <SectionTitle>Booking time</SectionTitle>
@@ -720,6 +743,18 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.lg,
     borderWidth: 1,
     padding: SPACING.md,
+  },
+  qrHint: {
+    color: COLORS.textMuted,
+    fontSize: FONT_SIZES.sm,
+    lineHeight: 20,
+    marginTop: SPACING.sm,
+    textAlign: 'center',
+  },
+  qrError: {
+    color: COLORS.error,
+    fontSize: FONT_SIZES.sm,
+    textAlign: 'center',
   },
   plateBig: {
     alignSelf: 'center',

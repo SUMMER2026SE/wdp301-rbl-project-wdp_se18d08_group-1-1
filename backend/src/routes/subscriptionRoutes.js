@@ -3,6 +3,22 @@ const router = express.Router();
 const subscriptionController = require('../controllers/subscriptionController');
 const { protect, authorize } = require('../middlewares/authMiddleware');
 const { requirePolicyAcceptance } = require('../middlewares/policyAcceptanceMiddleware');
+const renewalController = require('../controllers/subscriptionRenewalController');
+const entitlementRenewalController = require('../controllers/membershipEntitlementRenewalController');
+const { body, param } = require('express-validator');
+const {
+  subscriptionIdValidator,
+  renewalPaymentValidator,
+  renewalVerifyValidator,
+} = require('../validators/subscriptionValidator');
+const { isEnabled, defaultForCurrentEnvironment } = require('../utils/featureFlags');
+
+const renewalEnabled = (req, res, next) => {
+  if (!isEnabled('SUBSCRIPTION_RENEWAL_ENABLED', defaultForCurrentEnvironment())) {
+    return res.status(404).json({ success: false, message: 'Renewal is not enabled.' });
+  }
+  next();
+};
 
 router.use(protect);
 

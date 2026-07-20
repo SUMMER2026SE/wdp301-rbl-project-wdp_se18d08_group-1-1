@@ -1,10 +1,9 @@
 const Session = require('../models/Session');
 const Booking = require('../models/Booking');
 const notifTriggers = require('./notificationTriggers');
-const pricingEngine = require('./pricingEngine');
-const walletService = require('./walletService');
 const contractService = require('./contractService');
-
+const bookingRefundService = require('./bookingRefundService');
+const { isEnabled } = require('../utils/featureFlags');
 const CHECK_INTERVAL_MS = 60 * 1000; // 1 minute
 const CONTRACT_EXPIRATION_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const LOW_BALANCE_THRESHOLD = 30000; // 30,000 VND
@@ -64,19 +63,34 @@ async function checkBookings(app) {
     });
 
     for (const booking of noShowBookings) {
-      booking.status = 'CANCELLED';
-      await booking.save();
+      try {
+      const refundBreakdown = await bookingRefundService.quoteNoShow(booking);
+      await bookingRefundService.settleBookingEvent({
+        bookingId: booking._id,
+        eventKey: `booking:${booking._id}:no-show`,
+        eventType: 'no_show',
+        calculation: refundBreakdown,
+        description: `Settle no-show booking ${booking._id}`,
+        applyState: async ({ booking: currentBooking }) => {
+          if (currentBooking.status !== 'EXPIRED') {
+            throw Object.assign(new Error('Booking is no longer expired'), {
+              statusCode: 409,
+            });
+          }
+          currentBooking.status = 'CANCELLED';
+        },
+      });
       console.log(`[ParkingScheduler] Đặt chỗ ${booking._id} của xe ${booking.licensePlate} bị hủy hoàn toàn do trễ quá 30 phút.`);
 
       if (booking.userId) {
         notifTriggers.notifyBookingCancelled(app, booking.userId, {
           bookingId: booking._id.toString(),
           slotInfo: booking.parkingSlot,
-          reason: 'Quá 30 phút từ giờ bắt đầu. Booking đã bị hủy và không được hoàn tiền (0%).'
+          reason: `Quá 30 phút từ giờ bắt đầu. Booking đã bị hủy và hoàn ${refundBreakdown.appliedRefundPercent || 0}% theo policy.`
         }).catch(err => console.error('Failed to send cancelled no-show notification:', err));
-
-        // Không hoàn tiền cho lỗi No-show theo chính sách mới
-        // (Booking tự động huỷ sau 30 phút do khách không đến -> Hoàn 0%)
+      }
+      } catch (error) {
+        console.error(`[ParkingScheduler] Failed to settle no-show booking ${booking._id}:`, error);
       }
     }
 
@@ -88,34 +102,30 @@ async function checkBookings(app) {
     });
 
     for (const booking of pausedBookingsToComplete) {
-      booking.status = 'COMPLETED';
-      await booking.save();
-      console.log(`[ParkingScheduler] Booking PAUSED ${booking._id} tự động chuyển sang COMPLETED do hết thời gian chờ quay lại.`);
-
-      // Tính tiền thực tế đã sử dụng và hoàn phần còn thừa
-      if (booking.userId && booking.prepaidAmount > 0) {
-        try {
-          const sessions = await Session.find({ bookingId: booking._id });
-          let totalSpent = 0;
-          for (const sess of sessions) {
-            const checkout = sess.checkOutTime || now;
-            const pricing = await pricingEngine.calculatePrice(sess.checkInTime, checkout);
-            totalSpent += pricing.finalTotal;
-          }
-
-          const refundAmount = booking.prepaidAmount - totalSpent;
-          if (refundAmount > 0) {
-            await walletService.creditWallet(
-              booking.userId,
-              refundAmount,
-              'REFUND',
-              `Hoàn tiền trả sớm tự động (PAUSED) - Biển số ${booking.licensePlate}`,
-              { refSource: 'booking', refSourceId: booking._id }
-            );
-          }
-        } catch (refundErr) {
-          console.error(`[ParkingScheduler] Lỗi hoàn phí tự động cho booking PAUSED ${booking._id}:`, refundErr.message);
-        }
+      try {
+        const refundBreakdown = await bookingRefundService.quoteEarlyCheckout(
+          booking,
+          null,
+          now
+        );
+        await bookingRefundService.settleBookingEvent({
+          bookingId: booking._id,
+          eventKey: `booking:${booking._id}:early-checkout`,
+          eventType: 'paused_completion',
+          calculation: refundBreakdown,
+          description: `Settle paused booking ${booking._id}`,
+          applyState: async ({ booking: currentBooking }) => {
+            if (currentBooking.status !== 'PAUSED') {
+              throw Object.assign(new Error('Booking is no longer paused'), {
+                statusCode: 409,
+              });
+            }
+            currentBooking.status = 'COMPLETED';
+          },
+        });
+        console.log(`[ParkingScheduler] Booking PAUSED ${booking._id} tự động chuyển sang COMPLETED do hết thời gian chờ quay lại.`);
+      } catch (refundErr) {
+        console.error(`[ParkingScheduler] Lỗi hoàn phí tự động cho booking PAUSED ${booking._id}:`, refundErr.message);
       }
     }
   } catch (err) {
@@ -196,11 +206,95 @@ async function checkExpiredContracts(app) {
 async function checkVIPSubscriptions(app) {
   try {
     const Subscription = require('../models/Subscription');
+    const MembershipSlotEntitlement = require('../models/MembershipSlotEntitlement');
+    const {
+      recomputeUserMembership,
+    } = require('./membershipProjectionService');
     const now = new Date();
     const threeDaysFromNow = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+    const Slot = require('../models/Slot');
+    const {
+      releaseExpiredTransferLocks,
+    } = require('./membershipEntitlementTransferService');
+    await releaseExpiredTransferLocks(now);
+
+    const entitlementSubscriptions = await MembershipSlotEntitlement.distinct(
+      'sourceSubscriptionId'
+    );
+    const expiringEntitlements = await MembershipSlotEntitlement.find({
+      status: 'active',
+      expireAt: { $lte: threeDaysFromNow, $gt: now },
+      expireWarningSentAt: null,
+    });
+    for (const entitlement of expiringEntitlements) {
+      notifTriggers.notifySystemMessage(app, entitlement.ownerId, {
+        title: 'VIP parking space expiring',
+        body: `Your VIP space ${entitlement.slotCode} expires on ${entitlement.expireAt.toLocaleDateString()}. Renew this space to keep it reserved.`,
+        type: 'SYSTEM',
+      }).catch((err) => console.error('Failed to send VIP entitlement warning:', err));
+      entitlement.expireWarningSentAt = now;
+      await entitlement.save();
+    }
+
+    const expiredEntitlements = await MembershipSlotEntitlement.find({
+      status: { $in: ['active', 'transfer_locked'] },
+      expireAt: { $lte: now },
+    });
+    const affectedUsers = new Set();
+    const affectedSubscriptions = new Set();
+    for (const entitlement of expiredEntitlements) {
+      const updated = await MembershipSlotEntitlement.findOneAndUpdate(
+        {
+          _id: entitlement._id,
+          status: { $in: ['active', 'transfer_locked'] },
+          expireAt: { $lte: now },
+        },
+        { $set: { status: 'expired' } },
+        { new: true }
+      );
+      if (!updated) continue;
+      await Slot.updateOne(
+        {
+          _id: updated.slotId,
+          reservedByEntitlementId: updated._id,
+        },
+        {
+          $unset: {
+            reservedFor: '',
+            reservedBySubscriptionId: '',
+            reservedByEntitlementId: '',
+            reservedUntil: '',
+          },
+        }
+      );
+      affectedUsers.add(String(updated.ownerId));
+      affectedSubscriptions.add(String(updated.sourceSubscriptionId));
+      notifTriggers.notifySystemMessage(app, updated.ownerId, {
+        title: 'VIP parking space expired',
+        body: `Your VIP space ${updated.slotCode} has expired and was released.`,
+        type: 'SYSTEM',
+      }).catch((err) => console.error('Failed to send VIP entitlement expiry:', err));
+    }
+    for (const userId of affectedUsers) {
+      await recomputeUserMembership(userId, { rotateQr: true, now });
+    }
+    for (const subscriptionId of affectedSubscriptions) {
+      const remaining = await MembershipSlotEntitlement.findOne({
+        sourceSubscriptionId: subscriptionId,
+        status: { $in: ['active', 'transfer_locked'] },
+        expireAt: { $gt: now },
+      }).select('_id expireAt');
+      if (!remaining) {
+        await Subscription.updateOne(
+          { _id: subscriptionId },
+          { $set: { status: 'expired' } }
+        );
+      }
+    }
 
     // 1. Send warning for subscriptions expiring in <= 3 days
     const expiringSubscriptions = await Subscription.find({
+      _id: { $nin: entitlementSubscriptions },
       status: 'active',
       expireAt: { $lte: threeDaysFromNow, $gt: now },
       expireWarningSent: { $ne: true }
@@ -221,31 +315,74 @@ async function checkVIPSubscriptions(app) {
 
     // 2. Mark expired subscriptions
     const expiredSubscriptions = await Subscription.find({
+      _id: { $nin: entitlementSubscriptions },
       status: 'active',
       expireAt: { $lte: now }
     });
 
-    const Slot = require('../models/Slot');
+    const User = require('../models/User');
+    const useOwnerGuard = isEnabled(
+      'SUBSCRIPTION_SLOT_OWNER_GUARD_ENABLED',
+      false
+    );
     for (const sub of expiredSubscriptions) {
-      sub.status = 'expired';
-      await sub.save();
-      
-      // Release slots
-      for (const slot of sub.slots) {
-        await Slot.updateOne(
-          { floorID: slot.floorId, slotNumber: slot.slotCode },
-          { $unset: { reservedFor: "" } }
-        );
+      const expiringSubscription = useOwnerGuard
+        ? await Subscription.findOneAndUpdate(
+          { _id: sub._id, status: 'active', expireAt: { $lte: now } },
+          { status: 'expired' },
+          { new: true }
+        )
+        : sub;
+
+      if (!expiringSubscription) {
+        continue;
+      }
+      if (!useOwnerGuard) {
+        expiringSubscription.status = 'expired';
+        await expiringSubscription.save();
       }
       
-      if (sub.user) {
-        notifTriggers.notifySystemMessage(app, sub.user, {
+      // Release slots
+      for (const slot of expiringSubscription.slots) {
+        const slotFilter = {
+          floorID: slot.floorId,
+          slotNumber: slot.slotCode,
+        };
+        if (useOwnerGuard) {
+          slotFilter.reservedBySubscriptionId = expiringSubscription._id;
+        }
+        await Slot.updateOne(slotFilter, {
+          $unset: {
+            reservedFor: '',
+            reservedBySubscriptionId: '',
+            reservedByEntitlementId: '',
+            reservedUntil: '',
+          },
+        });
+      }
+
+      await User.updateOne(
+        {
+          _id: expiringSubscription.user,
+          'membership.expireAt': { $lte: now },
+        },
+        {
+          $set: {
+            'membership.isVip': false,
+            'membership.expireAt': null,
+            'membership.packageId': null,
+          },
+        }
+      );
+      
+      if (expiringSubscription.user) {
+        notifTriggers.notifySystemMessage(app, expiringSubscription.user, {
           title: 'Hết hạn VIP Pass / VIP Pass Expired',
           body: `Gói đỗ xe tháng của bạn đã hết hạn. Vị trí ô đỗ cố định đã được mở lại cho mọi người. / Your monthly pass has expired. Your fixed parking slot has been released.`,
           type: 'SYSTEM'
         }).catch(err => console.error('Failed to send VIP expired:', err));
       }
-      console.log(`[ParkingScheduler] Marked subscription ${sub._id} as expired and released slots.`);
+      console.log(`[ParkingScheduler] Marked subscription ${expiringSubscription._id} as expired and released slots.`);
     }
 
   } catch (err) {

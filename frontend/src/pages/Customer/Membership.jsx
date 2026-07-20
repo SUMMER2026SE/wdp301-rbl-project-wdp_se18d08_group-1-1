@@ -1,7 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Crown, Sparkles, Check, Loader2, ArrowRight, AlertCircle, QrCode, Wallet } from 'lucide-react';
-import { getTicketPackages, createSubscriptionPayment, verifySubscriptionPayment, paySubscriptionWithWallet } from '../../services/subscriptionService';
+import {
+  getTicketPackages,
+  createSubscriptionPayment,
+  verifySubscriptionPayment,
+  paySubscriptionWithWallet,
+  getMembershipStatus,
+} from '../../services/subscriptionService';
 import { getWalletInfo } from '../../services/walletService';
 import { getMyVehicles } from '../../services/vehicleService';
 import { apiFetch } from '../../services/api';
@@ -29,6 +35,7 @@ export default function Membership() {
   const [success, setSuccess] = useState(false);
   const [walletBalance, setWalletBalance] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState('payos');
+  const [membership, setMembership] = useState(null);
   const [policyPrompt, setPolicyPrompt] = useState({
     open: false,
     missingPolicies: [],
@@ -41,9 +48,14 @@ export default function Membership() {
       return (typeOrder[a.type] ?? 2) - (typeOrder[b.type] ?? 2) || (a.price || 0) - (b.price || 0);
     });
 
-  const activePackage = subscriptionPackages.find(pkg => user?.membership?.packageId === pkg._id);
-  const activePackageType = activePackage?.type || user?.membership?.packageType;
-  const isVipActive = Boolean(user?.membership?.isVip);
+  const isVipActive = Boolean(membership?.isVip ?? user?.membership?.isVip);
+  const approvedVehicleCount = vehicles.filter(
+    (vehicle) => !vehicle.status || vehicle.status === 'approved'
+  ).length;
+  const availablePurchaseSlots = Math.max(
+    0,
+    Math.min(3, approvedVehicleCount) - (membership?.reservedSlots?.length || 0)
+  );
 
   const syncCurrentUserProfile = async () => {
     const token = localStorage.getItem('accessToken');
@@ -77,7 +89,7 @@ export default function Membership() {
         toast.error('Payment transaction was cancelled.');
         window.history.replaceState({}, document.title, window.location.pathname);
       } else {
-        setVerifying(true);
+        const verifyingTimerId = window.setTimeout(() => setVerifying(true), 0);
         let attempts = 0;
         
         const intervalId = setInterval(async () => {
@@ -108,9 +120,13 @@ export default function Membership() {
           }
         }, 3000);
 
-        return () => clearInterval(intervalId);
+        return () => {
+          window.clearTimeout(verifyingTimerId);
+          clearInterval(intervalId);
+        };
       }
     }
+    return undefined;
   }, []);
 
   useEffect(() => {
@@ -136,14 +152,15 @@ export default function Membership() {
     const fetchData = async () => {
       try {
         setLoading(true);
-        const [pkgRes, vRes, floorRes, profileRes, walletRes] = await Promise.all([
+        const [pkgRes, vRes, floorRes, profileRes, walletRes, membershipRes] = await Promise.all([
           getTicketPackages(),
           getMyVehicles(),
           fetch(`${import.meta.env.VITE_API_BASE_URL}/parking-floors`).then(r => r.json()),
           fetch(`${import.meta.env.VITE_API_BASE_URL}/profile`, {
             headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
           }).then(r => r.json()),
-          getWalletInfo()
+          getWalletInfo(),
+          getMembershipStatus(),
         ]);
         
         if (pkgRes.ok && pkgRes.data?.data) {
@@ -164,6 +181,9 @@ export default function Membership() {
         }
         if (walletRes.ok && walletRes.data?.success) {
           setWalletBalance(walletRes.data.data.balance || 0);
+        }
+        if (membershipRes.ok && membershipRes.data?.success) {
+          setMembership(membershipRes.data.data);
         }
       } catch (err) {
         console.error(err);
@@ -246,16 +266,15 @@ export default function Membership() {
     };
   };
 
-  const getPackageButton = (pkg) => {
-    if (isVipActive && activePackage?._id === pkg._id) {
-      return { disabled: true, label: 'In use' };
+  const getPackageButton = () => {
+    if (availablePurchaseSlots <= 0) {
+      return { disabled: true, label: 'No available entitlement capacity' };
     }
 
-    if (isVipActive && activePackageType === 'yearly' && pkg.type === 'monthly') {
-      return { disabled: true, label: 'Included in the Yearly plan' };
-    }
-
-    return { disabled: false, label: 'Upgrade now' };
+    return {
+      disabled: false,
+      label: isVipActive ? 'Add another space' : 'Upgrade now',
+    };
   };
 
   const handleSelectSlot = (floorId, slotData) => {
@@ -265,8 +284,8 @@ export default function Membership() {
       setSelectedSlots(prev => prev.filter((_, i) => i !== existingIndex));
     } else {
       // Add
-      const maxSlots = Math.min(3, vehicles.length);
-      if (vehicles.length === 0) {
+      const maxSlots = availablePurchaseSlots;
+      if (approvedVehicleCount === 0) {
         toast.error("You need to add a vehicle before buying a VIP pass.");
         return;
       }
@@ -496,9 +515,9 @@ export default function Membership() {
               <div>
                 <h3 className="text-xl font-black text-gray-900">Choose Fixed Parking Slots</h3>
                 <p className="text-gray-500 mt-1">
-                You currently have <span className="font-bold text-gray-900">{vehicles.length}</span> registered vehicles. 
-                You can select up to <span className="font-bold text-gray-900">{Math.min(3, vehicles.length)}</span> parking slots.
-                {vehicles.length > 1 && (
+                You currently have <span className="font-bold text-gray-900">{approvedVehicleCount}</span> approved vehicles.
+                You can add up to <span className="font-bold text-gray-900">{availablePurchaseSlots}</span> parking slots.
+                {approvedVehicleCount > 1 && (
                   <span className="block mt-1 text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded-md">
                     Tip: You can select fewer slots than vehicles to share slots among your vehicles.
                   </span>
@@ -601,7 +620,7 @@ export default function Membership() {
                   )}
 
                   <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-3 mt-4">
-                    Selected ({selectedSlots.length} / {Math.min(3, vehicles.length)})
+                    Selected ({selectedSlots.length} / {availablePurchaseSlots})
                   </label>
                   <div className="space-y-2">
                     {selectedSlots.map(s => (

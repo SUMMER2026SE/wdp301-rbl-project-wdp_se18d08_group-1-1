@@ -7,14 +7,17 @@ export interface StaffCustomerProfile {
   lastName?: string;
   fullName?: string;
   phone?: string;
+  avatar?: string;
 }
 
 export interface StaffCustomer {
   _id: string;
   username?: string;
   email: string;
-  status?: 'active' | 'blocked' | 'inactive' | string;
+  role?: 'customer';
+  status?: boolean;
   createdAt?: string;
+  updatedAt?: string;
   profile?: StaffCustomerProfile;
 }
 
@@ -34,6 +37,21 @@ export interface StaffBooking {
   floorId?: { _id?: string; name?: string; floorNumber?: number } | string;
 }
 
+export type StaffBookingQrAction = 'CHECK_IN' | 'CHECK_OUT';
+
+export interface StaffBookingQrResolution {
+  booking: StaffBooking;
+  allowedActions: StaffBookingQrAction[];
+}
+
+export interface StaffBookingTransitionPayload {
+  action: StaffBookingQrAction;
+  payload: string;
+  evidenceImageBase64: string;
+  idempotencyKey: string;
+  reason: string;
+}
+
 export interface StaffSubscription {
   _id: string;
   amount: number;
@@ -43,7 +61,39 @@ export interface StaffSubscription {
   expireAt: string;
   user?: { _id?: string; username?: string; email?: string; status?: string; vehicles?: string[] };
   ticketPackage?: { _id?: string; name?: string; type?: string; price?: number };
-  slots?: Array<{ floorId?: { _id?: string; name?: string; floorNumber?: number } | string; slotCode: string }>;
+  slots?: Array<{
+    entitlementId?: string;
+    sourceSubscriptionId?: string;
+    floorId?: { _id?: string; name?: string; floorNumber?: number } | string;
+    slotCode: string;
+    status?: string;
+    expireAt?: string;
+  }>;
+}
+
+export interface StaffMembershipVehicle {
+  _id: string;
+  licensePlate: string;
+  vehicleType?: string;
+  brand?: string;
+  model?: string;
+  color?: string;
+}
+
+export interface StaffMembershipQrResolution {
+  credentialType: 'MEMBERSHIP';
+  membership: StaffSubscription;
+  vehicles: StaffMembershipVehicle[];
+  activeSessions: StaffSession[];
+  allowedActions: StaffBookingQrAction[];
+}
+
+export interface StaffMembershipTransitionPayload extends StaffBookingTransitionPayload {
+  entitlementId?: string;
+  vehicleId?: string;
+  floorId?: string;
+  parkingSlot?: string;
+  sessionId?: string;
 }
 
 export interface TicketPackage {
@@ -56,38 +106,54 @@ export interface TicketPackage {
   createdAt?: string;
 }
 
-export interface TicketPackageInput {
-  name: string;
-  type: TicketPackage['type'];
-  price: number;
-  description?: string;
-  isActive: boolean;
-}
-
 export interface StaffSession {
   _id: string;
   licensePlate: string;
   parkingSlot?: string;
-  floorId?: string;
+  floorId?: string | { _id?: string; name?: string; floorNumber?: number };
   checkInTime: string;
   checkOutTime?: string;
-  status: string;
+  status: 'active' | 'completed' | 'cancelled';
+  phone?: string;
+  vehicleType?: string;
+  source?: 'kiosk' | 'app_booking' | 'booking' | 'walk_in' | 'staff_manual';
+  totalPrice?: number;
+  paymentStatus?: string;
+  expectedDurationHours?: number;
+  entryImage_url?: string;
+  exitImage_url?: string;
+  entryCamera?: string;
+  exitCamera?: string;
+  entryGate?: string;
+  exitGate?: string;
 }
 
 export const staffService = {
   getCustomers: () => apiClient.get<APIResponse<StaffCustomer[]>>('/staff/users'),
-  updateCustomerStatus: (id: string, status: string) =>
+  updateCustomerStatus: (id: string, status: boolean) =>
     apiClient.put<APIResponse<StaffCustomer>>(`/staff/users/${id}/status`, { status }),
   updateCustomer: (id: string, data: StaffCustomerProfile) =>
     apiClient.put<APIResponse<StaffCustomer>>(`/staff/users/${id}`, data),
   getBookings: (params?: { date?: string; floorId?: string }) =>
     apiClient.get<APIResponse<StaffBooking[]>>('/bookings/all', { params }),
+  resolveBookingQr: (payload: string) =>
+    apiClient.post<APIResponse<StaffBookingQrResolution>>('/staff/bookings/qr/resolve', { payload }),
+  transitionBookingByQr: (bookingId: string, data: StaffBookingTransitionPayload) =>
+    apiClient.post<APIResponse<{ booking: StaffBooking }>>(
+      `/staff/bookings/${bookingId}/transition`,
+      data,
+    ),
+  resolveMembershipQr: (payload: string) =>
+    apiClient.post<APIResponse<StaffMembershipQrResolution>>(
+      '/staff/memberships/qr/resolve',
+      { payload },
+    ),
+  transitionMembershipByQr: (credentialId: string, data: StaffMembershipTransitionPayload) =>
+    apiClient.post<APIResponse<{ session: StaffSession }>>(
+      `/staff/memberships/${credentialId}/transition`,
+      data,
+    ),
   getSubscriptions: () => apiClient.get<APIResponse<StaffSubscription[]>>('/subscriptions/all'),
   getTicketPackages: () => apiClient.get<APIResponse<TicketPackage[]>>('/ticket-packages'),
-  createTicketPackage: (data: TicketPackageInput) =>
-    apiClient.post<APIResponse<TicketPackage>>('/ticket-packages', data),
-  updateTicketPackage: (id: string, data: TicketPackageInput) =>
-    apiClient.put<APIResponse<TicketPackage>>(`/ticket-packages/${id}`, data),
-  deleteTicketPackage: (id: string) => apiClient.delete<APIResponse>(`/ticket-packages/${id}`),
   getSessions: () => apiClient.get<APIResponse<StaffSession[]>>('/sessions'),
 };

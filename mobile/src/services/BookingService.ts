@@ -26,6 +26,13 @@ import type { SignedQrResponse } from '@/types/qr.types';
 
 type UnknownRecord = Record<string, unknown>;
 
+export interface BookingQrData {
+  available: boolean;
+  bookingStatus: string;
+  payload: string | null;
+  reason: string | null;
+}
+
 const asRecord = (value: unknown): UnknownRecord | undefined =>
   value !== null && typeof value === 'object' && !Array.isArray(value)
     ? (value as UnknownRecord)

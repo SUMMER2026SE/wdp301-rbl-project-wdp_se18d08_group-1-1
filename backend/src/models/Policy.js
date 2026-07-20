@@ -46,6 +46,10 @@ const policySchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    controlsBookingRefunds: {
+      type: Boolean,
+      default: false,
+    },
     currentVersionId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'PolicyVersion',
@@ -89,6 +93,13 @@ policySchema.pre('validate', function normalizePolicySlug(next) {
 
 policySchema.index({ status: 1, requiresAcceptance: 1 });
 policySchema.index({ deletedAt: 1 });
+policySchema.index(
+  { controlsBookingRefunds: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { controlsBookingRefunds: true, deletedAt: null },
+  }
+);
 
 module.exports = mongoose.model('Policy', policySchema);
 module.exports.POLICY_CATEGORIES = POLICY_CATEGORIES;

@@ -9,16 +9,21 @@ import {
   Send,
   Trash2,
 } from 'lucide-react';
+import RefundRuleEditor from '../../components/policies/RefundRuleEditor';
+import RefundRulePreview from '../../components/policies/RefundRulePreview';
 import {
   archivePolicy,
+  createDefaultRefundRule,
   createPolicy,
   createPolicyVersion,
   deletePolicy,
   getAdminPolicies,
   getAdminPolicy,
   publishPolicyVersion,
+  normalizeRefundRule,
   updatePolicy,
   updatePolicyVersion,
+  validateRefundRule,
 } from '../../services/policyService';
 
 const categories = [
@@ -36,10 +41,12 @@ const emptyCreateForm = {
   category: 'terms',
   description: '',
   requiresAcceptance: true,
+  controlsBookingRefunds: false,
   summary: '',
   content: '',
   effectiveDate: '',
   changeNote: '',
+  refundRule: null,
 };
 
 const formatDate = (value) =>
@@ -61,6 +68,7 @@ export default function PolicyManagement() {
   const [policies, setPolicies] = useState([]);
   const [selectedId, setSelectedId] = useState('');
   const [detail, setDetail] = useState(null);
+  const [isCreating, setIsCreating] = useState(false);
   const [createForm, setCreateForm] = useState(emptyCreateForm);
   const [metadata, setMetadata] = useState(null);
   const [draft, setDraft] = useState(null);
@@ -69,6 +77,8 @@ export default function PolicyManagement() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
+  const [createRuleErrors, setCreateRuleErrors] = useState({});
+  const [draftRuleErrors, setDraftRuleErrors] = useState({});
 
   const selectedPolicy = detail?.policy;
   const versions = useMemo(() => detail?.versions || [], [detail?.versions]);
@@ -105,6 +115,7 @@ export default function PolicyManagement() {
         category: nextDetail.policy.category || 'other',
         description: nextDetail.policy.description || '',
         requiresAcceptance: Boolean(nextDetail.policy.requiresAcceptance),
+        controlsBookingRefunds: Boolean(nextDetail.policy.controlsBookingRefunds),
       });
 
       const nextDraft = nextDetail.versions.find((version) => version.status === 'draft') || null;
@@ -118,9 +129,13 @@ export default function PolicyManagement() {
                 ? new Date(nextDraft.effectiveDate).toISOString().slice(0, 10)
                 : '',
               changeNote: nextDraft.changeNote || '',
+              refundRule: nextDetail.policy.controlsBookingRefunds
+                ? normalizeRefundRule(nextDraft.refundRule)
+                : null,
             }
           : null
       );
+      setDraftRuleErrors({});
     } else {
       setError(res.data?.message || 'Unable to load policy details.');
     }
@@ -139,15 +154,30 @@ export default function PolicyManagement() {
 
   const handleCreate = async (event) => {
     event.preventDefault();
+    const ruleErrors = createForm.controlsBookingRefunds
+      ? validateRefundRule(createForm.refundRule)
+      : {};
+    setCreateRuleErrors(ruleErrors);
+    if (Object.keys(ruleErrors).length > 0) {
+      setError('Please fix the refund rule errors before creating this policy.');
+      return;
+    }
+
     setSaving(true);
     setError('');
-    const res = await createPolicy(createForm);
+    const payload = {
+      ...createForm,
+      refundRule: createForm.controlsBookingRefunds
+        ? normalizeRefundRule(createForm.refundRule)
+        : undefined,
+    };
+    const res = await createPolicy(payload);
     if (res.ok && res.data?.success) {
-      showToast('Policy draft created');
+      showToast('Draft created');
       setCreateForm(emptyCreateForm);
+      setIsCreating(false);
       await fetchPolicies();
-      const policyId = res.data.data?.policy?._id;
-      if (policyId) setSelectedId(policyId);
+      setSelectedId(res.data.data._id);
     } else {
       setError(res.data?.message || 'Unable to create policy.');
     }
@@ -171,9 +201,24 @@ export default function PolicyManagement() {
 
   const handleDraftSave = async () => {
     if (!selectedPolicy || !activeDraft) return;
+    const ruleErrors = selectedPolicy.controlsBookingRefunds
+      ? validateRefundRule(draft?.refundRule)
+      : {};
+    setDraftRuleErrors(ruleErrors);
+    if (Object.keys(ruleErrors).length > 0) {
+      setError('Please fix the refund rule errors before saving this draft.');
+      return;
+    }
+
     setSaving(true);
     setError('');
-    const res = await updatePolicyVersion(selectedPolicy._id, activeDraft._id, draft);
+    const payload = {
+      ...draft,
+      refundRule: selectedPolicy.controlsBookingRefunds
+        ? normalizeRefundRule(draft.refundRule)
+        : undefined,
+    };
+    const res = await updatePolicyVersion(selectedPolicy._id, activeDraft._id, payload);
     if (res.ok && res.data?.success) {
       showToast('Draft saved');
       await loadDetail(selectedPolicy._id);
@@ -188,11 +233,19 @@ export default function PolicyManagement() {
     setSaving(true);
     setError('');
     const current = selectedPolicy.currentVersion || {};
+    const currentPublishedVersion = versions.find(
+      (version) =>
+        version.status === 'published' &&
+        version.versionNumber === selectedPolicy.currentVersionNumber
+    );
     const res = await createPolicyVersion(selectedPolicy._id, {
       title: current.title || selectedPolicy.title,
       summary: current.summary || '',
       content: current.content || '',
       effectiveDate: current.effectiveDate,
+      refundRule: selectedPolicy.controlsBookingRefunds
+        ? normalizeRefundRule(current.refundRule || currentPublishedVersion?.refundRule)
+        : undefined,
     });
     if (res.ok && res.data?.success) {
       showToast('New draft version created');
@@ -205,7 +258,20 @@ export default function PolicyManagement() {
 
   const handlePublish = async () => {
     if (!selectedPolicy || !activeDraft) return;
-    const confirmed = window.confirm('Publish this draft? Published versions cannot be edited later.');
+    const ruleErrors = selectedPolicy.controlsBookingRefunds
+      ? validateRefundRule(draft?.refundRule)
+      : {};
+    setDraftRuleErrors(ruleErrors);
+    if (Object.keys(ruleErrors).length > 0) {
+      setError('Please fix the refund rule errors before publishing this draft.');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      selectedPolicy.controlsBookingRefunds
+        ? 'Publish this draft? The policy text and executable refund rules will become immutable together and will apply to newly paid bookings.'
+        : 'Publish this draft? Published versions cannot be edited later.'
+    );
     if (!confirmed) return;
 
     setSaving(true);
@@ -257,14 +323,14 @@ export default function PolicyManagement() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0D0D0D] p-4 text-white sm:p-6 xl:p-8">
+    <div className="p-6 md:p-8 mx-auto min-h-[calc(100vh-70px)] overflow-auto bg-[#080808] text-white">
       {toast && (
         <div className="fixed right-5 top-5 z-50 rounded-2xl border border-emerald-500/20 bg-emerald-500 px-5 py-3 text-sm font-black text-white shadow-2xl">
           {toast}
         </div>
       )}
 
-      <div className="mx-auto max-w-[1500px]">
+      <div className="max-w-[1400px] mx-auto">
         <div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
           <div>
             <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-yellow-500/20 bg-yellow-500/10 px-3 py-1 text-xs font-black uppercase tracking-[0.2em] text-yellow-300">
@@ -286,116 +352,212 @@ export default function PolicyManagement() {
           </div>
         )}
 
-        <div className="grid gap-6 xl:grid-cols-[420px_1fr]">
+        <div className="grid gap-6 xl:grid-cols-[380px_1fr]">
           <section className="space-y-5">
-            <form
-              onSubmit={handleCreate}
-              className="rounded-3xl border border-white/10 bg-[#171717] p-5"
-            >
-              <div className="mb-4 flex items-center gap-2">
-                <Plus size={17} className="text-yellow-300" />
-                <h2 className="font-black">Create Policy Draft</h2>
-              </div>
-              <div className="space-y-3">
-                <input
-                  value={createForm.title}
-                  onChange={(event) => setCreateForm((current) => ({ ...current, title: event.target.value }))}
-                  className="w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm outline-none focus:border-yellow-400"
-                  placeholder="Policy title"
-                  required
-                />
-                <input
-                  value={createForm.slug}
-                  onChange={(event) => setCreateForm((current) => ({ ...current, slug: event.target.value }))}
-                  className="w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm outline-none focus:border-yellow-400"
-                  placeholder="slug-optional"
-                />
-                <div className="grid grid-cols-2 gap-3">
-                  <select
-                    value={createForm.category}
-                    onChange={(event) => setCreateForm((current) => ({ ...current, category: event.target.value }))}
-                    className="rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm outline-none focus:border-yellow-400"
-                  >
-                    {categories.map(([value, label]) => (
-                      <option key={value} value={value}>{label}</option>
-                    ))}
-                  </select>
-                  <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm font-bold text-gray-300">
-                    <input
-                      type="checkbox"
-                      checked={createForm.requiresAcceptance}
-                      onChange={(event) => setCreateForm((current) => ({ ...current, requiresAcceptance: event.target.checked }))}
-                    />
-                    Required
-                  </label>
-                </div>
-                <textarea
-                  value={createForm.content}
-                  onChange={(event) => setCreateForm((current) => ({ ...current, content: event.target.value }))}
-                  className="min-h-32 w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm outline-none focus:border-yellow-400"
-                  placeholder="Initial policy content"
-                  required
-                />
+            <div className="rounded-3xl border border-white/10 bg-[#171717] flex flex-col h-[calc(100vh-140px)]">
+              <div className="border-b border-white/10 px-5 py-4 flex items-center justify-between">
+                <h2 className="font-black">Policies</h2>
                 <button
-                  type="submit"
-                  disabled={saving}
-                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-yellow-400 px-4 py-3 text-sm font-black text-black transition hover:bg-yellow-300 disabled:opacity-60"
+                  type="button"
+                  onClick={() => {
+                    setSelectedId('');
+                    setDetail(null);
+                    setIsCreating(true);
+                  }}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition ${isCreating ? 'bg-yellow-400 text-black' : 'bg-white/5 text-gray-300 hover:bg-white/10'}`}
                 >
-                  {saving ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
-                  Create draft
+                  <Plus size={14} />
+                  New Policy
                 </button>
               </div>
-            </form>
-
-            <div className="rounded-3xl border border-white/10 bg-[#171717]">
-              <div className="border-b border-white/10 px-5 py-4">
-                <h2 className="font-black">Policies</h2>
-              </div>
-              {loading ? (
-                <div className="flex items-center justify-center gap-3 py-12 text-sm font-bold text-gray-400">
-                  <Loader2 size={16} className="animate-spin" />
-                  Loading policies
-                </div>
-              ) : policies.length === 0 ? (
-                <div className="px-5 py-10 text-center text-sm text-gray-500">
-                  No policies yet.
-                </div>
-              ) : (
-                <div className="max-h-[520px] overflow-y-auto p-2">
-                  {policies.map((policy) => (
-                    <button
-                      key={policy._id}
-                      type="button"
-                      onClick={() => setSelectedId(policy._id)}
-                      className={`mb-2 w-full rounded-2xl border p-4 text-left transition ${
-                        selectedId === policy._id
-                          ? 'border-yellow-400/60 bg-yellow-400/10'
-                          : 'border-white/5 bg-black/40 hover:border-white/20'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <p className="font-black text-white">{policy.title}</p>
-                          <p className="mt-1 text-xs font-semibold text-gray-500">
-                            /{policy.slug} - v{policy.currentVersionNumber || 0}
-                          </p>
+              
+              <div className="flex-1 overflow-y-auto p-3">
+                {loading ? (
+                  <div className="flex items-center justify-center gap-3 py-12 text-sm font-bold text-gray-400">
+                    <Loader2 size={16} className="animate-spin" />
+                    Loading policies
+                  </div>
+                ) : policies.length === 0 ? (
+                  <div className="px-5 py-10 text-center text-sm text-gray-500">
+                    No policies yet.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {policies.map((policy) => (
+                      <button
+                        key={policy._id}
+                        type="button"
+                        onClick={() => {
+                          setIsCreating(false);
+                          setSelectedId(policy._id);
+                        }}
+                        className={`w-full rounded-2xl border p-4 text-left transition ${
+                          selectedId === policy._id
+                            ? 'border-yellow-400/60 bg-yellow-400/10'
+                            : 'border-white/5 bg-black/40 hover:border-white/20'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-black text-white">{policy.title}</p>
+                            <p className="mt-1 text-[11px] font-semibold text-gray-500">
+                              /{policy.slug} - v{policy.currentVersionNumber || 0}
+                            </p>
+                          </div>
+                          <span className={`rounded-full border px-2 py-0.5 text-[9px] font-black uppercase whitespace-nowrap ${statusClass(policy.status)}`}>
+                            {policy.status}
+                          </span>
                         </div>
-                        <span className={`rounded-full border px-2.5 py-1 text-[10px] font-black uppercase ${statusClass(policy.status)}`}>
-                          {policy.status}
-                        </span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </section>
 
-          <section className="rounded-3xl border border-white/10 bg-[#171717] p-5">
-            {!selectedPolicy ? (
-              <div className="flex min-h-[520px] flex-col items-center justify-center text-center text-gray-500">
-                <FileText size={44} className="mb-4 text-gray-700" />
-                <p className="font-bold">Select a policy to edit metadata, drafts, and versions.</p>
+          <section className="rounded-3xl border border-white/10 bg-[#171717] p-5 lg:p-7 min-h-[calc(100vh-140px)]">
+            {isCreating ? (
+              <div className="max-w-2xl">
+                <div className="mb-6 flex items-center gap-2">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-yellow-400/10 text-yellow-400">
+                    <Plus size={20} />
+                  </div>
+                  <h2 className="text-xl font-black">Create New Policy</h2>
+                </div>
+                <form onSubmit={handleCreate} className="space-y-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-black uppercase tracking-widest text-gray-500">Title</span>
+                      <input
+                        value={createForm.title}
+                        onChange={(event) => setCreateForm((current) => ({ ...current, title: event.target.value }))}
+                        className="w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm outline-none focus:border-yellow-400"
+                        placeholder="e.g. Terms of Service"
+                        required
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-black uppercase tracking-widest text-gray-500">Slug (Optional)</span>
+                      <input
+                        value={createForm.slug}
+                        onChange={(event) => setCreateForm((current) => ({ ...current, slug: event.target.value }))}
+                        className="w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm outline-none focus:border-yellow-400"
+                        placeholder="e.g. terms-of-service"
+                      />
+                    </label>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-black uppercase tracking-widest text-gray-500">Category</span>
+                      <select
+                        value={createForm.category}
+                        onChange={(event) =>
+                          setCreateForm((current) => ({
+                            ...current,
+                            category: event.target.value,
+                            controlsBookingRefunds:
+                              event.target.value === 'refund'
+                                ? current.controlsBookingRefunds
+                                : false,
+                            refundRule:
+                              event.target.value === 'refund' ? current.refundRule : null,
+                          }))
+                        }
+                        className="w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm outline-none focus:border-yellow-400"
+                      >
+                        {categories.map(([value, label]) => (
+                          <option key={value} value={value}>{label}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="flex items-end">
+                      <label className="flex h-[46px] w-full cursor-pointer items-center gap-3 rounded-2xl border border-white/10 bg-black px-4 text-sm font-bold text-gray-300 transition hover:bg-white/5">
+                        <input
+                          type="checkbox"
+                          checked={createForm.requiresAcceptance}
+                          onChange={(event) => setCreateForm((current) => ({ ...current, requiresAcceptance: event.target.checked }))}
+                          className="h-4 w-4 accent-yellow-400"
+                        />
+                        Requires customer acceptance
+                      </label>
+                    </div>
+                  </div>
+                  {createForm.category === 'refund' && (
+                    <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-yellow-400/20 bg-yellow-400/[0.05] p-4 text-sm font-bold text-gray-200 transition hover:bg-yellow-400/10">
+                      <input
+                        type="checkbox"
+                        checked={createForm.controlsBookingRefunds}
+                        onChange={(event) => {
+                          setCreateForm((current) => ({
+                            ...current,
+                            controlsBookingRefunds: event.target.checked,
+                            refundRule: event.target.checked
+                              ? normalizeRefundRule(current.refundRule || createDefaultRefundRule())
+                              : null,
+                          }));
+                          setCreateRuleErrors({});
+                          setError('');
+                        }}
+                        className="mt-0.5 h-4 w-4 accent-yellow-400"
+                      />
+                      <div>
+                        Control booking refunds
+                        <span className="mt-1 block text-xs font-normal leading-relaxed text-gray-400">
+                          Designate this refund policy as the executable rule source. Only one policy can be designated.
+                        </span>
+                      </div>
+                    </label>
+                  )}
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-black uppercase tracking-widest text-gray-500">Initial Content</span>
+                    <textarea
+                      value={createForm.content}
+                      onChange={(event) => setCreateForm((current) => ({ ...current, content: event.target.value }))}
+                      className="min-h-48 w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm leading-relaxed outline-none focus:border-yellow-400"
+                      placeholder="Write your policy content here..."
+                      required
+                    />
+                  </label>
+                  {createForm.controlsBookingRefunds && (
+                    <div className="pt-2">
+                      <h3 className="mb-3 text-sm font-black uppercase tracking-widest text-gray-500">Refund Rules Configuration</h3>
+                      <RefundRuleEditor
+                        value={createForm.refundRule}
+                        onChange={(refundRule) => {
+                          setCreateForm((current) => ({ ...current, refundRule }));
+                          setCreateRuleErrors(validateRefundRule(refundRule));
+                          setError('');
+                        }}
+                        errors={createRuleErrors}
+                      />
+                    </div>
+                  )}
+                  <div className="pt-4">
+                    <button
+                      type="submit"
+                      disabled={saving}
+                      className="flex w-full items-center justify-center gap-2 rounded-2xl bg-yellow-400 py-3.5 text-sm font-black text-black shadow-lg shadow-yellow-400/20 transition hover:bg-yellow-300 disabled:opacity-60 sm:w-auto sm:px-8"
+                    >
+                      {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                      Create Policy
+                    </button>
+                  </div>
+                </form>
+              </div>
+            ) : !selectedPolicy ? (
+              <div className="flex h-full flex-col items-center justify-center text-center text-gray-500">
+                <FileText size={56} className="mb-4 text-gray-800" strokeWidth={1} />
+                <p className="text-lg font-black text-gray-300">No Policy Selected</p>
+                <p className="mt-2 text-sm max-w-sm">Select a policy from the list on the left to edit metadata, drafts, and versions, or create a new one.</p>
+                <button
+                  type="button"
+                  onClick={() => setIsCreating(true)}
+                  className="mt-6 flex items-center gap-2 rounded-full border border-white/10 px-6 py-2.5 text-sm font-bold text-white transition hover:bg-white/5"
+                >
+                  <Plus size={16} />
+                  Create New Policy
+                </button>
               </div>
             ) : detailLoading ? (
               <div className="flex min-h-[520px] items-center justify-center gap-3 text-sm font-bold text-gray-400">
@@ -455,7 +617,16 @@ export default function PolicyManagement() {
                       <span className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-gray-500">Category</span>
                       <select
                         value={metadata.category}
-                        onChange={(event) => setMetadata((current) => ({ ...current, category: event.target.value }))}
+                        onChange={(event) =>
+                          setMetadata((current) => ({
+                            ...current,
+                            category: event.target.value,
+                            controlsBookingRefunds:
+                              event.target.value === 'refund'
+                                ? current.controlsBookingRefunds
+                                : false,
+                          }))
+                        }
                         className="w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm outline-none focus:border-yellow-400"
                       >
                         {categories.map(([value, label]) => (
@@ -471,6 +642,27 @@ export default function PolicyManagement() {
                       />
                       Requires customer acceptance
                     </label>
+                    {metadata.category === 'refund' && (
+                      <label className="flex items-start gap-3 rounded-2xl border border-yellow-400/20 bg-yellow-400/[0.05] px-4 py-3 text-sm font-bold text-gray-200 lg:col-span-2">
+                        <input
+                          type="checkbox"
+                          checked={metadata.controlsBookingRefunds}
+                          onChange={(event) =>
+                            setMetadata((current) => ({
+                              ...current,
+                              controlsBookingRefunds: event.target.checked,
+                            }))
+                          }
+                          className="mt-1"
+                        />
+                        <span>
+                          Control booking refunds
+                          <span className="mt-1 block text-xs font-normal leading-5 text-gray-500">
+                            The designated policy publishes legal text and executable refund rules as one immutable version.
+                          </span>
+                        </span>
+                      </label>
+                    )}
                     <label className="block lg:col-span-2">
                       <span className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-gray-500">Description</span>
                       <textarea
@@ -498,7 +690,9 @@ export default function PolicyManagement() {
                     <div>
                       <h3 className="font-black">Draft Editor</h3>
                       <p className="mt-1 text-sm text-gray-500">
-                        Only draft versions can be edited. Publishing makes content immutable.
+                        {selectedPolicy.controlsBookingRefunds
+                          ? 'Policy text and executable refund rules stay editable in draft, then become immutable together when published.'
+                          : 'Only draft versions can be edited. Publishing makes content immutable.'}
                       </p>
                     </div>
                     {!activeDraft && (
@@ -552,6 +746,23 @@ export default function PolicyManagement() {
                         className="w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm outline-none focus:border-yellow-400"
                         placeholder="Change note"
                       />
+                      {selectedPolicy.controlsBookingRefunds && (
+                        <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_340px]">
+                          <RefundRuleEditor
+                            value={draft.refundRule}
+                            onChange={(refundRule) => {
+                              setDraft((current) => ({ ...current, refundRule }));
+                              setDraftRuleErrors(validateRefundRule(refundRule));
+                              setError('');
+                            }}
+                            errors={draftRuleErrors}
+                          />
+                          <RefundRulePreview
+                            rule={draft.refundRule}
+                            hasErrors={Object.keys(draftRuleErrors).length > 0}
+                          />
+                        </div>
+                      )}
                       <div className="flex flex-wrap gap-3">
                         <button
                           type="button"
@@ -569,7 +780,9 @@ export default function PolicyManagement() {
                           className="inline-flex items-center gap-2 rounded-2xl bg-yellow-400 px-5 py-3 text-sm font-black text-black transition hover:bg-yellow-300 disabled:opacity-60"
                         >
                           <Send size={16} />
-                          Publish immutable version
+                          {selectedPolicy.controlsBookingRefunds
+                            ? 'Publish immutable text + rules'
+                            : 'Publish immutable version'}
                         </button>
                       </div>
                     </div>

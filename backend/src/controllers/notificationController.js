@@ -110,13 +110,14 @@ const createNotification = async (req, res, next) => {
  */
 const getUserNotifications = async (req, res, next) => {
   try {
-    const { page, limit, type, isRead, search } = req.query;
+    const { page, limit, type, isRead, search, contextRole } = req.query;
     const result = await notificationService.getUserNotifications(req.user._id, {
       page,
       limit,
       type,
       isRead,
       search,
+      contextRole,
     });
 
     res.status(200).json({
@@ -136,10 +137,52 @@ const getUserNotifications = async (req, res, next) => {
  */
 const getUnreadCount = async (req, res, next) => {
   try {
-    const count = await notificationService.getUnreadCount(req.user._id);
+    const { contextRole } = req.query;
+    const count = await notificationService.getUnreadCount(req.user._id, contextRole);
     res.status(200).json({
       success: true,
       data: { count },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * @desc    Create an internal report (Staff to Admin)
+ * @route   POST /api/notifications/internal-report
+ * @access  Private (staff)
+ */
+const createInternalReport = async (req, res, next) => {
+  try {
+    const { content, priority = 'INFO' } = req.body;
+    
+    if (!content) {
+      return res.status(400).json({ success: false, message: 'Content is required' });
+    }
+
+    const title = `Issue Report from ${req.user.name || 'Staff'}`;
+    const createdBy = req.user._id;
+    const io = req.app.get('io');
+
+    const result = await notificationService.createForRole(
+      'admin',
+      { title, content, type: 'SYSTEM', priority, targetType: 'ROLE_BASED', targetRoles: ['admin'] },
+      createdBy
+    );
+
+    if (io) {
+      // emitNotification or broadcast to admins
+      // Since createForRole will resolve users with role 'admin'
+      const { notification, userIds } = result;
+      for (const uid of userIds) {
+        await emitNotification(io, uid, notification);
+      }
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Report sent successfully',
     });
   } catch (error) {
     next(error);
@@ -464,4 +507,5 @@ module.exports = {
   getAutoRules,
   updateAutoRule,
   testAutoRule,
+  createInternalReport,
 };

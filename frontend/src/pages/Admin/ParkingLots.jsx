@@ -5,7 +5,7 @@ import ParkingMapGrid from "../../components/ParkingMapGrid";
 import { getAllFloors, createFloor, updateFloorLayout, deleteFloor, getFloorSlots } from "../../services/parkingFloorService";
 import { startMaintenance, endMaintenance } from "../../services/maintenanceService";
 import { apiFetch, API_BASE } from "../../services/api";
-import { getAvailableBookingSlots, getActiveHolds } from "../../services/bookingService";
+import { getAvailableBookingSlots, getActiveHolds, getActiveMapBookings } from "../../services/bookingService";
 
 const LiveDuration = ({ checkInTime, expectedDurationHours }) => {
   const [now, setNow] = useState(Date.now());
@@ -41,15 +41,16 @@ export default function ParkingLots() {
   const [loading, setLoading] = useState(true);
   const [availableSlots, setAvailableSlots] = useState(null);
   const [activeHolds, setActiveHolds] = useState([]);
+  const [activeBookings, setActiveBookings] = useState([]);
   const [selectedItem, setSelectedItem] = useState(null);
   const [dbSlots, setDbSlots] = useState([]);
-
+  
   // activeSessions to track live cars
   const [activeSessions, setActiveSessions] = useState([]);
 
   useEffect(() => {
-    document.body.classList.add("bg-[#0b0e16]");
-    return () => document.body.classList.remove("bg-[#0b0e16]");
+    document.body.classList.add("bg-[#080808]");
+    return () => document.body.classList.remove("bg-[#080808]");
   }, []);
 
   const currentFloor = floors.find(f => f._id === currentFloorId);
@@ -204,6 +205,11 @@ export default function ParkingLots() {
       if (holdsRes.ok && holdsRes.data?.data) {
         setActiveHolds(holdsRes.data.data);
       }
+      
+      const bookingsRes = await getActiveMapBookings();
+      if (bookingsRes.ok && bookingsRes.data?.data) {
+        setActiveBookings(bookingsRes.data.data);
+      }
     } catch (err) {
       console.error('Failed to fetch live data', err);
     }
@@ -355,6 +361,7 @@ export default function ParkingLots() {
     return (
       <ParkingLotsBuilder 
         floor={currentFloor} 
+        dbSlots={dbSlots}
         onSave={handleSaveLayout} 
         onCancel={() => setIsEditMode(false)} 
       />
@@ -362,11 +369,11 @@ export default function ParkingLots() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-70px)] bg-[#0b0e16] text-gray-200 font-sans relative overflow-hidden"
+    <div className="flex flex-col h-[calc(100vh-70px)] bg-[#080808] text-gray-200 font-sans relative overflow-hidden"
          style={{ backgroundImage: `linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px)`, backgroundSize: '30px 30px' }}>
       
       {/* Top Toolbar */}
-      <div className="absolute top-4 left-8 z-50 flex items-center gap-4 bg-[#181c23]/80 backdrop-blur border border-white/10 p-2 rounded-xl shadow-lg">
+      <div className="absolute top-4 left-8 z-50 flex items-center gap-4 bg-[#171717]/80 backdrop-blur border border-white/10 p-2 rounded-xl shadow-lg">
         <select 
           className="bg-black/40 border border-white/20 rounded p-2 text-white text-sm outline-none font-bold min-w-[120px]"
           value={currentFloorId || ""}
@@ -410,6 +417,7 @@ export default function ParkingLots() {
           dbSlots={dbSlots}
           availableSlots={availableSlots}
           activeHolds={activeHolds}
+          activeBookings={activeBookings}
           loading={loading}
           isEditMode={isEditMode}
         />
@@ -417,7 +425,7 @@ export default function ParkingLots() {
 
       {/* Slide-over panel for slots */}
       <div className={`absolute inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity duration-300 ${selectedItem ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} onClick={() => setSelectedItem(null)}></div>
-      <div className={`absolute top-0 right-0 bottom-0 w-[420px] bg-[#0f172a]/80 backdrop-blur-2xl border-l border-cyan-500/20 p-8 flex flex-col shadow-[-20px_0_50px_rgba(8,145,178,0.1)] text-slate-200 z-50 transform transition-transform duration-300 ease-in-out ${selectedItem ? 'translate-x-0' : 'translate-x-full'}`}>
+      <div className={`absolute top-0 right-0 bottom-0 w-[420px] bg-[#111111]/95 backdrop-blur-2xl border-l border-white/10 p-8 flex flex-col shadow-[-20px_0_50px_rgba(0,0,0,0.5)] text-slate-200 z-50 transform transition-transform duration-300 ease-in-out ${selectedItem ? 'translate-x-0' : 'translate-x-full'}`}>
         {selectedItem && (() => {
            const isZone = selectedItem.type === 'zone';
            const dbSlotInfo = !isZone
@@ -548,6 +556,25 @@ export default function ParkingLots() {
                         </>
                       ) : (
                         <p className="text-xs text-purple-300 text-center mt-4">This slot is currently reserved for a VIP subscription package or an upcoming booking.</p>
+                      )}
+                  </div>
+                ) : !isZone && selectedItem.isHeld ? (
+                  <div className="flex flex-col gap-4">
+                      <div className="bg-orange-900/20 border border-orange-500/30 rounded-xl p-4 flex flex-col items-center justify-center mb-2">
+                          <span className="text-xs text-orange-400 uppercase tracking-widest font-bold mb-1">Status</span>
+                          <span className="text-lg text-white font-black uppercase">Holding / Booked</span>
+                      </div>
+                      {selectedItem.booking ? (
+                        <>
+                          <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Customer Name</span><span className="font-medium text-white">{selectedItem.booking.userId?.username || 'N/A'}</span></div>
+                          <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Phone</span><span className="font-medium text-white">{selectedItem.booking.userId?.phone || 'N/A'}</span></div>
+                          <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Email</span><span className="font-medium text-cyan-400">{selectedItem.booking.userId?.email || 'N/A'}</span></div>
+                          <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">License Plate</span><span className="font-mono text-base font-semibold text-white bg-slate-800/80 px-3 py-1 rounded border border-slate-700/50">{selectedItem.booking.licensePlate || 'N/A'}</span></div>
+                          <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">Start Time</span><span className="font-medium text-white">{new Date(selectedItem.booking.scheduledStart).toLocaleString('vi-VN')}</span></div>
+                          <div className="flex justify-between items-center pb-2 border-b border-white/5"><span className="text-slate-400 text-sm">End Time</span><span className="font-medium text-white">{new Date(selectedItem.booking.scheduledEnd).toLocaleString('vi-VN')}</span></div>
+                        </>
+                      ) : (
+                        <p className="text-xs text-orange-400 text-center mt-4">This slot is currently held for an upcoming booking or checkout process.</p>
                       )}
                   </div>
                 ) : (

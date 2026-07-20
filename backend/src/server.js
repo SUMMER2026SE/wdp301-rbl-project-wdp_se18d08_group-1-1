@@ -70,7 +70,9 @@ app.use("/api/bookings", require("./routes/bookingRoutes"));
 app.use("/api/qr", require("./routes/qrRoutes"));
 app.use("/api/violations", require("./routes/violationRoutes"));
 app.use("/api/revenue", require("./routes/revenueRoutes"));
+app.use("/api/statistics", require("./routes/statisticsRoutes"));
 app.use("/api", require("./routes/bookingTransferRoutes"));
+app.use("/api", require("./routes/membershipEntitlementTransferRoutes"));
 app.use("/api", require("./routes/contractRoutes"));
 
 // 404 handler

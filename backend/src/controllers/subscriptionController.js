@@ -107,21 +107,11 @@ exports.createSubscriptionPayment = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Invalid subscription package.' });
     }
 
-    // Validate slots limit based on vehicles
-    const Vehicle = require('../models/Vehicle');
-    const vehiclesCount = await Vehicle.countDocuments({ owner: req.user._id });
-    const maxSlots = Math.min(3, vehiclesCount); // User can choose up to their vehicle count, max 3
-    if (slots.length > maxSlots) {
-      return res.status(400).json({ success: false, message: `You can only select up to ${maxSlots} slots based on your registered vehicles.` });
-    }
-
-    // Check if slots are already reserved
-    for (const slot of slots) {
-      const slotDoc = await Slot.findOne({ floorID: slot.floorId, slotNumber: slot.slotCode });
-      if (slotDoc && slotDoc.reservedFor && slotDoc.reservedFor.toString() !== req.user._id.toString()) {
-        return res.status(400).json({ success: false, message: `Slot ${slot.slotCode} is already reserved by someone else.` });
-      }
-    }
+    const eligibility = await validateNewSubscriptionEligibility({
+      userId: req.user._id,
+      ticketPackage,
+      slots,
+    });
 
     // Amount to pay (price * number of slots)
     const amount = ticketPackage.price * Math.max(1, slots.length);
@@ -155,7 +145,7 @@ exports.createSubscriptionPayment = async (req, res, next) => {
     const subscription = new Subscription({
       user: req.user._id,
       ticketPackage: ticketPackage._id,
-      slots,
+      slots: eligibility.normalizedSlots,
       amount,
       orderCode,
       expireAt,
@@ -185,12 +175,36 @@ exports.verifyPayment = async (req, res, next) => {
   try {
     const { orderCode } = req.body;
     
-    const subscription = await Subscription.findOne({ orderCode, user: req.user._id });
+    const subscription = await Subscription.findOne({
+      $or: [{ orderCode }, { 'pendingRenewal.orderCode': orderCode }],
+      user: req.user._id
+    });
+    
     if (!subscription) {
       return res.status(404).json({ success: false, message: 'Subscription not found.' });
     }
 
-    if (subscription.paymentStatus === 'paid') {
+    const isRenewal = subscription.pendingRenewal && subscription.pendingRenewal.orderCode == orderCode;
+
+    if (!isRenewal && subscription.paymentStatus === 'paid') {
+      const entitlementCount = await MembershipSlotEntitlement.countDocuments({
+        sourceSubscriptionId: subscription._id,
+      });
+      if (entitlementCount < (subscription.slots || []).length) {
+        subscription.status = 'active';
+        await subscription.save();
+        try {
+          await activateSubscriptionEntitlements(subscription);
+        } catch (activationError) {
+          subscription.status = 'failed';
+          await subscription.save();
+          throw activationError;
+        }
+        return res.status(200).json({
+          success: true,
+          message: 'Payment was already completed and membership activation was repaired.',
+        });
+      }
       return res.status(200).json({ success: true, message: 'Already paid.' });
     }
 
@@ -206,37 +220,64 @@ exports.verifyPayment = async (req, res, next) => {
     }
     
     if (isPaymentSuccessful) {
-      subscription.paymentStatus = 'paid';
-      subscription.status = 'active';
-      await subscription.save();
-
-      // Update User VIP status
-      const user = await User.findById(req.user._id);
-      user.membership.isVip = true;
-      user.membership.packageId = subscription.ticketPackage;
-      user.membership.expireAt = subscription.expireAt;
-      
-      const ticketPackage = await TicketPackage.findById(subscription.ticketPackage);
-      if (ticketPackage && ticketPackage.type === 'yearly') {
-        user.membership.freeServiceCount = 12; // Free 12 services for Yearly
+      if (isRenewal) {
+        subscription.expireAt = subscription.pendingRenewal.newExpireAt;
+        subscription.status = 'active';
+        subscription.expireWarningSent = false;
+        subscription.pendingRenewal = undefined;
+        await subscription.save();
+        await activateSubscriptionEntitlements(subscription);
+      } else {
+        const activationSession = await mongoose.startSession();
+        activationSession.startTransaction();
+        try {
+          subscription.paymentStatus = 'paid';
+          subscription.status = 'active';
+          await subscription.save({ session: activationSession });
+          const ticketPackage = await TicketPackage.findById(
+            subscription.ticketPackage
+          ).session(activationSession);
+          if (ticketPackage?.type === 'yearly') {
+            await User.updateOne(
+              { _id: req.user._id },
+              { $set: { 'membership.freeServiceCount': 12 } },
+              { session: activationSession }
+            );
+          }
+          await activateSubscriptionEntitlements(subscription, {
+            session: activationSession,
+          });
+          await activationSession.commitTransaction();
+        } catch (activationError) {
+          await activationSession.abortTransaction();
+          await Subscription.updateOne(
+            { _id: subscription._id },
+            { $set: { paymentStatus: 'paid', status: 'failed' } }
+          );
+          return res.status(409).json({
+            success: false,
+            code: 'MEMBERSHIP_ACTIVATION_FAILED',
+            message:
+              activationError.message ||
+              'Payment succeeded but membership activation requires support.',
+          });
+        } finally {
+          activationSession.endSession();
+        }
       }
-      await user.save();
 
-      // Update Slots reservedFor
-      for (const slot of subscription.slots) {
-        await Slot.updateOne(
-          { floorID: slot.floorId, slotNumber: slot.slotCode },
-          { reservedFor: user._id }
-        );
-      }
-
-      return res.status(200).json({ success: true, message: 'Subscription activated successfully!' });
+      return res.status(200).json({ success: true, message: isRenewal ? 'Subscription renewed successfully!' : 'Subscription activated successfully!' });
     } else {
       const payosInfo = await payos.paymentRequests.get(parseInt(orderCode)).catch(() => null);
       if (['CANCELLED', 'FAILED'].includes(payosInfo?.status)) {
-        subscription.paymentStatus = payosInfo.status === 'CANCELLED' ? 'cancelled' : 'failed';
-        subscription.status = payosInfo.status === 'CANCELLED' ? 'cancelled' : 'failed';
-        await subscription.save();
+        if (isRenewal) {
+           subscription.pendingRenewal = undefined; // clear pending renewal if failed
+           await subscription.save();
+        } else {
+           subscription.paymentStatus = payosInfo.status === 'CANCELLED' ? 'cancelled' : 'failed';
+           subscription.status = payosInfo.status === 'CANCELLED' ? 'cancelled' : 'failed';
+           await subscription.save();
+        }
       }
       return res.status(400).json({ success: false, message: 'Payment not completed.' });
     }
@@ -256,21 +297,11 @@ exports.paySubscriptionWithWallet = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Invalid subscription package.' });
     }
 
-    // Validate slots limit based on vehicles
-    const Vehicle = require('../models/Vehicle');
-    const vehiclesCount = await Vehicle.countDocuments({ owner: req.user._id });
-    const maxSlots = Math.min(3, vehiclesCount); 
-    if (slots.length > maxSlots) {
-      return res.status(400).json({ success: false, message: `You can only select up to ${maxSlots} slots based on your registered vehicles.` });
-    }
-
-    // Check if slots are already reserved
-    for (const slot of slots) {
-      const slotDoc = await Slot.findOne({ floorID: slot.floorId, slotNumber: slot.slotCode });
-      if (slotDoc && slotDoc.reservedFor && slotDoc.reservedFor.toString() !== req.user._id.toString()) {
-        return res.status(400).json({ success: false, message: `Slot ${slot.slotCode} is already reserved by someone else.` });
-      }
-    }
+    const eligibility = await validateNewSubscriptionEligibility({
+      userId: req.user._id,
+      ticketPackage,
+      slots,
+    });
 
     // Amount to pay (price * number of slots)
     const amount = ticketPackage.price * Math.max(1, slots.length);
@@ -282,7 +313,7 @@ exports.paySubscriptionWithWallet = async (req, res, next) => {
     const subscription = new Subscription({
       user: req.user._id,
       ticketPackage: ticketPackage._id,
-      slots,
+      slots: eligibility.normalizedSlots,
       amount,
       orderCode: Number(String(Date.now()).slice(-6) + Math.floor(Math.random() * 100)),
       expireAt,
@@ -291,40 +322,38 @@ exports.paySubscriptionWithWallet = async (req, res, next) => {
     
     await subscription.save();
 
-    // Debit Wallet
+    const dbSession = await mongoose.startSession();
+    dbSession.startTransaction();
     try {
       await walletService.debitWallet(req.user._id, amount, `Buy VIP Package - ${ticketPackage.type}`, {
         refSource: 'subscription',
-        refSourceId: subscription._id.toString()
+        refSourceId: subscription._id.toString(),
+        session: dbSession,
       });
+      subscription.paymentStatus = 'paid';
+      subscription.status = 'active';
+      await subscription.save({ session: dbSession });
+
+      if (ticketPackage.type === 'yearly') {
+        await User.updateOne(
+          { _id: req.user._id },
+          { $set: { 'membership.freeServiceCount': 12 } },
+          { session: dbSession }
+        );
+      }
+      await activateSubscriptionEntitlements(subscription, { session: dbSession });
+      await dbSession.commitTransaction();
     } catch (err) {
+      await dbSession.abortTransaction();
       subscription.paymentStatus = 'failed';
+      subscription.status = 'failed';
       await subscription.save();
-      return res.status(400).json({ success: false, message: err.message || 'Insufficient wallet balance.' });
-    }
-
-    // Wallet debit successful, activate subscription
-    subscription.paymentStatus = 'paid';
-    subscription.status = 'active';
-    await subscription.save();
-
-    // Update User VIP status
-    const user = await User.findById(req.user._id);
-    user.membership.isVip = true;
-    user.membership.packageId = subscription.ticketPackage;
-    user.membership.expireAt = subscription.expireAt;
-    
-    if (ticketPackage.type === 'yearly') {
-      user.membership.freeServiceCount = 12; // Free 12 services for Yearly
-    }
-    await user.save();
-
-    // Update Slots reservedFor
-    for (const slot of subscription.slots) {
-      await Slot.updateOne(
-        { floorID: slot.floorId, slotNumber: slot.slotCode },
-        { reservedFor: user._id }
-      );
+      return res.status(err.statusCode || 400).json({
+        success: false,
+        message: err.message || 'Insufficient wallet balance.',
+      });
+    } finally {
+      dbSession.endSession();
     }
 
     return res.status(200).json({ success: true, message: 'Subscription activated successfully via Valo Wallet!' });
@@ -335,35 +364,120 @@ exports.paySubscriptionWithWallet = async (req, res, next) => {
 
 exports.getMembership = async (req, res, next) => {
   try {
+    const now = new Date();
     const user = await User.findById(req.user._id)
       .select('membership')
-      .populate('membership.packageId', 'name type price description isActive')
+      .populate(
+        'membership.packageId',
+        'name type price description isActive isRenewable renewalWindowDays maxSlots'
+      )
       .lean();
 
-    const activeSubscription = await Subscription.findOne({
+    const [entitlements, activeSubscriptions] = await Promise.all([
+      MembershipSlotEntitlement.find({
+        ownerId: req.user._id,
+        status: { $in: ['active', 'transfer_locked'] },
+        expireAt: { $gt: now },
+      })
+        .sort({ expireAt: -1 })
+        .populate(
+          'packageId',
+          'name type price description isActive isRenewable renewalWindowDays maxSlots'
+        )
+        .populate('floorId', 'name floorNumber')
+        .lean(),
+      Subscription.find({
       user: req.user._id,
       status: 'active',
       paymentStatus: 'paid',
-    })
-      .sort({ expireAt: -1 })
-      .populate('ticketPackage', 'name type price description isActive')
-      .populate('slots.floorId', 'name floorNumber')
-      .lean();
+      expireAt: { $gt: now }
+      })
+        .sort({ expireAt: -1 })
+        .populate(
+          'ticketPackage',
+          'name type price description isActive isRenewable renewalWindowDays maxSlots'
+        )
+        .populate('slots.floorId', 'name floorNumber')
+        .lean(),
+    ]);
 
-    const expireAt = user?.membership?.expireAt ? new Date(user.membership.expireAt) : null;
-    const now = new Date();
-    const isActive = Boolean(user?.membership?.isVip && expireAt && expireAt > now);
+    const latestEntitlement = entitlements[0] || null;
+    const latestSubscription = activeSubscriptions[0] || null;
+    const expireAt = latestEntitlement?.expireAt
+      ? new Date(latestEntitlement.expireAt)
+      : user?.membership?.expireAt
+        ? new Date(user.membership.expireAt)
+        : null;
+    const isActive = Boolean(
+      entitlements.length > 0 ||
+      (user?.membership?.isVip && expireAt && expireAt > now)
+    );
     const daysUntilExpiration = expireAt
       ? Math.ceil((expireAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
       : null;
-    const pkg = activeSubscription?.ticketPackage || user?.membership?.packageId || null;
+    const pkg =
+      latestEntitlement?.packageId ||
+      latestSubscription?.ticketPackage ||
+      user?.membership?.packageId ||
+      null;
+
+    const renewalWindowDays = Number(pkg?.renewalWindowDays || 7);
+    const canRenew = Boolean(
+      isEnabled('SUBSCRIPTION_RENEWAL_ENABLED', defaultForCurrentEnvironment()) &&
+      isActive &&
+      latestSubscription?._id &&
+      pkg?.isRenewable !== false &&
+      daysUntilExpiration !== null &&
+      daysUntilExpiration <= renewalWindowDays
+    );
+
+    const reservedSlots = entitlements.length
+      ? entitlements.map((entitlement) => ({
+          entitlementId: entitlement._id,
+          sourceSubscriptionId: entitlement.sourceSubscriptionId,
+          floorId: entitlement.floorId?._id || entitlement.floorId,
+          floorName: entitlement.floorId?.name || '',
+          floorNumber: entitlement.floorId?.floorNumber || null,
+          slotCode: entitlement.slotCode,
+          status: entitlement.status,
+          validFrom: entitlement.validFrom,
+          expireAt: entitlement.expireAt,
+          unitAmount: entitlement.unitAmount,
+          transferCount: entitlement.transferCount,
+          canTransfer:
+            entitlement.status === 'active' &&
+            Number(entitlement.transferCount || 0) < 1,
+        }))
+      : activeSubscriptions.flatMap((subscription) =>
+          (subscription.slots || []).map((slot) => ({
+            entitlementId: null,
+            sourceSubscriptionId: subscription._id,
+            floorId: slot.floorId?._id || slot.floorId,
+            floorName: slot.floorId?.name || '',
+            floorNumber: slot.floorId?.floorNumber || null,
+            slotCode: slot.slotCode,
+            status: 'active',
+            validFrom: subscription.validFrom,
+            expireAt: subscription.expireAt,
+            unitAmount:
+              Number(subscription.amount || 0) /
+              Math.max(1, (subscription.slots || []).length),
+            transferCount: 0,
+            canTransfer: false,
+            legacy: true,
+          }))
+        );
 
     res.status(200).json({
       success: true,
       data: {
         isVip: isActive,
         status: isActive ? 'active' : 'expired',
+        subscriptionId:
+          latestEntitlement?.sourceSubscriptionId || latestSubscription?._id || null,
+        entitlementCount: reservedSlots.length,
         expireAt,
+        daysUntilExpiration,
         expirationWarning: Boolean(isActive && daysUntilExpiration !== null && daysUntilExpiration <= 7),
         freeServiceCount: user?.membership?.freeServiceCount || 0,
         package: pkg
@@ -375,12 +489,7 @@ exports.getMembership = async (req, res, next) => {
               description: pkg.description,
             }
           : null,
-        reservedSlots: (activeSubscription?.slots || []).map((slot) => ({
-          floorId: slot.floorId?._id || slot.floorId,
-          floorName: slot.floorId?.name || '',
-          floorNumber: slot.floorId?.floorNumber || null,
-          slotCode: slot.slotCode,
-        })),
+        reservedSlots,
         benefits: isActive
           ? ['Reserved VIP parking slots', 'Priority parking access', 'Membership parking coverage']
           : [],
@@ -388,8 +497,121 @@ exports.getMembership = async (req, res, next) => {
           status: 'manual',
           nextRenewalDate: expireAt,
           price: pkg?.price || 0,
-          message: 'Auto-renewal is not yet supported.',
+          canRenew,
+          renewalWindowDays,
+          message: canRenew
+            ? 'Your renewal window is open. Renew now to keep your reserved spaces.'
+            : 'Manual renewal opens before your membership expires.',
         },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.getMembershipQr = async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array().map((error) => ({
+          field: error.path || error.param,
+          message: error.msg,
+        })),
+      });
+    }
+
+    const query = { _id: req.params.subscriptionId };
+    if (req.user.role !== 'admin') {
+      query.user = req.user._id;
+    }
+
+    const subscription = await Subscription.findOne(query);
+    if (!subscription) {
+      return res.status(404).json({ success: false, message: 'Membership not found' });
+    }
+
+    const [user, latestEntitlement] = await Promise.all([
+      User.findById(subscription.user).select('membership'),
+      MembershipSlotEntitlement.findOne({
+        ownerId: subscription.user,
+        status: { $in: ['active', 'transfer_locked'] },
+        expireAt: { $gt: new Date() },
+      }).sort({ expireAt: -1 }),
+    ]);
+    const useAccountCredential = Boolean(latestEntitlement);
+    const available = useAccountCredential
+      ? Boolean(user)
+      : isMembershipQrAvailable(subscription);
+    return res.status(200).json({
+      success: true,
+      data: {
+        available,
+        credentialType: useAccountCredential ? 'ACCOUNT' : 'LEGACY_SUBSCRIPTION',
+        membershipStatus: available ? 'active' : subscription.status,
+        expireAt: useAccountCredential
+          ? latestEntitlement?.expireAt
+          : subscription.expireAt,
+        payload: available
+          ? useAccountCredential
+            ? buildAccountMembershipQrPayload(user)
+            : buildMembershipQrPayload(subscription)
+          : null,
+        reason: available ? null : 'MEMBERSHIP_QR_INACTIVE',
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.getAccountMembershipQr = async (req, res, next) => {
+  try {
+    const now = new Date();
+    const [user, latestEntitlement] = await Promise.all([
+      User.findById(req.user._id).select('membership'),
+      MembershipSlotEntitlement.findOne({
+        ownerId: req.user._id,
+        status: { $in: ['active', 'transfer_locked'] },
+        expireAt: { $gt: now },
+      }).sort({ expireAt: -1 }),
+    ]);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'Membership account not found' });
+    }
+    if (latestEntitlement) {
+      return res.status(200).json({
+        success: true,
+        data: {
+          available: true,
+          credentialType: 'ACCOUNT',
+          membershipStatus: 'active',
+          expireAt: latestEntitlement.expireAt,
+          payload: buildAccountMembershipQrPayload(user),
+          reason: null,
+        },
+      });
+    }
+
+    const legacySubscription = await Subscription.findOne({
+      user: req.user._id,
+      status: 'active',
+      paymentStatus: 'paid',
+      expireAt: { $gt: now },
+    }).sort({ expireAt: -1 });
+    const available = isMembershipQrAvailable(legacySubscription);
+    return res.status(200).json({
+      success: true,
+      data: {
+        available,
+        credentialType: 'LEGACY_SUBSCRIPTION',
+        membershipStatus: available ? 'active' : 'expired',
+        expireAt: legacySubscription?.expireAt || null,
+        payload: available ? buildMembershipQrPayload(legacySubscription) : null,
+        reason: available ? null : 'MEMBERSHIP_QR_INACTIVE',
       },
     });
   } catch (error) {
@@ -437,6 +659,119 @@ exports.getAllSubscriptions = async (req, res, next) => {
       success: true,
       data: enhancedSubscriptions
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Renew subscription
+exports.renewSubscription = async (req, res, next) => {
+  try {
+    const { subscriptionId, paymentMethod } = req.body;
+    
+    const subscription = await Subscription.findById(subscriptionId).populate('ticketPackage');
+    if (!subscription) {
+      return res.status(404).json({ success: false, message: 'Subscription not found.' });
+    }
+    
+    if (subscription.user.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: 'Unauthorized' });
+    }
+    const entitlementCount = await MembershipSlotEntitlement.countDocuments({
+      sourceSubscriptionId: subscription._id,
+    });
+    if (entitlementCount > 0) {
+      return res.status(409).json({
+        success: false,
+        code: 'USE_ENTITLEMENT_RENEWAL',
+        message: 'Renew each membership space separately.',
+      });
+    }
+
+    if (!['active', 'expired'].includes(subscription.status)) {
+      return res.status(400).json({ success: false, message: 'Can only renew active or expired subscriptions.' });
+    }
+
+    const ticketPackage = subscription.ticketPackage;
+    if (!ticketPackage || !ticketPackage.isActive) {
+      return res.status(400).json({ success: false, message: 'Package is no longer available.' });
+    }
+
+    const amount = ticketPackage.price * Math.max(1, subscription.slots.length);
+    
+    // Determine the base date for renewal
+    const now = new Date();
+    const baseDate = (subscription.status === 'active' && subscription.expireAt > now) 
+                     ? subscription.expireAt 
+                     : now;
+                     
+    const newExpireAt = buildExpirationDate(ticketPackage.type, baseDate);
+
+    if (paymentMethod === 'WALLET') {
+      try {
+        await walletService.debitWallet(req.user._id, amount, `Renew VIP Package - ${ticketPackage.type}`, {
+          refSource: 'subscription_renewal',
+          refSourceId: subscription._id.toString()
+        });
+        
+        subscription.expireAt = newExpireAt;
+        subscription.status = 'active';
+        subscription.expireWarningSent = false;
+        
+        // Also update User membership and Slot reservedFor to ensure they are active
+        const user = await User.findById(req.user._id);
+        user.membership.isVip = true;
+        user.membership.expireAt = newExpireAt;
+        if (ticketPackage.type === 'yearly') {
+           user.membership.freeServiceCount = 12;
+        }
+        await user.save();
+
+        for (const slot of subscription.slots) {
+          await Slot.updateOne(
+            { floorID: slot.floorId, slotNumber: slot.slotCode },
+            { reservedFor: user._id }
+          );
+        }
+
+        await subscription.save();
+        return res.status(200).json({ success: true, message: 'Renewed successfully via Valo Wallet.', data: subscription });
+      } catch (err) {
+        return res.status(400).json({ success: false, message: err.message || 'Insufficient wallet balance.' });
+      }
+    } else if (paymentMethod === 'PAYOS') {
+      const orderCode = Number(String(Date.now()).slice(-6) + Math.floor(Math.random() * 100));
+      const paymentData = {
+        orderCode,
+        amount: parseInt(amount),
+        description: `Renew VIP ${ticketPackage.type}`,
+        returnUrl: process.env.PAYOS_RETURN_URL || `${process.env.CLIENT_URL}/membership?orderCode=${orderCode}`,
+        cancelUrl: process.env.PAYOS_CANCEL_URL || `${process.env.CLIENT_URL}/membership?orderCode=${orderCode}&cancel=true`,
+        items: [{ name: `Renew VIP ${ticketPackage.type}`, quantity: 1, price: parseInt(amount) }]
+      };
+
+      const paymentLink = await payos.paymentRequests.create(paymentData);
+      
+      subscription.pendingRenewal = {
+        orderCode,
+        newExpireAt,
+        amount
+      };
+      await subscription.save();
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          subscriptionId: subscription._id,
+          orderCode,
+          amount,
+          checkoutUrl: paymentLink.checkoutUrl
+        }
+      });
+    } else {
+      return res.status(400).json({ success: false, message: 'Invalid payment method.' });
+    }
+
   } catch (error) {
     next(error);
   }

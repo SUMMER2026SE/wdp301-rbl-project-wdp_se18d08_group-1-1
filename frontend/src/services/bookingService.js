@@ -12,6 +12,13 @@ export const getAllBookings = (params = {}) => {
   });
 };
 
+export const getActiveMapBookings = () => {
+  return apiFetch(`/bookings/active-for-map`, {
+    method: 'GET',
+    headers: authHeader(),
+  });
+};
+
 export const getAvailableBookingSlots = ({ startTime, endTime }) => {
   const query = new URLSearchParams({ startTime, endTime }).toString();
 
@@ -92,6 +99,12 @@ export const getBookingOrder = (orderId) =>
 
 export const getMyBookings = () =>
   apiFetch('/bookings/my', {
+    method: 'GET',
+    headers: authHeader(),
+  });
+
+export const getBookingQr = (bookingId) =>
+  apiFetch(`/bookings/${bookingId}/qr`, {
     method: 'GET',
     headers: authHeader(),
   });

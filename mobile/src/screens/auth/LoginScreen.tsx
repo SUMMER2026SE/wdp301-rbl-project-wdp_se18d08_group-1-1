@@ -124,19 +124,21 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
     selectAccount: true,
   });
 
-  const handleGoogleLogin = useCallback(async (idToken: string) => {
-    setGoogleLoading(true);
-    try {
-      await googleLogin({ idToken });
-    } catch (err: unknown) {
-      const message = err instanceof Error
-        ? err.message
-        : 'Google sign-in failed. Please try again.';
-      alert('Google sign-in failed', message);
-    } finally {
-      setGoogleLoading(false);
-    }
-  }, [alert, googleLogin]);
+  const handleGoogleLogin = useCallback(
+    async (idToken: string) => {
+      setGoogleLoading(true);
+      try {
+        await googleLogin({ idToken });
+      } catch (err: unknown) {
+        const message =
+          err instanceof Error ? err.message : 'Google sign-in failed. Please try again.';
+        alert('Google sign-in failed', message);
+      } finally {
+        setGoogleLoading(false);
+      }
+    },
+    [alert, googleLogin],
+  );
 
   useEffect(() => {
     if (googleResponse?.type !== 'success') return;
@@ -182,9 +184,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
     try {
       await login({ email: trimEmail, password: trimPass });
     } catch (err: unknown) {
-      const message = err instanceof Error
-        ? err.message
-        : 'Sign-in failed. Please try again.';
+      const message = err instanceof Error ? err.message : 'Sign-in failed. Please try again.';
       alert('Sign-in failed', message);
     } finally {
       setLoading(false);

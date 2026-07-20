@@ -68,22 +68,24 @@ export default function VehiclePending() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-8 py-10">
+    <div className="p-6 md:p-8 mx-auto min-h-[calc(100vh-70px)] overflow-auto bg-[#080808]">
+      <div className="max-w-5xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">
-            Pending vehicles
-          </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-yellow-500/20 bg-yellow-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-yellow-300">
+            <Car size={12} /> Pending
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">Pending vehicles</h1>
+          <p className="text-gray-400 text-sm mt-1">
             {vehicles.length > 0 ? `${vehicles.length} vehicles pending approval` : 'No vehicles pending approval'}
           </p>
         </div>
         <button
           onClick={fetchPending}
           className="flex items-center gap-2 px-4 py-2.5 rounded-xl
-            border border-gray-200 dark:border-white/10
-            text-sm font-semibold text-gray-600 dark:text-gray-300
+            border border-white/10
+            text-sm font-semibold text-gray-300
             hover:border-yellow-500/40 hover:text-yellow-500 transition-all"
         >
           <RefreshCw size={14} />
@@ -100,11 +102,11 @@ export default function VehiclePending() {
 
       {/* Empty */}
       {!loading && vehicles.length === 0 && (
-        <div className="rounded-2xl border border-dashed border-gray-200 dark:border-white/10
-          bg-gray-50 dark:bg-white/[0.02] flex flex-col items-center justify-center py-20 text-center">
+        <div className="rounded-3xl border border-dashed border-white/10
+          bg-white/[0.02] flex flex-col items-center justify-center py-20 text-center">
           <Check size={32} className="text-green-400 mb-3" />
-          <p className="font-bold text-gray-700 dark:text-gray-300">All vehicles have been approved</p>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">No vehicles are pending approval</p>
+          <p className="font-bold text-gray-300">All vehicles have been approved</p>
+          <p className="text-sm text-gray-400 mt-1">No vehicles are pending approval</p>
         </div>
       )}
 
@@ -156,6 +158,7 @@ export default function VehiclePending() {
         </div>
       )}
     </div>
+    </div>
   );
 }
 
@@ -165,13 +168,11 @@ function VehicleApprovalCard({ vehicle, processing, onApprove, onReject, onPrevi
   const typeLabel = VEHICLE_TYPE_LABELS[vehicle.vehicleType] || vehicle.vehicleType;
 
   return (
-    <div className="rounded-2xl border border-gray-200 dark:border-white/10
-      bg-white dark:bg-white/[0.03] shadow-sm
-      flex flex-col sm:flex-row gap-4 p-5">
+    <div className="rounded-3xl border border-white/10 bg-[#171717] shadow-sm flex flex-col sm:flex-row gap-4 p-5">
 
       {/* Registration card image */}
       <div className="shrink-0 w-full sm:w-44 h-32 rounded-xl overflow-hidden
-        bg-gray-100 dark:bg-black/30 border border-gray-200 dark:border-white/10
+        bg-black/30 border border-white/10
         flex items-center justify-center cursor-pointer group relative"
         onClick={() => vehicle.registrationCardImage && onPreviewImage(vehicle.registrationCardImage)}
       >
@@ -198,7 +199,7 @@ function VehicleApprovalCard({ vehicle, processing, onApprove, onReject, onPrevi
       {/* Info */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap mb-1">
-          <h3 className="font-black text-base text-gray-900 dark:text-white">
+          <h3 className="font-black text-base text-white">
             {[vehicle.brand, vehicle.model].filter(Boolean).join(' ') || 'No name yet'}
           </h3>
           <span className="text-[10px] font-bold bg-orange-500/15 text-orange-400
@@ -207,11 +208,11 @@ function VehicleApprovalCard({ vehicle, processing, onApprove, onReject, onPrevi
           </span>
         </div>
 
-        <p className="text-lg font-black font-mono text-gray-700 dark:text-gray-200 tracking-widest mb-2">
+        <p className="text-lg font-black font-mono text-gray-200 tracking-widest mb-2">
           {vehicle.licensePlate}
         </p>
 
-        <div className="flex items-center gap-2 flex-wrap text-sm text-gray-500 dark:text-gray-400 mb-3">
+        <div className="flex items-center gap-2 flex-wrap text-sm text-gray-400 mb-3">
           <span className="inline-flex items-center gap-1 text-[11px] font-semibold
             bg-white/5 border border-white/10 rounded-full px-2.5 py-0.5">
             {vehicle.vehicleType === 'electric_car' ? <Zap size={11} /> : <Car size={11} />}
@@ -219,12 +220,12 @@ function VehicleApprovalCard({ vehicle, processing, onApprove, onReject, onPrevi
           </span>
           {vehicle.hexColor && (
             <span className="flex items-center gap-1">
-              <span className="inline-block w-3.5 h-3.5 rounded-full border border-gray-300 dark:border-white/20"
+              <span className="inline-block w-3.5 h-3.5 rounded-full border border-white/20"
                 style={{ backgroundColor: vehicle.hexColor }} />
               <span className="font-mono text-xs">{vehicle.hexColor}</span>
             </span>
           )}
-          <span>Owner: <span className="font-semibold text-gray-700 dark:text-gray-200">
+          <span>Owner: <span className="font-semibold text-gray-200">
             {vehicle.owner?.name || vehicle.owner?.email || '—'}
           </span></span>
         </div>
@@ -236,11 +237,10 @@ function VehicleApprovalCard({ vehicle, processing, onApprove, onReject, onPrevi
             value={modelUrl}
             onChange={(e) => setModelUrl(e.target.value)}
             placeholder="3D model URL (optional)"
-            className="flex-1 rounded-lg px-3 py-2 text-xs font-medium outline-none
-              border border-gray-200 dark:border-white/15
-              bg-gray-50 dark:bg-black/30 text-gray-700 dark:text-gray-300
+            className="flex-1 rounded-xl px-3 py-2 text-xs font-medium outline-none
+              border border-white/10 bg-black text-white
               focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/20
-              placeholder:text-gray-400 dark:placeholder:text-gray-600"
+              placeholder-gray-500 shadow-inner"
           />
         </div>
       </div>

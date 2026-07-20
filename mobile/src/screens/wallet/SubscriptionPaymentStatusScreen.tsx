@@ -24,10 +24,14 @@ export const SubscriptionPaymentStatusScreen = ({ navigation, route }: Props) =>
         return;
       }
       try {
-        await subscriptionsService.verifyPayment({ orderCode: route.params.orderCode });
+        if (route.params.renewal) {
+          await subscriptionsService.verifyRenewalPayment(route.params.orderCode);
+        } else {
+          await subscriptionsService.verifyPayment({ orderCode: route.params.orderCode });
+        }
         if (!stopped) {
           setStatus('PAID');
-          setMessage('Subscription activated successfully.');
+          setMessage(route.params.renewal ? 'Membership renewed successfully.' : 'Subscription activated successfully.');
         }
       } catch (error) {
         if (!stopped && error instanceof Error) {
@@ -43,7 +47,7 @@ export const SubscriptionPaymentStatusScreen = ({ navigation, route }: Props) =>
       stopped = true;
       clearInterval(interval);
     };
-  }, [route.params.orderCode, status]);
+  }, [route.params.orderCode, route.params.renewal, status]);
 
   return (
     <Screen scrollable>

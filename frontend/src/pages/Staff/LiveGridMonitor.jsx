@@ -3,6 +3,8 @@ import ParkingMapGrid from "../../components/ParkingMapGrid";
 import { getAllFloors } from "../../services/parkingFloorService";
 import { apiFetch } from "../../services/api";
 import { MonitorCheck, X } from "lucide-react";
+import StaffCheckoutModal from "./StaffCheckoutModal";
+import { getAvailableBookingSlots, getActiveHolds, getActiveMapBookings } from "../../services/bookingService";
 
 export default function LiveGridMonitor() {
   const [floors, setFloors] = useState([]);
@@ -10,7 +12,11 @@ export default function LiveGridMonitor() {
   const [loading, setLoading] = useState(true);
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [activeSessions, setActiveSessions] = useState([]);
+  const [availableSlots, setAvailableSlots] = useState(null);
+  const [activeHolds, setActiveHolds] = useState([]);
+  const [activeBookings, setActiveBookings] = useState([]);
   const [dbSlots, setDbSlots] = useState([]);
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
 
   useEffect(() => {
     const fetchDbSlots = async () => {
@@ -66,8 +72,28 @@ export default function LiveGridMonitor() {
       if (res.ok && res.data.success) {
         setActiveSessions(res.data.data);
       }
+
+      const startTimeStr = new Date().toISOString();
+      const endTimeStr = new Date(Date.now() + 60 * 1000).toISOString();
+      const availableRes = await getAvailableBookingSlots({
+        startTime: startTimeStr,
+        endTime: endTimeStr,
+      });
+      if (availableRes.ok && availableRes.data?.data?.slots) {
+        setAvailableSlots(availableRes.data.data.slots);
+      }
+
+      const holdsRes = await getActiveHolds();
+      if (holdsRes.ok && holdsRes.data?.data) {
+        setActiveHolds(holdsRes.data.data);
+      }
+      
+      const bookingsRes = await getActiveMapBookings();
+      if (bookingsRes.ok && bookingsRes.data?.data) {
+        setActiveBookings(bookingsRes.data.data);
+      }
     } catch (err) {
-      console.error("Failed to fetch active status", err);
+      console.error("Failed to fetch live status", err);
     }
   };
 
@@ -118,6 +144,9 @@ export default function LiveGridMonitor() {
           onSlotClick={setSelectedSlot}
           activeSessions={activeSessions}
           dbSlots={dbSlots}
+          availableSlots={availableSlots}
+          activeHolds={activeHolds}
+          activeBookings={activeBookings}
           loading={loading}
           isEditMode={false} // Staff cannot edit layout
         />
@@ -221,7 +250,9 @@ export default function LiveGridMonitor() {
 
             {selectedSlot.session && (
               <div className="mt-auto flex-shrink-0 pt-2 pb-2">
-                 <button className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-extrabold uppercase tracking-wider py-4 rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.3)] transition-all flex items-center justify-center gap-2">
+                 <button 
+                    onClick={() => setShowCheckoutModal(true)}
+                    className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-extrabold uppercase tracking-wider py-4 rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.3)] transition-all flex items-center justify-center gap-2">
                     <X size={18} />
                     Process Check-out
                  </button>
@@ -231,6 +262,18 @@ export default function LiveGridMonitor() {
         )}
       </div>
 
+      {showCheckoutModal && selectedSlot?.session && (
+        <StaffCheckoutModal 
+          isOpen={showCheckoutModal}
+          onClose={() => setShowCheckoutModal(false)}
+          session={{...selectedSlot.session, parkingSlot: selectedSlot.id}}
+          onSuccess={() => {
+            setShowCheckoutModal(false);
+            setSelectedSlot(null);
+            fetchLiveStatus();
+          }}
+        />
+      )}
     </div>
   );
 }

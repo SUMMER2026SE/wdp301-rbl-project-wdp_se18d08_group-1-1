@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import {
   AlertCircle,
   CalendarClock,
@@ -6,15 +7,17 @@ import {
   Clock,
   Edit3,
   Loader2,
+  QrCode,
   RotateCcw,
   TimerReset,
   Trash2,
   Wifi,
+  X,
 } from 'lucide-react';
 import {
   cancelBooking,
-  checkOutBooking,
   extendBooking,
+  getBookingQr,
   getMyBookings,
   updateBookingVehicle,
 } from '../../services/bookingService';
@@ -81,6 +84,8 @@ export default function BookingPage() {
   const [vehicleInput, setVehicleInput] = useState('');
   const [manualPlateInput, setManualPlateInput] = useState('');
   const [extendEndTime, setExtendEndTime] = useState('');
+  const [qrDialog, setQrDialog] = useState(null);
+  const [qrLoading, setQrLoading] = useState(false);
   const lastEventRef = useRef(null);
 
   const loadData = async (silent = false) => {
@@ -237,17 +242,23 @@ export default function BookingPage() {
     }
   };
 
-  const handleComplete = async (booking) => {
-    const confirmed = window.confirm('Complete this parking session now? The system will calculate any refund or extra fee.');
-    if (!confirmed) return;
-
-    const res = await runBookingAction(`complete-${booking._id}`, () => checkOutBooking(booking._id));
-    if (res) {
-      const refund = res.data?.data?.refundAmount || 0;
-      const extra = res.data?.data?.extraAmount || 0;
-      if (refund > 0) setSuccess(`Booking completed. Refunded ${formatMoney(refund)}.`);
-      else if (extra > 0) setSuccess(`Booking completed. Extra fee charged ${formatMoney(extra)}.`);
-      else setSuccess('Booking completed.');
+  const openQrDialog = async (booking) => {
+    setQrLoading(true);
+    setError('');
+    try {
+      const response = await getBookingQr(booking._id);
+      if (!response.ok || !response.data?.data?.payload) {
+        setError(response.data?.message || 'This booking QR is no longer available.');
+        return;
+      }
+      setQrDialog({
+        booking,
+        payload: response.data.data.payload,
+      });
+    } catch {
+      setError('Network error while loading the booking QR.');
+    } finally {
+      setQrLoading(false);
     }
   };
 
@@ -374,6 +385,17 @@ export default function BookingPage() {
                   </div>
 
                   <div className="flex flex-wrap lg:justify-end gap-2 shrink-0">
+                    {['PAID', 'ACTIVE', 'PAUSED'].includes(getBookingStatus(booking)) && (
+                      <button
+                        type="button"
+                        disabled={qrLoading}
+                        onClick={() => openQrDialog(booking)}
+                        className="rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-3 py-2 text-xs font-bold text-cyan-200 hover:bg-cyan-400/20 transition flex items-center gap-2 disabled:opacity-50"
+                      >
+                        {qrLoading ? <Loader2 size={14} className="animate-spin" /> : <QrCode size={14} />}
+                        Show QR
+                      </button>
+                    )}
                     {timing.canExtend && (
                       <button
                         type="button"
@@ -531,6 +553,43 @@ export default function BookingPage() {
                 Save
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {qrDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+          <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-[#121212] p-6 shadow-2xl">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-xl font-black text-white">Booking QR</h3>
+                <p className="mt-1 text-sm text-white/45">
+                  {getBookingSlot(qrDialog.booking)} · {qrDialog.booking.licensePlate}
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Close booking QR"
+                onClick={() => setQrDialog(null)}
+                className="rounded-xl border border-white/10 p-2 text-white/50 hover:bg-white/5 hover:text-white"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="rounded-2xl bg-white p-5">
+              <QRCodeSVG
+                value={qrDialog.payload}
+                size={256}
+                level="M"
+                className="h-auto w-full"
+              />
+            </div>
+            <p className="mt-4 text-center text-xs leading-5 text-white/45">
+              Present this code to the kiosk or staff. It becomes invalid when the booking ends.
+            </p>
+            <p className="mt-2 break-all text-center font-mono text-[10px] text-white/25">
+              Ref: {qrDialog.booking._id}
+            </p>
           </div>
         </div>
       )}

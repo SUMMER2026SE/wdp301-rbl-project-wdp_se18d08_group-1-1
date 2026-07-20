@@ -119,10 +119,28 @@ const getBalance = async (userId, options = {}) => {
  * @returns {Object} { transaction, wallet }
  */
 const creditWallet = async (userId, amount, type, description, options = {}) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
+  const externalSession = options.session || null;
+  const session = externalSession || await mongoose.startSession();
+  const ownsSession = !externalSession;
+
+  if (ownsSession) {
+    session.startTransaction();
+  }
 
   try {
+    if (options.idempotencyKey) {
+      const existing = await WalletTransaction.findOne({
+        idempotencyKey: options.idempotencyKey,
+      }).session(session);
+      if (existing) {
+        return {
+          transaction: existing,
+          newBalance: existing.balanceAfter,
+          alreadyProcessed: true,
+        };
+      }
+    }
+
     const wallet = await getOrCreateWallet(userId, { session });
 
     // Check wallet status
@@ -150,6 +168,7 @@ const creditWallet = async (userId, amount, type, description, options = {}) => 
           payosReference: options.payosReference || undefined,
           refSource: options.refSource || null,
           refSourceId: options.refSourceId || null,
+          idempotencyKey: options.idempotencyKey || undefined,
         },
       ],
       { session }
@@ -165,17 +184,23 @@ const creditWallet = async (userId, amount, type, description, options = {}) => 
 
     await Wallet.findByIdAndUpdate(wallet._id, updateFields, { session });
 
-    await session.commitTransaction();
+    if (ownsSession) {
+      await session.commitTransaction();
+    }
 
     return {
       transaction: transaction[0],
       newBalance: balanceAfter,
     };
   } catch (error) {
-    await session.abortTransaction();
+    if (ownsSession) {
+      await session.abortTransaction();
+    }
     throw error;
   } finally {
-    session.endSession();
+    if (ownsSession) {
+      session.endSession();
+    }
   }
 };
 
@@ -200,6 +225,19 @@ const debitWallet = async (userId, amount, description, options = {}) => {
   }
 
   try {
+    if (options.idempotencyKey) {
+      const existing = await WalletTransaction.findOne({
+        idempotencyKey: options.idempotencyKey,
+      }).session(session);
+      if (existing) {
+        return {
+          transaction: existing,
+          newBalance: existing.balanceAfter,
+          alreadyProcessed: true,
+        };
+      }
+    }
+
     const wallet = await getOrCreateWallet(userId, { session });
 
     // Check wallet status
@@ -222,7 +260,7 @@ const debitWallet = async (userId, amount, description, options = {}) => {
         {
           userId,
           walletId: wallet._id,
-          type: 'PAYMENT',
+          type: options.transactionType || 'PAYMENT',
           amount,
           balanceBefore,
           balanceAfter,
@@ -230,6 +268,7 @@ const debitWallet = async (userId, amount, description, options = {}) => {
           description,
           refSource: options.refSource || null,
           refSourceId: options.refSourceId || null,
+          idempotencyKey: options.idempotencyKey || undefined,
         },
       ],
       { session }

@@ -40,6 +40,7 @@ export type BookingStackParamList = {
 
 export type ProfileStackParamList = {
   Profile: undefined;
+  PersonalProfile: undefined;
   EditProfile: undefined;
   ChangePassword: undefined;
   VehicleList: undefined;
@@ -70,5 +71,6 @@ export type WalletStackParamList = {
     checkoutUrl?: string;
     qrCode?: string;
     amount?: number;
+    renewal?: boolean;
   };
 };

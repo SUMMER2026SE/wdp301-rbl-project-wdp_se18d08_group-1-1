@@ -10,7 +10,7 @@ import { API_BASE } from '../../services/api';
 
 // ─── Stat Card ─────────────────────────────────────────────────────────────────
 const StatCard = ({ icon, label, value, sub, color, increaseStr }) => (
-  <div className="bg-[#1A1A1A] border border-white/5 rounded-2xl p-5 flex flex-col gap-4 hover:border-white/10 transition-colors group">
+  <div className="bg-[#171717] border border-white/10 rounded-2xl p-5 flex flex-col gap-4 hover:border-[#ffd555]/40 hover:shadow-[0_8px_30px_rgba(0,0,0,0.2)] transition-all group">
     <div className="flex items-center justify-between">
       <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${color}`}>{icon}</div>
       <TrendingUp size={13} className="text-green-400 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -102,12 +102,15 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="p-6 lg:p-8 space-y-8 min-h-full">
+    <div className="p-6 lg:p-8 space-y-8 min-h-[calc(100vh-70px)] bg-[#080808]">
 
       {/* Page header */}
       <div>
-        <h1 className="text-2xl font-extrabold text-white">Admin Overview</h1>
-        <p className="text-gray-500 text-sm mt-1">Manage the entire VALO Smart Parking system</p>
+        <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-yellow-500/20 bg-yellow-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-yellow-300">
+          <Settings2 size={12} /> Dashboard
+        </div>
+        <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">Admin Overview</h1>
+        <p className="text-gray-400 text-sm mt-1">Manage the entire VALO Smart Parking system</p>
       </div>
 
       {/* ── Stat cards ── */}
@@ -146,7 +149,7 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
         {/* Quick Actions */}
-        <div className="lg:col-span-1 bg-[#1A1A1A] border border-white/5 rounded-2xl p-5">
+        <div className="lg:col-span-1 bg-[#171717] border border-white/10 rounded-2xl p-5 shadow-lg">
           <h3 className="text-white font-bold text-sm mb-4">Quick Actions</h3>
           <div className="space-y-2.5">
             <QuickAction
@@ -181,7 +184,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* Recent admin actions */}
-        <div className="lg:col-span-2 bg-[#1A1A1A] border border-white/5 rounded-2xl p-5">
+        <div className="lg:col-span-2 bg-[#171717] border border-white/10 rounded-2xl p-5 shadow-lg">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-white font-bold text-sm">Recent Admin Actions</h3>
             <span className="text-[10px] text-gray-600 bg-white/5 px-2.5 py-1 rounded-full">Last 24h</span>
@@ -206,7 +209,7 @@ export default function AdminDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
         {/* Revenue overview */}
-        <div className="bg-[#1A1A1A] border border-white/5 rounded-2xl p-5">
+        <div className="bg-[#171717] border border-white/10 rounded-2xl p-5 shadow-lg">
           <h3 className="text-white font-bold text-sm mb-4">Revenue Analytics (This Week)</h3>
           <div className="space-y-3">
             {[
@@ -229,7 +232,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* Services status */}
-        <div className="bg-[#1A1A1A] border border-white/5 rounded-2xl p-5">
+        <div className="bg-[#171717] border border-white/10 rounded-2xl p-5 shadow-lg">
           <h3 className="text-white font-bold text-sm mb-4">Services Overview</h3>
           <div className="space-y-2.5">
             {[

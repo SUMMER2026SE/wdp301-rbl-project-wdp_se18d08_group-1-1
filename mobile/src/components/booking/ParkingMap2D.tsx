@@ -8,8 +8,49 @@ import type { SubscriptionSlotSelection } from '@/types/subscription.types';
 import {
   isParkingSlotSelectable,
   isVipParkingSlotLayoutName,
+  type ParkingSlotVisualStatus,
   resolveParkingSlotStatus,
 } from '@/utils/parkingSlotStatus';
+
+export interface ParkingSlotInspection {
+  slotCode: string;
+  status: ParkingSlotVisualStatus;
+  dbSlot?: {
+    _id?: string;
+    slotNumber?: string;
+    status?: string;
+    slotType?: string;
+    reservedFor?: unknown;
+    subscriptionType?: string | null;
+    subscriptionDetail?: {
+      expireAt?: string;
+      user?: {
+        username?: string;
+        email?: string;
+        phone?: string;
+      } | null;
+      ticketPackage?: {
+        name?: string;
+        type?: string;
+      } | null;
+    } | null;
+    zoneID?: {
+      zoneName?: string;
+      zoneType?: string;
+    } | string;
+  };
+  session?: {
+    licensePlate?: string;
+    phone?: string;
+    vehicleType?: string;
+    checkInTime?: string;
+    expectedDurationHours?: number;
+    userId?: {
+      email?: string;
+      username?: string;
+    } | string;
+  };
+}
 
 interface ParkingMap2DProps {
   floor: ParkingFloor;
@@ -22,6 +63,9 @@ interface ParkingMap2DProps {
   selectionMode?: 'booking' | 'membership';
   selectedSlots?: SubscriptionSlotSelection[];
   onToggleSlot?: (slot: SubscriptionSlotSelection) => void;
+  interactionMode?: 'selection' | 'monitor';
+  inspectedSlotCode?: string | null;
+  onInspectSlot?: (slot: ParkingSlotInspection) => void;
 }
 
 const SLOT_STATUS_COLOR: Record<string, string> = {
@@ -44,6 +88,9 @@ export const ParkingMap2D = ({
   selectionMode = 'booking',
   selectedSlots = [],
   onToggleSlot,
+  interactionMode = 'selection',
+  inspectedSlotCode = null,
+  onInspectSlot,
 }: ParkingMap2DProps) => {
   const { width: windowWidth } = useWindowDimensions();
   const [viewportWidth, setViewportWidth] = useState(0);
@@ -122,8 +169,14 @@ export const ParkingMap2D = ({
       const sessionSlotCode = String(session.slotCode ?? session.parkingSlot ?? '').toUpperCase();
       return sessionFloorId === floorId && sessionSlotCode === normalizedSlotName;
     });
+    const activeSession = activeSessions.find((session: any) => {
+      const sessionFloorId = String(session.floorId?._id ?? session.floorId ?? '');
+      const sessionSlotCode = String(session.slotCode ?? session.parkingSlot ?? '').toUpperCase();
+      return sessionFloorId === floorId && sessionSlotCode === normalizedSlotName;
+    });
     const isMembershipMode = selectionMode === 'membership';
-    const isDbOccupied = dbSlot?.status === 'occupied' || dbSlot?.status === 'booked';
+    const isDbOccupied = dbSlot?.status === 'occupied'
+      || (interactionMode !== 'monitor' && dbSlot?.status === 'booked');
     const slotData = isMembershipMode && dbSlot
       ? {
           id: String(dbSlot._id ?? `${floorId}-${normalizedSlotName}`),
@@ -133,19 +186,31 @@ export const ParkingMap2D = ({
         } as AvailableSlot
       : bookingSlotData;
     const status = resolveParkingSlotStatus({
-      hasAvailableSlot: isMembershipMode ? Boolean(dbSlot) : Boolean(bookingSlotData),
+      hasAvailableSlot: interactionMode === 'monitor'
+        ? true
+        : isMembershipMode
+          ? Boolean(dbSlot)
+          : Boolean(bookingSlotData),
       isMaintenance: dbSlot?.status === 'maintenance',
       isOccupied: isOccupied || isDbOccupied,
       isHeld,
-      isReserved: (isMembershipMode ? false : isVipLayoutSlot) || Boolean(dbSlot?.reservedFor),
+      isReserved:
+        dbSlot?.status === 'booked'
+        || Boolean(dbSlot?.subscriptionType)
+        || (isMembershipMode ? false : isVipLayoutSlot)
+        || Boolean(dbSlot?.reservedFor),
     });
 
     return {
+      activeSession,
+      dbSlot,
       slotData,
       status,
-      isSelectable: isParkingSlotSelectable(status, Boolean(slotData)),
+      isSelectable: interactionMode === 'monitor'
+        ? true
+        : isParkingSlotSelectable(status, Boolean(slotData)),
     };
-  }, [activeHolds, activeSessions, dbSlots, floorId, selectionMode, slotLookup]);
+  }, [activeHolds, activeSessions, dbSlots, floorId, interactionMode, selectionMode, slotLookup]);
 
   useEffect(() => {
     if (selectionMode === 'membership' || !selectedSlot || String(selectedSlot.floorId) !== floorId) return;
@@ -158,6 +223,26 @@ export const ParkingMap2D = ({
     );
     if (!isSelectable) onSelectSlot(null);
   }, [floorId, getSlotInteractionState, layout.elements, onSelectSlot, selectedSlot, selectionMode]);
+
+  useEffect(() => {
+    if (interactionMode !== 'monitor' || !inspectedSlotCode || !onInspectSlot) return;
+    const {
+      activeSession,
+      dbSlot,
+      status,
+    } = getSlotInteractionState(inspectedSlotCode);
+    onInspectSlot({
+      slotCode: inspectedSlotCode.toUpperCase(),
+      status,
+      dbSlot,
+      session: activeSession,
+    });
+  }, [
+    getSlotInteractionState,
+    inspectedSlotCode,
+    interactionMode,
+    onInspectSlot,
+  ]);
 
   const renderElement = (el: any) => {
     const isSlot = el.type && el.type.startsWith('slot');
@@ -179,10 +264,12 @@ export const ParkingMap2D = ({
 
       const layoutSlotName = String(el.name);
       const slotName = layoutSlotName.toUpperCase();
-      const { slotData, status, isSelectable } = getSlotInteractionState(layoutSlotName);
+      const { activeSession, dbSlot, slotData, status, isSelectable } = getSlotInteractionState(layoutSlotName);
       const isSelected = selectionMode === 'membership'
         ? selectedSlots.some((slot) => String(slot.floorId) === floorId && slot.slotCode.toUpperCase() === slotName)
-        : selectedSlot?.slotCode?.toUpperCase() === slotName && String(selectedSlot?.floorId) === floorId;
+        : interactionMode === 'monitor'
+          ? inspectedSlotCode?.toUpperCase() === slotName
+          : selectedSlot?.slotCode?.toUpperCase() === slotName && String(selectedSlot?.floorId) === floorId;
 
       const color = isSelected ? COLORS.staffBlue : SLOT_STATUS_COLOR[status] || COLORS.textMuted;
       const bgColor = isSelected ? 'rgba(96,180,255,0.2)' : `${color}18`;
@@ -199,9 +286,21 @@ export const ParkingMap2D = ({
             },
           ]}
           disabled={!isSelectable}
+          accessibilityLabel={`${slotName}, ${status}`}
+          accessibilityRole="button"
           accessibilityState={{ disabled: !isSelectable, selected: isSelected }}
           onPress={() => {
-            if (!isSelectable || !slotData) return;
+            if (!isSelectable) return;
+            if (interactionMode === 'monitor') {
+              onInspectSlot?.({
+                slotCode: slotName,
+                status,
+                dbSlot,
+                session: activeSession,
+              });
+              return;
+            }
+            if (!slotData) return;
             if (selectionMode === 'membership') {
               onToggleSlot?.({ floorId, slotCode: slotData.slotCode || slotName });
             } else {
@@ -334,6 +433,7 @@ export const ParkingMap2D = ({
             top: mapTop,
             width: mapWidth,
             height: mapHeight,
+            backgroundColor: interactionMode === 'monitor' ? '#F2F4F7' : COLORS.surface,
             transform: [{ scale }],
           }
         ]}
@@ -353,7 +453,6 @@ export const ParkingMap2D = ({
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    backgroundColor: COLORS.surface,
   },
   viewport: {
     alignSelf: 'stretch',

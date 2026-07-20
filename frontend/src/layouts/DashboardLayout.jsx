@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from "react";
-import { Outlet, NavLink, useNavigate } from "react-router-dom";
+import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { apiFetch } from "../services/api";
 import { logoutUser } from "../services/authService";
 import { clearAuthSession, notifyAuthChange } from "../services/authStorage";
 import logoImg from "../assets/images/logo.png";
 import { useNotifications } from "../hooks/useNotifications";
+import { sendInternalReport } from "../services/notificationService";
 import { formatDistanceToNow } from "date-fns";
 import { enUS } from "date-fns/locale";
 import {
@@ -26,18 +27,19 @@ import {
   // Manager icons
   MonitorCheck,
   Car,
-  Gauge,
-  FileWarning,
   ScrollText,
-  ClipboardList,
   BookOpen,
   CalendarCheck,
-  SlidersHorizontal,
+  ArrowLeftRight,
   // Common
   Bell,
   LogOut,
   Menu,
   ChevronDown,
+  AlertTriangle,
+  X,
+  Send,
+  Loader2,
 } from "lucide-react";
 
 // ─── Nav configs per role ─────────────────────────────────────────────────────
@@ -59,7 +61,7 @@ const NAV_CONFIG = {
       to: "/admin/parking-lots",
     },
     {
-      label: "Pricing Config",
+      label: "Pricing",
       icon: <DollarSign size={18} />,
       to: "/admin/pricing",
     },
@@ -84,11 +86,6 @@ const NAV_CONFIG = {
       label: "Revenue Analytics",
       icon: <BarChart2 size={18} />,
       to: "/admin/revenue",
-    },
-    {
-      label: "Financial Export",
-      icon: <DollarSign size={18} />,
-      to: "/admin/financial",
     },
   ],
   staff: [
@@ -137,6 +134,11 @@ const NAV_CONFIG = {
   customer: [
     { label: "Home", icon: <Home size={18} />, to: "/" },
     { label: "Profile", icon: <User size={18} />, to: "/profile" },
+    {
+      label: "Membership Transfers",
+      icon: <ArrowLeftRight size={18} />,
+      to: "/customer/membership-transfers",
+    },
     { label: "My Vehicles", icon: <Car size={18} />, to: "/customer/vehicles" },
     {
       label: "My Bookings",
@@ -191,26 +193,30 @@ const getInitials = (name = "") =>
 
 export default function DashboardLayout() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [user, setUser] = useState(() =>
     JSON.parse(sessionStorage.getItem("valo_user") || "{}"),
   );
   const [collapsed, setCollapsed] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef(null);
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [reportContent, setReportContent] = useState("");
+  const [reportLoading, setReportLoading] = useState(false);
 
   // Hook for notifications
   const { notifications, unreadCount, markAsRead, markAllAsRead } =
-    useNotifications();
+    useNotifications({ contextRole: user?.role });
 
   const role = user?.role;
   const navItems = NAV_CONFIG[role] || [];
   const theme = ROLE_THEME[role] || ROLE_THEME.admin;
   const displayName = user
     ? [user.profile?.firstName, user.profile?.lastName]
-        .filter(Boolean)
-        .join(" ") ||
-      user.username ||
-      "User"
+      .filter(Boolean)
+      .join(" ") ||
+    user.username ||
+    "User"
     : "User";
 
   // Always dark mode
@@ -253,13 +259,29 @@ export default function DashboardLayout() {
           setUser(updatedUser);
           notifyAuthChange();
         }
-      } catch {
-        // Profile enrichment is best-effort; keep the cached user if it fails.
+      } catch (err) {
+        console.error("Failed fetching profile for avatar sync", err);
       }
     };
 
     fetchProfileAvatar();
   }, [user]);
+
+  const handleSendReport = async () => {
+    if (!reportContent.trim()) return;
+    try {
+      setReportLoading(true);
+      const res = await sendInternalReport(reportContent, 'WARNING');
+      if (res.ok) {
+        setReportModalOpen(false);
+        setReportContent("");
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setReportLoading(false);
+    }
+  };
 
   // Close notif dropdown on outside click
   useEffect(() => {
@@ -328,11 +350,10 @@ export default function DashboardLayout() {
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold
                  transition-all duration-150 whitespace-nowrap overflow-hidden group
-                 ${
-                   isActive
-                     ? `${theme.activeBg} border`
-                     : `text-gray-500 hover:text-gray-300 hover:bg-white/5 border border-transparent`
-                 }`
+                 ${isActive
+                  ? `${theme.activeBg} border`
+                  : `text-gray-500 hover:text-gray-300 hover:bg-white/5 border border-transparent`
+                }`
               }
               title={collapsed ? item.label : undefined}
             >
@@ -386,6 +407,18 @@ export default function DashboardLayout() {
                 {theme.badge.label}
               </span>
             </div>
+
+            {/* Report Issue (Staff only) */}
+            {role === 'staff' && (
+              <button
+                onClick={() => setReportModalOpen(true)}
+                className="flex items-center gap-2 px-3 py-1.5 h-9 rounded-xl bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 hover:text-orange-300 border border-orange-500/20 transition-all font-semibold text-xs"
+                title="Report an Issue"
+              >
+                <AlertTriangle size={15} />
+                <span className="hidden sm:inline">Report Issue</span>
+              </button>
+            )}
 
             {/* Logout */}
             <button
@@ -453,9 +486,9 @@ export default function DashboardLayout() {
                             <p className="text-gray-400 dark:text-gray-600 text-[10px] mt-1">
                               {n.createdAt
                                 ? formatDistanceToNow(new Date(n.createdAt), {
-                                    addSuffix: true,
-                                    locale: enUS,
-                                  })
+                                  addSuffix: true,
+                                  locale: enUS,
+                                })
                                 : "Just now"}
                             </p>
                           </div>
@@ -501,10 +534,68 @@ export default function DashboardLayout() {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto bg-gray-100 dark:bg-[#0D0D0D] transition-colors duration-300">
+        <main
+          className={`flex-1 overflow-y-auto bg-gray-100 transition-colors duration-300 dark:bg-[#0D0D0D] ${location.pathname === "/admin/revenue" ? "scrollbar-hidden" : ""
+            }`}
+        >
           <Outlet />
         </main>
       </div>
+
+      {/* Report Modal */}
+      {reportModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-[#1A1A1A] w-full max-w-md rounded-2xl shadow-2xl overflow-hidden border border-gray-200 dark:border-white/10 animate-in zoom-in-95 duration-200">
+            <div className="px-6 py-4 border-b border-gray-100 dark:border-white/5 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <AlertTriangle className="text-orange-500" size={20} />
+                Report an Issue
+              </h3>
+              <button
+                onClick={() => setReportModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-white transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                Describe the issue you are experiencing in detail. This message will be sent directly to the Admin with high priority.
+              </p>
+
+              <textarea
+                value={reportContent}
+                onChange={(e) => setReportContent(e.target.value)}
+                placeholder="Type your report here..."
+                className="w-full h-32 px-4 py-3 bg-gray-50 dark:bg-[#111111] border border-gray-200 dark:border-white/10 rounded-xl focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500 text-gray-900 dark:text-white text-sm resize-none transition-all placeholder:text-gray-400 dark:placeholder:text-gray-600"
+              />
+            </div>
+
+            <div className="px-6 py-4 border-t border-gray-100 dark:border-white/5 bg-gray-50 dark:bg-[#111111] flex justify-end gap-3">
+              <button
+                onClick={() => setReportModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-sm font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/5 transition-colors"
+                disabled={reportLoading}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSendReport}
+                disabled={!reportContent.trim() || reportLoading}
+                className="px-6 py-2 rounded-xl text-sm font-bold text-white bg-orange-500 hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-all shadow-lg shadow-orange-500/20"
+              >
+                {reportLoading ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <Send size={16} />
+                )}
+                Send Report
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

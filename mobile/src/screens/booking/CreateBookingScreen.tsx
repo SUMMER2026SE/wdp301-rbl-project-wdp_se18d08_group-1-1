@@ -6,6 +6,8 @@ import { addMinutes, format } from 'date-fns';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -34,7 +36,7 @@ import { vehiclesService } from '@/services/api/vehicles';
 import { ParkingMap2D } from '@/components/booking/ParkingMap2D';
 import bookingService from '@/services/BookingService';
 import parkingFloorService from '@/services/ParkingFloorService';
-import type { AvailableSlot, ParkingFloor } from '@/types/booking.types';
+import type { AvailableSlot, ParkingFloor, Service } from '@/types/booking.types';
 import type { Vehicle } from '@/types/models';
 import type { MembershipStatus } from '@/types/subscription.types';
 import { formatCurrency } from '@/utils/formatters';
@@ -57,6 +59,8 @@ const roundUpTo15Min = (date: Date) => {
   const ms = 1000 * 60 * 15;
   return new Date(Math.ceil(date.getTime() / ms) * ms);
 };
+
+const getServiceId = (service: Service) => service._id || service.id || '';
 
 // generate time slots every 15 minutes: ['00:00', '00:15', ...]
 const TIME_OPTIONS: string[] = [];
@@ -235,6 +239,620 @@ const mpStyles = StyleSheet.create({
   confirmText: { color: COLORS.textInverse, fontSize: FONT_SIZES.md, fontWeight: '700' },
 });
 
+const STICKY_FOOTER_SPACE = 178;
+
+const useEntrance = (delay = 0) => {
+  const progress = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(progress, {
+      delay,
+      duration: 420,
+      easing: Easing.out(Easing.cubic),
+      toValue: 1,
+      useNativeDriver: true,
+    }).start();
+  }, [delay, progress]);
+
+  return progress;
+};
+
+function AnimatedPressable({
+  children,
+  disabled,
+  onPress,
+  style,
+}: {
+  children: React.ReactNode;
+  disabled?: boolean;
+  onPress: () => void;
+  style?: object;
+}) {
+  const press = useRef(new Animated.Value(0)).current;
+
+  const animatePress = (toValue: number) => {
+    Animated.spring(press, {
+      damping: 15,
+      mass: 0.55,
+      stiffness: 260,
+      toValue,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const scale = press.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0.975],
+  });
+
+  return (
+    <Animated.View style={[style, { transform: [{ scale }] }]}>
+      <Pressable
+        disabled={disabled}
+        onPress={onPress}
+        onPressIn={() => animatePress(1)}
+        onPressOut={() => animatePress(0)}
+      >
+        {children}
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+function StaggeredSection({
+  children,
+  delay,
+  style,
+}: {
+  children: React.ReactNode;
+  delay: number;
+  style?: object;
+}) {
+  const entrance = useEntrance(delay);
+
+  return (
+    <Animated.View
+      style={[
+        style,
+        {
+          opacity: entrance,
+          transform: [
+            {
+              translateY: entrance.interpolate({
+                inputRange: [0, 1],
+                outputRange: [14, 0],
+              }),
+            },
+          ],
+        },
+      ]}
+    >
+      {children}
+    </Animated.View>
+  );
+}
+
+function TimeTimeline({
+  startTime,
+  endTime,
+  durationHours,
+  onStartPress,
+  onEndPress,
+}: {
+  startTime: Date;
+  endTime: Date;
+  durationHours: number;
+  onStartPress: () => void;
+  onEndPress: () => void;
+}) {
+  return (
+    <StaggeredSection delay={110} style={styles.section}>
+      <Text style={styles.sectionKicker}>Time</Text>
+      <View style={styles.timeline}>
+        <AnimatedPressable onPress={onStartPress} style={styles.timeBlock}>
+          <View style={styles.timeLabelRow}>
+            <Ionicons name="log-in-outline" size={16} color={COLORS.gold} />
+            <Text style={styles.timeLabel}>Arrival</Text>
+          </View>
+          <Text style={styles.timeValue}>{format(startTime, 'HH:mm')}</Text>
+          <Text style={styles.timeDate}>{format(startTime, 'dd MMM yyyy')}</Text>
+        </AnimatedPressable>
+
+        <View style={styles.timelineMiddle}>
+          <View style={styles.timelineLine} />
+          <View style={styles.durationChip}>
+            <Ionicons name="time-outline" size={13} color={COLORS.gold} />
+            <Text style={styles.durationText}>{durationHours}h</Text>
+          </View>
+        </View>
+
+        <AnimatedPressable onPress={onEndPress} style={styles.timeBlock}>
+          <View style={styles.timeLabelRow}>
+            <Ionicons name="log-out-outline" size={16} color={COLORS.staffBlue} />
+            <Text style={styles.timeLabel}>Departure</Text>
+          </View>
+          <Text style={styles.timeValue}>{format(endTime, 'HH:mm')}</Text>
+          <Text style={styles.timeDate}>{format(endTime, 'dd MMM yyyy')}</Text>
+        </AnimatedPressable>
+      </View>
+    </StaggeredSection>
+  );
+}
+
+function VehicleSelector({
+  vehicleError,
+  vehicles,
+  selectedVehicleId,
+  manualPlate,
+  membershipBlocksRegisteredVehicle,
+  onRetry,
+  onSelectVehicle,
+  onManualPlateChange,
+  onManageVehicles,
+}: {
+  vehicleError: string;
+  vehicles: Vehicle[];
+  selectedVehicleId: string | null;
+  manualPlate: string;
+  membershipBlocksRegisteredVehicle: boolean;
+  onRetry: () => void;
+  onSelectVehicle: (id: string) => void;
+  onManualPlateChange: (value: string) => void;
+  onManageVehicles: () => void;
+}) {
+  return (
+    <StaggeredSection delay={180} style={styles.section}>
+      <Text style={styles.sectionKicker}>Your vehicle</Text>
+      {vehicleError ? (
+        <ErrorState message={vehicleError} onRetry={onRetry} />
+      ) : vehicles.length === 0 ? (
+        <View style={styles.vehicleEmpty}>
+          <View style={styles.vehicleEmptyIcon}>
+            <Ionicons name="car-outline" size={22} color={COLORS.gold} />
+          </View>
+          <View style={styles.vehicleEmptyCopy}>
+            <Text style={styles.vehicleEmptyTitle}>No approved vehicle</Text>
+            <Text style={styles.vehicleEmptyText}>Add a vehicle or wait for approval in your profile before booking.</Text>
+          </View>
+          <Pressable style={styles.manageVehicleBtn} onPress={onManageVehicles}>
+            <Text style={styles.manageVehicleText}>Manage vehicles</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow}>
+          {vehicles.map((vehicle) => {
+            const vehicleId = vehicle.id ?? vehicle._id ?? '';
+            const active = selectedVehicleId === vehicleId;
+            return (
+              <Pressable
+                accessibilityLabel={`Select vehicle ${vehicle.licensePlate}`}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: active }}
+                key={vehicleId}
+                style={[styles.vehiclePill, active && styles.vehiclePillActive]}
+                onPress={() => onSelectVehicle(vehicleId)}
+              >
+                <Ionicons name={active ? 'car-sport' : 'car-outline'} size={17} color={active ? COLORS.gold : COLORS.textMuted} />
+                <Text style={[styles.vehicleText, active && styles.vehicleTextActive]}>{vehicle.licensePlate}</Text>
+                {active ? <Ionicons name="checkmark-circle" size={15} color={COLORS.gold} /> : null}
+              </Pressable>
+            );
+          })}
+          <Pressable
+            accessibilityLabel="Use another license plate"
+            accessibilityRole="radio"
+            accessibilityState={{ checked: selectedVehicleId === 'manual' }}
+            style={[styles.vehiclePill, selectedVehicleId === 'manual' && styles.vehiclePillActive]}
+            onPress={() => onSelectVehicle('manual')}
+          >
+            <Ionicons name="create-outline" size={17} color={selectedVehicleId === 'manual' ? COLORS.gold : COLORS.textMuted} />
+            <Text style={[styles.vehicleText, selectedVehicleId === 'manual' && styles.vehicleTextActive]}>Other plate</Text>
+          </Pressable>
+        </ScrollView>
+      )}
+
+      {selectedVehicleId === 'manual' ? (
+        <View style={styles.manualInputWrap}>
+          <TextInput
+            autoCapitalize="characters"
+            placeholder="Enter license plate (e.g. 30A-12345)"
+            placeholderTextColor={COLORS.textMuted}
+            style={styles.manualInput}
+            value={manualPlate}
+            onChangeText={onManualPlateChange}
+          />
+        </View>
+      ) : null}
+
+      {membershipBlocksRegisteredVehicle ? (
+        <View style={styles.warningBox}>
+          <Ionicons name="alert-circle-outline" size={18} color={COLORS.warning} />
+          <Text style={styles.warningText}>
+            Your membership has an available VIP space. Assign a vehicle to it before booking a regular space.
+          </Text>
+        </View>
+      ) : null}
+    </StaggeredSection>
+  );
+}
+
+function ParkingLegend() {
+  const items = [
+    { label: 'Available', color: '#7EE8A2' },
+    { label: 'Occupied', color: '#FF6B6B' },
+    { label: 'VIP', color: '#FFD700' },
+    { label: 'Reserved', color: '#FFA500' },
+    { label: 'Maintenance', color: '#A0A0A0' },
+  ];
+
+  return (
+    <View style={styles.legend}>
+      {items.map((item) => (
+        <View key={item.label} style={styles.legendItem}>
+          <View style={[styles.legendDot, { backgroundColor: item.color }]} />
+          <Text style={styles.legendText}>{item.label}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function ParkingMapSection({
+  selectedSlot,
+  selectedVehiclePlate,
+  selectedFloorName,
+  selectedRouteSlotUnavailable,
+  selectedSlotCode,
+  parkingFloors,
+  selectedFloor,
+  availableSlots,
+  isLoading,
+  dbSlots,
+  error,
+  activeSessions,
+  activeHolds,
+  startTime,
+  endTime,
+  onClearSlot,
+  onSelectFloor,
+  onSelectSlot,
+  onRetryFloors,
+  onRetrySlots,
+}: {
+  selectedSlot: AvailableSlot | null;
+  selectedVehiclePlate?: string;
+  selectedFloorName?: string;
+  selectedRouteSlotUnavailable: boolean;
+  selectedSlotCode?: string;
+  parkingFloors: ParkingFloor[];
+  selectedFloor: ParkingFloor | null;
+  availableSlots: AvailableSlot[];
+  isLoading: boolean;
+  dbSlots: any[] | null;
+  error?: string | null;
+  activeSessions: any[];
+  activeHolds: any[];
+  startTime: Date;
+  endTime: Date;
+  onClearSlot: () => void;
+  onSelectFloor: (floor: ParkingFloor) => void;
+  onSelectSlot: (slot: AvailableSlot | null) => void;
+  onRetryFloors: () => void;
+  onRetrySlots: (start: Date, end: Date) => void;
+}) {
+  const selectedFloorId = selectedFloor?._id ?? selectedFloor?.id ?? String(selectedFloor?.floorNumber ?? '');
+  const floorAvailableCount = selectedFloor
+    ? availableSlots.filter((slot) => slot.floorId === selectedFloorId).length
+    : availableSlots.length;
+
+  return (
+    <StaggeredSection delay={260} style={styles.mapSection}>
+      <View style={styles.mapHeader}>
+        <View>
+          <Text style={styles.sectionKicker}>Parking space</Text>
+          <Text style={styles.mapTitle}>{selectedFloor?.name ?? 'Choose a floor'}</Text>
+        </View>
+        <View style={styles.availableBadge}>
+          <Text style={styles.availableCount}>{floorAvailableCount}</Text>
+          <Text style={styles.availableLabel}>available</Text>
+        </View>
+      </View>
+
+      {selectedSlot ? (
+        <View style={styles.selectedSlotCard}>
+          <View style={styles.selectedSlotIcon}>
+            <Ionicons name="location" size={20} color={COLORS.gold} />
+          </View>
+          <View style={styles.selectedSlotInfo}>
+            <Text style={styles.selectedSlotCode}>{selectedSlot.slotCode}</Text>
+            <Text style={styles.selectedSlotMeta}>
+              {selectedSlot.floorName ?? selectedFloorName ?? selectedSlot.floorId}
+              {selectedVehiclePlate ? ` · ${selectedVehiclePlate}` : ''}
+            </Text>
+          </View>
+          <Pressable
+            accessibilityLabel="Clear selected space"
+            accessibilityRole="button"
+            style={styles.clearSlotBtn}
+            onPress={onClearSlot}
+          >
+            <Ionicons name="close-circle" size={20} color={COLORS.textMuted} />
+          </Pressable>
+        </View>
+      ) : selectedRouteSlotUnavailable ? (
+        <View style={styles.warningBox}>
+          <Ionicons name="alert-circle-outline" size={18} color={COLORS.warning} />
+          <Text style={styles.warningText}>
+            Space {selectedSlotCode} is no longer available. Please choose another space.
+          </Text>
+        </View>
+      ) : null}
+
+      {parkingFloors.length > 0 ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.floorTabs}>
+          {parkingFloors.map((floor) => {
+            const floorId = floor._id ?? floor.id ?? String(floor.floorNumber);
+            const active = selectedFloor && (selectedFloor._id ?? selectedFloor.id ?? String(selectedFloor.floorNumber)) === floorId;
+            const floorCount = availableSlots.filter((slot) => slot.floorId === floorId).length;
+            return (
+              <Pressable
+                key={floorId}
+                style={[styles.floorTab, active && styles.floorTabActive]}
+                onPress={() => onSelectFloor(floor)}
+              >
+                <Text style={[styles.floorTabText, active && styles.floorTabTextActive]}>{floor.name}</Text>
+                <View style={[styles.floorCount, active && styles.floorCountActive]}>
+                  <Text style={[styles.floorCountText, active && styles.floorCountTextActive]}>{floorCount}</Text>
+                </View>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      ) : null}
+
+      <ParkingLegend />
+
+      <View style={styles.mapCanvas}>
+        {isLoading || dbSlots === null ? (
+          <View style={styles.mapState}>
+            <ActivityIndicator color={COLORS.gold} size="large" />
+            <Text style={styles.mapStateText}>Loading parking map...</Text>
+          </View>
+        ) : error ? (
+          <View style={styles.mapState}>
+            <ErrorState
+              message={error}
+              onRetry={() => {
+                onRetryFloors();
+                onRetrySlots(startTime, endTime);
+              }}
+            />
+          </View>
+        ) : !selectedFloor ? (
+          <View style={styles.mapState}>
+            <EmptyState icon="layers-outline" title="No floors available" message="No parking floors were found." />
+          </View>
+        ) : (
+          <ParkingMap2D
+            activeHolds={activeHolds}
+            activeSessions={activeSessions}
+            dbSlots={dbSlots}
+            floor={selectedFloor}
+            floorSlots={availableSlots.filter(
+              (slot) => slot.floorId === (selectedFloor._id ?? selectedFloor.id ?? String(selectedFloor.floorNumber)),
+            )}
+            selectedSlot={selectedSlot}
+            onSelectSlot={onSelectSlot}
+          />
+        )}
+      </View>
+    </StaggeredSection>
+  );
+}
+
+function ServiceList({
+  services,
+  selectedServiceIds,
+  serviceTotal,
+  onToggleService,
+}: {
+  services: Service[];
+  selectedServiceIds: string[];
+  serviceTotal: number;
+  onToggleService: (serviceId: string) => void;
+}) {
+  return (
+    <StaggeredSection delay={340} style={styles.section}>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionKicker}>Additional services</Text>
+        {serviceTotal > 0 ? <Text style={styles.serviceTotalBadge}>+{formatCurrency(serviceTotal)}</Text> : null}
+      </View>
+
+      {services.length === 0 ? (
+        <View style={styles.emptyServices}>
+          <Text style={styles.emptyServicesText}>No services are currently available.</Text>
+        </View>
+      ) : (
+        <View style={styles.serviceList}>
+          {services.map((service, index) => {
+            const serviceId = getServiceId(service);
+            const selected = selectedServiceIds.includes(serviceId);
+            return (
+              <Pressable
+                accessibilityLabel={`${service.name}, ${formatCurrency(service.price)}`}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: selected }}
+                key={serviceId}
+                style={[styles.serviceItem, selected && styles.serviceItemActive]}
+                onPress={() => onToggleService(serviceId)}
+              >
+                <View style={[styles.serviceCheckbox, selected && styles.serviceCheckboxActive]}>
+                  {selected ? <Ionicons name="checkmark" size={14} color={COLORS.textInverse} /> : null}
+                </View>
+                <View style={styles.serviceInfo}>
+                  <Text numberOfLines={2} style={styles.serviceName}>{service.name}</Text>
+                  {service.description ? (
+                    <Text numberOfLines={1} style={styles.serviceDescription}>{service.description}</Text>
+                  ) : (service.estimatedTime || service.estimatedTimeMinutes) ? (
+                    <Text style={styles.serviceDescription}>
+                      {service.estimatedTime ?? service.estimatedTimeMinutes} min
+                    </Text>
+                  ) : null}
+                </View>
+                <Text numberOfLines={1} style={styles.servicePrice}>{formatCurrency(service.price)}</Text>
+                {index < services.length - 1 ? <View style={styles.serviceDivider} /> : null}
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
+    </StaggeredSection>
+  );
+}
+
+function PriceBreakdown({
+  hourlyRate,
+  paidHours,
+  parkingCost,
+  serviceTotal,
+}: {
+  hourlyRate: number;
+  paidHours: number;
+  parkingCost: number;
+  serviceTotal: number;
+}) {
+  return (
+    <StaggeredSection delay={420} style={styles.priceDetails}>
+      <Text style={styles.sectionKicker}>Price details</Text>
+      <View style={styles.priceLine}>
+        <Text style={styles.priceLabel}>Hourly rate</Text>
+        <Text style={styles.priceValue}>{formatCurrency(hourlyRate)}</Text>
+      </View>
+      <View style={styles.priceLine}>
+        <Text style={styles.priceLabel}>Billable time</Text>
+        <Text style={styles.priceValue}>{paidHours} hours</Text>
+      </View>
+      <View style={styles.priceLine}>
+        <Text style={styles.priceLabel}>Parking fee</Text>
+        <Text style={styles.priceValue}>{formatCurrency(parkingCost)}</Text>
+      </View>
+      <View style={styles.priceLine}>
+        <Text style={styles.priceLabel}>Services</Text>
+        <Text style={styles.priceValue}>{formatCurrency(serviceTotal)}</Text>
+      </View>
+    </StaggeredSection>
+  );
+}
+
+function StickyBookingFooter({
+  grandTotal,
+  walletBalance,
+  hasEnoughBalance,
+  canBook,
+  submitting,
+  disabledReason,
+  onSubmit,
+}: {
+  grandTotal: number;
+  walletBalance: number;
+  hasEnoughBalance: boolean;
+  canBook: boolean;
+  submitting: boolean;
+  disabledReason: string;
+  onSubmit: () => void;
+}) {
+  const entrance = useEntrance(500);
+  const press = useRef(new Animated.Value(0)).current;
+
+  const animatePress = (toValue: number) => {
+    Animated.spring(press, {
+      damping: 15,
+      mass: 0.55,
+      stiffness: 260,
+      toValue,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const scale = press.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 0.985],
+  });
+
+  return (
+    <Animated.View
+      style={[
+        styles.stickyFooter,
+        {
+          opacity: entrance,
+          transform: [
+            {
+              translateY: entrance.interpolate({
+                inputRange: [0, 1],
+                outputRange: [36, 0],
+              }),
+            },
+          ],
+        },
+      ]}
+    >
+      <LinearGradient
+        colors={['rgba(21,23,26,0.98)', 'rgba(11,12,14,0.96)']}
+        style={StyleSheet.absoluteFill}
+      />
+      {!hasEnoughBalance ? (
+        <View style={styles.footerWarning}>
+          <Ionicons name="warning-outline" size={14} color={COLORS.warning} />
+          <Text style={styles.footerWarningText}>
+            Wallet balance {formatCurrency(walletBalance)} - insufficient
+          </Text>
+        </View>
+      ) : !canBook && disabledReason ? (
+        <View style={styles.footerWarning}>
+          <Ionicons name="information-circle-outline" size={14} color={COLORS.textMuted} />
+          <Text style={styles.footerHintText}>{disabledReason}</Text>
+        </View>
+      ) : null}
+
+      <View style={styles.footerMain}>
+        <View style={styles.footerTotal}>
+          <Text style={styles.footerTotalLabel}>Total</Text>
+          <Text style={styles.footerTotalValue}>{formatCurrency(grandTotal)}</Text>
+        </View>
+        <Animated.View style={[styles.footerSubmitWrap, { transform: [{ scale }] }]}>
+          <Pressable
+            accessibilityLabel="Confirm booking"
+            accessibilityRole="button"
+            accessibilityState={{ disabled: !canBook, busy: submitting }}
+            disabled={!canBook}
+            onPress={onSubmit}
+            onPressIn={() => animatePress(1)}
+            onPressOut={() => animatePress(0)}
+          >
+            <LinearGradient
+              colors={canBook ? [COLORS.goldLight, COLORS.gold, COLORS.goldDark] : ['#393A3D', '#2B2D31']}
+              end={{ x: 1, y: 0 }}
+              start={{ x: 0, y: 0 }}
+              style={styles.footerSubmitGrad}
+            >
+              {submitting ? (
+                <ActivityIndicator color={COLORS.textInverse} size="small" />
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle-outline" size={19} color={canBook ? COLORS.textInverse : COLORS.textMuted} />
+                  <Text style={[styles.footerSubmitText, !canBook && styles.footerSubmitTextDisabled]}>
+                    Confirm booking
+                  </Text>
+                </>
+              )}
+            </LinearGradient>
+          </Pressable>
+        </Animated.View>
+      </View>
+    </Animated.View>
+  );
+}
+
 // ── Main Screen ──────────────────────────────────────────────────────────────
 export const CreateBookingScreen = ({ navigation, route }: Props) => {
   const {
@@ -284,6 +902,7 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
   const selectedFloorId = route.params?.selectedFloorId;
   const selectedSlotCode = route.params?.selectedSlotCode;
   const selectedFloorName = route.params?.selectedFloorName;
+  const selectedServiceId = route.params?.selectedServiceId;
 
   const fetchExtraData = useCallback(async () => {
     try {
@@ -362,6 +981,15 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
   }, [fetchWalletBalance, fetchParkingFloors, fetchServices, loadVehicles, loadHourlyRate, loadMembership]);
 
   useEffect(() => {
+    if (!selectedServiceId || services.length === 0) return;
+    const matchedService = services.find((service) => getServiceId(service) === selectedServiceId);
+    if (!matchedService) return;
+    const matchedServiceId = getServiceId(matchedService);
+    if (!matchedServiceId) return;
+    setSelectedServiceIds((current) => (current.includes(matchedServiceId) ? current : [...current, matchedServiceId]));
+  }, [selectedServiceId, services]);
+
+  useEffect(() => {
     const now = new Date();
     if (startTime > now && endTime > startTime) {
       void getAvailableSlots(startTime, endTime);
@@ -426,7 +1054,7 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
   const serviceTotal = useMemo(
     () =>
       services
-        .filter((s) => selectedServiceIds.includes(s._id))
+        .filter((s) => selectedServiceIds.includes(getServiceId(s)))
         .reduce((sum, s) => sum + Number(s.price || 0), 0),
     [services, selectedServiceIds],
   );
@@ -463,6 +1091,17 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
   );
   const selectedRouteSlotUnavailable =
     Boolean(selectedFloorId && selectedSlotCode) && !selectedSlot && !isLoading && availableSlots.length > 0;
+  const disabledReason = !selectedVehicleId
+    ? 'Select a vehicle to continue'
+    : !selectedSlot
+      ? 'Choose an available space'
+      : membershipBlocksRegisteredVehicle
+        ? 'Use your VIP space first'
+        : durationMs < 30 * 60 * 1000 || durationMs > 24 * 60 * 60 * 1000
+          ? 'Adjust booking duration'
+          : !hasEnoughBalance
+            ? 'Top up your wallet'
+            : '';
 
   useEffect(() => {
     if (!selectedSlot || !selectedVehicleId || startTime <= new Date() || endTime <= startTime) {
@@ -657,8 +1296,13 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
     <SafeAreaView edges={['top', 'bottom']} style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
       <ScreenHeader
+        accentColor={COLORS.gold}
+        headerIcon="calendar-outline"
+        headerIconBackground="rgba(226,186,75,0.12)"
+        headerIconColor={COLORS.gold}
+        progressVariant="accent"
+        subtitle="Time & vehicle · Parking · Review"
         title="New booking"
-        subtitle="Choose a time, vehicle, and parking space"
         onBack={() => navigation.goBack()}
       />
 
@@ -666,122 +1310,74 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
           {/* ── Time Pickers ──────────────────────────────────── */}
-          <View style={styles.section}>
-            <SectionTitle>Time</SectionTitle>
-            <View style={styles.timePickerRow}>
-              <TouchableOpacity
-                style={styles.timePickerCard}
-                onPress={() => setShowStartPicker(true)}
-                activeOpacity={0.7}
-                accessibilityLabel={`Select arrival time, currently ${format(startTime, 'HH:mm dd/MM/yyyy')}`}
-                accessibilityRole="button"
-              >
-                <View style={styles.timeCardTop}>
-                  <View style={styles.timePickerIcon}>
-                    <Ionicons name="log-in-outline" size={18} color={COLORS.gold} />
-                  </View>
-                  <Text style={styles.timePickerLabel}>Arrival</Text>
-                </View>
-                <Text style={styles.timePickerValue}>{format(startTime, 'HH:mm')}</Text>
-                <Text style={styles.timePickerDate}>{format(startTime, 'dd/MM/yyyy')}</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.timePickerCard}
-                onPress={() => setShowEndPicker(true)}
-                activeOpacity={0.7}
-                accessibilityLabel={`Select departure time, currently ${format(endTime, 'HH:mm dd/MM/yyyy')}`}
-                accessibilityRole="button"
-              >
-                <View style={styles.timeCardTop}>
-                  <View style={[styles.timePickerIcon, styles.timePickerIconExit]}>
-                    <Ionicons name="log-out-outline" size={18} color={COLORS.staffBlue} />
-                  </View>
-                  <Text style={styles.timePickerLabel}>Departure</Text>
-                </View>
-                <Text style={styles.timePickerValue}>{format(endTime, 'HH:mm')}</Text>
-                <Text style={styles.timePickerDate}>{format(endTime, 'dd/MM/yyyy')}</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.durationNote}>
-              <Ionicons name="time-outline" size={15} color={COLORS.gold} />
-              <Text style={styles.durationText}>Estimated duration: {durationHours} hours</Text>
-            </View>
-          </View>
+          <TimeTimeline
+            durationHours={durationHours}
+            endTime={endTime}
+            startTime={startTime}
+            onEndPress={() => setShowEndPicker(true)}
+            onStartPress={() => setShowStartPicker(true)}
+          />
 
           {/* ── Vehicle ───────────────────────────────────────── */}
-          <View style={styles.section}>
-            <SectionTitle>Your vehicle</SectionTitle>
-            {vehicleError ? (
-              <ErrorState message={vehicleError} onRetry={loadVehicles} />
-            ) : vehicles.length === 0 ? (
-              <EmptyState
-                icon="car-outline"
-                title="No approved vehicles"
-                message="Add a vehicle or wait for approval in your profile before booking."
-              />
-            ) : (
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow}>
-                {vehicles.map((vehicle) => {
-                  const vehicleId = vehicle.id ?? vehicle._id ?? '';
-                  const active = selectedVehicleId === vehicleId;
-                  return (
-                    <Pressable
-                      key={vehicleId}
-                      style={[styles.vehiclePill, active && styles.vehiclePillActive]}
-                      onPress={() => setSelectedVehicleId(vehicleId)}
-                      accessibilityLabel={`Select vehicle ${vehicle.licensePlate}`}
-                      accessibilityRole="radio"
-                      accessibilityState={{ checked: active }}
-                    >
-                      <Ionicons name="car-outline" size={16} color={active ? COLORS.gold : COLORS.textMuted} />
-                      <Text style={[styles.vehicleText, active && styles.vehicleTextActive]}>
-                        {vehicle.licensePlate}
-                      </Text>
-                      {vehicle.isDefault ? <View style={styles.defaultDot} /> : null}
-                    </Pressable>
-                  );
-                })}
-                <Pressable
-                  style={[styles.vehiclePill, selectedVehicleId === 'manual' && styles.vehiclePillActive]}
-                  onPress={() => setSelectedVehicleId('manual')}
-                  accessibilityLabel="Use another license plate"
-                  accessibilityRole="radio"
-                  accessibilityState={{ checked: selectedVehicleId === 'manual' }}
-                >
-                  <Ionicons name="create-outline" size={16} color={selectedVehicleId === 'manual' ? COLORS.gold : COLORS.textMuted} />
-                  <Text style={[styles.vehicleText, selectedVehicleId === 'manual' && styles.vehicleTextActive]}>
-                    Other plate
-                  </Text>
-                </Pressable>
-              </ScrollView>
-            )}
+          <VehicleSelector
+            manualPlate={manualPlate}
+            membershipBlocksRegisteredVehicle={membershipBlocksRegisteredVehicle}
+            selectedVehicleId={selectedVehicleId}
+            vehicleError={vehicleError}
+            vehicles={vehicles}
+            onManageVehicles={() =>
+              navigation
+                .getParent<BottomTabNavigationProp<CustomerTabParamList>>()
+                ?.navigate('ProfileTab', { screen: 'VehicleList' })
+            }
+            onManualPlateChange={setManualPlate}
+            onRetry={loadVehicles}
+            onSelectVehicle={setSelectedVehicleId}
+          />
 
-            {selectedVehicleId === 'manual' && (
-              <View style={styles.manualInputWrap}>
-                <TextInput
-                  style={styles.manualInput}
-                  placeholder="Enter license plate (e.g. 30A-12345)"
-                  placeholderTextColor={COLORS.textMuted}
-                  value={manualPlate}
-                  onChangeText={setManualPlate}
-                  autoCapitalize="characters"
-                />
-              </View>
-            )}
-            {membershipBlocksRegisteredVehicle ? (
-              <View style={styles.warningBox}>
-                <Ionicons name="alert-circle-outline" size={18} color={COLORS.warning} />
-                <Text style={styles.warningText}>
-                  Your membership has an available VIP space. Assign a vehicle to it before booking a regular space.
-                </Text>
-              </View>
-            ) : null}
-          </View>
+          <ParkingMapSection
+            activeHolds={activeHolds}
+            activeSessions={activeSessions}
+            availableSlots={availableSlots}
+            dbSlots={dbSlots}
+            endTime={endTime}
+            error={error}
+            isLoading={isLoading}
+            parkingFloors={parkingFloors}
+            selectedFloor={selectedFloor}
+            selectedFloorName={selectedFloorName}
+            selectedRouteSlotUnavailable={selectedRouteSlotUnavailable}
+            selectedSlot={selectedSlot}
+            selectedSlotCode={selectedSlotCode}
+            selectedVehiclePlate={selectedVehicle?.licensePlate}
+            startTime={startTime}
+            onClearSlot={() => setSelectedSlot(null)}
+            onRetryFloors={() => void fetchParkingFloors()}
+            onRetrySlots={(start, end) => void getAvailableSlots(start, end)}
+            onSelectFloor={(floor) => {
+              setSelectedFloor(floor);
+              setSelectedSlot(null);
+            }}
+            onSelectSlot={setSelectedSlot}
+          />
+
+          <ServiceList
+            selectedServiceIds={selectedServiceIds}
+            serviceTotal={serviceTotal}
+            services={services}
+            onToggleService={toggleService}
+          />
+
+          <PriceBreakdown
+            hourlyRate={hourlyRate}
+            paidHours={paidHours}
+            parkingCost={parkingCost}
+            serviceTotal={serviceTotal}
+          />
 
           {/* ── Slot Map ──────────────────────────────────────── */}
-          <View style={styles.section}>
-            <SectionTitle>Parking space</SectionTitle>
+          <View style={styles.hiddenLegacySection}>
+            {false ? <SectionTitle>Parking space</SectionTitle> : null}
 
             {selectedSlot ? (
               <View style={styles.selectedSlotCard}>
@@ -900,7 +1496,7 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
           </View>
 
           {/* ── Extra Services ────────────────────────────────── */}
-          <View style={styles.section}>
+          <View style={styles.hiddenLegacySection}>
             <View style={styles.sectionHeader}>
               <SectionTitle>Additional services</SectionTitle>
               {serviceTotal > 0 && (
@@ -915,12 +1511,13 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
             ) : (
               <View style={styles.serviceList}>
                 {services.map((service) => {
-                  const selected = selectedServiceIds.includes(service._id);
+                  const serviceId = getServiceId(service);
+                  const selected = selectedServiceIds.includes(serviceId);
                   return (
                     <TouchableOpacity
-                      key={service._id}
+                      key={serviceId}
                       style={[styles.serviceItem, selected && styles.serviceItemActive]}
-                      onPress={() => toggleService(service._id)}
+                      onPress={() => toggleService(serviceId)}
                       activeOpacity={0.7}
                       accessibilityLabel={`${service.name}, ${formatCurrency(service.price)}`}
                       accessibilityRole="checkbox"
@@ -946,7 +1543,7 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
           </View>
 
           {/* ── Price Summary ─────────────────────────────────── */}
-          <View style={styles.priceSummary}>
+          <View style={styles.hiddenLegacySection}>
             <View style={styles.summaryHeader}>
               <View style={styles.summaryIcon}>
                 <Ionicons name="receipt-outline" size={19} color={COLORS.gold} />
@@ -1019,6 +1616,16 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <StickyBookingFooter
+        canBook={canBook}
+        disabledReason={disabledReason}
+        grandTotal={grandTotal}
+        hasEnoughBalance={hasEnoughBalance}
+        submitting={submitting}
+        walletBalance={walletBalance}
+        onSubmit={handleSubmit}
+      />
 
       <BookingActionModal
         message={`Space ${selectedSlot?.slotCode ?? '--'} has been reserved.\nAmount paid: ${formatCurrency(confirmedTotal ?? grandTotal)}`}
@@ -1103,10 +1710,78 @@ export const CreateBookingScreen = ({ navigation, route }: Props) => {
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: COLORS.background },
   flex: { flex: 1 },
-  scroll: { gap: SPACING.xl, padding: SPACING.lg, paddingBottom: 40 },
+  scroll: { gap: SPACING.lg, padding: SPACING.lg, paddingBottom: STICKY_FOOTER_SPACE },
 
   section: { gap: SPACING.sm },
+  hiddenLegacySection: { display: 'none' },
   sectionHeader: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
+  sectionKicker: {
+    color: COLORS.gold,
+    fontSize: FONT_SIZES.xs,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+
+  // Header
+  headerShell: {
+    backgroundColor: COLORS.background,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.md,
+    paddingBottom: SPACING.sm,
+  },
+  headerRow: { alignItems: 'center', flexDirection: 'row', gap: SPACING.md },
+  backButton: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.055)',
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.round,
+    borderWidth: 1,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
+  headerTitleWrap: { flex: 1, minWidth: 0 },
+  headerTitle: { color: COLORS.textPrimary, fontSize: FONT_SIZES.lg, fontWeight: '800' },
+  headerSubtitle: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs, marginTop: 2 },
+  progressTrack: {
+    backgroundColor: COLORS.surfaceElevated,
+    borderRadius: RADIUS.round,
+    height: 3,
+    marginTop: SPACING.md,
+    overflow: 'hidden',
+  },
+  progressFill: { backgroundColor: COLORS.gold, borderRadius: RADIUS.round, height: 3, width: '72%' },
+
+  // Compact time timeline
+  timeline: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.035)',
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+    flexDirection: 'row',
+    minHeight: 108,
+    padding: SPACING.md,
+  },
+  timeBlock: { flex: 1, minWidth: 0 },
+  timeLabelRow: { alignItems: 'center', flexDirection: 'row', gap: 6 },
+  timeLabel: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs, fontWeight: '700' },
+  timeValue: { color: COLORS.textPrimary, fontSize: 28, fontWeight: '900', letterSpacing: 0 },
+  timeDate: { color: COLORS.textSecondary, fontSize: FONT_SIZES.xs, marginTop: 2 },
+  timelineMiddle: { alignItems: 'center', flex: 0.76, justifyContent: 'center', minWidth: 82 },
+  timelineLine: { backgroundColor: 'rgba(226,186,75,0.35)', height: 1, position: 'absolute', width: '100%' },
+  durationChip: {
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    borderColor: 'rgba(226,186,75,0.26)',
+    borderRadius: RADIUS.round,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
 
   // Time picker cards
   timePickerRow: { flexDirection: 'row', gap: SPACING.sm },
@@ -1161,6 +1836,37 @@ const styles = StyleSheet.create({
   vehicleText: { color: COLORS.textMuted, fontSize: FONT_SIZES.sm, fontWeight: '600' },
   vehicleTextActive: { color: COLORS.gold },
   defaultDot: { backgroundColor: COLORS.gold, borderRadius: 3, height: 6, marginLeft: 2, width: 6 },
+  vehicleEmpty: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.035)',
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    padding: SPACING.md,
+  },
+  vehicleEmptyIcon: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(226,186,75,0.12)',
+    borderRadius: RADIUS.md,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
+  vehicleEmptyCopy: { flex: 1, minWidth: 0 },
+  vehicleEmptyTitle: { color: COLORS.textPrimary, fontSize: FONT_SIZES.sm, fontWeight: '800' },
+  vehicleEmptyText: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs, lineHeight: 17, marginTop: 2 },
+  manageVehicleBtn: {
+    alignItems: 'center',
+    borderColor: 'rgba(226,186,75,0.35)',
+    borderRadius: RADIUS.round,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 38,
+    paddingHorizontal: SPACING.sm,
+  },
+  manageVehicleText: { color: COLORS.gold, fontSize: FONT_SIZES.xs, fontWeight: '800' },
   manualInputWrap: { marginTop: SPACING.xs },
   manualInput: {
     backgroundColor: COLORS.surface,
@@ -1209,6 +1915,29 @@ const styles = StyleSheet.create({
 
   // Floor tabs
   floorTabScroll: { maxHeight: 44, marginTop: SPACING.sm },
+  mapSection: {
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderColor: 'rgba(226,186,75,0.2)',
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+    gap: SPACING.sm,
+    overflow: 'hidden',
+    padding: SPACING.md,
+  },
+  mapHeader: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
+  mapTitle: { color: COLORS.textPrimary, fontSize: FONT_SIZES.xl, fontWeight: '900', marginTop: 3 },
+  availableBadge: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(126,232,162,0.09)',
+    borderColor: 'rgba(126,232,162,0.22)',
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    minWidth: 72,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 7,
+  },
+  availableCount: { color: COLORS.success, fontSize: FONT_SIZES.lg, fontWeight: '900' },
+  availableLabel: { color: COLORS.textMuted, fontSize: 10, fontWeight: '700', textTransform: 'uppercase' },
   floorTabs: { alignItems: 'center', gap: SPACING.sm, paddingBottom: SPACING.sm },
   floorTab: {
     alignItems: 'center',
@@ -1279,33 +2008,55 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
   },
   emptyServicesText: { color: COLORS.textMuted, fontSize: FONT_SIZES.sm, textAlign: 'center' },
-  serviceList: { gap: SPACING.xs },
-  serviceItem: {
-    alignItems: 'center',
-    backgroundColor: COLORS.surface,
+  serviceList: {
+    backgroundColor: 'rgba(255,255,255,0.032)',
     borderColor: COLORS.border,
     borderRadius: RADIUS.lg,
     borderWidth: 1,
+    overflow: 'hidden',
+  },
+  serviceItem: {
+    alignItems: 'center',
+    backgroundColor: 'transparent',
     flexDirection: 'row',
     gap: SPACING.sm,
+    minHeight: 64,
     padding: SPACING.md,
   },
-  serviceItemActive: { backgroundColor: 'rgba(226,186,75,0.08)', borderColor: COLORS.gold },
+  serviceItemActive: { backgroundColor: 'rgba(226,186,75,0.08)' },
   serviceCheckbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 4,
-    borderWidth: 1.5,
-    borderColor: COLORS.border,
-    backgroundColor: COLORS.surfaceElevated,
     alignItems: 'center',
+    backgroundColor: COLORS.surfaceElevated,
+    borderColor: COLORS.border,
+    borderRadius: 7,
+    borderWidth: 1.5,
+    height: 24,
     justifyContent: 'center',
+    width: 24,
   },
   serviceCheckboxActive: { backgroundColor: COLORS.gold, borderColor: COLORS.gold },
-  serviceInfo: { flex: 1 },
-  serviceName: { color: COLORS.textPrimary, fontSize: FONT_SIZES.sm, fontWeight: '600' },
+  serviceInfo: { flex: 1, minWidth: 0 },
+  serviceName: { color: COLORS.textPrimary, fontSize: FONT_SIZES.sm, fontWeight: '700', lineHeight: 19 },
   serviceDuration: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs, marginTop: 2 },
-  servicePrice: { color: COLORS.textPrimary, fontSize: FONT_SIZES.sm, fontWeight: '700' },
+  serviceDescription: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs, marginTop: 3 },
+  servicePrice: { color: COLORS.textPrimary, fontSize: FONT_SIZES.sm, fontWeight: '800', marginLeft: SPACING.xs, maxWidth: 110 },
+  serviceDivider: {
+    backgroundColor: COLORS.border,
+    bottom: 0,
+    height: StyleSheet.hairlineWidth,
+    left: 56,
+    position: 'absolute',
+    right: SPACING.md,
+  },
+
+  priceDetails: {
+    backgroundColor: 'transparent',
+    borderTopColor: COLORS.border,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    gap: SPACING.xs,
+    paddingTop: SPACING.md,
+  },
+  priceLine: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', minHeight: 28 },
 
   // Price summary
   priceSummary: {
@@ -1358,8 +2109,58 @@ const styles = StyleSheet.create({
   },
   walletText: { fontSize: FONT_SIZES.xs },
 
+  // Sticky footer
+  stickyFooter: {
+    borderColor: 'rgba(226,186,75,0.24)',
+    borderTopLeftRadius: RADIUS.xl,
+    borderTopRightRadius: RADIUS.xl,
+    borderWidth: 1,
+    bottom: 0,
+    elevation: 18,
+    left: 0,
+    overflow: 'hidden',
+    paddingBottom: Platform.OS === 'ios' ? 28 : 18,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.md,
+    position: 'absolute',
+    right: 0,
+    shadowColor: COLORS.gold,
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.14,
+    shadowRadius: 20,
+  },
+  footerWarning: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,159,67,0.09)',
+    borderColor: 'rgba(255,159,67,0.2)',
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: SPACING.sm,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 7,
+  },
+  footerWarningText: { color: COLORS.warning, flex: 1, fontSize: FONT_SIZES.xs, fontWeight: '700' },
+  footerHintText: { color: COLORS.textMuted, flex: 1, fontSize: FONT_SIZES.xs, fontWeight: '700' },
+  footerMain: { alignItems: 'center', flexDirection: 'row', gap: SPACING.md },
+  footerTotal: { flex: 1, minWidth: 0 },
+  footerTotalLabel: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs, fontWeight: '800', textTransform: 'uppercase' },
+  footerTotalValue: { color: COLORS.gold, fontSize: FONT_SIZES.xl, fontWeight: '900', marginTop: 2 },
+  footerSubmitWrap: { borderRadius: RADIUS.lg, minWidth: 168, overflow: 'hidden' },
+  footerSubmitGrad: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: SPACING.xs,
+    height: 54,
+    justifyContent: 'center',
+    paddingHorizontal: SPACING.md,
+  },
+  footerSubmitText: { color: COLORS.textInverse, fontSize: FONT_SIZES.sm, fontWeight: '900' },
+  footerSubmitTextDisabled: { color: COLORS.textMuted },
+
   // Submit
-  submitBtn: { borderRadius: RADIUS.lg, overflow: 'hidden' },
+  submitBtn: { borderRadius: RADIUS.lg, display: 'none', overflow: 'hidden' },
   submitDisabled: { opacity: 0.5 },
   submitGrad: {
     alignItems: 'center',

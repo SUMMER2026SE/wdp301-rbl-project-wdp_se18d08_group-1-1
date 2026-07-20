@@ -16,8 +16,10 @@ import {
   Wallet,
 } from 'lucide-react';
 import ParkingMapViewer from '../../components/ParkingMapViewer';
+
 import PolicyAcceptancePrompt from '../../components/policies/PolicyAcceptancePrompt';
 import { extractMissingPolicies, isPolicyAcceptanceRequired } from '../../utils/policyErrors';
+import { getPolicyAcceptanceStatus } from '../../services/policyService';
 import { getServices } from '../../services/extraServiceApi';
 import { getMyVehicles } from '../../services/vehicleService';
 import { getWalletInfo } from '../../services/walletService';
@@ -28,6 +30,7 @@ import {
   getAvailableBookingSlots,
   quoteBulkBooking,
   releaseBookingHold,
+  getActiveHolds,
 } from '../../services/bookingService';
 import { QRCodeSVG } from 'qrcode.react';
 import { createTopUpUrl, getTopUpStatus } from '../../services/walletService';
@@ -221,10 +224,10 @@ export default function CreateBookingPage() {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [bookingInfo, setBookingInfo] = useState(null);
   const [successRedirectCountdown, setSuccessRedirectCountdown] = useState(4);
-  const [policyPrompt, setPolicyPrompt] = useState({
-    open: false,
-    missingPolicies: [],
-  });
+
+  const [showGlobalPolicyModal, setShowGlobalPolicyModal] = useState(false);
+  const [missingPolicies, setMissingPolicies] = useState([]);
+  const [pendingPolicyAction, setPendingPolicyAction] = useState(null);
 
   // Map state
   const [floors, setFloors] = useState([]);
@@ -232,6 +235,7 @@ export default function CreateBookingPage() {
   const [currentFloorId, setCurrentFloorId] = useState(null);
   const [dbSlots, setDbSlots] = useState([]);
   const [activeSessions, setActiveSessions] = useState([]);
+  const [activeHolds, setActiveHolds] = useState([]);
 
   const fetchDbSlots = useCallback(async () => {
     if (!currentFloorId) {
@@ -253,6 +257,17 @@ export default function CreateBookingPage() {
     fetchDbSlots();
   }, [fetchDbSlots]);
 
+  const fetchActiveHoldsData = async () => {
+    try {
+      const res = await getActiveHolds();
+      if (res.ok && res.data?.data) {
+        setActiveHolds(res.data.data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch active holds', err);
+    }
+  };
+
   const fetchActiveSessions = async () => {
     try {
       const token = localStorage.getItem('accessToken');
@@ -271,8 +286,10 @@ export default function CreateBookingPage() {
 
   useEffect(() => {
     fetchActiveSessions();
+    fetchActiveHoldsData();
     const intervalId = setInterval(() => {
       fetchActiveSessions();
+      fetchActiveHoldsData();
       fetchDbSlots();
     }, 30000); // 30s
     return () => clearInterval(intervalId);
@@ -357,16 +374,22 @@ export default function CreateBookingPage() {
     ? dbSlots.find((slot) => slot.slotNumber === selectedSlot.slotCode)
     : null;
   const selectedSlotReservedFor = selectedDbSlot?.reservedFor?._id || selectedDbSlot?.reservedFor || null;
+  const currentLicensePlate = vehicleId ? selectedVehicle?.licensePlate : manualPlate.trim();
+  const isRegisteredPlate = vehicles.some(
+    v => v.licensePlate.toUpperCase() === currentLicensePlate?.toUpperCase()
+  );
+
   const selectedSlotIsOwnVipSlot = Boolean(
     activeMembershipType &&
-    selectedVehicle &&
+    isRegisteredPlate &&
     selectedSlot &&
     selectedSlotReservedFor &&
     String(selectedSlotReservedFor) === String(profile?.id)
   );
+
   const selectedRegisteredVehicleBlockedByVip = Boolean(
     activeMembershipType &&
-    selectedVehicle &&
+    isRegisteredPlate &&
     selectedSlot &&
     selectedDbSlot &&
     !selectedSlotIsOwnVipSlot
@@ -537,6 +560,11 @@ export default function CreateBookingPage() {
       });
 
       if (!res.ok) {
+        if (isPolicyAcceptanceRequired(res.data)) {
+          setMissingPolicies(extractMissingPolicies(res.data));
+          setPendingPolicyAction(() => handleFindSlots);
+          setShowGlobalPolicyModal(true);
+        }
         setError(res.data?.message || 'Could not check available slots.');
         setSelectedSlotKey('');
         return;
@@ -586,13 +614,20 @@ export default function CreateBookingPage() {
       return;
     }
 
-    if (!vehicleId && !manualPlate.trim()) {
-      setError('Please select a vehicle or enter a license plate.');
-      return;
+    if (!vehicleId) {
+      if (!manualPlate.trim()) {
+        setError('Please select a vehicle or enter a license plate.');
+        return;
+      }
+      const plateRegex = /^[A-Za-z0-9]{4,12}$/;
+      if (!plateRegex.test(manualPlate.trim())) {
+        setError('License plate must be 4-12 alphanumeric characters.');
+        return;
+      }
     }
 
     if (selectedRegisteredVehicleBlockedByVip) {
-      setError('This registered vehicle is already covered by your active VIP membership. Please use your assigned VIP slot instead of booking another slot.');
+      setError('This vehicle is already covered by your active VIP membership. Please use your assigned VIP slot instead of booking another slot.');
       return;
     }
 
@@ -798,7 +833,15 @@ export default function CreateBookingPage() {
     );
   };
 
-  const handleCheckoutCart = async () => {
+  const handleBookingClick = () => {
+    if (Object.keys(cartItemErrors).length > 0) {
+      setError('Fix highlighted booking items before checkout.');
+      return;
+    }
+    executeCheckoutCart();
+  };
+
+  const executeCheckoutCart = async () => {
     setSubmitting(true);
     setError('');
     setSuccess('');
@@ -825,9 +868,6 @@ export default function CreateBookingPage() {
         return;
       }
 
-
-
-
       const checkoutItems = cartApiItems.map((item) => ({
         ...item,
         holdId: cartItems.find(c => c.clientItemId === item.clientItemId)?.holdId,
@@ -839,16 +879,15 @@ export default function CreateBookingPage() {
       });
 
       if (!res.ok) {
-        if (isPolicyAcceptanceRequired(res.data)) {
-          setPolicyPrompt({
-            open: true,
-            missingPolicies: extractMissingPolicies(res.data),
-          });
-          return;
-        }
-
         const errorMessage = res.data?.message || '';
         const itemErrors = res.data?.data?.itemErrors || [];
+        
+        if (isPolicyAcceptanceRequired(res.data)) {
+          setMissingPolicies(extractMissingPolicies(res.data));
+          setPendingPolicyAction(() => executeCheckoutCart);
+          setShowGlobalPolicyModal(true);
+        }
+
         if (itemErrors.length > 0) {
           setCartItemErrors(toItemErrorMap(itemErrors));
           setError(errorMessage || 'One or more booking items need attention.');
@@ -883,7 +922,7 @@ export default function CreateBookingPage() {
   };
 
   useEffect(() => {
-    latestActions.current.handleCreateBooking = handleCheckoutCart;
+    latestActions.current.handleCreateBooking = executeCheckoutCart;
   });
 
   const successBookingCards = bookingInfo?.bookings || (
@@ -1265,7 +1304,7 @@ export default function CreateBookingPage() {
 
                   <button
                     type="button"
-                    onClick={handleCheckoutCart}
+                    onClick={handleBookingClick}
                     disabled={submitting || topUpLoading  || cartItems.length === 0}
                     className="w-full rounded-2xl bg-gray-900 hover:bg-black disabled:opacity-50 text-white px-4 py-4 font-black transition flex items-center justify-center gap-2 shadow-sm active:scale-[0.98]"
                   >
@@ -1332,6 +1371,7 @@ export default function CreateBookingPage() {
                 onFloorSelect={setCurrentFloorId}
                 activeSessions={activeSessions}
                 dbSlots={dbSlots}
+                activeHolds={activeHolds}
                 availableSlots={slots}
                 selectedSlotId={
                   cartItems.length > 0 
@@ -1354,7 +1394,7 @@ export default function CreateBookingPage() {
                       <span className="text-[10px] text-gray-300 font-bold tracking-wide">Available</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <div className="w-3.5 h-3.5 rounded-sm bg-red-500/20 border border-red-500"></div>
+                      <div className="w-3.5 h-3.5 rounded-sm bg-rose-200 border border-rose-600"></div>
                       <span className="text-[10px] text-gray-300 font-bold tracking-wide">Occupied</span>
                     </div>
                     <div className="flex items-center gap-1.5">
@@ -1368,6 +1408,10 @@ export default function CreateBookingPage() {
                     <div className="flex items-center gap-1.5">
                       <div className="w-3.5 h-3.5 rounded-sm bg-red-200 border border-red-500" style={{ backgroundImage: 'repeating-linear-gradient(45deg, rgba(239, 68, 68, 0.2), rgba(239, 68, 68, 0.2) 4px, rgba(127, 29, 29, 0.3) 4px, rgba(127, 29, 29, 0.3) 8px)' }}></div>
                       <span className="text-[10px] text-gray-300 font-bold tracking-wide">Maintenance</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-3.5 h-3.5 rounded-sm bg-orange-100 border border-orange-500"></div>
+                      <span className="text-[10px] text-orange-500 font-bold tracking-wide">Hold/Booked</span>
                     </div>
                   </div>
                 </div>
@@ -1497,13 +1541,18 @@ export default function CreateBookingPage() {
         </div>
       )}
 
+
+
+
       <PolicyAcceptancePrompt
-        open={policyPrompt.open}
-        missingPolicies={policyPrompt.missingPolicies}
-        onClose={() => setPolicyPrompt({ open: false, missingPolicies: [] })}
+        open={showGlobalPolicyModal}
+        missingPolicies={missingPolicies}
+        onClose={() => setShowGlobalPolicyModal(false)}
         onAccepted={() => {
-          setPolicyPrompt({ open: false, missingPolicies: [] });
-          handleCheckoutCart();
+          setShowGlobalPolicyModal(false);
+          if (pendingPolicyAction) {
+            pendingPolicyAction();
+          }
         }}
       />
     </div>

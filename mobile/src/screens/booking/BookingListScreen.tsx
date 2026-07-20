@@ -1,43 +1,42 @@
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { LinearGradient } from 'expo-linear-gradient';
 import { format } from 'date-fns';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   FlatList,
-  Pressable,
   RefreshControl,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { EmptyState, ErrorState } from '@/components/common';
+import { AnimatedPressable, StatusChip, StaggeredView } from '@/components/profile/ProfileUI';
+import { ErrorState } from '@/components/common';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
 import { useBooking } from '@/hooks/useBooking';
-import type { BookingStackParamList } from '@/navigation/BookingStackNavigator';
 import type { CustomerTabParamList } from '@/navigation/CustomerNavigator';
 import type { Booking, BookingStatus, ParkingFloor } from '@/types/booking.types';
 import { formatCurrency } from '@/utils/formatters';
 
-type Props = NativeStackScreenProps<BookingStackParamList, 'BookingList'>;
+type Props = { navigation: any };
 type FilterType = BookingStatus | 'all';
 
 const STATUS_CONFIG: Record<BookingStatus | 'all', { label: string; color: string; bg: string }> = {
-  all: { label: 'All', color: COLORS.textSecondary, bg: COLORS.surface },
-  pending: { label: 'Payment pending', color: COLORS.warning, bg: 'rgba(255,159,67,0.12)' },
-  confirmed: { label: 'Confirmed', color: COLORS.staffBlue, bg: 'rgba(96,180,255,0.12)' },
-  active: { label: 'Parked', color: COLORS.success, bg: 'rgba(76,175,80,0.12)' },
-  paused: { label: 'Paused', color: COLORS.warning, bg: 'rgba(255,159,67,0.12)' },
-  completed: { label: 'Completed', color: COLORS.textMuted, bg: COLORS.surfaceElevated },
-  cancelled: { label: 'Cancelled', color: COLORS.error, bg: 'rgba(255,77,77,0.12)' },
-  expired: { label: 'Expired', color: COLORS.warning, bg: 'rgba(255,159,67,0.12)' },
+  all: { label: 'All', color: COLORS.textSecondary, bg: 'rgba(255,255,255,0.04)' },
+  pending: { label: 'Payment pending', color: COLORS.warning, bg: 'rgba(255,159,67,0.11)' },
+  confirmed: { label: 'Confirmed', color: COLORS.staffBlue, bg: 'rgba(96,180,255,0.11)' },
+  active: { label: 'Parked', color: COLORS.success, bg: 'rgba(76,175,80,0.11)' },
+  paused: { label: 'Paused', color: COLORS.warning, bg: 'rgba(255,159,67,0.11)' },
+  completed: { label: 'Completed', color: COLORS.textMuted, bg: 'rgba(255,255,255,0.04)' },
+  cancelled: { label: 'Cancelled', color: COLORS.error, bg: 'rgba(255,77,77,0.1)' },
+  expired: { label: 'Expired', color: COLORS.warning, bg: 'rgba(255,159,67,0.11)' },
 };
 
 const FILTERS: FilterType[] = ['all', 'pending', 'confirmed', 'active', 'paused', 'completed', 'cancelled', 'expired'];
@@ -63,60 +62,184 @@ function getFloorLabel(floorId: Booking['floorId']) {
   return floor.name || `Floor ${floor.floorNumber}`;
 }
 
-function BookingCard({ booking, onPress }: { booking: Booking; onPress: () => void }) {
+function NewBookingButton({ compact, onPress }: { compact?: boolean; onPress: () => void }) {
+  return (
+    <AnimatedPressable accessibilityLabel="Create a new booking" onPress={onPress} style={styles.newBtn} tint="rgba(226,186,75,0.08)">
+      <LinearGradient
+        colors={[COLORS.goldLight, COLORS.gold]}
+        end={{ x: 1, y: 0 }}
+        start={{ x: 0, y: 0 }}
+        style={[styles.newBtnGrad, compact && styles.newBtnCompact]}
+      >
+        <Ionicons name="add" size={18} color={COLORS.textInverse} />
+        <Text numberOfLines={1} style={styles.newBtnText}>New booking</Text>
+      </LinearGradient>
+    </AnimatedPressable>
+  );
+}
+
+function FilterChip({
+  active,
+  count,
+  filterType,
+  onPress,
+}: {
+  active: boolean;
+  count: number;
+  filterType: FilterType;
+  onPress: () => void;
+}) {
+  const config = STATUS_CONFIG[filterType];
+
+  return (
+    <AnimatedPressable accessibilityLabel={`Filter ${config.label}`} onPress={onPress} style={styles.filterPress}>
+      <View
+        style={[
+          styles.filterPill,
+          active
+            ? { backgroundColor: config.bg, borderColor: config.color }
+            : { backgroundColor: 'rgba(255,255,255,0.025)', borderColor: 'rgba(255,255,255,0.08)' },
+        ]}
+      >
+        <Text style={[styles.filterText, { color: active ? config.color : COLORS.textMuted }]}>{config.label}</Text>
+        <View style={[styles.filterBadge, { backgroundColor: active ? config.color : 'rgba(255,255,255,0.08)' }]}>
+          <Text style={[styles.filterBadgeText, { color: active ? COLORS.background : COLORS.textMuted }]}>{count}</Text>
+        </View>
+      </View>
+    </AnimatedPressable>
+  );
+}
+
+function EmptyBookings({ filter, onCreate }: { filter: FilterType; onCreate: () => void }) {
+  const title = filter === 'all' ? 'No bookings yet' : `No ${STATUS_CONFIG[filter].label.toLowerCase()} bookings`;
+
+  return (
+    <StaggeredView delay={120} style={styles.empty}>
+      <View style={styles.emptyIcon}>
+        <Ionicons name="calendar-outline" size={34} color={COLORS.gold} />
+      </View>
+      <Text style={styles.emptyTitle}>{title}</Text>
+      <Text style={styles.emptyText}>Create a booking to reserve your space before arrival.</Text>
+      <View style={styles.emptyButton}>
+        <NewBookingButton compact onPress={onCreate} />
+      </View>
+    </StaggeredView>
+  );
+}
+
+function BookingRow({
+  booking,
+  index,
+  onPress,
+}: {
+  booking: Booking;
+  index: number;
+  onPress: () => void;
+}) {
+  const entrance = useRef(new Animated.Value(0)).current;
+  const arrow = useRef(new Animated.Value(0)).current;
   const statusConfig = getStatusConfig(booking.status);
-  const startDate = safeFormat(booking.startTime, 'dd/MM/yyyy');
+  const startDate = safeFormat(booking.startTime, 'dd MMM yyyy');
   const startTime = safeFormat(booking.startTime, 'HH:mm');
   const endTime = safeFormat(booking.endTime, 'HH:mm');
 
+  useEffect(() => {
+    Animated.timing(entrance, {
+      delay: 90 + index * 55,
+      duration: 430,
+      easing: Easing.out(Easing.cubic),
+      toValue: 1,
+      useNativeDriver: true,
+    }).start();
+  }, [entrance, index]);
+
+  const animateArrow = (toValue: number) => {
+    Animated.spring(arrow, {
+      damping: 16,
+      stiffness: 260,
+      toValue,
+      useNativeDriver: true,
+    }).start();
+  };
+
   return (
-    <Pressable
-      accessibilityLabel={`Space ${booking.slotCode}, ${statusConfig.label}, ${startDate} from ${startTime} to ${endTime}`}
-      accessibilityRole="button"
-      style={({ pressed }) => [styles.card, pressed && styles.pressed]}
-      onPress={onPress}
+    <Animated.View
+      style={[
+        styles.bookingWrap,
+        {
+          opacity: entrance,
+          transform: [
+            {
+              translateY: entrance.interpolate({
+                inputRange: [0, 1],
+                outputRange: [18, 0],
+              }),
+            },
+          ],
+        },
+      ]}
     >
-      <View style={[styles.cardAccent, { backgroundColor: statusConfig.color }]} />
+      <AnimatedPressable
+        accessibilityLabel={`Space ${booking.slotCode}, ${statusConfig.label}`}
+        onPress={onPress}
+        onPressIn={() => animateArrow(1)}
+        onPressOut={() => animateArrow(0)}
+      >
+        <View style={styles.bookingRow}>
+          <View style={[styles.timelineDot, { backgroundColor: statusConfig.color }]} />
+          <View style={styles.bookingBody}>
+            <View style={styles.bookingTop}>
+              <View style={styles.bookingTimeBlock}>
+                <Text style={styles.bookingDate}>{startDate}</Text>
+                <Text style={styles.bookingTime}>{startTime} - {endTime}</Text>
+              </View>
+              <Animated.View
+                style={{
+                  opacity: entrance,
+                  transform: [
+                    {
+                      translateX: entrance.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [8, 0],
+                      }),
+                    },
+                  ],
+                }}
+              >
+                <Text numberOfLines={1} style={styles.amount}>{formatCurrency(booking.finalAmount ?? booking.prepaidAmount ?? 0)}</Text>
+              </Animated.View>
+            </View>
 
-      <View style={styles.cardHeader}>
-        <View style={styles.slotIdentity}>
-          <View style={[styles.slotIcon, { backgroundColor: statusConfig.bg }]}>
-            <Ionicons name="location" size={18} color={statusConfig.color} />
+            <Text numberOfLines={1} style={styles.slotCode}>Space {booking.slotCode}</Text>
+            <Text numberOfLines={1} style={styles.floorLabel}>{getFloorLabel(booking.floorId)}</Text>
+
+            <View style={styles.bookingFooter}>
+              <StatusChip color={statusConfig.color} label={statusConfig.label} />
+              <View style={styles.platePill}>
+                <Ionicons name="car-outline" size={13} color={COLORS.textMuted} />
+                <Text numberOfLines={1} style={styles.plateText}>{booking.licensePlate}</Text>
+              </View>
+              <Animated.View
+                style={{
+                  marginLeft: 'auto',
+                  transform: [
+                    {
+                      translateX: arrow.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0, 4],
+                      }),
+                    },
+                  ],
+                }}
+              >
+                <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+              </Animated.View>
+            </View>
           </View>
-          <View style={styles.slotCopy}>
-            <Text style={styles.slotCode}>Space {booking.slotCode}</Text>
-            <Text style={styles.floorLabel} numberOfLines={1}>{getFloorLabel(booking.floorId)}</Text>
-          </View>
         </View>
-        <View style={[styles.statusPill, { backgroundColor: statusConfig.bg, borderColor: statusConfig.color }]}>
-          <Text style={[styles.statusText, { color: statusConfig.color }]}>{statusConfig.label}</Text>
-        </View>
-      </View>
-
-      <View style={styles.scheduleRow}>
-        <View style={styles.dateBlock}>
-          <Ionicons name="calendar-clear-outline" size={16} color={COLORS.textMuted} />
-          <Text style={styles.dateText}>{startDate}</Text>
-        </View>
-        <View style={styles.timeBlock}>
-          <Text style={styles.timeText}>{startTime}</Text>
-          <View style={styles.timeLine} />
-          <Text style={styles.timeText}>{endTime}</Text>
-        </View>
-      </View>
-
-      <View style={styles.cardFooter}>
-        <View style={styles.platePill}>
-          <Ionicons name="car-outline" size={13} color={COLORS.textSecondary} />
-          <Text style={styles.plateText}>{booking.licensePlate}</Text>
-        </View>
-        <View style={styles.amountWrap}>
-          <Text style={styles.amountLabel}>Total</Text>
-          <Text style={styles.amount}>{formatCurrency(booking.finalAmount ?? booking.prepaidAmount ?? 0)}</Text>
-          <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} />
-        </View>
-      </View>
-    </Pressable>
+      </AnimatedPressable>
+      <View style={styles.rowDivider} />
+    </Animated.View>
   );
 }
 
@@ -137,7 +260,7 @@ export const BookingListScreen = ({ navigation }: Props) => {
   );
 
   const openCreateBooking = useCallback(() => {
-    const tabNavigation = navigation.getParent<BottomTabNavigationProp<CustomerTabParamList>>();
+    const tabNavigation = navigation.getParent?.() as BottomTabNavigationProp<CustomerTabParamList> | undefined;
 
     if (tabNavigation) {
       tabNavigation.navigate('Bookings', { screen: 'CreateBooking' });
@@ -151,31 +274,13 @@ export const BookingListScreen = ({ navigation }: Props) => {
     <SafeAreaView edges={['top']} style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
 
-      <View style={styles.header}>
+      <StaggeredView delay={20} style={styles.header}>
         <View style={styles.headerCopy}>
           <Text style={styles.headerTitle}>My bookings</Text>
-          <Text style={styles.headerSubtitle}>
-            {bookings.length > 0 ? `${bookings.length} parking reservations` : 'Manage your parking reservations'}
-          </Text>
+          <Text style={styles.headerSubtitle}>Manage your parking reservations</Text>
         </View>
-        <TouchableOpacity
-          accessibilityLabel="Create a new booking"
-          accessibilityRole="button"
-          activeOpacity={0.8}
-          style={styles.newBtn}
-          onPress={openCreateBooking}
-        >
-          <LinearGradient
-            colors={[COLORS.goldLight, COLORS.gold]}
-            end={{ x: 1, y: 0 }}
-            start={{ x: 0, y: 0 }}
-            style={styles.newBtnGrad}
-          >
-            <Ionicons name="add" size={18} color={COLORS.textInverse} />
-            <Text style={styles.newBtnText}>New booking</Text>
-          </LinearGradient>
-        </TouchableOpacity>
-      </View>
+        <NewBookingButton onPress={openCreateBooking} />
+      </StaggeredView>
 
       <ScrollView
         horizontal
@@ -183,31 +288,15 @@ export const BookingListScreen = ({ navigation }: Props) => {
         contentContainerStyle={styles.filtersWrap}
         style={styles.filterScroll}
       >
-        {FILTERS.map((filterType) => {
-          const config = STATUS_CONFIG[filterType];
-          const active = filter === filterType;
-          return (
-            <Pressable
-              key={filterType}
-              style={[
-                styles.filterPill,
-                active
-                  ? { backgroundColor: config.bg, borderColor: config.color }
-                  : { backgroundColor: COLORS.surface, borderColor: COLORS.border },
-              ]}
-              onPress={() => setFilter(filterType)}
-            >
-              <Text style={[styles.filterText, { color: active ? config.color : COLORS.textMuted }]}>
-                {config.label}
-              </Text>
-              <View style={[styles.filterBadge, { backgroundColor: active ? config.color : COLORS.border }]}>
-                <Text style={[styles.filterBadgeText, { color: active ? COLORS.background : COLORS.textMuted }]}>
-                  {countFor(filterType)}
-                </Text>
-              </View>
-            </Pressable>
-          );
-        })}
+        {FILTERS.map((filterType) => (
+          <FilterChip
+            key={filterType}
+            active={filter === filterType}
+            count={countFor(filterType)}
+            filterType={filterType}
+            onPress={() => setFilter(filterType)}
+          />
+        ))}
       </ScrollView>
 
       {error ? (
@@ -219,34 +308,20 @@ export const BookingListScreen = ({ navigation }: Props) => {
         </View>
       ) : (
         <FlatList
+          contentContainerStyle={styles.listContent}
           data={filtered}
           keyExtractor={(item) => item._id}
-          contentContainerStyle={styles.listContent}
+          ListEmptyComponent={!isLoading ? <EmptyBookings filter={filter} onCreate={openCreateBooking} /> : null}
           refreshControl={
-            <RefreshControl
-              refreshing={isLoading}
-              tintColor={COLORS.gold}
-              colors={[COLORS.gold]}
-              onRefresh={fetchBookings}
-            />
+            <RefreshControl refreshing={isLoading} tintColor={COLORS.gold} colors={[COLORS.gold]} onRefresh={fetchBookings} />
           }
-          renderItem={({ item }) => (
-            <BookingCard
+          renderItem={({ item, index }) => (
+            <BookingRow
               booking={item}
+              index={index}
               onPress={() => navigation.navigate('BookingDetail', { bookingId: item._id })}
             />
           )}
-          ListEmptyComponent={
-            !isLoading ? (
-              <EmptyState
-                icon="calendar-outline"
-                title={filter === 'all' ? 'No bookings yet' : `No ${STATUS_CONFIG[filter].label.toLowerCase()} bookings`}
-                message="Create a booking to reserve your space before arrival."
-                actionLabel="New booking"
-                onAction={openCreateBooking}
-              />
-            ) : null
-          }
           showsVerticalScrollIndicator={false}
         />
       )}
@@ -255,29 +330,73 @@ export const BookingListScreen = ({ navigation }: Props) => {
 };
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: COLORS.background },
+  safe: {
+    backgroundColor: COLORS.background,
+    flex: 1,
+  },
   header: {
-    alignItems: 'flex-end',
+    alignItems: 'flex-start',
     flexDirection: 'row',
+    gap: SPACING.md,
     justifyContent: 'space-between',
     paddingBottom: SPACING.md,
     paddingHorizontal: SPACING.lg,
     paddingTop: SPACING.lg,
   },
-  headerCopy: { flex: 1, minWidth: 0, paddingRight: SPACING.md },
-  headerTitle: { color: COLORS.textPrimary, fontSize: 28, fontWeight: '800', letterSpacing: -0.5 },
-  headerSubtitle: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs, marginTop: 4 },
-  newBtn: { borderRadius: RADIUS.md, overflow: 'hidden' },
+  headerCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  headerTitle: {
+    color: COLORS.textPrimary,
+    fontSize: 30,
+    fontWeight: '900',
+    letterSpacing: 0,
+    lineHeight: 36,
+  },
+  headerSubtitle: {
+    color: COLORS.textMuted,
+    fontSize: 14,
+    fontWeight: '500',
+    marginTop: 3,
+  },
+  newBtn: {
+    borderRadius: RADIUS.md,
+    maxWidth: 148,
+    minWidth: 118,
+  },
   newBtnGrad: {
     alignItems: 'center',
+    borderRadius: RADIUS.md,
     flexDirection: 'row',
     gap: 6,
     minHeight: 46,
+    justifyContent: 'center',
     paddingHorizontal: SPACING.md,
   },
-  newBtnText: { color: COLORS.textInverse, fontSize: FONT_SIZES.sm, fontWeight: '800' },
-  filterScroll: { flexGrow: 0, maxHeight: 48 },
-  filtersWrap: { alignItems: 'center', gap: SPACING.sm, paddingHorizontal: SPACING.lg, paddingBottom: 4 },
+  newBtnCompact: {
+    minHeight: 46,
+    paddingHorizontal: SPACING.lg,
+  },
+  newBtnText: {
+    color: COLORS.textInverse,
+    flexShrink: 1,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '900',
+  },
+  filterScroll: {
+    flexGrow: 0,
+    maxHeight: 50,
+  },
+  filtersWrap: {
+    alignItems: 'center',
+    gap: SPACING.sm,
+    paddingBottom: 4,
+    paddingHorizontal: SPACING.lg,
+  },
+  filterPress: {
+    borderRadius: RADIUS.round,
+  },
   filterPill: {
     alignItems: 'center',
     borderRadius: RADIUS.round,
@@ -287,7 +406,10 @@ const styles = StyleSheet.create({
     minHeight: 38,
     paddingHorizontal: 14,
   },
-  filterText: { fontSize: FONT_SIZES.xs, fontWeight: '600' },
+  filterText: {
+    fontSize: FONT_SIZES.xs,
+    fontWeight: '800',
+  },
   filterBadge: {
     alignItems: 'center',
     borderRadius: 9,
@@ -296,62 +418,146 @@ const styles = StyleSheet.create({
     minWidth: 18,
     paddingHorizontal: 4,
   },
-  filterBadgeText: { fontSize: 10, fontWeight: '700' },
-  listContent: { gap: SPACING.md, padding: SPACING.lg, paddingBottom: 112 },
-  loadingState: { alignItems: 'center', flex: 1, justifyContent: 'center', padding: SPACING.xxl },
-  loadingText: { color: COLORS.textMuted, fontSize: FONT_SIZES.sm, marginTop: SPACING.md },
-  card: {
-    backgroundColor: COLORS.surface,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.xl,
-    borderWidth: 1,
+  filterBadgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  listContent: {
+    paddingBottom: 118,
+    paddingHorizontal: SPACING.lg,
+    paddingTop: SPACING.lg,
+  },
+  bookingWrap: {
+    marginBottom: SPACING.xl,
+  },
+  bookingRow: {
+    flexDirection: 'row',
     gap: SPACING.md,
-    overflow: 'hidden',
-    padding: SPACING.lg,
+    minHeight: 128,
+    paddingHorizontal: SPACING.xs,
+    paddingVertical: SPACING.sm,
   },
-  pressed: { opacity: 0.92, transform: [{ scale: 0.99 }] },
-  cardAccent: { bottom: SPACING.lg, left: 0, position: 'absolute', top: SPACING.lg, width: 3 },
-  cardHeader: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  slotIdentity: { alignItems: 'center', flex: 1, flexDirection: 'row', gap: SPACING.sm, minWidth: 0 },
-  slotIcon: { alignItems: 'center', borderRadius: RADIUS.md, height: 42, justifyContent: 'center', width: 42 },
-  slotCopy: { flex: 1, minWidth: 0 },
-  slotCode: { color: COLORS.textPrimary, fontSize: FONT_SIZES.md, fontWeight: '800' },
-  floorLabel: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs, marginTop: 2 },
-  statusPill: { borderRadius: RADIUS.round, borderWidth: 1, marginLeft: SPACING.sm, paddingHorizontal: SPACING.sm, paddingVertical: 5 },
-  statusText: { fontSize: 10, fontWeight: '700' },
-  scheduleRow: {
-    alignItems: 'center',
-    backgroundColor: COLORS.surfaceElevated,
-    borderRadius: RADIUS.md,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: 10,
+  timelineDot: {
+    borderRadius: 5,
+    height: 10,
+    marginTop: 7,
+    width: 10,
   },
-  dateBlock: { alignItems: 'center', flexDirection: 'row', gap: 6 },
-  dateText: { color: COLORS.textSecondary, fontSize: FONT_SIZES.xs, fontWeight: '600' },
-  timeBlock: { alignItems: 'center', flexDirection: 'row', gap: 7 },
-  timeText: { color: COLORS.textPrimary, fontSize: FONT_SIZES.sm, fontWeight: '800' },
-  timeLine: { backgroundColor: COLORS.borderLight, height: 1, width: 18 },
-  cardFooter: {
-    alignItems: 'center',
-    borderTopColor: COLORS.border,
-    borderTopWidth: StyleSheet.hairlineWidth,
+  bookingBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  bookingTop: {
+    alignItems: 'flex-start',
     flexDirection: 'row',
+    gap: SPACING.md,
     justifyContent: 'space-between',
-    paddingTop: SPACING.md,
+  },
+  bookingTimeBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+  bookingDate: {
+    color: COLORS.textMuted,
+    fontSize: 13,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  bookingTime: {
+    color: COLORS.textPrimary,
+    fontSize: 18,
+    fontWeight: '900',
+    marginTop: 3,
+  },
+  amount: {
+    color: COLORS.gold,
+    fontSize: 18,
+    fontWeight: '900',
+    maxWidth: 118,
+    textAlign: 'right',
+  },
+  slotCode: {
+    color: COLORS.textPrimary,
+    fontSize: 17,
+    fontWeight: '800',
+    marginTop: SPACING.md,
+  },
+  floorLabel: {
+    color: COLORS.textMuted,
+    fontSize: 14,
+    marginTop: 4,
+  },
+  bookingFooter: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.sm,
+    marginTop: SPACING.md,
   },
   platePill: {
     alignItems: 'center',
-    backgroundColor: COLORS.surfaceElevated,
+    backgroundColor: 'rgba(255,255,255,0.035)',
     borderRadius: RADIUS.round,
     flexDirection: 'row',
     gap: 5,
+    maxWidth: 120,
     paddingHorizontal: SPACING.sm,
     paddingVertical: 5,
   },
-  plateText: { color: COLORS.textSecondary, fontSize: FONT_SIZES.xs, fontWeight: '700', letterSpacing: 0.7 },
-  amountWrap: { alignItems: 'center', flexDirection: 'row', gap: 6 },
-  amountLabel: { color: COLORS.textMuted, fontSize: 10 },
-  amount: { color: COLORS.gold, fontSize: FONT_SIZES.md, fontWeight: '800' },
+  plateText: {
+    color: COLORS.textSecondary,
+    flexShrink: 1,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+  },
+  rowDivider: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    height: StyleSheet.hairlineWidth,
+    marginLeft: 26,
+    marginTop: SPACING.sm,
+  },
+  empty: {
+    alignItems: 'center',
+    minHeight: 420,
+    paddingHorizontal: SPACING.xl,
+    paddingTop: SPACING.xxl,
+  },
+  emptyIcon: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 40,
+    borderWidth: 1,
+    height: 80,
+    justifyContent: 'center',
+    marginBottom: SPACING.lg,
+    width: 80,
+  },
+  emptyTitle: {
+    color: COLORS.textPrimary,
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  emptyText: {
+    color: COLORS.textMuted,
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: SPACING.sm,
+    textAlign: 'center',
+  },
+  emptyButton: {
+    marginTop: SPACING.lg,
+  },
+  loadingState: {
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+    padding: SPACING.xxl,
+  },
+  loadingText: {
+    color: COLORS.textMuted,
+    fontSize: FONT_SIZES.sm,
+    marginTop: SPACING.md,
+  },
 });

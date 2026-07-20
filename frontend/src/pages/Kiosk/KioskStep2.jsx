@@ -74,6 +74,23 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack, i
     };
 
     fetchData();
+    const interval = setInterval(async () => {
+      try {
+        const sessionRes = await fetch(`${API_BASE}/sessions/active-status`);
+        const sessionData = await sessionRes.json();
+        if (sessionData.success) {
+          setActiveSessions(sessionData.data);
+        }
+        
+        const holdsRes = await getActiveHolds();
+        if (holdsRes.ok && holdsRes.data?.data) {
+          setActiveHolds(holdsRes.data.data);
+        }
+      } catch (err) {
+        console.error('Kiosk polling error', err);
+      }
+    }, 15000);
+    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
@@ -185,6 +202,10 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack, i
                   style={{ backgroundImage: 'repeating-linear-gradient(45deg, rgba(239, 68, 68, 0.2), rgba(239, 68, 68, 0.2) 4px, rgba(127, 29, 29, 0.3) 4px, rgba(127, 29, 29, 0.3) 8px)' }}
                 ></div>
                 <span className="text-[10px] text-gray-300 font-bold tracking-wide">Maintenance</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3.5 h-3.5 rounded-sm bg-orange-100 border border-orange-500"></div>
+                <span className="text-[10px] text-orange-500 font-bold tracking-wide">Hold</span>
               </div>
             </div>
           </div>

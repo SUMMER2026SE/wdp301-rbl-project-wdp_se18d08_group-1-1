@@ -31,7 +31,6 @@ import {
   calculateExpirationDate,
   calculateSubscriptionTotal,
   getSubscriptionPackageRestriction,
-  validateSubscriptionSlots,
 } from '@/utils/walletSubscription';
 
 type Props = NativeStackScreenProps<WalletStackParamList, 'SubscriptionCheckout'>;
@@ -59,7 +58,10 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
     [packages, route.params.packageId],
   );
 
-  const maxSlots = Math.min(3, vehicleCount);
+  const maxSlots = Math.max(
+    0,
+    Math.min(3, vehicleCount) - (membership?.reservedSlots.length || 0),
+  );
   const subscriptionTotal = calculateSubscriptionTotal(pkg?.price || 0, selectedSlots.length);
   const hasEnoughWallet = (wallet?.balance || 0) >= subscriptionTotal;
   const packageRestriction = getSubscriptionPackageRestriction(membership, pkg);
@@ -76,7 +78,9 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
         subscriptionsService.getMembership(),
       ]);
       setPackages(packageResponse.data || []);
-      setVehicleCount((vehicleResponse.data || []).length);
+      setVehicleCount(
+        (vehicleResponse.data || []).filter((vehicle) => vehicle.status === 'approved').length,
+      );
       setWallet(walletResponse.data || null);
       setMembership(membershipResponse.data || null);
       setFloors(floorResponse);
@@ -135,7 +139,7 @@ export const SubscriptionCheckoutScreen = ({ navigation, route }: Props) => {
       setError(packageRestriction);
       return;
     }
-    if (!validateSubscriptionSlots(selectedSlots.length, vehicleCount)) {
+    if (selectedSlots.length < 1 || selectedSlots.length > maxSlots) {
       setError(`Select 1-${maxSlots} spaces based on your registered vehicles.`);
       return;
     }

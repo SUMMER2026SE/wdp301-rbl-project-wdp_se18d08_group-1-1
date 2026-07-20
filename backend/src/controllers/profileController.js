@@ -18,12 +18,50 @@ const buildMembershipPayload = async (membership = {}, userId = null) => {
   }
 
   let reservedSlots = [];
+  let subscriptionId = null;
   if (userId && raw?.isVip) {
-    const slots = await Slot.find({ reservedFor: userId }).populate('floorID', 'name').lean();
-    reservedSlots = slots.map(s => ({
-      floorName: s.floorID?.name || 'Unknown Floor',
-      slotNumber: s.slotNumber
-    }));
+    const MembershipSlotEntitlement = require("../models/MembershipSlotEntitlement");
+    const entitlements = await MembershipSlotEntitlement.find({
+      ownerId: userId,
+      status: { $in: ['active', 'transfer_locked'] },
+      expireAt: { $gt: new Date() },
+    })
+      .populate('floorId', 'name floorNumber')
+      .sort({ expireAt: -1 })
+      .lean();
+    if (entitlements.length) {
+      reservedSlots = entitlements.map((entitlement) => ({
+        entitlementId: entitlement._id,
+        floorName: entitlement.floorId?.name || 'Unknown Floor',
+        floorNumber: entitlement.floorId?.floorNumber || null,
+        slotNumber: entitlement.slotCode,
+        expireAt: entitlement.expireAt,
+        status: entitlement.status,
+        canTransfer:
+          entitlement.status === 'active' &&
+          Number(entitlement.transferCount || 0) < 1,
+      }));
+      subscriptionId = String(entitlements[0].sourceSubscriptionId);
+    } else {
+      const slots = await Slot.find({ reservedFor: userId }).populate('floorID', 'name').lean();
+      reservedSlots = slots.map(s => ({
+        floorName: s.floorID?.name || 'Unknown Floor',
+        slotNumber: s.slotNumber
+      }));
+    }
+
+    if (!subscriptionId) {
+      const Subscription = require("../models/Subscription");
+      const sub = await Subscription.findOne({
+        user: userId,
+        status: 'active',
+        paymentStatus: 'paid',
+        expireAt: { $gt: new Date() },
+      }).sort({ expireAt: -1 }).lean();
+      if (sub) {
+        subscriptionId = sub._id.toString();
+      }
+    }
   }
 
   return {
@@ -33,6 +71,7 @@ const buildMembershipPayload = async (membership = {}, userId = null) => {
     freeServiceCount: raw?.freeServiceCount || 0,
     packageType,
     reservedSlots,
+    subscriptionId,
   };
 };
 
@@ -43,7 +82,7 @@ const buildMembershipPayload = async (membership = {}, userId = null) => {
  */
 const getProfile = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user._id);
+    const user = await User.findById(req.user._id).select('+password');
     const userDetail = await UserDetail.findOne({ userId: req.user._id });
 
     if (!user) {
@@ -63,7 +102,7 @@ const getProfile = async (req, res, next) => {
         email: user.email,
         role: user.role,
         status: user.status,
-        isGoogleUser: !!user.googleId,
+        isGoogleUser: !!user.googleId && !user.password,
         createdAt: user.createdAt,
         profile: {
           firstName: userDetail?.firstName || "",
