@@ -7,6 +7,9 @@ const Slot = require('../models/Slot');
 const User = require('../models/User');
 const MembershipSlotEntitlement = require('../models/MembershipSlotEntitlement');
 const { isEnabled } = require('../utils/featureFlags');
+const {
+  getUnmigratedLegacySlots,
+} = require('./membershipProjectionService');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -88,34 +91,48 @@ const validateNewSubscriptionEligibility = async ({
         paymentStatus: 'paid',
         expireAt: { $gt: now },
       }).select('slots');
+  let legacySubscriptionsQuery = entitlementMode
+    ? Subscription.find({
+        user: userId,
+        status: 'active',
+        paymentStatus: 'paid',
+        expireAt: { $gt: now },
+      }).select('slots')
+    : null;
   if (session) {
     vehicleQuery = vehicleQuery.session(session);
     activeOwnershipQuery = activeOwnershipQuery.session(session);
+    if (legacySubscriptionsQuery) {
+      legacySubscriptionsQuery = legacySubscriptionsQuery.session(session);
+    }
   }
 
-  const [eligibleVehicleCount, activeOwnership] = await Promise.all([
-    vehicleQuery,
-    activeOwnershipQuery,
-  ]);
+  const [eligibleVehicleCount, activeOwnership, legacySubscriptions] =
+    await Promise.all([
+      vehicleQuery,
+      activeOwnershipQuery,
+      legacySubscriptionsQuery || Promise.resolve([]),
+    ]);
   let activeSlotCount = entitlementMode
     ? Number(activeOwnership || 0)
     : (activeOwnership || []).reduce(
         (total, subscription) => total + (subscription.slots || []).length,
         0
       );
-  if (entitlementMode && activeSlotCount === 0) {
-    let legacyQuery = Subscription.find({
-      user: userId,
-      status: 'active',
-      paymentStatus: 'paid',
-      expireAt: { $gt: now },
-    }).select('slots');
-    if (session) legacyQuery = legacyQuery.session(session);
-    const legacySubscriptions = await legacyQuery;
-    activeSlotCount = legacySubscriptions.reduce(
-      (total, subscription) => total + (subscription.slots || []).length,
-      0
-    );
+  if (entitlementMode && legacySubscriptions.length) {
+    let sourceEntitlementsQuery = MembershipSlotEntitlement.find({
+      sourceSubscriptionId: {
+        $in: legacySubscriptions.map((subscription) => subscription._id),
+      },
+    }).select('sourceSubscriptionId floorId slotCode');
+    if (session) {
+      sourceEntitlementsQuery = sourceEntitlementsQuery.session(session);
+    }
+    const sourceEntitlements = await sourceEntitlementsQuery.lean();
+    activeSlotCount += getUnmigratedLegacySlots(
+      legacySubscriptions,
+      sourceEntitlements
+    ).length;
   }
 
   const maxSlots = Math.min(3, eligibleVehicleCount);
