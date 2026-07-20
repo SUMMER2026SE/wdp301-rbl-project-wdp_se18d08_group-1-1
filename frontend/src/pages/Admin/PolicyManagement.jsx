@@ -9,16 +9,21 @@ import {
   Send,
   Trash2,
 } from 'lucide-react';
+import RefundRuleEditor from '../../components/policies/RefundRuleEditor';
+import RefundRulePreview from '../../components/policies/RefundRulePreview';
 import {
   archivePolicy,
+  createDefaultRefundRule,
   createPolicy,
   createPolicyVersion,
   deletePolicy,
   getAdminPolicies,
   getAdminPolicy,
   publishPolicyVersion,
+  normalizeRefundRule,
   updatePolicy,
   updatePolicyVersion,
+  validateRefundRule,
 } from '../../services/policyService';
 
 const categories = [
@@ -36,10 +41,12 @@ const emptyCreateForm = {
   category: 'terms',
   description: '',
   requiresAcceptance: true,
+  controlsBookingRefunds: false,
   summary: '',
   content: '',
   effectiveDate: '',
   changeNote: '',
+  refundRule: null,
 };
 
 const formatDate = (value) =>
@@ -69,6 +76,8 @@ export default function PolicyManagement() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
+  const [createRuleErrors, setCreateRuleErrors] = useState({});
+  const [draftRuleErrors, setDraftRuleErrors] = useState({});
 
   const selectedPolicy = detail?.policy;
   const versions = useMemo(() => detail?.versions || [], [detail?.versions]);
@@ -105,6 +114,7 @@ export default function PolicyManagement() {
         category: nextDetail.policy.category || 'other',
         description: nextDetail.policy.description || '',
         requiresAcceptance: Boolean(nextDetail.policy.requiresAcceptance),
+        controlsBookingRefunds: Boolean(nextDetail.policy.controlsBookingRefunds),
       });
 
       const nextDraft = nextDetail.versions.find((version) => version.status === 'draft') || null;
@@ -118,9 +128,13 @@ export default function PolicyManagement() {
                 ? new Date(nextDraft.effectiveDate).toISOString().slice(0, 10)
                 : '',
               changeNote: nextDraft.changeNote || '',
+              refundRule: nextDetail.policy.controlsBookingRefunds
+                ? normalizeRefundRule(nextDraft.refundRule)
+                : null,
             }
           : null
       );
+      setDraftRuleErrors({});
     } else {
       setError(res.data?.message || 'Unable to load policy details.');
     }
@@ -139,12 +153,28 @@ export default function PolicyManagement() {
 
   const handleCreate = async (event) => {
     event.preventDefault();
+    const ruleErrors = createForm.controlsBookingRefunds
+      ? validateRefundRule(createForm.refundRule)
+      : {};
+    setCreateRuleErrors(ruleErrors);
+    if (Object.keys(ruleErrors).length > 0) {
+      setError('Please fix the refund rule errors before creating this policy.');
+      return;
+    }
+
     setSaving(true);
     setError('');
-    const res = await createPolicy(createForm);
+    const payload = {
+      ...createForm,
+      refundRule: createForm.controlsBookingRefunds
+        ? normalizeRefundRule(createForm.refundRule)
+        : undefined,
+    };
+    const res = await createPolicy(payload);
     if (res.ok && res.data?.success) {
       showToast('Policy draft created');
       setCreateForm(emptyCreateForm);
+      setCreateRuleErrors({});
       await fetchPolicies();
       const policyId = res.data.data?.policy?._id;
       if (policyId) setSelectedId(policyId);
@@ -171,9 +201,24 @@ export default function PolicyManagement() {
 
   const handleDraftSave = async () => {
     if (!selectedPolicy || !activeDraft) return;
+    const ruleErrors = selectedPolicy.controlsBookingRefunds
+      ? validateRefundRule(draft?.refundRule)
+      : {};
+    setDraftRuleErrors(ruleErrors);
+    if (Object.keys(ruleErrors).length > 0) {
+      setError('Please fix the refund rule errors before saving this draft.');
+      return;
+    }
+
     setSaving(true);
     setError('');
-    const res = await updatePolicyVersion(selectedPolicy._id, activeDraft._id, draft);
+    const payload = {
+      ...draft,
+      refundRule: selectedPolicy.controlsBookingRefunds
+        ? normalizeRefundRule(draft.refundRule)
+        : undefined,
+    };
+    const res = await updatePolicyVersion(selectedPolicy._id, activeDraft._id, payload);
     if (res.ok && res.data?.success) {
       showToast('Draft saved');
       await loadDetail(selectedPolicy._id);
@@ -188,11 +233,19 @@ export default function PolicyManagement() {
     setSaving(true);
     setError('');
     const current = selectedPolicy.currentVersion || {};
+    const currentPublishedVersion = versions.find(
+      (version) =>
+        version.status === 'published' &&
+        version.versionNumber === selectedPolicy.currentVersionNumber
+    );
     const res = await createPolicyVersion(selectedPolicy._id, {
       title: current.title || selectedPolicy.title,
       summary: current.summary || '',
       content: current.content || '',
       effectiveDate: current.effectiveDate,
+      refundRule: selectedPolicy.controlsBookingRefunds
+        ? normalizeRefundRule(current.refundRule || currentPublishedVersion?.refundRule)
+        : undefined,
     });
     if (res.ok && res.data?.success) {
       showToast('New draft version created');
@@ -205,7 +258,20 @@ export default function PolicyManagement() {
 
   const handlePublish = async () => {
     if (!selectedPolicy || !activeDraft) return;
-    const confirmed = window.confirm('Publish this draft? Published versions cannot be edited later.');
+    const ruleErrors = selectedPolicy.controlsBookingRefunds
+      ? validateRefundRule(draft?.refundRule)
+      : {};
+    setDraftRuleErrors(ruleErrors);
+    if (Object.keys(ruleErrors).length > 0) {
+      setError('Please fix the refund rule errors before publishing this draft.');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      selectedPolicy.controlsBookingRefunds
+        ? 'Publish this draft? The policy text and executable refund rules will become immutable together and will apply to newly paid bookings.'
+        : 'Publish this draft? Published versions cannot be edited later.'
+    );
     if (!confirmed) return;
 
     setSaving(true);
@@ -313,7 +379,18 @@ export default function PolicyManagement() {
                 <div className="grid grid-cols-2 gap-3">
                   <select
                     value={createForm.category}
-                    onChange={(event) => setCreateForm((current) => ({ ...current, category: event.target.value }))}
+                    onChange={(event) =>
+                      setCreateForm((current) => ({
+                        ...current,
+                        category: event.target.value,
+                        controlsBookingRefunds:
+                          event.target.value === 'refund'
+                            ? current.controlsBookingRefunds
+                            : false,
+                        refundRule:
+                          event.target.value === 'refund' ? current.refundRule : null,
+                      }))
+                    }
                     className="rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm outline-none focus:border-yellow-400"
                   >
                     {categories.map(([value, label]) => (
@@ -329,6 +406,32 @@ export default function PolicyManagement() {
                     Required
                   </label>
                 </div>
+                {createForm.category === 'refund' && (
+                  <label className="flex items-start gap-3 rounded-2xl border border-yellow-400/20 bg-yellow-400/[0.05] px-4 py-3 text-sm font-bold text-gray-200">
+                    <input
+                      type="checkbox"
+                      checked={createForm.controlsBookingRefunds}
+                      onChange={(event) => {
+                        setCreateForm((current) => ({
+                          ...current,
+                          controlsBookingRefunds: event.target.checked,
+                          refundRule: event.target.checked
+                            ? normalizeRefundRule(current.refundRule || createDefaultRefundRule())
+                            : null,
+                        }));
+                        setCreateRuleErrors({});
+                        setError('');
+                      }}
+                      className="mt-1"
+                    />
+                    <span>
+                      Control booking refunds
+                      <span className="mt-1 block text-xs font-normal leading-5 text-gray-500">
+                        Designate this refund policy as the executable rule source. Only one policy can be designated.
+                      </span>
+                    </span>
+                  </label>
+                )}
                 <textarea
                   value={createForm.content}
                   onChange={(event) => setCreateForm((current) => ({ ...current, content: event.target.value }))}
@@ -336,6 +439,17 @@ export default function PolicyManagement() {
                   placeholder="Initial policy content"
                   required
                 />
+                {createForm.controlsBookingRefunds && (
+                  <RefundRuleEditor
+                    value={createForm.refundRule}
+                    onChange={(refundRule) => {
+                      setCreateForm((current) => ({ ...current, refundRule }));
+                      setCreateRuleErrors(validateRefundRule(refundRule));
+                      setError('');
+                    }}
+                    errors={createRuleErrors}
+                  />
+                )}
                 <button
                   type="submit"
                   disabled={saving}
@@ -455,7 +569,16 @@ export default function PolicyManagement() {
                       <span className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-gray-500">Category</span>
                       <select
                         value={metadata.category}
-                        onChange={(event) => setMetadata((current) => ({ ...current, category: event.target.value }))}
+                        onChange={(event) =>
+                          setMetadata((current) => ({
+                            ...current,
+                            category: event.target.value,
+                            controlsBookingRefunds:
+                              event.target.value === 'refund'
+                                ? current.controlsBookingRefunds
+                                : false,
+                          }))
+                        }
                         className="w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm outline-none focus:border-yellow-400"
                       >
                         {categories.map(([value, label]) => (
@@ -471,6 +594,27 @@ export default function PolicyManagement() {
                       />
                       Requires customer acceptance
                     </label>
+                    {metadata.category === 'refund' && (
+                      <label className="flex items-start gap-3 rounded-2xl border border-yellow-400/20 bg-yellow-400/[0.05] px-4 py-3 text-sm font-bold text-gray-200 lg:col-span-2">
+                        <input
+                          type="checkbox"
+                          checked={metadata.controlsBookingRefunds}
+                          onChange={(event) =>
+                            setMetadata((current) => ({
+                              ...current,
+                              controlsBookingRefunds: event.target.checked,
+                            }))
+                          }
+                          className="mt-1"
+                        />
+                        <span>
+                          Control booking refunds
+                          <span className="mt-1 block text-xs font-normal leading-5 text-gray-500">
+                            The designated policy publishes legal text and executable refund rules as one immutable version.
+                          </span>
+                        </span>
+                      </label>
+                    )}
                     <label className="block lg:col-span-2">
                       <span className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-gray-500">Description</span>
                       <textarea
@@ -498,7 +642,9 @@ export default function PolicyManagement() {
                     <div>
                       <h3 className="font-black">Draft Editor</h3>
                       <p className="mt-1 text-sm text-gray-500">
-                        Only draft versions can be edited. Publishing makes content immutable.
+                        {selectedPolicy.controlsBookingRefunds
+                          ? 'Policy text and executable refund rules stay editable in draft, then become immutable together when published.'
+                          : 'Only draft versions can be edited. Publishing makes content immutable.'}
                       </p>
                     </div>
                     {!activeDraft && (
@@ -552,6 +698,23 @@ export default function PolicyManagement() {
                         className="w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm outline-none focus:border-yellow-400"
                         placeholder="Change note"
                       />
+                      {selectedPolicy.controlsBookingRefunds && (
+                        <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_340px]">
+                          <RefundRuleEditor
+                            value={draft.refundRule}
+                            onChange={(refundRule) => {
+                              setDraft((current) => ({ ...current, refundRule }));
+                              setDraftRuleErrors(validateRefundRule(refundRule));
+                              setError('');
+                            }}
+                            errors={draftRuleErrors}
+                          />
+                          <RefundRulePreview
+                            rule={draft.refundRule}
+                            hasErrors={Object.keys(draftRuleErrors).length > 0}
+                          />
+                        </div>
+                      )}
                       <div className="flex flex-wrap gap-3">
                         <button
                           type="button"
@@ -569,7 +732,9 @@ export default function PolicyManagement() {
                           className="inline-flex items-center gap-2 rounded-2xl bg-yellow-400 px-5 py-3 text-sm font-black text-black transition hover:bg-yellow-300 disabled:opacity-60"
                         >
                           <Send size={16} />
-                          Publish immutable version
+                          {selectedPolicy.controlsBookingRefunds
+                            ? 'Publish immutable text + rules'
+                            : 'Publish immutable version'}
                         </button>
                       </div>
                     </div>

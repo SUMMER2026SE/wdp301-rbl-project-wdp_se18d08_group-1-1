@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { QRCodeSVG } from 'qrcode.react';
 import { Crown, Sparkles, Check, Loader2, ArrowRight, AlertCircle, QrCode, Wallet, CalendarClock, MapPin, RotateCcw, X } from 'lucide-react';
 import {
   getTicketPackages,
@@ -7,6 +8,7 @@ import {
   verifySubscriptionPayment,
   paySubscriptionWithWallet,
   getMembershipStatus,
+  getMembershipQr,
   getRenewalQuote,
   renewSubscriptionWithWallet,
   createRenewalPayment,
@@ -49,6 +51,9 @@ export default function Membership() {
   const [walletBalance, setWalletBalance] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState('payos');
   const [membership, setMembership] = useState(null);
+  const [membershipQr, setMembershipQr] = useState('');
+  const [membershipQrError, setMembershipQrError] = useState('');
+  const [membershipQrOpen, setMembershipQrOpen] = useState(false);
   const [renewQuote, setRenewQuote] = useState(null);
   const [renewOpen, setRenewOpen] = useState(false);
   const [renewMethod, setRenewMethod] = useState('wallet');
@@ -92,10 +97,24 @@ export default function Membership() {
     }
   };
 
+  const loadMembershipQr = async (membershipData) => {
+    setMembershipQr('');
+    setMembershipQrError('');
+    if (membershipData?.status !== 'active' || !membershipData?.subscriptionId) return;
+
+    const response = await getMembershipQr(membershipData.subscriptionId);
+    if (response.ok && response.data?.success && response.data.data?.available) {
+      setMembershipQr(response.data.data.payload);
+      return;
+    }
+    setMembershipQrError(response.data?.message || 'Membership QR is currently unavailable.');
+  };
+
   const refreshMembership = async () => {
     const response = await getMembershipStatus();
     if (response.ok && response.data?.success) {
       setMembership(response.data.data);
+      await loadMembershipQr(response.data.data);
       return response.data.data;
     }
     return null;
@@ -243,6 +262,7 @@ export default function Membership() {
         }
         if (membershipRes.ok && membershipRes.data?.success) {
           setMembership(membershipRes.data.data);
+          await loadMembershipQr(membershipRes.data.data);
         }
       } catch (err) {
         console.error(err);
@@ -535,6 +555,20 @@ export default function Membership() {
                         {membership.reservedSlots?.length || 0} reserved spaces
                       </span>
                     </div>
+                    {membership.status === 'active' && (
+                      <button
+                        type="button"
+                        onClick={() => setMembershipQrOpen(true)}
+                        disabled={!membershipQr}
+                        className="mt-6 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#DCA11D]/35 bg-[#DCA11D]/10 px-4 text-sm font-black text-[#E8B63E] transition hover:bg-[#DCA11D]/15 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <QrCode size={17} />
+                        {membershipQr ? 'Show membership QR' : 'QR unavailable'}
+                      </button>
+                    )}
+                    {membershipQrError && (
+                      <p className="mt-2 text-xs text-rose-300">{membershipQrError}</p>
+                    )}
                   </div>
                   <span className={`rounded-full border px-3 py-1.5 text-xs font-black ${
                     membership.status === 'active'
@@ -912,6 +946,36 @@ export default function Membership() {
                 Pay {Number(renewQuote.amount || 0).toLocaleString('vi-VN')} VND
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {membershipQrOpen && membershipQr && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#0A0B0E]/80 p-4 backdrop-blur-md">
+          <div className="w-full max-w-sm rounded-3xl bg-white p-6 text-center shadow-2xl">
+            <div className="flex items-start justify-between text-left">
+              <div>
+                <p className="text-xs font-black uppercase tracking-widest text-[#B9820D]">Parking access</p>
+                <h3 className="mt-1 text-xl font-black text-gray-900">Membership QR</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMembershipQrOpen(false)}
+                className="flex h-10 w-10 items-center justify-center rounded-xl text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
+                aria-label="Close membership QR"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="mx-auto mt-6 inline-flex rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
+              <QRCodeSVG value={membershipQr} size={230} level="M" includeMargin />
+            </div>
+            <p className="mt-5 text-sm leading-6 text-gray-500">
+              Show this code to staff when the kiosk is unavailable. Staff must photograph the vehicle before check-in or check-out.
+            </p>
+            <p className="mt-2 text-xs font-semibold text-rose-500">
+              This QR automatically becomes invalid when the membership expires.
+            </p>
           </div>
         </div>
       )}

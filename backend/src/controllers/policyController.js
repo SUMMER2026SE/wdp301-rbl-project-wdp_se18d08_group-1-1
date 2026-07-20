@@ -163,7 +163,7 @@ exports.createVersion = async (req, res, next) => {
   try {
     if (handleValidation(req, res)) return;
 
-    const version = await policyService.createNextDraftVersion(
+    const data = await policyService.createNextDraftVersion(
       req.params.id,
       req.body,
       req.user._id
@@ -172,7 +172,7 @@ exports.createVersion = async (req, res, next) => {
     res.status(201).json({
       success: true,
       message: 'Policy draft version created successfully',
-      data: version,
+      data,
     });
   } catch (error) {
     next(error);
@@ -183,7 +183,7 @@ exports.updateVersion = async (req, res, next) => {
   try {
     if (handleValidation(req, res)) return;
 
-    const version = await policyService.updateDraftVersion(
+    const data = await policyService.updateDraftVersion(
       req.params.id,
       req.params.versionId,
       req.body,
@@ -193,7 +193,7 @@ exports.updateVersion = async (req, res, next) => {
     res.status(200).json({
       success: true,
       message: 'Policy draft version updated successfully',
-      data: version,
+      data,
     });
   } catch (error) {
     next(error);

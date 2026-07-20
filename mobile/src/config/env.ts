@@ -6,8 +6,9 @@ const envName = process.env.EXPO_PUBLIC_ENV || 'development';
 
 const defaults = {
   development: {
-    apiBaseUrl: 'http://localhost:5000/api',
-    socketUrl: 'http://localhost:5000',
+    // Android Emulator maps the host machine to 10.0.2.2.
+    apiBaseUrl: 'http://10.0.2.2:5001/api',
+    socketUrl: 'http://10.0.2.2:5001',
   },
   staging: {
     apiBaseUrl: 'https://staging-api.valoparking.com/api',
@@ -24,12 +25,26 @@ type EnvName = keyof typeof defaults;
 const selectedEnv: EnvName =
   envName === 'staging' || envName === 'production' ? envName : 'development';
 
+const expoHostUri =
+  Constants.expoConfig?.hostUri ??
+  (Constants as unknown as { manifest?: { debuggerHost?: string } }).manifest?.debuggerHost;
+
+const expoDevHost = expoHostUri?.split(':')[0];
+const runtimeDevelopmentUrls = expoDevHost
+  ? {
+      apiBaseUrl: `http://${expoDevHost}:5001/api`,
+      socketUrl: `http://${expoDevHost}:5001`,
+    }
+  : undefined;
+
 const apiBaseUrl =
+  (selectedEnv === 'development' ? runtimeDevelopmentUrls?.apiBaseUrl : undefined) ||
   process.env.EXPO_PUBLIC_API_URL ||
   Constants.expoConfig?.extra?.apiBaseUrl ||
   defaults[selectedEnv].apiBaseUrl;
 
 const socketUrl =
+  (selectedEnv === 'development' ? runtimeDevelopmentUrls?.socketUrl : undefined) ||
   process.env.EXPO_PUBLIC_SOCKET_URL ||
   Constants.expoConfig?.extra?.socketUrl ||
   defaults[selectedEnv].socketUrl;

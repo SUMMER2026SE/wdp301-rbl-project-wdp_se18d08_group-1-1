@@ -18,6 +18,7 @@ const normalizePolicy = (policy) => {
     policyVersionId: currentVersion?._id || raw.currentVersionId,
     effectiveDate: currentVersion?.effectiveDate || null,
     summary: currentVersion?.summary || '',
+    content: currentVersion?.content || '',
   };
 };
 

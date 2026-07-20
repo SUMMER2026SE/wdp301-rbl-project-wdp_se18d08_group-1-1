@@ -44,6 +44,82 @@ const bookingSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    paymentBreakdownSnapshot: {
+      parkingAmount: { type: Number, min: 0, default: null },
+      serviceAmount: { type: Number, min: 0, default: null },
+      totalAmount: { type: Number, min: 0, default: null },
+      source: {
+        type: String,
+        enum: ['calculated', 'legacy-derived'],
+        default: null,
+      },
+    },
+    refundPolicySnapshot: {
+      source: {
+        type: String,
+        enum: ['published-rule', 'legacy-v1'],
+        default: null,
+      },
+      policyId: { type: mongoose.Schema.Types.ObjectId, ref: 'Policy', default: null },
+      policyVersionId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'PolicyVersion',
+        default: null,
+      },
+      policyVersionNumber: { type: Number, default: null },
+      refundRuleVersionId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'RefundRuleVersion',
+        default: null,
+      },
+      capturedAt: { type: Date, default: null },
+      rule: { type: mongoose.Schema.Types.Mixed, default: null },
+    },
+    paidOverageAdjustments: [
+      {
+        eventKey: { type: String, required: true },
+        amount: { type: Number, min: 0, required: true },
+        paymentMethod: {
+          type: String,
+          enum: ['wallet', 'vietqr', 'qr', 'cash'],
+          required: true,
+        },
+        sessionId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'Session',
+          required: true,
+        },
+        paidAt: { type: Date, default: Date.now },
+      },
+    ],
+    refundSettlements: [
+      {
+        eventKey: { type: String, required: true },
+        eventType: {
+          type: String,
+          enum: ['cancellation', 'no_show', 'early_checkout', 'paused_completion'],
+          required: true,
+        },
+        refundAmount: { type: Number, min: 0, default: 0 },
+        extraAmount: { type: Number, min: 0, default: 0 },
+        netWalletAmount: { type: Number, default: 0 },
+        feeAmount: { type: Number, min: 0, default: 0 },
+        refundableServiceAmount: { type: Number, min: 0, default: 0 },
+        calculationVersion: { type: String, default: 'refund-engine-v1' },
+        payoutStatus: {
+          type: String,
+          enum: ['credited', 'debited', 'suppressed', 'not_required'],
+          default: 'not_required',
+        },
+        suppressionReason: { type: String, default: null },
+        walletTransactionId: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'WalletTransaction',
+          default: null,
+        },
+        settledAt: { type: Date, default: Date.now },
+      },
+    ],
     paymentMethod: {
       type: String,
       enum: ['wallet', 'vietqr'],
@@ -53,6 +129,11 @@ const bookingSchema = new mongoose.Schema(
       type: String,
       enum: ['PENDING', 'PAID', 'ACTIVE', 'PAUSED', 'EXPIRED', 'COMPLETED', 'CANCELLED'],
       default: 'PENDING',
+    },
+    qrVersion: {
+      type: Number,
+      default: 1,
+      min: 1,
     },
     modificationCount: {
       type: Number,

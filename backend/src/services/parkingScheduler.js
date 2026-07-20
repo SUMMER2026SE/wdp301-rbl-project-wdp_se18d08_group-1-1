@@ -1,70 +1,16 @@
 const Session = require('../models/Session');
 const Booking = require('../models/Booking');
 const notifTriggers = require('./notificationTriggers');
-const pricingEngine = require('./pricingEngine');
-const walletService = require('./walletService');
 const contractService = require('./contractService');
+const bookingRefundService = require('./bookingRefundService');
 const { isEnabled } = require('../utils/featureFlags');
-const { emitToUser } = require('../sockets/notificationSocket');
-
 const CHECK_INTERVAL_MS = 60 * 1000; // 1 minute
 const CONTRACT_EXPIRATION_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const LOW_BALANCE_THRESHOLD = 30000; // 30,000 VND
 const NO_SHOW_GRACE_MS = 15 * 60 * 1000;
-const CHECKIN_REMINDER_MINUTES = [15, 30];
-const BOOKING_END_REMINDER_MINUTES = [5, 15, 30];
 
 let schedulerInterval = null;
 let contractSchedulerInterval = null;
-
-function getUpcomingMilestone(targetTime, now = new Date(), milestones = []) {
-  const target = new Date(targetTime);
-  const current = new Date(now);
-  const remainingMs = target.getTime() - current.getTime();
-  if (
-    Number.isNaN(target.getTime()) ||
-    Number.isNaN(current.getTime()) ||
-    remainingMs <= 0
-  ) {
-    return null;
-  }
-
-  return [...milestones]
-    .sort((left, right) => left - right)
-    .find((minutes) => remainingMs <= minutes * 60 * 1000) || null;
-}
-
-function toBookingNotificationDetails(booking) {
-  return {
-    bookingId: String(booking._id),
-    slotInfo: booking.parkingSlot,
-    scheduledStart: booking.scheduledStart,
-    scheduledEnd: booking.scheduledEnd,
-  };
-}
-
-function emitBookingChanged(app, booking) {
-  if (!app || !booking?.userId) return;
-  const io = app.get('io');
-  if (!io) return;
-
-  emitToUser(io, booking.userId, 'booking:changed', {
-    bookingId: String(booking._id),
-    status: booking.status,
-    slotCode: booking.parkingSlot,
-    floorId: booking.floorId ? String(booking.floorId) : null,
-  });
-}
-
-async function isBookingScheduleCurrent(booking, status, scheduleField) {
-  return Boolean(
-    await Booking.exists({
-      _id: booking._id,
-      status,
-      [scheduleField]: booking[scheduleField],
-    })
-  );
-}
 
 /**
  * Kiểm tra các phiên đặt chỗ (Booking) ngầm để hủy, hết hạn hoặc hoàn tất sớm
@@ -87,195 +33,99 @@ async function checkBookings(app) {
       console.log(`[ParkingScheduler] Đã tự động hủy ${pendingCancelResult.modifiedCount} đặt chỗ chờ thanh toán VietQR.`);
     }
 
-    // 2. Nhắc check-in trước giờ bắt đầu (30/15 phút)
-    const upcomingCheckins = await Booking.find({
-      status: 'PAID',
-      userId: { $ne: null },
-      scheduledStart: {
-        $gt: now,
-        $lte: new Date(now.getTime() + 30 * 60 * 1000),
-      },
-    }).lean();
-
-    for (const booking of upcomingCheckins) {
-      const milestone = getUpcomingMilestone(
-        booking.scheduledStart,
-        now,
-        CHECKIN_REMINDER_MINUTES
-      );
-      if (
-        milestone &&
-        await isBookingScheduleCurrent(booking, 'PAID', 'scheduledStart')
-      ) {
-        await notifTriggers.notifyBookingCheckinReminder(
-          app,
-          booking.userId,
-          toBookingNotificationDetails(booking),
-          milestone
-        );
-      }
-    }
-
-    // 3. PAID -> EXPIRED khi trễ check-in từ 15 đến dưới 30 phút
+    // 2. Tự động chuyển Booking PAID sang EXPIRED nếu trễ quá 15 phút (Chỉ đổi trạng thái, chưa hoàn tiền)
     const gracePeriodLimit = new Date(now.getTime() - 15 * 60 * 1000);
-    const cancelPeriodLimit = new Date(now.getTime() - 30 * 60 * 1000);
-    const expiredBookingCandidates = await Booking.find({
+    const expiredBookings = await Booking.find({
       status: 'PAID',
-      scheduledStart: { $gt: cancelPeriodLimit, $lte: gracePeriodLimit }
-    }).select('_id').lean();
+      scheduledStart: { $lt: gracePeriodLimit }
+    });
 
-    for (const candidate of expiredBookingCandidates) {
-      const booking = await Booking.findOneAndUpdate(
-        {
-          _id: candidate._id,
-          status: 'PAID',
-          scheduledStart: { $gt: cancelPeriodLimit, $lte: gracePeriodLimit },
-        },
-        { $set: { status: 'EXPIRED' } },
-        { new: true }
-      );
-      if (!booking) continue;
+    for (const booking of expiredBookings) {
+      booking.status = 'EXPIRED';
+      await booking.save();
       console.log(`[ParkingScheduler] Đặt chỗ ${booking._id} của xe ${booking.licensePlate} đã hết hạn check-in (15 phút).`);
 
       // Gửi thông báo hết hạn đặt chỗ nhưng báo vẫn còn 15 phút vớt vát
       if (booking.userId) {
-        notifTriggers.notifyBookingCheckinExpired(app, booking.userId, {
+        notifTriggers.notifyBookingCancelled(app, booking.userId, {
           bookingId: booking._id.toString(),
           slotInfo: booking.parkingSlot,
-          scheduledStart: booking.scheduledStart,
-          scheduledEnd: booking.scheduledEnd,
           reason: 'Quá 15 phút. Bạn có thêm 15 phút để đến bãi và chọn lại ô đỗ, sau đó Booking sẽ bị hủy hoàn toàn.'
         }).catch(err => console.error('Failed to send expired booking notification:', err));
       }
-      emitBookingChanged(app, booking);
     }
 
-    // 4. PAID/EXPIRED -> CANCELLED khi no-show từ 30 phút
-    const noShowBookingCandidates = await Booking.find({
-      status: { $in: ['PAID', 'EXPIRED'] },
-      scheduledStart: { $lte: cancelPeriodLimit }
-    }).select('_id').lean();
+    // 2.5. Tự động chuyển Booking EXPIRED sang CANCELLED nếu trễ quá 30 phút (Hủy hoàn toàn & Hoàn tiền)
+    const cancelPeriodLimit = new Date(now.getTime() - 30 * 60 * 1000);
+    const noShowBookings = await Booking.find({
+      status: 'EXPIRED',
+      scheduledStart: { $lt: cancelPeriodLimit }
+    });
 
-    for (const candidate of noShowBookingCandidates) {
-      const booking = await Booking.findOneAndUpdate(
-        {
-          _id: candidate._id,
-          status: { $in: ['PAID', 'EXPIRED'] },
-          scheduledStart: { $lte: cancelPeriodLimit },
+    for (const booking of noShowBookings) {
+      try {
+      const refundBreakdown = await bookingRefundService.quoteNoShow(booking);
+      await bookingRefundService.settleBookingEvent({
+        bookingId: booking._id,
+        eventKey: `booking:${booking._id}:no-show`,
+        eventType: 'no_show',
+        calculation: refundBreakdown,
+        description: `Settle no-show booking ${booking._id}`,
+        applyState: async ({ booking: currentBooking }) => {
+          if (currentBooking.status !== 'EXPIRED') {
+            throw Object.assign(new Error('Booking is no longer expired'), {
+              statusCode: 409,
+            });
+          }
+          currentBooking.status = 'CANCELLED';
         },
-        { $set: { status: 'CANCELLED' } },
-        { new: true }
-      );
-      if (!booking) continue;
-
+      });
       console.log(`[ParkingScheduler] Đặt chỗ ${booking._id} của xe ${booking.licensePlate} bị hủy hoàn toàn do trễ quá 30 phút.`);
 
       if (booking.userId) {
-        notifTriggers.notifyBookingNoShowCancelled(app, booking.userId, {
+        notifTriggers.notifyBookingCancelled(app, booking.userId, {
           bookingId: booking._id.toString(),
           slotInfo: booking.parkingSlot,
-          scheduledStart: booking.scheduledStart,
-          scheduledEnd: booking.scheduledEnd,
-          reason: 'Quá 30 phút từ giờ bắt đầu. Booking đã bị hủy và không được hoàn tiền (0%).'
+          reason: `Quá 30 phút từ giờ bắt đầu. Booking đã bị hủy và hoàn ${refundBreakdown.appliedRefundPercent || 0}% theo policy.`
         }).catch(err => console.error('Failed to send cancelled no-show notification:', err));
-
-        // Không hoàn tiền cho lỗi No-show theo chính sách mới
-        // (Booking tự động huỷ sau 30 phút do khách không đến -> Hoàn 0%)
       }
-      emitBookingChanged(app, booking);
-    }
-
-    // 5. Nhắc booking ACTIVE trước scheduledEnd và khi vừa hết giờ
-    const activeBookingsEndingSoon = await Booking.find({
-      status: 'ACTIVE',
-      userId: { $ne: null },
-      scheduledEnd: {
-        $gt: now,
-        $lte: new Date(now.getTime() + 30 * 60 * 1000),
-      },
-    }).lean();
-
-    for (const booking of activeBookingsEndingSoon) {
-      const milestone = getUpcomingMilestone(
-        booking.scheduledEnd,
-        now,
-        BOOKING_END_REMINDER_MINUTES
-      );
-      if (
-        milestone &&
-        await isBookingScheduleCurrent(booking, 'ACTIVE', 'scheduledEnd')
-      ) {
-        await notifTriggers.notifyBookingEndingSoon(
-          app,
-          booking.userId,
-          toBookingNotificationDetails(booking),
-          milestone
-        );
+      } catch (error) {
+        console.error(`[ParkingScheduler] Failed to settle no-show booking ${booking._id}:`, error);
       }
     }
 
-    const activeBookingsPastEnd = await Booking.find({
-      status: 'ACTIVE',
-      userId: { $ne: null },
-      scheduledEnd: { $lte: now },
-    }).lean();
-
-    for (const booking of activeBookingsPastEnd) {
-      if (await isBookingScheduleCurrent(booking, 'ACTIVE', 'scheduledEnd')) {
-        await notifTriggers.notifyBookingTimeExpired(
-          app,
-          booking.userId,
-          toBookingNotificationDetails(booking)
-        );
-      }
-    }
-
-    // 6. Hoàn tất Booking PAUSED nếu còn ít hơn 30 phút để quay lại
+    // 3. Tự động hoàn tất các Booking đang PAUSED nếu còn ít hơn 30 phút mà chưa check-in lại
     const limitTimeForPaused = new Date(now.getTime() + 30 * 60 * 1000);
-    const pausedBookingCandidates = await Booking.find({
+    const pausedBookingsToComplete = await Booking.find({
       status: 'PAUSED',
       scheduledEnd: { $lt: limitTimeForPaused }
-    }).select('_id').lean();
+    });
 
-    for (const candidate of pausedBookingCandidates) {
-      const booking = await Booking.findOneAndUpdate(
-        {
-          _id: candidate._id,
-          status: 'PAUSED',
-          scheduledEnd: { $lt: limitTimeForPaused },
-        },
-        { $set: { status: 'COMPLETED' } },
-        { new: true }
-      );
-      if (!booking) continue;
-
-      emitBookingChanged(app, booking);
-      console.log(`[ParkingScheduler] Booking PAUSED ${booking._id} tự động chuyển sang COMPLETED do hết thời gian chờ quay lại.`);
-
-      // Tính tiền thực tế đã sử dụng và hoàn phần còn thừa
-      if (booking.userId && booking.prepaidAmount > 0) {
-        try {
-          const sessions = await Session.find({ bookingId: booking._id });
-          let totalSpent = 0;
-          for (const sess of sessions) {
-            const checkout = sess.checkOutTime || now;
-            const pricing = await pricingEngine.calculatePrice(sess.checkInTime, checkout);
-            totalSpent += pricing.finalTotal;
-          }
-
-          const refundAmount = booking.prepaidAmount - totalSpent;
-          if (refundAmount > 0) {
-            await walletService.creditWallet(
-              booking.userId,
-              refundAmount,
-              'REFUND',
-              `Hoàn tiền trả sớm tự động (PAUSED) - Biển số ${booking.licensePlate}`,
-              { refSource: 'booking', refSourceId: booking._id }
-            );
-          }
-        } catch (refundErr) {
-          console.error(`[ParkingScheduler] Lỗi hoàn phí tự động cho booking PAUSED ${booking._id}:`, refundErr.message);
-        }
+    for (const booking of pausedBookingsToComplete) {
+      try {
+        const refundBreakdown = await bookingRefundService.quoteEarlyCheckout(
+          booking,
+          null,
+          now
+        );
+        await bookingRefundService.settleBookingEvent({
+          bookingId: booking._id,
+          eventKey: `booking:${booking._id}:early-checkout`,
+          eventType: 'paused_completion',
+          calculation: refundBreakdown,
+          description: `Settle paused booking ${booking._id}`,
+          applyState: async ({ booking: currentBooking }) => {
+            if (currentBooking.status !== 'PAUSED') {
+              throw Object.assign(new Error('Booking is no longer paused'), {
+                statusCode: 409,
+              });
+            }
+            currentBooking.status = 'COMPLETED';
+          },
+        });
+        console.log(`[ParkingScheduler] Booking PAUSED ${booking._id} tự động chuyển sang COMPLETED do hết thời gian chờ quay lại.`);
+      } catch (refundErr) {
+        console.error(`[ParkingScheduler] Lỗi hoàn phí tự động cho booking PAUSED ${booking._id}:`, refundErr.message);
       }
     }
   } catch (err) {
@@ -289,7 +139,6 @@ async function checkActiveSessions(app) {
       status: 'active',
       userId: { $ne: null }, // Only notify registered users
       expectedDurationHours: { $gt: 0 },
-      type: { $ne: 'BOOKING' },
     }).lean();
 
     if (activeSessions.length === 0) return;
@@ -361,51 +210,30 @@ async function checkVIPSubscriptions(app) {
     const threeDaysFromNow = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
 
     // 1. Send warning for subscriptions expiring in <= 3 days
-    const expiringSubscriptionCandidates = await Subscription.find({
+    const expiringSubscriptions = await Subscription.find({
       status: 'active',
       expireAt: { $lte: threeDaysFromNow, $gt: now },
       expireWarningSent: { $ne: true }
-    }).select('_id').lean();
+    });
 
-    for (const candidate of expiringSubscriptionCandidates) {
-      const sub = await Subscription.findOneAndUpdate(
-        {
-          _id: candidate._id,
-          status: 'active',
-          expireAt: { $lte: threeDaysFromNow, $gt: now },
-          expireWarningSent: { $ne: true },
-        },
-        { $set: { expireWarningSent: true } },
-        { new: true }
-      );
-      if (!sub) continue;
-
-      let notification = null;
+    for (const sub of expiringSubscriptions) {
       if (sub.user) {
-        notification = await notifTriggers.notifyVipExpiringSoon(app, sub.user, {
-          subscriptionId: String(sub._id),
-          expireAt: sub.expireAt,
-          expireDate: sub.expireAt.toLocaleDateString('vi-VN'),
-        });
+        notifTriggers.notifySystemMessage(app, sub.user, {
+          title: 'Sắp hết hạn VIP Pass / VIP Pass Expiring',
+          body: `Gói đỗ xe tháng của bạn sẽ hết hạn vào ${sub.expireAt.toLocaleDateString()}. Vui lòng gia hạn để giữ vị trí ô đỗ cố định của bạn. / Your monthly pass expires on ${sub.expireAt.toLocaleDateString()}. Please renew to keep your fixed parking slot.`,
+          type: 'SYSTEM'
+        }).catch(err => console.error('Failed to send VIP warning:', err));
       }
-
-      if (!notification) {
-        await Subscription.updateOne(
-          { _id: sub._id, status: 'active', expireAt: sub.expireAt },
-          { $set: { expireWarningSent: false } }
-        );
-        console.error(`[ParkingScheduler] VIP expiration warning failed for subscription ${sub._id}; it will be retried.`);
-        continue;
-      }
-
+      sub.expireWarningSent = true;
+      await sub.save();
       console.log(`[ParkingScheduler] Sent VIP expiration warning for subscription ${sub._id}.`);
     }
 
     // 2. Mark expired subscriptions
-    const expiredSubscriptionCandidates = await Subscription.find({
+    const expiredSubscriptions = await Subscription.find({
       status: 'active',
       expireAt: { $lte: now }
-    }).select('_id').lean();
+    });
 
     const Slot = require('../models/Slot');
     const User = require('../models/User');
@@ -413,15 +241,21 @@ async function checkVIPSubscriptions(app) {
       'SUBSCRIPTION_SLOT_OWNER_GUARD_ENABLED',
       false
     );
-    for (const candidate of expiredSubscriptionCandidates) {
-      const expiringSubscription = await Subscription.findOneAndUpdate(
-        { _id: candidate._id, status: 'active', expireAt: { $lte: now } },
-        { $set: { status: 'expired' } },
-        { new: true }
-      );
+    for (const sub of expiredSubscriptions) {
+      const expiringSubscription = useOwnerGuard
+        ? await Subscription.findOneAndUpdate(
+          { _id: sub._id, status: 'active', expireAt: { $lte: now } },
+          { status: 'expired' },
+          { new: true }
+        )
+        : sub;
 
       if (!expiringSubscription) {
         continue;
+      }
+      if (!useOwnerGuard) {
+        expiringSubscription.status = 'expired';
+        await expiringSubscription.save();
       }
       
       // Release slots
@@ -457,11 +291,11 @@ async function checkVIPSubscriptions(app) {
       );
       
       if (expiringSubscription.user) {
-        await notifTriggers.notifyVipExpired(app, expiringSubscription.user, {
-          subscriptionId: String(expiringSubscription._id),
-          expireAt: expiringSubscription.expireAt,
-          expireDate: expiringSubscription.expireAt.toLocaleDateString('vi-VN'),
-        });
+        notifTriggers.notifySystemMessage(app, expiringSubscription.user, {
+          title: 'Hết hạn VIP Pass / VIP Pass Expired',
+          body: `Gói đỗ xe tháng của bạn đã hết hạn. Vị trí ô đỗ cố định đã được mở lại cho mọi người. / Your monthly pass has expired. Your fixed parking slot has been released.`,
+          type: 'SYSTEM'
+        }).catch(err => console.error('Failed to send VIP expired:', err));
       }
       console.log(`[ParkingScheduler] Marked subscription ${expiringSubscription._id} as expired and released slots.`);
     }
@@ -539,6 +373,5 @@ module.exports = {
   checkBookings,
   checkExpiredContracts,
   checkVIPSubscriptions,
-  getUpcomingMilestone,
   LOW_BALANCE_THRESHOLD,
 };

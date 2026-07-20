@@ -1,5 +1,8 @@
+const mongoose = require('mongoose');
+const cloudinary = require('../config/cloudinary');
 const Booking = require('../models/Booking');
 const BookingService = require('../models/BookingService');
+const StaffBookingAction = require('../models/StaffBookingAction');
 const TicketPackage = require('../models/TicketPackage');
 const User = require('../models/User');
 const Vehicle = require('../models/Vehicle');
@@ -11,8 +14,18 @@ const walletService = require('../services/walletService');
 const pricingEngine = require('../services/pricingEngine');
 const notifTriggers = require('../services/notificationTriggers');
 const contractService = require('../services/contractService');
+const bookingRefundService = require('../services/bookingRefundService');
+const {
+  attachPaidBookingSnapshots,
+  getEffectiveRefundPolicySnapshot,
+  transitionPendingBookingToPaid,
+} = require('../services/paidBookingPolicyService');
 const { normalizeLicensePlate } = require('../utils/licensePlateUtils');
 const { emitToUser } = require('../sockets/notificationSocket');
+const {
+  buildBookingQrPayload,
+  isBookingQrAvailable,
+} = require('../services/bookingQrService');
 
 const BOOKING_STATUSES_THAT_BLOCK_SLOT = ['PAID', 'ACTIVE', 'PAUSED'];
 
@@ -21,6 +34,40 @@ const normalizeSlotCode = (slotCode = '') => String(slotCode).trim().toUpperCase
 const buildSlotKey = (floorId, slotCode) => `${String(floorId)}:${normalizeSlotCode(slotCode)}`;
 
 const sameObjectId = (a, b) => String(a || '') === String(b || '');
+
+const uploadStaffEvidence = async (staffAction, bookingId, action) => {
+  if (!staffAction) return null;
+
+  const result = await cloudinary.uploader.upload(staffAction.evidenceImageBase64, {
+    folder: `valo-parking/staff-booking-evidence/${bookingId}`,
+    public_id: `${action.toLowerCase()}-${Date.now()}`,
+    resource_type: 'image',
+  });
+  return result.secure_url;
+};
+
+const recordStaffBookingAction = async ({
+  req,
+  booking,
+  session,
+  previousStatus,
+  newStatus,
+  evidenceImageUrl,
+}) => {
+  if (!req.staffBookingAction) return;
+
+  await StaffBookingAction.create({
+    bookingId: booking._id,
+    sessionId: session?._id || null,
+    staffId: req.user._id,
+    action: req.staffBookingAction.action,
+    previousStatus,
+    newStatus,
+    reason: req.staffBookingAction.reason,
+    evidenceImageUrl,
+    idempotencyKey: req.staffBookingAction.idempotencyKey,
+  });
+};
 
 exports.getPricingConfig = async (req, res, next) => {
   try {
@@ -392,7 +439,7 @@ const emitBookingChanged = (app, booking, extra = {}) => {
 
 const findOwnedBooking = (bookingId, user) => {
   const query = { _id: bookingId };
-  if (user?.role !== 'admin') {
+  if (!['admin', 'staff'].includes(user?.role)) {
     query.userId = user?._id;
   }
   return Booking.findOne(query);
@@ -547,15 +594,35 @@ exports.createBooking = async (req, res, next) => {
       }
 
       // Trừ tiền
-      await walletService.debitWallet(
-        userId,
-        prepaidAmount,
+      const paymentSession = await mongoose.startSession();
+      try {
+        paymentSession.startTransaction();
+        await walletService.debitWallet(
+            userId,
+            prepaidAmount,
         `Thanh toán Đặt chỗ ô đỗ ${parkingSlot} - Xe ${vehicle.licensePlate}`,
-        { refSource: 'booking', refSourceId: newBooking._id }
-      );
+            {
+              refSource: 'booking',
+              refSourceId: newBooking._id,
+              idempotencyKey: `booking:${newBooking._id}:initial-payment`,
+              session: paymentSession,
+            }
+        );
 
-      newBooking.status = 'PAID';
-      await newBooking.save();
+        newBooking.status = 'PAID';
+        await attachPaidBookingSnapshots(newBooking, {
+          parkingAmount: prepaidAmount,
+          serviceAmount: 0,
+          source: 'calculated',
+          session: paymentSession,
+        });
+        await paymentSession.commitTransaction();
+      } catch (error) {
+        await paymentSession.abortTransaction();
+        throw error;
+      } finally {
+        await paymentSession.endSession();
+      }
 
       // Gửi thông báo
       notifTriggers.notifyBookingSuccess(req.app, userId, {
@@ -621,6 +688,14 @@ exports.createBooking = async (req, res, next) => {
       );
       bookingServices = await BookingService.find({ bookingId: newBooking._id }).lean();
     }
+
+    if (newBooking.status === 'PAID') {
+      await attachPaidBookingSnapshots(newBooking, {
+        parkingAmount: prepaidAmount,
+        serviceAmount: 0,
+        source: 'calculated',
+      });
+    }
     
     emitBookingChanged(req.app, newBooking, { action: 'created' });
 
@@ -675,16 +750,26 @@ exports.checkVietQRStatus = async (req, res, next) => {
       try {
         const payosInfo = await payos.paymentRequests.get(Number(orderCode));
         if (payosInfo.status === 'PAID') {
-          booking.status = 'PAID';
-          await booking.save();
+          const paidTransition = await transitionPendingBookingToPaid(booking, {
+            parkingAmount: booking.prepaidAmount,
+            serviceAmount: 0,
+            source: 'calculated',
+          });
+          const paidBooking = paidTransition.booking;
 
-          // Gửi thông báo
-          notifTriggers.notifyBookingSuccess(req.app, booking.userId, {
-            bookingId: booking._id.toString(),
-            slotInfo: `${booking.parkingSlot}`
-          }).catch(err => console.error('Error sending notifyBookingSuccess:', err));
+          if (paidTransition.transitioned) {
+            // Gửi thông báo
+            notifTriggers.notifyBookingSuccess(req.app, paidBooking.userId, {
+              bookingId: paidBooking._id.toString(),
+              slotInfo: `${paidBooking.parkingSlot}`
+            }).catch(err => console.error('Error sending notifyBookingSuccess:', err));
+          }
 
-          return res.status(200).json({ success: true, status: 'PAID', data: booking });
+          return res.status(200).json({
+            success: true,
+            status: paidBooking.status,
+            data: paidBooking,
+          });
         } else if (['CANCELLED', 'EXPIRED'].includes(payosInfo.status)) {
           booking.status = 'CANCELLED';
           await booking.save();
@@ -726,16 +811,22 @@ exports.handleBookingWebhook = async (req, res, next) => {
     if (code === '00') {
       const booking = await Booking.findOne({ vietqrOrderCode: orderCode, status: 'PENDING' });
       if (booking) {
-        booking.status = 'PAID';
-        await booking.save();
+        const paidTransition = await transitionPendingBookingToPaid(booking, {
+          parkingAmount: booking.prepaidAmount,
+          serviceAmount: 0,
+          source: 'calculated',
+        });
+        const paidBooking = paidTransition.booking;
 
-        // Gửi thông báo đặt chỗ thành công
-        notifTriggers.notifyBookingSuccess(req.app, booking.userId, {
-          bookingId: booking._id.toString(),
-          slotInfo: `${booking.parkingSlot}`
-        }).catch(err => console.error('Failed to notify success:', err));
+        if (paidTransition.transitioned) {
+          // Gửi thông báo đặt chỗ thành công
+          notifTriggers.notifyBookingSuccess(req.app, paidBooking.userId, {
+            bookingId: paidBooking._id.toString(),
+            slotInfo: `${paidBooking.parkingSlot}`
+          }).catch(err => console.error('Failed to notify success:', err));
+        }
 
-        console.log(`✅ Webhook: Booking ${booking._id} paid successfully.`);
+        console.log(`✅ Webhook: Booking ${paidBooking._id} paid successfully.`);
       }
     }
 
@@ -753,7 +844,7 @@ exports.handleBookingWebhook = async (req, res, next) => {
  */
 exports.cancelBooking = async (req, res, next) => {
   try {
-    const booking = await Booking.findOne({ _id: req.params.id, userId: req.user._id });
+    let booking = await Booking.findOne({ _id: req.params.id, userId: req.user._id });
     if (!booking) {
       return res.status(404).json({ success: false, message: 'Không tìm thấy thông tin đặt chỗ' });
     }
@@ -768,32 +859,24 @@ exports.cancelBooking = async (req, res, next) => {
     }
 
     // Hoàn tiền đặt chỗ vào Wallet (kể cả thanh toán trước đó bằng VietQR)
-    if (booking.prepaidAmount > 0) {
-      const timeBeforeStart = booking.scheduledStart.getTime() - now.getTime();
-      let refundPercentage = 0;
-      if (timeBeforeStart >= 60 * 60 * 1000) {
-        refundPercentage = 1;
-      } else if (timeBeforeStart >= 30 * 60 * 1000) {
-        refundPercentage = 0.5;
-      } else {
-        refundPercentage = 0;
-      }
-
-      const refundAmount = booking.prepaidAmount * refundPercentage;
-
-      if (refundAmount > 0) {
-        await walletService.creditWallet(
-          req.user._id,
-          refundAmount,
-          'REFUND',
-          `Hoàn tiền hủy đặt chỗ ô ${booking.parkingSlot} - Xe ${booking.licensePlate} (${refundPercentage * 100}%)`,
-          { refSource: 'booking', refSourceId: booking._id }
-        );
-      }
-    }
+    const refundBreakdown = await bookingRefundService.quoteCancellation(booking, now);
+    const settled = await bookingRefundService.settleBookingEvent({
+      bookingId: booking._id,
+      eventKey: `booking:${booking._id}:cancellation`,
+      eventType: 'cancellation',
+      calculation: refundBreakdown,
+      description: `Refund cancelled booking ${booking._id}`,
+      applyState: async ({ booking: currentBooking }) => {
+        if (currentBooking.status !== 'PAID') {
+          throw Object.assign(new Error('Booking is no longer cancellable'), {
+            statusCode: 400,
+          });
+        }
+        currentBooking.status = 'CANCELLED';
+      },
+    });
 
     booking.status = 'CANCELLED';
-    await booking.save();
 
     // Gửi thông báo hủy thành công
     notifTriggers.notifyBookingCancelled(req.app, req.user._id, {
@@ -802,10 +885,21 @@ exports.cancelBooking = async (req, res, next) => {
       reason: 'Khách yêu cầu hủy đặt chỗ'
     }).catch(err => console.error('Failed to notify cancel:', err));
 
+    const payoutSuppressed = settled.settlement.payoutStatus === 'suppressed';
     res.status(200).json({
       success: true,
-      message: 'Hủy đặt chỗ thành công, tiền đặt trước đã được hoàn vào ví của bạn',
-      data: booking,
+      message: payoutSuppressed
+        ? 'Hủy đặt chỗ thành công; khoản hoàn dưới mức giao dịch tối thiểu nên chưa được cộng vào ví'
+        : 'Hủy đặt chỗ thành công, tiền đặt trước đã được hoàn vào ví của bạn',
+      data: {
+        ...settled.booking.toObject(),
+        refundAmount: refundBreakdown.refundAmount,
+        refundBreakdown: {
+          ...refundBreakdown,
+          payoutStatus: settled.settlement.payoutStatus,
+          suppressionReason: settled.settlement.suppressionReason,
+        },
+      },
     });
   } catch (error) {
     console.error('Error cancelBooking:', error);
@@ -821,7 +915,7 @@ exports.cancelBooking = async (req, res, next) => {
 exports.modifyBookingTime = async (req, res, next) => {
   try {
     const { newStart, newEnd } = req.body;
-    const booking = await Booking.findOne({ _id: req.params.id, userId: req.user._id });
+    let booking = await Booking.findOne({ _id: req.params.id, userId: req.user._id });
 
     if (!booking) {
       return res.status(404).json({ success: false, message: 'Không tìm thấy đặt chỗ' });
@@ -892,7 +986,10 @@ exports.modifyBookingTime = async (req, res, next) => {
     const pricing = await pricingEngine.calculatePrice(start, end);
     const newPrice = pricing.finalTotal;
     const diff = newPrice - booking.prepaidAmount;
+    const expectedModificationCount = booking.modificationCount;
 
+    let modificationSession = null;
+    try {
     if (diff > 0) {
       // Cần đóng thêm tiền -> chỉ hỗ trợ trừ tiền Wallet (phải nạp trước)
       const wallet = await walletService.getOrCreateWallet(req.user._id);
@@ -900,21 +997,35 @@ exports.modifyBookingTime = async (req, res, next) => {
         return res.status(400).json({ success: false, message: `Thời gian mới phát sinh thêm phí ${diff.toLocaleString()}đ, số dư ví không đủ. Vui lòng nạp thêm tiền vào ví trước.` });
       }
 
+      modificationSession = await mongoose.startSession();
+      modificationSession.startTransaction();
       await walletService.debitWallet(
         req.user._id,
         diff,
         `Thu phí bổ sung sửa giờ đặt chỗ ô ${booking.parkingSlot} - Xe ${booking.licensePlate}`,
-        { refSource: 'booking', refSourceId: booking._id }
+        {
+          refSource: 'booking',
+          refSourceId: booking._id,
+          idempotencyKey: `booking:${booking._id}:modification:${booking.modificationCount + 1}`,
+          session: modificationSession,
+        }
       );
     } else if (diff < 0) {
       // Hoàn lại tiền thừa
       const refundAmount = Math.abs(diff);
+      modificationSession = await mongoose.startSession();
+      modificationSession.startTransaction();
       await walletService.creditWallet(
         req.user._id,
         refundAmount,
         'REFUND',
         `Hoàn tiền dư sửa giờ đặt chỗ ô ${booking.parkingSlot} - Xe ${booking.licensePlate}`,
-        { refSource: 'booking', refSourceId: booking._id }
+        {
+          refSource: 'booking',
+          refSourceId: booking._id,
+          idempotencyKey: `booking:${booking._id}:modification:${booking.modificationCount + 1}`,
+          session: modificationSession,
+        }
       );
     }
 
@@ -922,8 +1033,62 @@ exports.modifyBookingTime = async (req, res, next) => {
     booking.scheduledEnd = end;
     booking.durationHours = pricing.durationHours;
     booking.prepaidAmount = newPrice;
-    booking.modificationCount += 1;
-    await booking.save();
+    if (booking.paymentBreakdownSnapshot?.source) {
+      const serviceAmount = Math.min(
+        Math.max(0, Number(booking.paymentBreakdownSnapshot.serviceAmount) || 0),
+        newPrice
+      );
+      booking.paymentBreakdownSnapshot = {
+        parkingAmount: Math.max(0, newPrice - serviceAmount),
+        serviceAmount,
+        totalAmount: newPrice,
+        source: booking.paymentBreakdownSnapshot.source,
+      };
+    }
+    const updatedBooking = await Booking.findOneAndUpdate(
+      {
+        _id: booking._id,
+        userId: req.user._id,
+        status: { $in: ['PAID', 'ACTIVE', 'PAUSED'] },
+        modificationCount: expectedModificationCount,
+      },
+      {
+        $set: {
+          scheduledStart: booking.scheduledStart,
+          scheduledEnd: booking.scheduledEnd,
+          durationHours: booking.durationHours,
+          prepaidAmount: booking.prepaidAmount,
+          ...(booking.paymentBreakdownSnapshot?.source
+            ? { paymentBreakdownSnapshot: booking.paymentBreakdownSnapshot }
+            : {}),
+        },
+        $inc: { modificationCount: 1 },
+      },
+      {
+        new: true,
+        runValidators: true,
+        ...(modificationSession ? { session: modificationSession } : {}),
+      }
+    );
+    if (!updatedBooking) {
+      throw Object.assign(new Error('Booking was modified concurrently; please retry'), {
+        statusCode: 409,
+      });
+    }
+    booking = updatedBooking;
+    if (modificationSession) {
+      await modificationSession.commitTransaction();
+    }
+    } catch (error) {
+      if (modificationSession) {
+        await modificationSession.abortTransaction();
+      }
+      throw error;
+    } finally {
+      if (modificationSession) {
+        await modificationSession.endSession();
+      }
+    }
 
     res.status(200).json({
       success: true,
@@ -947,6 +1112,33 @@ exports.getMyBookings = async (req, res, next) => {
     res.status(200).json({ success: true, data: bookings });
   } catch (error) {
     console.error('Error getMyBookings:', error);
+    next(error);
+  }
+};
+
+/**
+ * @desc    Get the signed, lifecycle-bound QR payload for one owned booking
+ * @route   GET /api/bookings/:id/qr
+ * @access  Private (Customer/Admin)
+ */
+exports.getBookingQr = async (req, res, next) => {
+  try {
+    const booking = await findOwnedBooking(req.params.id, req.user);
+    if (!booking) {
+      return res.status(404).json({ success: false, message: 'Booking not found' });
+    }
+
+    const available = isBookingQrAvailable(booking);
+    return res.status(200).json({
+      success: true,
+      data: {
+        available,
+        bookingStatus: booking.status,
+        payload: available ? buildBookingQrPayload(booking) : null,
+        reason: available ? null : 'BOOKING_QR_INACTIVE',
+      },
+    });
+  } catch (error) {
     next(error);
   }
 };
@@ -1081,6 +1273,13 @@ exports.checkInBooking = async (req, res, next) => {
       ? await Vehicle.findById(booking.vehicleId).select('vehicleType').lean()
       : null;
 
+    const previousStatus = booking.status;
+    const evidenceImageUrl = await uploadStaffEvidence(
+      req.staffBookingAction,
+      booking._id,
+      'CHECK_IN'
+    );
+
     booking.status = 'ACTIVE';
     await booking.save();
 
@@ -1089,7 +1288,7 @@ exports.checkInBooking = async (req, res, next) => {
       userId: booking.userId,
       bookingId: booking._id,
       type: 'BOOKING',
-      source: 'app_booking',
+      source: req.staffBookingAction ? 'staff_manual' : 'app_booking',
       vehicleType: vehicle?.vehicleType || 'car',
       parkingSlot: normalizeSlotCode(booking.parkingSlot),
       floorId: booking.floorId,
@@ -1097,6 +1296,22 @@ exports.checkInBooking = async (req, res, next) => {
       expectedDurationHours: booking.durationHours || 1,
       paymentStatus: 'unpaid',
       status: 'active',
+      ...(evidenceImageUrl
+        ? {
+            entryImage_url: evidenceImageUrl,
+            entryCamera: 'staff_mobile',
+            entryGate: 'manual_override',
+          }
+        : {}),
+    });
+
+    await recordStaffBookingAction({
+      req,
+      booking,
+      session,
+      previousStatus,
+      newStatus: booking.status,
+      evidenceImageUrl,
     });
 
     emitBookingChanged(req.app, booking, { action: 'checked-in' });
@@ -1148,53 +1363,78 @@ exports.checkOutBooking = async (req, res, next) => {
     }
 
     const now = new Date();
-    const pricing = await pricingEngine.calculatePrice(session.checkInTime, now);
-    const previousSessions = await Session.find({
+    const previousStatus = booking.status;
+    const evidenceImageUrl = await uploadStaffEvidence(
+      req.staffBookingAction,
+      booking._id,
+      'CHECK_OUT'
+    );
+    const refundBreakdown = await bookingRefundService.quoteEarlyCheckout(
+      booking,
+      session,
+      now
+    );
+    const settled = await bookingRefundService.settleBookingEvent({
       bookingId: booking._id,
-      _id: { $ne: session._id },
-      status: 'completed',
-    }).select('totalPrice');
-
-    const previousSpent = previousSessions.reduce((total, item) => total + Number(item.totalPrice || 0), 0);
-    const totalIncurred = previousSpent + Number(pricing.finalTotal || 0);
-    const prepaidAmount = Number(booking.prepaidAmount || 0);
-    const extraAmount = Math.max(totalIncurred - prepaidAmount, 0);
-    const refundAmount = Math.max(prepaidAmount - totalIncurred, 0);
-
-    if (extraAmount > 0) {
-      const wallet = await walletService.getOrCreateWallet(booking.userId);
-      if (wallet.balance < extraAmount) {
-        return res.status(400).json({
-          success: false,
-          message: `Phí phát sinh ${extraAmount.toLocaleString('vi-VN')}đ, số dư ví không đủ để hoàn tất check-out.`,
-        });
-      }
-
-      await walletService.debitWallet(
-        booking.userId,
-        extraAmount,
-        `Thanh toán phí phát sinh đặt chỗ ô ${booking.parkingSlot} - Xe ${booking.licensePlate}`,
-        { refSource: 'booking', refSourceId: booking._id }
-      );
-    } else if (refundAmount > 0) {
-      await walletService.creditWallet(
-        booking.userId,
-        refundAmount,
-        'REFUND',
-        `Hoàn tiền trả sớm đặt chỗ ô ${booking.parkingSlot} - Xe ${booking.licensePlate}`,
-        { refSource: 'booking', refSourceId: booking._id }
-      );
-    }
-
+      eventKey: `booking:${booking._id}:early-checkout`,
+      eventType: 'early_checkout',
+      calculation: refundBreakdown,
+      description: `Settle checkout for booking ${booking._id}`,
+      applyState: async ({ booking: currentBooking, session: mongoSession }) => {
+        if (currentBooking.status !== 'ACTIVE') {
+          throw Object.assign(new Error('Booking is no longer active'), {
+            statusCode: 409,
+          });
+        }
+        currentBooking.status = 'COMPLETED';
+        const updatedSession = await Session.findOneAndUpdate(
+          { _id: session._id, status: 'active' },
+          {
+            status: 'completed',
+            checkOutTime: now,
+            totalPrice: refundBreakdown.actualParkingCharge,
+            pricingBreakdown: refundBreakdown.pricingBreakdown,
+            paymentStatus: 'paid',
+            ...(evidenceImageUrl
+              ? {
+                  exitImage_url: evidenceImageUrl,
+                  exitCamera: 'staff_mobile',
+                  exitGate: 'manual_override',
+                }
+              : {}),
+          },
+          { new: true, session: mongoSession }
+        );
+        if (!updatedSession) {
+          throw Object.assign(new Error('Parking session is no longer active'), {
+            statusCode: 409,
+          });
+        }
+      },
+    });
+    const refundAmount = refundBreakdown.refundAmount;
+    const extraAmount = refundBreakdown.extraAmount;
+    const pricing = refundBreakdown.pricingBreakdown;
+    booking.status = 'COMPLETED';
     session.status = 'completed';
     session.checkOutTime = now;
-    session.totalPrice = pricing.finalTotal;
+    session.totalPrice = refundBreakdown.actualParkingCharge;
     session.pricingBreakdown = pricing;
     session.paymentStatus = 'paid';
-    await session.save();
+    if (evidenceImageUrl) {
+      session.exitImage_url = evidenceImageUrl;
+      session.exitCamera = 'staff_mobile';
+      session.exitGate = 'manual_override';
+    }
 
-    booking.status = 'COMPLETED';
-    await booking.save();
+    await recordStaffBookingAction({
+      req,
+      booking: settled.booking,
+      session,
+      previousStatus,
+      newStatus: 'COMPLETED',
+      evidenceImageUrl,
+    });
 
     emitBookingChanged(req.app, booking, { action: 'checked-out' });
     notifTriggers.notifyVehicleExit(
@@ -1217,11 +1457,16 @@ exports.checkOutBooking = async (req, res, next) => {
       success: true,
       message: 'Hoàn tất đặt chỗ thành công',
       data: {
-        booking,
+        booking: settled.booking,
         session,
         refundAmount,
         extraAmount,
         pricingBreakdown: pricing,
+        refundBreakdown: {
+          ...refundBreakdown,
+          payoutStatus: settled.settlement.payoutStatus,
+          suppressionReason: settled.settlement.suppressionReason,
+        },
       },
     });
   } catch (error) {
@@ -1644,7 +1889,6 @@ exports.quoteBulkBooking = async (req, res, next) => {
 };
 
 exports.createBulkBooking = async (req, res, next) => {
-  const mongoose = require('mongoose');
   const session = await mongoose.startSession();
   session.startTransaction();
 
@@ -1848,6 +2092,8 @@ exports.createBulkBooking = async (req, res, next) => {
         scheduledEnd: end,
         durationHours: pricing.durationHours,
         prepaidAmount: pricing.finalTotal + servicesTotal,
+        parkingAmount: pricing.finalTotal,
+        serviceAmount: servicesTotal,
         paymentMethod: 'wallet',
         status: 'PAID',
         servicesData: itemServices,
@@ -1881,6 +2127,7 @@ exports.createBulkBooking = async (req, res, next) => {
     await newOrder[0].save({ session });
 
     const createdBookingsResponse = [];
+    const bulkRefundPolicySnapshot = await getEffectiveRefundPolicySnapshot({ session });
 
     // Create Bookings
     for (const bData of bookingsToCreate) {
@@ -1908,6 +2155,14 @@ exports.createBulkBooking = async (req, res, next) => {
           { session }
         );
       }
+
+      await attachPaidBookingSnapshots(newBooking, {
+        parkingAmount: bData.parkingAmount,
+        serviceAmount: bData.serviceAmount,
+        source: 'calculated',
+        refundPolicySnapshot: bulkRefundPolicySnapshot,
+        session,
+      });
       
       // Auto-contract
       try {

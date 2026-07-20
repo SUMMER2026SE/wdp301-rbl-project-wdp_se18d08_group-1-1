@@ -66,6 +66,15 @@ const walletTransactionSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       default: null,
     },
+    idempotencyKey: {
+      type: String,
+      default: undefined,
+      trim: true,
+      set: (value) => {
+        const normalized = String(value || '').trim();
+        return normalized || undefined;
+      },
+    },
   },
   {
     timestamps: true,
@@ -75,6 +84,13 @@ const walletTransactionSchema = new mongoose.Schema(
 // Indexes for common queries
 walletTransactionSchema.index({ userId: 1, createdAt: -1 });
 walletTransactionSchema.index({ status: 1 });
+walletTransactionSchema.index(
+  { idempotencyKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { idempotencyKey: { $type: 'string' } },
+  }
+);
 
 const WalletTransaction = mongoose.model('WalletTransaction', walletTransactionSchema);
 

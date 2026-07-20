@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import * as Google from 'expo-auth-session/providers/google';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -24,15 +23,18 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { config } from '@/config/env';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
-import { useAppAlert } from '@/contexts/AppAlertContext';
 import { useAuth } from '@/hooks/useAuth';
-import type { AuthStackParamList } from '@/navigation/types';
+import { useAppAlert } from '@/contexts/AppAlertContext';
 
 WebBrowser.maybeCompleteAuthSession();
 
 const LogoImg = require('../../../assets/logo.png') as number;
 
-type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
+interface LoginScreenProps {
+  navigation?: {
+    navigate: (screen: string) => void;
+  };
+}
 
 function GoogleIcon() {
   return (
@@ -104,7 +106,7 @@ function Field({
   );
 }
 
-export default function LoginScreen({ navigation }: Props) {
+export default function LoginScreen({ navigation }: LoginScreenProps) {
   const { login, googleLogin } = useAuth();
   const { alert } = useAppAlert();
   const [email, setEmail] = useState('');
@@ -156,7 +158,7 @@ export default function LoginScreen({ navigation }: Props) {
     if (Constants.executionEnvironment === ExecutionEnvironment.StoreClient) {
       alert(
         'Google sign-in requires a development build',
-        "Expo Go cannot use this app's OAuth redirect. Install and open the VALO development build, then try again.",
+        'Expo Go cannot use this app\'s OAuth redirect. Install and open the VALO development build, then try again.',
       );
       return;
     }
@@ -261,7 +263,7 @@ export default function LoginScreen({ navigation }: Props) {
 
             <Pressable
               style={({ pressed }) => [styles.forgotRow, pressed && styles.pressed]}
-              onPress={() => navigation.navigate('ForgotPassword')}
+              onPress={() => navigation?.navigate('ForgotPassword')}
             >
               <Text style={styles.forgotText}>Forgot password?</Text>
             </Pressable>
@@ -313,7 +315,7 @@ export default function LoginScreen({ navigation }: Props) {
 
             <Pressable
               style={({ pressed }) => [styles.registerRow, pressed && styles.pressed]}
-              onPress={() => navigation.navigate('Register')}
+              onPress={() => navigation?.navigate('Register')}
             >
               <Text style={styles.registerText}>New to VALO? </Text>
               <Text style={[styles.registerText, styles.registerLink]}>Create account</Text>
@@ -336,20 +338,12 @@ const googleIconStyles = StyleSheet.create({
     overflow: 'hidden',
     width: 20,
   },
-  quad: {
-    height: 10,
-    width: 10,
-  },
+  quad: { height: 10, width: 10 },
 });
 
 const styles = StyleSheet.create({
-  safe: {
-    flex: 1,
-    backgroundColor: '#080808',
-  },
-  kav: {
-    flex: 1,
-  },
+  safe: { flex: 1, backgroundColor: '#080808' },
+  kav: { flex: 1 },
   scroll: {
     flexGrow: 1,
     justifyContent: 'center',
@@ -366,10 +360,7 @@ const styles = StyleSheet.create({
     top: -80,
     width: 260,
   },
-  hero: {
-    alignItems: 'center',
-    marginBottom: SPACING.xl,
-  },
+  hero: { alignItems: 'center', marginBottom: SPACING.xl },
   logoGlow: {
     alignItems: 'center',
     backgroundColor: 'rgba(212,175,55,0.08)',
@@ -385,10 +376,7 @@ const styles = StyleSheet.create({
     shadowRadius: 22,
     width: 108,
   },
-  logoImg: {
-    height: 78,
-    width: 78,
-  },
+  logoImg: { height: 78, width: 78 },
   brandName: {
     color: COLORS.gold,
     fontSize: 38,
@@ -464,14 +452,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(212,175,55,0.06)',
     borderColor: 'rgba(212,175,55,0.5)',
   },
-  fieldIconLeft: {
-    alignItems: 'center',
-    width: 32,
-  },
-  fieldIconRight: {
-    alignItems: 'center',
-    width: 32,
-  },
+  fieldIconLeft: { alignItems: 'center', width: 32 },
+  fieldIconRight: { alignItems: 'center', width: 32 },
   fieldInput: {
     color: COLORS.textPrimary,
     flex: 1,
@@ -488,11 +470,7 @@ const styles = StyleSheet.create({
     fontSize: FONT_SIZES.sm,
     fontWeight: '600',
   },
-  loginBtn: {
-    borderRadius: RADIUS.lg,
-    marginTop: 4,
-    overflow: 'hidden',
-  },
+  loginBtn: { borderRadius: RADIUS.lg, marginTop: 4, overflow: 'hidden' },
   loginBtnGrad: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -510,11 +488,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginVertical: SPACING.md,
   },
-  dividerLine: {
-    backgroundColor: COLORS.border,
-    flex: 1,
-    height: 1,
-  },
+  dividerLine: { backgroundColor: COLORS.border, flex: 1, height: 1 },
   dividerText: {
     color: COLORS.textMuted,
     fontSize: FONT_SIZES.xs,
@@ -557,10 +531,6 @@ const styles = StyleSheet.create({
     opacity: 0.5,
     textAlign: 'center',
   },
-  disabled: {
-    opacity: 0.6,
-  },
-  pressed: {
-    opacity: 0.65,
-  },
+  disabled: { opacity: 0.6 },
+  pressed: { opacity: 0.65 },
 });

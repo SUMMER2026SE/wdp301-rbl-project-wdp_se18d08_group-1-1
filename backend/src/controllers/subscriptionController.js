@@ -8,6 +8,11 @@ const {
   validateNewSubscriptionEligibility,
 } = require('../services/subscriptionEligibilityService');
 const { isEnabled, defaultForCurrentEnvironment } = require('../utils/featureFlags');
+const {
+  buildMembershipQrPayload,
+  isMembershipQrAvailable,
+} = require('../services/membershipQrService');
+const { validationResult } = require('express-validator');
 
 const buildExpirationDate = (packageType, fromDate = new Date()) => {
   const expireAt = new Date(fromDate);
@@ -393,6 +398,46 @@ exports.getMembership = async (req, res, next) => {
             ? 'Your renewal window is open. Renew now to keep your reserved spaces.'
             : 'Manual renewal opens before your membership expires.',
         },
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.getMembershipQr = async (req, res, next) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array().map((error) => ({
+          field: error.path || error.param,
+          message: error.msg,
+        })),
+      });
+    }
+
+    const query = { _id: req.params.subscriptionId };
+    if (req.user.role !== 'admin') {
+      query.user = req.user._id;
+    }
+
+    const subscription = await Subscription.findOne(query);
+    if (!subscription) {
+      return res.status(404).json({ success: false, message: 'Membership not found' });
+    }
+
+    const available = isMembershipQrAvailable(subscription);
+    return res.status(200).json({
+      success: true,
+      data: {
+        available,
+        membershipStatus: subscription.status,
+        expireAt: subscription.expireAt,
+        payload: available ? buildMembershipQrPayload(subscription) : null,
+        reason: available ? null : 'MEMBERSHIP_QR_INACTIVE',
       },
     });
   } catch (error) {

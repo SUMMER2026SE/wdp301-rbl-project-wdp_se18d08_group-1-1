@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import ParkingMapViewer from '../../components/ParkingMapViewer';
 
-import BookingPolicyModal from '../../components/policies/BookingPolicyModal';
+import PolicyAcceptancePrompt from '../../components/policies/PolicyAcceptancePrompt';
 import { extractMissingPolicies, isPolicyAcceptanceRequired } from '../../utils/policyErrors';
 import { getPolicyAcceptanceStatus } from '../../services/policyService';
 import { getServices } from '../../services/extraServiceApi';
@@ -30,6 +30,7 @@ import {
   getAvailableBookingSlots,
   quoteBulkBooking,
   releaseBookingHold,
+  getActiveHolds,
 } from '../../services/bookingService';
 import { QRCodeSVG } from 'qrcode.react';
 import { createTopUpUrl, getTopUpStatus } from '../../services/walletService';
@@ -224,7 +225,9 @@ export default function CreateBookingPage() {
   const [bookingInfo, setBookingInfo] = useState(null);
   const [successRedirectCountdown, setSuccessRedirectCountdown] = useState(4);
 
-  const [showPolicyModal, setShowPolicyModal] = useState(false);
+  const [showGlobalPolicyModal, setShowGlobalPolicyModal] = useState(false);
+  const [missingPolicies, setMissingPolicies] = useState([]);
+  const [pendingPolicyAction, setPendingPolicyAction] = useState(null);
 
   // Map state
   const [floors, setFloors] = useState([]);
@@ -232,6 +235,7 @@ export default function CreateBookingPage() {
   const [currentFloorId, setCurrentFloorId] = useState(null);
   const [dbSlots, setDbSlots] = useState([]);
   const [activeSessions, setActiveSessions] = useState([]);
+  const [activeHolds, setActiveHolds] = useState([]);
 
   const fetchDbSlots = useCallback(async () => {
     if (!currentFloorId) {
@@ -253,6 +257,17 @@ export default function CreateBookingPage() {
     fetchDbSlots();
   }, [fetchDbSlots]);
 
+  const fetchActiveHoldsData = async () => {
+    try {
+      const res = await getActiveHolds();
+      if (res.ok && res.data?.data) {
+        setActiveHolds(res.data.data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch active holds', err);
+    }
+  };
+
   const fetchActiveSessions = async () => {
     try {
       const token = localStorage.getItem('accessToken');
@@ -271,8 +286,10 @@ export default function CreateBookingPage() {
 
   useEffect(() => {
     fetchActiveSessions();
+    fetchActiveHoldsData();
     const intervalId = setInterval(() => {
       fetchActiveSessions();
+      fetchActiveHoldsData();
       fetchDbSlots();
     }, 30000); // 30s
     return () => clearInterval(intervalId);
@@ -543,6 +560,11 @@ export default function CreateBookingPage() {
       });
 
       if (!res.ok) {
+        if (isPolicyAcceptanceRequired(res.data)) {
+          setMissingPolicies(extractMissingPolicies(res.data));
+          setPendingPolicyAction(() => handleFindSlots);
+          setShowGlobalPolicyModal(true);
+        }
         setError(res.data?.message || 'Could not check available slots.');
         setSelectedSlotKey('');
         return;
@@ -816,11 +838,10 @@ export default function CreateBookingPage() {
       setError('Fix highlighted booking items before checkout.');
       return;
     }
-    setShowPolicyModal(true);
+    executeCheckoutCart();
   };
 
   const executeCheckoutCart = async () => {
-    setShowPolicyModal(false);
     setSubmitting(true);
     setError('');
     setSuccess('');
@@ -847,9 +868,6 @@ export default function CreateBookingPage() {
         return;
       }
 
-
-
-
       const checkoutItems = cartApiItems.map((item) => ({
         ...item,
         holdId: cartItems.find(c => c.clientItemId === item.clientItemId)?.holdId,
@@ -861,9 +879,15 @@ export default function CreateBookingPage() {
       });
 
       if (!res.ok) {
-
         const errorMessage = res.data?.message || '';
         const itemErrors = res.data?.data?.itemErrors || [];
+        
+        if (isPolicyAcceptanceRequired(res.data)) {
+          setMissingPolicies(extractMissingPolicies(res.data));
+          setPendingPolicyAction(() => executeCheckoutCart);
+          setShowGlobalPolicyModal(true);
+        }
+
         if (itemErrors.length > 0) {
           setCartItemErrors(toItemErrorMap(itemErrors));
           setError(errorMessage || 'One or more booking items need attention.');
@@ -1347,6 +1371,7 @@ export default function CreateBookingPage() {
                 onFloorSelect={setCurrentFloorId}
                 activeSessions={activeSessions}
                 dbSlots={dbSlots}
+                activeHolds={activeHolds}
                 availableSlots={slots}
                 selectedSlotId={
                   cartItems.length > 0 
@@ -1383,6 +1408,10 @@ export default function CreateBookingPage() {
                     <div className="flex items-center gap-1.5">
                       <div className="w-3.5 h-3.5 rounded-sm bg-red-200 border border-red-500" style={{ backgroundImage: 'repeating-linear-gradient(45deg, rgba(239, 68, 68, 0.2), rgba(239, 68, 68, 0.2) 4px, rgba(127, 29, 29, 0.3) 4px, rgba(127, 29, 29, 0.3) 8px)' }}></div>
                       <span className="text-[10px] text-gray-300 font-bold tracking-wide">Maintenance</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-3.5 h-3.5 rounded-sm bg-orange-100 border border-orange-500"></div>
+                      <span className="text-[10px] text-orange-500 font-bold tracking-wide">Hold</span>
                     </div>
                   </div>
                 </div>
@@ -1514,10 +1543,17 @@ export default function CreateBookingPage() {
 
 
 
-      <BookingPolicyModal
-        open={showPolicyModal}
-        onClose={() => setShowPolicyModal(false)}
-        onConfirm={executeCheckoutCart}
+
+      <PolicyAcceptancePrompt
+        open={showGlobalPolicyModal}
+        missingPolicies={missingPolicies}
+        onClose={() => setShowGlobalPolicyModal(false)}
+        onAccepted={() => {
+          setShowGlobalPolicyModal(false);
+          if (pendingPolicyAction) {
+            pendingPolicyAction();
+          }
+        }}
       />
     </div>
   );

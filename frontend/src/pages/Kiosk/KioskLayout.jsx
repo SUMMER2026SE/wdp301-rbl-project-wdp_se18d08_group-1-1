@@ -116,7 +116,7 @@ export default function KioskLayout() {
           </div>
 
           {/* Main Content Area */}
-          <div className="flex-1 flex flex-col">
+          <div className="flex-1 flex flex-col min-h-0">
             <Outlet />
           </div>
 

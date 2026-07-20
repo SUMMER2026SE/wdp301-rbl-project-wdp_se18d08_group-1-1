@@ -19,4 +19,29 @@ describe('QRCodeDisplay properties', () => {
       { numRuns: 100 },
     );
   });
+
+  it('accepts signed VALO booking QR payloads', () => {
+    expect(
+      isValidBookingQrValue(
+        'VALO_BOOKING:1:507f1f77bcf86cd799439011:abcdefghijklmnopqrstuvwxyz0123456789_-',
+      ),
+    ).toBe(true);
+    expect(
+      isValidBookingQrValue(
+        'VALO_BOOKING:2:507f1f77bcf86cd799439011:abcdefghijklmnopqrstuvwxyz0123456789_-',
+      ),
+    ).toBe(true);
+  });
+
+  it('rejects unsigned VALO booking QR payloads', () => {
+    expect(isValidBookingQrValue('VALO_BOOKING:1:507f1f77bcf86cd799439011')).toBe(false);
+  });
+
+  it('accepts signed membership QR payloads', () => {
+    expect(
+      isValidBookingQrValue(
+        'VALO_MEMBERSHIP:1:507f1f77bcf86cd799439011:abcdefghijklmnopqrstuvwxyz0123456789_-',
+      ),
+    ).toBe(true);
+  });
 });
