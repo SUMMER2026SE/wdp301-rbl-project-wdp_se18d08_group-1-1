@@ -22,7 +22,6 @@ import type {
   BookingStatus,
   PaymentStatus,
 } from '@/types/booking.types';
-import type { SignedQrResponse } from '@/types/qr.types';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -166,7 +165,7 @@ class BookingService {
   }
 
   getBookingQr(bookingId: string) {
-    return apiClient.get<APIResponse<SignedQrResponse>>(`/bookings/${bookingId}/qr`);
+    return apiClient.get<APIResponse<BookingQrData>>(`/bookings/${bookingId}/qr`);
   }
 
   checkInBooking(bookingId: string) {

@@ -32,7 +32,6 @@ router.post('/', requirePolicyAcceptance({ action: 'booking:create' }), bookingC
 router.post('/bulk', requirePolicyAcceptance({ action: 'booking:create' }), bookingController.createBulkBooking);
 router.post('/bulk/quote', bookingController.quoteBulkBooking);
 router.get('/status/:orderCode', bookingController.checkVietQRStatus);
-router.get('/:id/qr', bookingController.getBookingQr);
 router.post('/:id/cancel', bookingController.cancelBooking);
 router.put('/:id/time', bookingController.modifyBookingTime);
 router.put('/:id/vehicle', bookingController.updateBookingVehicle);
