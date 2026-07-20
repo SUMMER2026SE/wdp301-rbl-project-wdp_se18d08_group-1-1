@@ -9,18 +9,22 @@ interface QRCodeDisplayProps {
   bookingId?: string;
   value?: string;
   reference?: string;
+  shareLabel?: string;
+  shareTitle?: string;
   size?: number;
   showBrightnessControl?: boolean;
 }
 
 export const isValidBookingQrValue = (value: string) =>
   /^[a-f\d]{24}$/i.test(value) ||
-  /^VALO_BOOKING:[1-9]\d*:[a-f\d]{24}:[A-Za-z0-9_-]{20,}$/i.test(value);
+  /^VALO_(BOOKING|MEMBERSHIP):[1-9]\d*:[a-f\d]{24}:[A-Za-z0-9_-]{20,}$/i.test(value);
 
 export const QRCodeDisplay = ({
   bookingId,
   value,
   reference,
+  shareLabel = 'VALO parking pass',
+  shareTitle = 'Share pass',
   size = 200,
   showBrightnessControl = true,
 }: QRCodeDisplayProps) => {
@@ -46,9 +50,9 @@ export const QRCodeDisplay = ({
         />
       ) : null}
       <Button
-        title="Share Booking"
+        title={shareTitle}
         variant="ghost"
-        onPress={() => Share.share({ message: `VALO booking: ${qrValue}` })}
+        onPress={() => Share.share({ message: `${shareLabel}: ${qrValue}` })}
       />
     </Card>
   );

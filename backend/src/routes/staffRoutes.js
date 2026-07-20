@@ -7,6 +7,10 @@ const {
   updateCustomerStatus,
   updateCustomer,
 } = require('../controllers/staffController');
+const {
+  resolveMembershipQr,
+  transitionMembershipByQr,
+} = require('../controllers/staffMembershipController');
 
 const router = express.Router();
 
@@ -14,6 +18,8 @@ router.use(protect, authorize('staff', 'admin'));
 
 router.post('/bookings/qr/resolve', resolveBookingQr);
 router.post('/bookings/:id/transition', transitionBookingByQr);
+router.post('/memberships/qr/resolve', resolveMembershipQr);
+router.post('/memberships/:id/transition', transitionMembershipByQr);
 
 // Customers
 router.get('/users', listCustomers);

@@ -64,6 +64,30 @@ export interface StaffSubscription {
   slots?: Array<{ floorId?: { _id?: string; name?: string; floorNumber?: number } | string; slotCode: string }>;
 }
 
+export interface StaffMembershipVehicle {
+  _id: string;
+  licensePlate: string;
+  vehicleType?: string;
+  brand?: string;
+  model?: string;
+  color?: string;
+}
+
+export interface StaffMembershipQrResolution {
+  credentialType: 'MEMBERSHIP';
+  membership: StaffSubscription;
+  vehicles: StaffMembershipVehicle[];
+  activeSessions: StaffSession[];
+  allowedActions: StaffBookingQrAction[];
+}
+
+export interface StaffMembershipTransitionPayload extends StaffBookingTransitionPayload {
+  vehicleId?: string;
+  floorId?: string;
+  parkingSlot?: string;
+  sessionId?: string;
+}
+
 export interface TicketPackage {
   _id: string;
   name: string;
@@ -84,7 +108,7 @@ export interface StaffSession {
   status: 'active' | 'completed' | 'cancelled';
   phone?: string;
   vehicleType?: string;
-  source?: 'kiosk' | 'app_booking' | 'booking' | 'walk_in';
+  source?: 'kiosk' | 'app_booking' | 'booking' | 'walk_in' | 'staff_manual';
   totalPrice?: number;
   paymentStatus?: string;
   expectedDurationHours?: number;
@@ -109,6 +133,16 @@ export const staffService = {
   transitionBookingByQr: (bookingId: string, data: StaffBookingTransitionPayload) =>
     apiClient.post<APIResponse<{ booking: StaffBooking }>>(
       `/staff/bookings/${bookingId}/transition`,
+      data,
+    ),
+  resolveMembershipQr: (payload: string) =>
+    apiClient.post<APIResponse<StaffMembershipQrResolution>>(
+      '/staff/memberships/qr/resolve',
+      { payload },
+    ),
+  transitionMembershipByQr: (subscriptionId: string, data: StaffMembershipTransitionPayload) =>
+    apiClient.post<APIResponse<{ session: StaffSession }>>(
+      `/staff/memberships/${subscriptionId}/transition`,
       data,
     ),
   getSubscriptions: () => apiClient.get<APIResponse<StaffSubscription[]>>('/subscriptions/all'),
