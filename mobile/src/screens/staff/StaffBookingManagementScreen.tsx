@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { addDays, format, subDays } from 'date-fns';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -18,7 +19,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { EmptyState, ErrorState, ScreenHeader } from '@/components/common';
+import { EmptyState, ErrorState } from '@/components/common';
+import { StaffHeader, StatusBadge } from '@/components/staff';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
 import type { StaffManagementStackParamList } from '@/navigation/StaffNavigator';
 import { staffService, type StaffBooking } from '@/services/api/staff';
@@ -87,6 +89,7 @@ const getDurationProgress = (start: string, end: string) => {
 };
 
 export function StaffBookingManagementScreen({ navigation }: Props) {
+  const tabBarHeight = useBottomTabBarHeight();
   const [date, setDate] = useState(new Date());
   const [bookings, setBookings] = useState<StaffBooking[]>([]);
   const [filter, setFilter] = useState<BookingFilter>('ALL');
@@ -154,22 +157,23 @@ export function StaffBookingManagementScreen({ navigation }: Props) {
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
-      <ScreenHeader
-        title="Booking management"
-        subtitle={`${bookings.length} on selected day`}
-        accentColor={COLORS.staffBlue}
+      <StaffHeader
+        eyebrow="Verification"
+        title="Booking Management"
         onBack={() => navigation.navigate('ManagementHome')}
-        right={
-          <TouchableOpacity
-            accessibilityLabel="Scan booking QR"
-            accessibilityRole="button"
-            onPress={() => navigation.navigate('BookingScanner')}
-            style={styles.scanButton}
-          >
-            <Ionicons name="qr-code-outline" size={22} color={COLORS.textInverse} />
-          </TouchableOpacity>
-        }
+        right={<TouchableOpacity
+          accessibilityLabel="Scan booking QR"
+          accessibilityRole="button"
+          onPress={() => navigation.navigate('BookingScanner')}
+          style={styles.scanButton}
+        >
+          <Ionicons name="qr-code-outline" size={22} color={COLORS.textInverse} />
+        </TouchableOpacity>}
       />
+      <View style={styles.headerStatus}>
+        <StatusBadge label={`${allCounts.ACTIVE.length} active`} tone="success" />
+        <StatusBadge label={`${allCounts.UPCOMING.length} upcoming`} tone="warning" />
+      </View>
 
       <View style={styles.dateBar}>
         <TouchableOpacity
@@ -261,7 +265,7 @@ export function StaffBookingManagementScreen({ navigation }: Props) {
           key={filter}
           sections={sections}
           keyExtractor={(item) => item._id}
-          contentContainerStyle={[styles.list, sections.length === 0 && styles.emptyList]}
+          contentContainerStyle={[styles.list, { paddingBottom: tabBarHeight + SPACING.lg }, sections.length === 0 && styles.emptyList]}
           stickySectionHeadersEnabled={false}
           showsVerticalScrollIndicator={false}
           refreshControl={
@@ -449,9 +453,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: COLORS.staffBlue,
     borderRadius: RADIUS.md,
-    height: 40,
+    height: 48,
     justifyContent: 'center',
-    width: 40,
+    width: 48,
+  },
+  headerStatus: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    paddingBottom: SPACING.xs,
+    paddingHorizontal: SPACING.md,
   },
   center: {
     alignItems: 'center',
@@ -461,7 +471,7 @@ const styles = StyleSheet.create({
   dateBar: {
     alignItems: 'center',
     flexDirection: 'row',
-    marginHorizontal: SPACING.lg,
+    marginHorizontal: SPACING.md,
     marginTop: SPACING.xs,
   },
   dateButton: {
@@ -490,14 +500,14 @@ const styles = StyleSheet.create({
   },
   summary: {
     alignItems: 'center',
-    backgroundColor: COLORS.surface,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.lg,
-    borderWidth: 1,
+    borderBottomColor: COLORS.border,
+    borderTopColor: COLORS.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
-    marginHorizontal: SPACING.lg,
-    marginTop: SPACING.md,
-    paddingVertical: SPACING.sm,
+    marginHorizontal: SPACING.md,
+    marginTop: SPACING.sm,
+    paddingVertical: SPACING.xs,
   },
   summaryMetric: {
     alignItems: 'center',
@@ -526,10 +536,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: 'row',
     gap: SPACING.sm,
-    marginHorizontal: SPACING.lg,
-    marginTop: SPACING.md,
+    marginHorizontal: SPACING.md,
+    marginTop: SPACING.sm,
     minHeight: 46,
-    paddingHorizontal: SPACING.md,
+    paddingHorizontal: SPACING.sm,
   },
   searchInput: {
     color: COLORS.textPrimary,
@@ -545,11 +555,15 @@ const styles = StyleSheet.create({
   },
   filterScroll: {
     flexGrow: 0,
+    height: 48,
+    marginBottom: SPACING.md,
+    marginTop: SPACING.sm,
+    maxHeight: 48,
   },
   filters: {
+    alignItems: 'center',
     gap: SPACING.sm,
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.md,
   },
   filter: {
     alignItems: 'center',
@@ -594,8 +608,8 @@ const styles = StyleSheet.create({
   },
   list: {
     paddingBottom: SPACING.xxl,
-    paddingHorizontal: SPACING.lg,
-    paddingTop: SPACING.sm,
+    paddingHorizontal: SPACING.md,
+    paddingTop: 0,
   },
   emptyList: {
     flexGrow: 1,
@@ -607,7 +621,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: 'row',
     paddingBottom: SPACING.sm,
-    paddingTop: SPACING.sm,
+    paddingTop: 0,
   },
   sectionIcon: {
     alignItems: 'center',
@@ -642,7 +656,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   itemSeparator: {
-    height: SPACING.sm,
+    height: SPACING.xs,
   },
   sectionSeparator: {
     height: SPACING.md,
@@ -652,13 +666,13 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     borderRadius: RADIUS.lg,
     borderWidth: 1,
-    gap: SPACING.md,
+    gap: SPACING.sm,
     overflow: 'hidden',
-    padding: SPACING.md,
+    padding: SPACING.sm,
   },
   pressed: {
     backgroundColor: COLORS.surfaceElevated,
-    transform: [{ scale: 0.99 }],
+    transform: [{ scale: 0.98 }],
   },
   accent: {
     bottom: SPACING.md,

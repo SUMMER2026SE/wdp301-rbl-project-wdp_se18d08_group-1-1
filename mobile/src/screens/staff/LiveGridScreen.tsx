@@ -1,7 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   Modal,
   Pressable,
   RefreshControl,
@@ -18,6 +20,12 @@ import {
   type ParkingSlotInspection,
 } from '@/components/booking/ParkingMap2D';
 import { EmptyState, ErrorState } from '@/components/common';
+import {
+  MetricStrip,
+  OperationalMetric,
+  StaffHeader,
+  StatusStrip,
+} from '@/components/staff';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
 import { sessionsService } from '@/services/api/sessions';
 import { parkingFloorService } from '@/services/ParkingFloorService';
@@ -63,6 +71,44 @@ const getLayoutElements = (floor: ParkingFloor | null) => {
     return [];
   }
 };
+
+function LiveActiveBadge({ count }: { count: number }) {
+  const pulse = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          duration: 1100,
+          easing: Easing.out(Easing.quad),
+          toValue: 1,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          duration: 1100,
+          easing: Easing.in(Easing.quad),
+          toValue: 0,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse]);
+
+  const scale = pulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.7] });
+  const opacity = pulse.interpolate({ inputRange: [0, 1], outputRange: [0.36, 0] });
+
+  return (
+    <View style={styles.liveBadge}>
+      <View style={styles.liveDotWrap}>
+        <Animated.View style={[styles.liveDotHalo, { opacity, transform: [{ scale }] }]} />
+        <View style={styles.liveDot} />
+      </View>
+      <Text style={styles.liveBadgeText}>{count} active</Text>
+    </View>
+  );
+}
 
 export default function LiveGridScreen() {
   const [floors, setFloors] = useState<ParkingFloor[]>([]);
@@ -223,16 +269,11 @@ export default function LiveGridScreen() {
     <SafeAreaView edges={['top']} style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
 
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.title}>Live parking</Text>
-          <Text style={styles.subtitle}>Real-time floor monitoring</Text>
-        </View>
-        <View style={styles.statChip}>
-          <View style={styles.onlineDot} />
-          <Text style={styles.statChipText}>Live · {activeSessions.length}</Text>
-        </View>
-      </View>
+      <StaffHeader
+        eyebrow="Live parking"
+        title="Floor monitor"
+        right={<LiveActiveBadge count={activeSessions.length} />}
+      />
 
       <ScrollView
         horizontal
@@ -310,23 +351,19 @@ export default function LiveGridScreen() {
           />
         ) : (
           <>
-            <View style={styles.metricsRow}>
-              <Metric
-                value={`${occupancy}%`}
-                label="Occupied"
-                accent={COLORS.staffBlue}
-              />
-              <View style={styles.metricDivider} />
-              <Metric
-                value={String(availableCount)}
-                label="Available"
-                accent="#7EE8A2"
-              />
-              <View style={styles.metricDivider} />
-              <Metric
-                value={String(capacity)}
-                label="Total spaces"
-                accent={COLORS.textPrimary}
+            <MetricStrip style={styles.liveMetricStrip}>
+              <OperationalMetric icon="speedometer-outline" value={`${occupancy}%`} label="Occupied" tone={occupancy >= 90 ? 'danger' : occupancy >= 80 ? 'warning' : 'info'} />
+              <OperationalMetric icon="checkmark-circle-outline" value={String(availableCount)} label="Available" tone="success" />
+              <OperationalMetric icon="bookmark-outline" value={String(reservedCount)} label="Reserved" tone="warning" />
+              <OperationalMetric icon="construct-outline" value={String(maintenanceCount)} label="Repair" tone={maintenanceCount > 0 ? 'danger' : 'muted'} />
+            </MetricStrip>
+
+            <View style={styles.floorStatus}>
+              <StatusStrip
+                icon="layers-outline"
+                label={selectedFloor.name}
+                value={`${capacity} spaces · ${floorSessions.length} active vehicles`}
+                tone={occupancy >= 90 ? 'danger' : occupancy >= 80 ? 'warning' : 'success'}
               />
             </View>
 
@@ -466,23 +503,6 @@ function SessionSlotCard({ session }: { session: ActiveSession }) {
           {mins}m
         </Text>
       </View>
-    </View>
-  );
-}
-
-function Metric({
-  value,
-  label,
-  accent,
-}: {
-  value: string;
-  label: string;
-  accent: string;
-}) {
-  return (
-    <View style={styles.metric}>
-      <Text style={[styles.metricValue, { color: accent }]}>{value}</Text>
-      <Text style={styles.metricLabel}>{label}</Text>
     </View>
   );
 }
@@ -811,11 +831,43 @@ const styles = StyleSheet.create({
   },
   onlineDot: { backgroundColor: '#7EE8A2', borderRadius: 3, height: 6, width: 6 },
   statChipText: { color: '#7EE8A2', fontSize: FONT_SIZES.xs, fontWeight: '700' },
-  floorTabScroll: { flexGrow: 0, maxHeight: 48 },
+  liveBadge: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(76,175,80,0.12)',
+    borderColor: 'rgba(76,175,80,0.32)',
+    borderRadius: RADIUS.round,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 7,
+    minHeight: 40,
+    paddingHorizontal: SPACING.md,
+  },
+  liveBadgeText: {
+    color: COLORS.success,
+    fontSize: FONT_SIZES.xs,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  liveDot: { backgroundColor: COLORS.success, borderRadius: 5, height: 10, width: 10 },
+  liveDotHalo: {
+    borderColor: COLORS.success,
+    borderRadius: 10,
+    borderWidth: 1,
+    height: 20,
+    position: 'absolute',
+    width: 20,
+  },
+  liveDotWrap: {
+    alignItems: 'center',
+    height: 22,
+    justifyContent: 'center',
+    width: 22,
+  },
+  floorTabScroll: { flexGrow: 0, height: 46, marginBottom: SPACING.sm, marginTop: SPACING.xs, maxHeight: 46 },
   floorTabs: {
     alignItems: 'center',
     gap: SPACING.sm,
-    paddingBottom: SPACING.sm,
+    paddingBottom: 0,
     paddingHorizontal: SPACING.lg,
   },
   floorTab: {
@@ -826,52 +878,44 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: 'row',
     gap: 6,
-    minHeight: 38,
+    minHeight: 42,
     paddingHorizontal: SPACING.md,
-    paddingVertical: 7,
   },
   floorTabActive: {
     backgroundColor: 'rgba(96,180,255,0.1)',
     borderColor: COLORS.staffBlue,
+    shadowColor: COLORS.staffBlue,
+    shadowOffset: { height: 0, width: 0 },
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
   },
   floorTabText: {
     color: COLORS.textMuted,
-    fontSize: FONT_SIZES.xs,
-    fontWeight: '600',
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '800',
   },
   floorTabTextActive: { color: COLORS.staffBlue },
   floorBadge: {
     alignItems: 'center',
     backgroundColor: COLORS.staffBlue,
-    borderRadius: 9,
-    height: 18,
+    borderRadius: RADIUS.round,
+    height: 20,
     justifyContent: 'center',
-    minWidth: 18,
+    minWidth: 20,
     paddingHorizontal: 3,
   },
   floorBadgeText: { color: COLORS.background, fontSize: 10, fontWeight: '800' },
   content: { paddingBottom: SPACING.xl },
-  loadingWrap: { alignItems: 'center', gap: SPACING.md, paddingTop: 80 },
-  loadingText: { color: COLORS.textMuted, fontSize: FONT_SIZES.sm },
-  metricsRow: {
-    alignItems: 'center',
-    backgroundColor: COLORS.surface,
-    borderColor: COLORS.border,
-    borderRadius: RADIUS.lg,
-    borderWidth: 1,
-    flexDirection: 'row',
+  liveMetricStrip: {
     marginHorizontal: SPACING.lg,
     marginTop: SPACING.sm,
-    paddingVertical: SPACING.md,
   },
-  metric: { alignItems: 'center', flex: 1 },
-  metricValue: {
-    fontSize: FONT_SIZES.xl,
-    fontVariant: ['tabular-nums'],
-    fontWeight: '800',
+  floorStatus: {
+    marginHorizontal: SPACING.lg,
+    marginTop: SPACING.md,
   },
-  metricLabel: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs, marginTop: 3 },
-  metricDivider: { backgroundColor: COLORS.border, height: 30, width: 1 },
+  loadingWrap: { alignItems: 'center', gap: SPACING.md, paddingTop: 80 },
+  loadingText: { color: COLORS.textMuted, fontSize: FONT_SIZES.sm },
   mapCard: {
     backgroundColor: '#111419',
     borderColor: COLORS.border,
@@ -1175,3 +1219,4 @@ const styles = StyleSheet.create({
   },
   clearStateText: { color: COLORS.textSecondary, flex: 1, fontSize: FONT_SIZES.sm },
 });
+

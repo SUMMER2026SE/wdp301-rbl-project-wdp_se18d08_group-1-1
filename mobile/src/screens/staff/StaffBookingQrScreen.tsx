@@ -1,12 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { BarcodeScanningResult } from 'expo-camera';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Crypto from 'expo-crypto';
 import * as ImageManipulator from 'expo-image-manipulator';
-import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   Image,
   Linking,
   ScrollView,
@@ -17,9 +19,9 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ScreenHeader } from '@/components/common';
+import { StaffHeader, StatusBadge, StatusStrip } from '@/components/staff';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
 import type { StaffManagementStackParamList } from '@/navigation/StaffNavigator';
 import {
@@ -41,9 +43,12 @@ const isMembershipResolution = (
 
 export function StaffBookingQrScreen({ navigation }: Props) {
   const cameraRef = useRef<CameraView | null>(null);
+  const insets = useSafeAreaInsets();
+  const tabBarHeight = useBottomTabBarHeight();
   const [permission, requestPermission] = useCameraPermissions();
   const [phase, setPhase] = useState<Phase>('scan');
   const [busy, setBusy] = useState(false);
+  const [qrCapturing, setQrCapturing] = useState(false);
   const [error, setError] = useState('');
   const [qrPayload, setQrPayload] = useState('');
   const [resolution, setResolution] = useState<QrResolution | null>(null);
@@ -65,6 +70,7 @@ export function StaffBookingQrScreen({ navigation }: Props) {
   const reset = () => {
     setPhase('scan');
     setBusy(false);
+    setQrCapturing(false);
     setError('');
     setQrPayload('');
     setResolution(null);
@@ -106,8 +112,27 @@ export function StaffBookingQrScreen({ navigation }: Props) {
   };
 
   const handleQrScanned = ({ data }: BarcodeScanningResult) => {
-    if (busy || phase !== 'scan') return;
+    if (busy || qrCapturing || phase !== 'scan') return;
     void resolveQr(data);
+  };
+
+  const captureQrFrame = async () => {
+    if (!cameraRef.current || busy || qrCapturing) return;
+    setQrCapturing(true);
+    setError('');
+    try {
+      const photo = await cameraRef.current.takePictureAsync({
+        quality: 0.7,
+        skipProcessing: true,
+      });
+      if (!photo?.uri) {
+        throw new Error('Unable to capture the QR frame.');
+      }
+    } catch (captureError) {
+      setError(captureError instanceof Error ? captureError.message : 'Unable to capture the QR frame.');
+    } finally {
+      setQrCapturing(false);
+    }
   };
 
   const startEvidenceCapture = (action: StaffBookingQrAction) => {
@@ -217,22 +242,6 @@ export function StaffBookingQrScreen({ navigation }: Props) {
     }
   };
 
-  if (permission?.granted === false) {
-    return (
-      <SafeAreaView style={styles.safe}>
-        <ScreenHeader title="Parking QR" onBack={() => navigation.goBack()} />
-        <View style={styles.center}>
-          <Ionicons name="camera-outline" size={48} color={COLORS.error} />
-          <Text style={styles.title}>Camera permission required</Text>
-          <Text style={styles.helper}>
-            Camera access is required to scan parking QR codes and photograph the vehicle.
-          </Text>
-          <ActionButton label="Open settings" onPress={() => Linking.openSettings()} />
-        </View>
-      </SafeAreaView>
-    );
-  }
-
   const bookingResolution = resolution && 'booking' in resolution ? resolution : null;
   const booking = bookingResolution?.booking || null;
   const membershipResolution = isMembershipResolution(resolution) ? resolution : null;
@@ -242,43 +251,75 @@ export function StaffBookingQrScreen({ navigation }: Props) {
   const selectedSession = membershipResolution?.activeSessions.find(
     (session) => session._id === selectedSessionId,
   );
+  const stickyBottom = Math.max(tabBarHeight, 76);
+  const stickyPaddingBottom = Math.max(insets.bottom, SPACING.sm);
+  const shutterBottom = Math.max(insets.bottom + 18, 26);
+  const stickyContentPadding = stickyBottom + stickyPaddingBottom + 132;
+  const shutterContentPadding = shutterBottom + 132;
+
+  if (permission?.granted === false) {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <StaffHeader
+          eyebrow="Verification"
+          title="Parking QR"
+          onBack={() => navigation.goBack()}
+          right={<StatusBadge label="Blocked" tone="danger" />}
+        />
+        <View style={styles.center}>
+          <Ionicons name="camera-outline" size={42} color={COLORS.error} />
+          <Text style={styles.title}>Camera permission required</Text>
+          <Text style={styles.helper}>Camera access is required for QR scanning and vehicle evidence.</Text>
+          <ActionButton label="Open settings" onPress={() => Linking.openSettings()} />
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
-      <ScreenHeader
+      <StaffHeader
+        eyebrow="Verification"
         title="Parking QR"
-        subtitle="Kiosk manual override"
-        accentColor={COLORS.staffBlue}
         onBack={() => navigation.goBack()}
+        right={<StatusBadge label={phase === 'scan' ? 'Scan' : phase} tone={phase === 'success' ? 'success' : phase === 'confirm' ? 'warning' : 'info'} />}
       />
 
       {phase === 'scan' ? (
-        <View style={styles.content}>
-          <View style={styles.cameraFrame}>
-            {permission?.granted ? (
-              <CameraView
-                barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
-                facing="back"
-                onBarcodeScanned={busy ? undefined : handleQrScanned}
-                style={StyleSheet.absoluteFill}
-              />
-            ) : (
-              <ActivityIndicator color={COLORS.staffBlue} size="large" />
-            )}
-            <View pointerEvents="none" style={styles.viewfinder} />
+        <>
+          <View style={[styles.scanContent, { paddingBottom: shutterContentPadding }]}>
+            <View style={styles.cameraFrame}>
+              {permission?.granted ? (
+                <CameraView
+                  ref={cameraRef}
+                  barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+                  facing="back"
+                  onBarcodeScanned={busy || qrCapturing ? undefined : handleQrScanned}
+                  style={StyleSheet.absoluteFill}
+                />
+              ) : (
+                <ActivityIndicator color={COLORS.staffBlue} size="large" />
+              )}
+              <View pointerEvents="none" style={styles.viewfinder} />
+            </View>
+            <Text style={styles.scanHint}>Align QR inside frame</Text>
+            {busy ? <ActivityIndicator color={COLORS.staffBlue} /> : null}
+            {error ? <ErrorMessage message={error} /> : null}
           </View>
-          <Text style={styles.title}>Scan the customer's parking QR</Text>
-          <Text style={styles.helper}>
-            Booking and membership codes are supported. No status changes happen until evidence is captured and confirmed.
-          </Text>
-          {busy ? <ActivityIndicator color={COLORS.staffBlue} /> : null}
-          {error ? <ErrorMessage message={error} /> : null}
-        </View>
+          <ShutterActionBar bottom={shutterBottom}>
+            <CameraShutterControl
+              disabled={busy || qrCapturing || !permission?.granted}
+              label={busy || qrCapturing ? 'Capturing' : 'Capture'}
+              onPress={() => void captureQrFrame()}
+            />
+          </ShutterActionBar>
+        </>
       ) : null}
 
       {phase === 'detail' && booking ? (
         <ScrollView contentContainerStyle={styles.content}>
+          <StatusStrip icon="shield-checkmark-outline" label="Step 2" value="Verify booking" tone="success" />
           <View style={styles.bookingCard}>
             <View style={styles.statusRow}>
               <Text style={styles.plate}>{booking.licensePlate}</Text>
@@ -297,12 +338,9 @@ export function StaffBookingQrScreen({ navigation }: Props) {
             />
             <DetailRow
               label="Schedule"
-              value={`${new Date(booking.scheduledStart).toLocaleString()} – ${new Date(booking.scheduledEnd).toLocaleString()}`}
+              value={`${new Date(booking.scheduledStart).toLocaleString()} - ${new Date(booking.scheduledEnd).toLocaleString()}`}
             />
           </View>
-          <Text style={styles.helper}>
-            Verify the license plate before continuing. A clear vehicle photo is mandatory.
-          </Text>
           {bookingResolution?.allowedActions.map((action) => (
             <ActionButton
               key={action}
@@ -319,6 +357,7 @@ export function StaffBookingQrScreen({ navigation }: Props) {
 
       {phase === 'detail' && membershipResolution ? (
         <ScrollView contentContainerStyle={styles.content}>
+          <StatusStrip icon="diamond-outline" label="Step 2" value="Select vehicle or session" tone="success" />
           <View style={styles.bookingCard}>
             <View style={styles.statusRow}>
               <Text style={styles.membershipTitle}>
@@ -350,7 +389,7 @@ export function StaffBookingQrScreen({ navigation }: Props) {
                   key={vehicle._id}
                   selected={selectedVehicleId === vehicle._id}
                   title={vehicle.licensePlate}
-                  subtitle={[vehicle.brand, vehicle.model, vehicle.color].filter(Boolean).join(' · ')}
+                  subtitle={[vehicle.brand, vehicle.model, vehicle.color].filter(Boolean).join(' / ')}
                   onPress={() => setSelectedVehicleId(vehicle._id)}
                 />
               ))}
@@ -384,7 +423,7 @@ export function StaffBookingQrScreen({ navigation }: Props) {
                   key={session._id}
                   selected={selectedSessionId === session._id}
                   title={session.licensePlate}
-                  subtitle={`${session.parkingSlot || 'No space'} · ${new Date(session.checkInTime).toLocaleString()}`}
+                  subtitle={`${session.parkingSlot || 'No space'} / ${new Date(session.checkInTime).toLocaleString()}`}
                   onPress={() => setSelectedSessionId(session._id)}
                 />
               ))}
@@ -399,66 +438,77 @@ export function StaffBookingQrScreen({ navigation }: Props) {
             <ErrorMessage message="No manual action is available for this membership." />
           ) : null}
           {error ? <ErrorMessage message={error} /> : null}
-          <Text style={styles.helper}>
-            Verify the vehicle and assigned space. A clear evidence photo is mandatory.
-          </Text>
           <ActionButton label="Scan another QR" secondary onPress={reset} />
         </ScrollView>
       ) : null}
 
       {phase === 'capture' ? (
-        <View style={styles.content}>
-          <View style={styles.evidenceCamera}>
-            {permission?.granted ? (
-              <CameraView ref={cameraRef} facing="back" style={StyleSheet.absoluteFill} />
-            ) : (
-              <ActivityIndicator color={COLORS.staffBlue} size="large" />
-            )}
-            <View pointerEvents="none" style={styles.plateGuide} />
-          </View>
-          <Text style={styles.title}>Photograph the vehicle</Text>
-          <Text style={styles.helper}>
-            Keep the license plate readable and include enough of the vehicle for operational evidence.
-          </Text>
-          {error ? <ErrorMessage message={error} /> : null}
-          <ActionButton
-            disabled={busy}
-            label={busy ? 'Capturing…' : 'Capture evidence'}
-            onPress={() => void captureEvidence()}
-          />
-          <ActionButton label="Back to details" secondary onPress={() => setPhase('detail')} />
-        </View>
+        <>
+          <ScrollView contentContainerStyle={[styles.content, { paddingBottom: shutterContentPadding }]}>
+            <StatusStrip icon="camera-outline" label="Step 3" value="Vehicle evidence" tone="warning" />
+            <View style={styles.evidenceCamera}>
+              {permission?.granted ? (
+                <CameraView ref={cameraRef} facing="back" style={StyleSheet.absoluteFill} />
+              ) : (
+                <ActivityIndicator color={COLORS.staffBlue} size="large" />
+              )}
+              <View pointerEvents="none" style={styles.plateGuide} />
+            </View>
+            <Text style={styles.scanHint}>Keep plate readable</Text>
+            {error ? <ErrorMessage message={error} /> : null}
+          </ScrollView>
+          <ShutterActionBar bottom={shutterBottom}>
+            <CameraShutterControl
+              disabled={busy}
+              label={busy ? 'Capturing' : 'Capture'}
+              onPress={() => void captureEvidence()}
+            />
+          </ShutterActionBar>
+          <TouchableOpacity
+            accessibilityRole="button"
+            activeOpacity={0.78}
+            onPress={() => setPhase('detail')}
+            style={[styles.floatingBackAction, { bottom: shutterBottom + 108 }]}
+          >
+            <Text style={styles.shutterTextActionLabel}>Back to details</Text>
+          </TouchableOpacity>
+        </>
       ) : null}
 
       {phase === 'confirm' && (booking || membershipResolution) && selectedAction ? (
-        <ScrollView contentContainerStyle={styles.content}>
-          <Image source={{ uri: evidenceUri }} style={styles.preview} />
-          <Text style={styles.title}>Confirm {actionLabel(selectedAction).toLowerCase()}</Text>
-          <Text style={styles.helper}>
-            {booking
-              ? `${booking.licensePlate} · ${booking.parkingSlot}`
-              : selectedAction === 'CHECK_IN'
-                ? `${selectedVehicle?.licensePlate || 'Vehicle'} · ${selectedSlotKey.split(':')[1] || 'Parking space'}`
-                : `${selectedSession?.licensePlate || 'Vehicle'} · ${selectedSession?.parkingSlot || 'Parking space'}`}
-          </Text>
-          <Text style={styles.inputLabel}>Override reason</Text>
-          <TextInput
-            maxLength={500}
-            multiline
-            placeholder="Why is staff performing this action?"
-            placeholderTextColor={COLORS.textMuted}
-            style={styles.input}
-            value={reason}
-            onChangeText={setReason}
-          />
-          {error ? <ErrorMessage message={error} /> : null}
-          <ActionButton
-            disabled={busy || !reason.trim()}
-            label={busy ? 'Submitting…' : `Confirm ${actionLabel(selectedAction)}`}
-            onPress={() => void submitTransition()}
-          />
-          <ActionButton label="Retake photo" secondary onPress={() => setPhase('capture')} />
-        </ScrollView>
+        <>
+          <ScrollView contentContainerStyle={[styles.content, { paddingBottom: stickyContentPadding }]}>
+            <StatusStrip icon="checkmark-done-outline" label="Final step" value="Confirm transition" tone="warning" />
+            <Image source={{ uri: evidenceUri }} style={styles.preview} />
+            <Text style={styles.title}>Confirm {actionLabel(selectedAction).toLowerCase()}</Text>
+            <Text style={styles.helper}>
+              {booking
+                ? `${booking.licensePlate} / ${booking.parkingSlot}`
+                : selectedAction === 'CHECK_IN'
+                  ? `${selectedVehicle?.licensePlate || 'Vehicle'} / ${selectedSlotKey.split(':')[1] || 'Parking space'}`
+                  : `${selectedSession?.licensePlate || 'Vehicle'} / ${selectedSession?.parkingSlot || 'Parking space'}`}
+            </Text>
+            <Text style={styles.inputLabel}>Override reason</Text>
+            <TextInput
+              maxLength={500}
+              multiline
+              placeholder="Why is staff performing this action?"
+              placeholderTextColor={COLORS.textMuted}
+              style={styles.input}
+              value={reason}
+              onChangeText={setReason}
+            />
+            {error ? <ErrorMessage message={error} /> : null}
+          </ScrollView>
+          <StickyActionBar bottom={stickyBottom} paddingBottom={stickyPaddingBottom}>
+            <ActionButton
+              disabled={busy || !reason.trim()}
+              label={busy ? 'Submitting...' : `Confirm ${actionLabel(selectedAction)}`}
+              onPress={() => void submitTransition()}
+            />
+            <ActionButton label="Retake photo" secondary onPress={() => setPhase('capture')} />
+          </StickyActionBar>
+        </>
       ) : null}
 
       {phase === 'success' ? (
@@ -467,9 +517,7 @@ export function StaffBookingQrScreen({ navigation }: Props) {
             <Ionicons name="checkmark" size={42} color={COLORS.textInverse} />
           </View>
           <Text style={styles.title}>Parking access updated</Text>
-          <Text style={styles.helper}>
-            The customer has been notified and the evidence photo was saved to the parking session.
-          </Text>
+          <Text style={styles.helper}>Evidence saved to the parking session.</Text>
           <ActionButton label="Scan another QR" onPress={reset} />
           <ActionButton label="Back to bookings" secondary onPress={() => navigation.navigate('Bookings')} />
         </View>
@@ -509,13 +557,13 @@ function SelectionCard({
 }) {
   return (
     <TouchableOpacity
-      activeOpacity={0.8}
+      activeOpacity={0.84}
       onPress={onPress}
       style={[styles.selectionCard, selected && styles.selectionCardSelected]}
     >
       <View style={styles.selectionText}>
         <Text style={styles.selectionTitle}>{title}</Text>
-        {subtitle ? <Text style={styles.selectionSubtitle}>{subtitle}</Text> : null}
+        {subtitle ? <Text numberOfLines={1} style={styles.selectionSubtitle}>{subtitle}</Text> : null}
       </View>
       <Ionicons
         name={selected ? 'checkmark-circle' : 'ellipse-outline'}
@@ -523,6 +571,104 @@ function SelectionCard({
         color={selected ? COLORS.staffBlue : COLORS.textMuted}
       />
     </TouchableOpacity>
+  );
+}
+
+function StickyActionBar({
+  bottom,
+  children,
+  paddingBottom,
+}: {
+  bottom: number;
+  children: React.ReactNode;
+  paddingBottom: number;
+}) {
+  return (
+    <View style={[styles.stickyActionBar, { bottom, paddingBottom }]}>
+      {children}
+    </View>
+  );
+}
+
+function ShutterActionBar({
+  bottom,
+  children,
+}: {
+  bottom: number;
+  children: React.ReactNode;
+}) {
+  return (
+    <View style={[styles.shutterActionBar, { bottom }]}>
+      {children}
+    </View>
+  );
+}
+
+function CameraShutterControl({
+  disabled = false,
+  label,
+  onPress,
+}: {
+  disabled?: boolean;
+  label: string;
+  onPress: () => void;
+}) {
+  const press = useRef(new Animated.Value(0)).current;
+  const ripple = useRef(new Animated.Value(0)).current;
+  const scale = press.interpolate({ inputRange: [0, 1], outputRange: [1, 0.9] });
+  const rippleScale = ripple.interpolate({ inputRange: [0, 1], outputRange: [0.78, 1.28] });
+  const rippleOpacity = ripple.interpolate({ inputRange: [0, 1], outputRange: [0.35, 0] });
+
+  const pressIn = () => {
+    Animated.spring(press, {
+      damping: 18,
+      mass: 0.6,
+      stiffness: 360,
+      toValue: 1,
+      useNativeDriver: true,
+    }).start();
+    ripple.setValue(0);
+    Animated.timing(ripple, {
+      duration: 220,
+      toValue: 1,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  const pressOut = () => {
+    Animated.spring(press, {
+      damping: 16,
+      mass: 0.55,
+      stiffness: 320,
+      toValue: 0,
+      useNativeDriver: true,
+    }).start();
+  };
+
+  return (
+    <View style={styles.shutterWrap}>
+      <Animated.View style={[styles.shutterAnimated, { opacity: disabled ? 0.5 : 1, transform: [{ scale }] }]}>
+        <TouchableOpacity
+          accessibilityLabel="Capture QR"
+          accessibilityRole="button"
+          activeOpacity={0.92}
+          disabled={disabled}
+          onPress={onPress}
+          onPressIn={pressIn}
+          onPressOut={pressOut}
+          style={styles.shutterButton}
+        >
+          <Animated.View
+            pointerEvents="none"
+            style={[styles.shutterRipple, { opacity: rippleOpacity, transform: [{ scale: rippleScale }] }]}
+          />
+          <View style={styles.shutterInner}>
+            <Ionicons name="camera-outline" size={26} color={COLORS.staffBlue} />
+          </View>
+        </TouchableOpacity>
+      </Animated.View>
+      <Text style={styles.shutterLabel}>{label}</Text>
+    </View>
   );
 }
 
@@ -539,19 +685,20 @@ function ActionButton({
 }) {
   return (
     <TouchableOpacity
-      activeOpacity={0.8}
+      activeOpacity={0.84}
       disabled={disabled}
       onPress={onPress}
       style={[styles.button, secondary && styles.buttonSecondary, disabled && styles.buttonDisabled]}
     >
-      <Text style={[styles.buttonText, secondary && styles.buttonTextSecondary]}>{label}</Text>
+      <Text numberOfLines={1} style={[styles.buttonText, secondary && styles.buttonTextSecondary]}>{label}</Text>
     </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
   safe: { backgroundColor: COLORS.background, flex: 1 },
-  content: { gap: SPACING.md, padding: SPACING.lg, paddingBottom: SPACING.xxl },
+  content: { gap: SPACING.sm, padding: SPACING.md, paddingBottom: SPACING.xxl },
+  scanContent: { gap: SPACING.sm, paddingHorizontal: SPACING.md, paddingTop: SPACING.sm },
   center: {
     alignItems: 'center',
     flex: 1,
@@ -562,16 +709,16 @@ const styles = StyleSheet.create({
   cameraFrame: {
     alignItems: 'center',
     backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.xl,
-    height: 390,
+    borderRadius: RADIUS.lg,
+    height: 300,
     justifyContent: 'center',
     overflow: 'hidden',
   },
   evidenceCamera: {
     alignItems: 'center',
     backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.xl,
-    height: 430,
+    borderRadius: RADIUS.lg,
+    height: 340,
     justifyContent: 'center',
     overflow: 'hidden',
   },
@@ -579,20 +726,27 @@ const styles = StyleSheet.create({
     borderColor: COLORS.staffBlue,
     borderRadius: RADIUS.lg,
     borderWidth: 3,
-    height: 235,
-    width: 235,
+    height: 220,
+    width: 220,
   },
   plateGuide: {
     borderColor: COLORS.gold,
     borderRadius: RADIUS.md,
     borderWidth: 3,
-    height: 120,
+    height: 112,
     width: '82%',
   },
   title: {
     color: COLORS.textPrimary,
     fontSize: FONT_SIZES.xl,
     fontWeight: '800',
+    textAlign: 'center',
+  },
+  scanHint: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.sm,
+    fontWeight: '800',
+    lineHeight: 20,
     textAlign: 'center',
   },
   helper: {
@@ -604,15 +758,15 @@ const styles = StyleSheet.create({
   bookingCard: {
     backgroundColor: COLORS.surface,
     borderColor: COLORS.border,
-    borderRadius: RADIUS.xl,
+    borderRadius: RADIUS.lg,
     borderWidth: 1,
-    padding: SPACING.lg,
+    padding: SPACING.md,
   },
   statusRow: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: SPACING.md,
+    marginBottom: SPACING.sm,
   },
   plate: {
     color: COLORS.textPrimary,
@@ -640,7 +794,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: 'row',
     gap: SPACING.md,
-    minHeight: 66,
+    minHeight: 58,
     padding: SPACING.md,
   },
   selectionCardSelected: {
@@ -674,7 +828,7 @@ const styles = StyleSheet.create({
   preview: {
     aspectRatio: 4 / 3,
     backgroundColor: COLORS.surface,
-    borderRadius: RADIUS.xl,
+    borderRadius: RADIUS.lg,
     width: '100%',
   },
   inputLabel: { color: COLORS.textSecondary, fontSize: FONT_SIZES.sm, fontWeight: '700' },
@@ -699,12 +853,107 @@ const styles = StyleSheet.create({
     padding: SPACING.md,
   },
   errorText: { color: COLORS.error, flex: 1, fontSize: FONT_SIZES.sm },
+  stickyActionBar: {
+    backgroundColor: 'rgba(11,12,14,0.97)',
+    borderTopColor: COLORS.border,
+    borderTopWidth: 1,
+    gap: SPACING.sm,
+    left: 0,
+    paddingHorizontal: SPACING.md,
+    paddingTop: SPACING.sm,
+    position: 'absolute',
+    right: 0,
+  },
+  shutterActionBar: {
+    alignItems: 'center',
+    alignSelf: 'stretch',
+    backgroundColor: 'transparent',
+    elevation: 24,
+    justifyContent: 'center',
+    left: 0,
+    overflow: 'visible',
+    position: 'absolute',
+    right: 0,
+    width: '100%',
+    zIndex: 24,
+  },
+  shutterWrap: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: SPACING.xs,
+    justifyContent: 'center',
+    width: 124,
+  },
+  shutterLabel: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.xs,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  shutterAnimated: {
+    borderRadius: RADIUS.round,
+    elevation: 14,
+    shadowColor: COLORS.staffBlue,
+    shadowOffset: { height: 0, width: 0 },
+    shadowOpacity: 0.36,
+    shadowRadius: 18,
+  },
+  shutterButton: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(244,248,255,0.96)',
+    borderColor: 'rgba(226,241,255,0.98)',
+    borderRadius: 38,
+    borderWidth: 4,
+    height: 76,
+    justifyContent: 'center',
+    overflow: 'hidden',
+    width: 76,
+  },
+  shutterInner: {
+    alignItems: 'center',
+    backgroundColor: COLORS.background,
+    borderColor: 'rgba(96,180,255,0.36)',
+    borderRadius: 27,
+    borderWidth: 1,
+    height: 54,
+    justifyContent: 'center',
+    width: 54,
+  },
+  shutterRipple: {
+    backgroundColor: 'rgba(96,180,255,0.22)',
+    borderRadius: RADIUS.round,
+    height: 96,
+    position: 'absolute',
+    width: 96,
+  },
+  shutterTextAction: {
+    alignItems: 'center',
+    minHeight: 32,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+  },
+  floatingBackAction: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    left: 0,
+    minHeight: 32,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    position: 'absolute',
+    right: 0,
+    zIndex: 23,
+  },
+  shutterTextActionLabel: {
+    color: COLORS.textSecondary,
+    fontSize: FONT_SIZES.xs,
+    fontWeight: '800',
+  },
   button: {
     alignItems: 'center',
     backgroundColor: COLORS.staffBlue,
     borderRadius: RADIUS.md,
-    minHeight: 50,
     justifyContent: 'center',
+    minHeight: 50,
     paddingHorizontal: SPACING.md,
   },
   buttonSecondary: {
