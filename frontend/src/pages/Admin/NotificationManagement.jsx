@@ -75,13 +75,13 @@ function normalizeNotification(item) {
 
 function StatCard({ label, value, icon: Icon }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-2xl border border-white/10 bg-[#171717] p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-yellow-500/40">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-medium text-slate-500">{label}</p>
-          <p className="mt-1 text-2xl font-semibold text-slate-900">{value}</p>
+          <p className="text-xs font-bold text-gray-500">{label}</p>
+          <p className="mt-2 text-2xl font-black text-white tabular-nums">{value}</p>
         </div>
-        <span className="grid h-10 w-10 place-items-center rounded-lg bg-slate-100 text-slate-700">
+        <span className="grid h-12 w-12 place-items-center rounded-2xl bg-white/5 text-gray-400">
           <Icon size={20} />
         </span>
       </div>
@@ -278,19 +278,19 @@ export default function NotificationManagement() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="p-6 md:p-8 mx-auto min-h-[calc(100vh-70px)] overflow-auto bg-[#080808]">
       <div className="mx-auto max-w-7xl space-y-6">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="text-sm font-medium text-slate-500">Admin</p>
-            <h1 className="mt-1 text-2xl font-semibold text-slate-950">
-              Manage notifications
-            </h1>
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-yellow-500/20 bg-yellow-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-yellow-300">
+              <Bell size={12} /> Notifications
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">Manage notifications</h1>
           </div>
           <button
             type="button"
             onClick={fetchLiveFeed}
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800"
+            className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 px-4 py-2.5 text-sm font-semibold text-gray-300 hover:text-yellow-500 hover:border-yellow-500/40 transition"
           >
             <Inbox size={16} />
             Refresh
@@ -316,7 +316,7 @@ export default function NotificationManagement() {
           </div>
         )}
 
-        <div className="overflow-x-auto border-b border-slate-200">
+        <div className="overflow-x-auto border-b border-white/10">
           <div className="flex min-w-max gap-2">
             {TABS.map(({ key, label, icon: Icon }) => (
               <button
@@ -325,8 +325,8 @@ export default function NotificationManagement() {
                 onClick={() => setActiveTab(key)}
                 className={`inline-flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-semibold ${
                   activeTab === key
-                    ? "border-slate-900 text-slate-950"
-                    : "border-transparent text-slate-500 hover:text-slate-800"
+                    ? "border-yellow-500 text-yellow-500"
+                    : "border-transparent text-gray-500 hover:text-gray-300"
                 }`}
               >
                 <Icon size={16} />
@@ -338,17 +338,17 @@ export default function NotificationManagement() {
 
         {activeTab === "live" && (
           <section className="space-y-4">
-            <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-white p-4 shadow-sm lg:flex-row lg:items-center">
+            <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-[#171717] p-4 shadow-sm lg:flex-row lg:items-center">
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
                 placeholder="Search by title or content"
-                className="min-h-10 flex-1 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900"
+                className="min-h-10 flex-1 rounded-xl border border-white/10 bg-black text-white px-3 text-sm outline-none focus:border-yellow-500/50 focus:ring-1 focus:ring-yellow-500/50 placeholder-gray-500"
               />
               <select
                 value={priorityFilter}
                 onChange={(event) => setPriorityFilter(event.target.value)}
-                className="min-h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900"
+                className="min-h-10 rounded-xl border border-white/10 bg-black text-white px-3 text-sm outline-none focus:border-yellow-500/50 focus:ring-1 focus:ring-yellow-500/50"
               >
                 <option value="ALL">All priorities</option>
                 {PRIORITIES.map((priority) => (
@@ -361,23 +361,23 @@ export default function NotificationManagement() {
                 type="button"
                 onClick={markAllAsRead}
                 disabled={!unreadCount}
-                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-white/10 px-4 text-sm font-semibold text-gray-300 hover:text-white disabled:cursor-not-allowed disabled:opacity-50 transition"
               >
                 <CheckCircle2 size={16} />
                 Mark as read
               </button>
             </div>
 
-            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            <div className="overflow-hidden rounded-3xl border border-white/10 bg-[#171717] shadow-sm">
               {loading ? (
-                <p className="p-6 text-sm text-slate-500">Loading notifications...</p>
+                <p className="p-6 text-sm text-gray-500">Loading notifications...</p>
               ) : liveNotifications.length ? (
-                <div className="divide-y divide-slate-100">
+                <div className="divide-y divide-white/[0.05]">
                   {liveNotifications.map((item) => (
                     <article
                       key={item.id}
-                      className={`flex flex-col gap-3 p-4 md:flex-row md:items-start md:justify-between ${
-                        item.read ? "bg-white" : "bg-sky-50/50"
+                      className={`flex flex-col gap-3 p-4 md:flex-row md:items-start md:justify-between transition-colors ${
+                        item.read ? "bg-transparent" : "bg-white/[0.02]"
                       }`}
                     >
                       <div className="min-w-0 flex-1">
@@ -389,22 +389,22 @@ export default function NotificationManagement() {
                           >
                             {item.priority}
                           </span>
-                          <span className="text-xs text-slate-500">
+                          <span className="text-xs text-gray-400">
                             {formatDate(item.createdAt)}
                           </span>
                           {!item.read && (
-                            <span className="rounded-full bg-slate-900 px-2 py-0.5 text-xs font-semibold text-white">
+                            <span className="rounded-full bg-yellow-500 px-2 py-0.5 text-xs font-semibold text-black">
                               New
                             </span>
                           )}
                         </div>
-                        <h2 className="mt-2 text-base font-semibold text-slate-950">
+                        <h2 className="mt-2 text-base font-semibold text-white">
                           {item.title}
                         </h2>
-                        <p className="mt-1 text-sm leading-6 text-slate-600">
+                        <p className="mt-1 text-sm leading-6 text-gray-400">
                           {item.content}
                         </p>
-                        <p className="mt-2 text-xs font-medium text-slate-400">
+                        <p className="mt-2 text-xs font-medium text-gray-500">
                           {item.targetType} · {item.channels.join(", ")}
                         </p>
                       </div>
@@ -413,7 +413,7 @@ export default function NotificationManagement() {
                           <button
                             type="button"
                             onClick={() => markAsRead(item.id)}
-                            className="grid h-9 w-9 place-items-center rounded-lg border border-slate-300 text-slate-600 hover:bg-slate-50"
+                            className="grid h-9 w-9 place-items-center rounded-lg border border-white/10 text-gray-400 hover:bg-white/5 hover:text-white transition"
                             aria-label="Mark as read"
                           >
                             <CheckCircle2 size={16} />
@@ -422,7 +422,7 @@ export default function NotificationManagement() {
                         <button
                           type="button"
                           onClick={() => removeNotification(item.id)}
-                          className="grid h-9 w-9 place-items-center rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50"
+                          className="grid h-9 w-9 place-items-center rounded-lg border border-red-500/20 text-red-500 hover:bg-red-500/10 transition"
                           aria-label="Delete notifications"
                         >
                           <Trash2 size={16} />
@@ -432,7 +432,7 @@ export default function NotificationManagement() {
                   ))}
                 </div>
               ) : (
-                <p className="p-6 text-sm text-slate-500">No notifications yet.</p>
+                <p className="p-6 text-sm text-gray-500">No notifications yet.</p>
               )}
             </div>
           </section>
@@ -441,23 +441,23 @@ export default function NotificationManagement() {
         {activeTab === "compose" && (
           <form
             onSubmit={handleSendNotification}
-            className="grid gap-4 rounded-lg border border-slate-200 bg-white p-5 shadow-sm"
+            className="grid gap-4 rounded-3xl border border-white/10 bg-[#171717] p-5 shadow-sm"
           >
             <div className="grid gap-4 lg:grid-cols-2">
-              <label className="grid gap-2 text-sm font-medium text-slate-700">
+              <label className="grid gap-2 text-sm font-medium text-gray-300">
                 Title
                 <input
                   value={form.title}
                   onChange={(event) => updateForm("title", event.target.value)}
-                  className="min-h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900"
+                  className="min-h-10 rounded-xl border border-white/10 bg-black text-white px-3 text-sm outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/20"
                 />
               </label>
-              <label className="grid gap-2 text-sm font-medium text-slate-700">
+              <label className="grid gap-2 text-sm font-medium text-gray-300">
                 Priority
                 <select
                   value={form.priority}
                   onChange={(event) => updateForm("priority", event.target.value)}
-                  className="min-h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900"
+                  className="min-h-10 rounded-xl border border-white/10 bg-black text-white px-3 text-sm outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/20"
                 >
                   {PRIORITIES.map((priority) => (
                     <option key={priority} value={priority}>
@@ -468,23 +468,23 @@ export default function NotificationManagement() {
               </label>
             </div>
 
-            <label className="grid gap-2 text-sm font-medium text-slate-700">
+            <label className="grid gap-2 text-sm font-medium text-gray-300">
               Content
               <textarea
                 value={form.content}
                 onChange={(event) => updateForm("content", event.target.value)}
                 rows={5}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-900"
+                className="rounded-xl border border-white/10 bg-black text-white px-3 py-2 text-sm outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/20"
               />
             </label>
 
             <div className="grid gap-4 lg:grid-cols-3">
-              <label className="grid gap-2 text-sm font-medium text-slate-700">
+              <label className="grid gap-2 text-sm font-medium text-gray-300">
                 Audience
                 <select
                   value={form.targetType}
                   onChange={(event) => updateForm("targetType", event.target.value)}
-                  className="min-h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900"
+                  className="min-h-10 rounded-xl border border-white/10 bg-black text-white px-3 text-sm outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/20"
                 >
                   {TARGET_TYPES.map((item) => (
                     <option key={item.value} value={item.value}>
@@ -493,23 +493,23 @@ export default function NotificationManagement() {
                   ))}
                 </select>
               </label>
-              <label className="grid gap-2 text-sm font-medium text-slate-700">
+              <label className="grid gap-2 text-sm font-medium text-gray-300">
                 Expires after hours
                 <input
                   type="number"
                   min="1"
                   value={form.expiresInHours}
                   onChange={(event) => updateForm("expiresInHours", event.target.value)}
-                  className="min-h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900"
+                  className="min-h-10 rounded-xl border border-white/10 bg-black text-white px-3 text-sm outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/20"
                 />
               </label>
-              <div className="grid gap-2 text-sm font-medium text-slate-700">
+              <div className="grid gap-2 text-sm font-medium text-gray-300">
                 Delivery channels
                 <div className="flex min-h-10 flex-wrap items-center gap-2">
                   {["IN_APP", "EMAIL"].map((channel) => (
                     <label
                       key={channel}
-                      className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                      className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-sm bg-black text-white"
                     >
                       <input
                         type="checkbox"
@@ -528,7 +528,7 @@ export default function NotificationManagement() {
                 {ROLE_OPTIONS.map((role) => (
                   <label
                     key={role}
-                    className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700"
+                    className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-sm font-medium text-gray-300 bg-black"
                   >
                     <input
                       type="checkbox"
@@ -542,13 +542,13 @@ export default function NotificationManagement() {
             )}
 
             {form.targetType === "USER" && (
-              <label className="grid gap-2 text-sm font-medium text-slate-700">
+              <label className="grid gap-2 text-sm font-medium text-gray-300">
                 User IDs
                 <input
                   value={form.targetUsers}
                   onChange={(event) => updateForm("targetUsers", event.target.value)}
                   placeholder="Enter IDs separated by commas"
-                  className="min-h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none focus:border-slate-900"
+                  className="min-h-10 rounded-xl border border-white/10 bg-black text-white px-3 text-sm outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/20"
                 />
               </label>
             )}
@@ -557,7 +557,7 @@ export default function NotificationManagement() {
               <button
                 type="submit"
                 disabled={saving}
-                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-yellow-500 hover:bg-yellow-400 px-4 text-sm font-bold text-black disabled:cursor-not-allowed disabled:opacity-60 transition"
               >
                 <Send size={16} />
                 {saving ? "Sending..." : "Send notifications"}
@@ -567,11 +567,11 @@ export default function NotificationManagement() {
         )}
 
         {activeTab === "rules" && (
-          <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <section className="overflow-hidden rounded-3xl border border-white/10 bg-[#171717] shadow-sm">
             {rulesLoading ? (
-              <p className="p-6 text-sm text-slate-500">Loading automation rules...</p>
+              <p className="p-6 text-sm text-gray-500">Loading automation rules...</p>
             ) : autoRules.length ? (
-              <div className="divide-y divide-slate-100">
+              <div className="divide-y divide-white/[0.05]">
                 {autoRules.map((rule) => (
                   <div
                     key={rule._id || rule.id || rule.eventKey}
@@ -579,7 +579,7 @@ export default function NotificationManagement() {
                   >
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <h2 className="text-base font-semibold text-slate-950">
+                        <h2 className="text-base font-semibold text-white">
                           {rule.name}
                         </h2>
                         <span
@@ -589,19 +589,19 @@ export default function NotificationManagement() {
                         >
                           {rule.priority || "INFO"}
                         </span>
-                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+                        <span className="rounded-full bg-white/5 px-2.5 py-1 text-xs font-medium text-gray-400">
                           {rule.eventKey}
                         </span>
                       </div>
-                      <p className="mt-2 text-sm leading-6 text-slate-600">
+                      <p className="mt-2 text-sm leading-6 text-gray-400">
                         {rule.description || rule.content || "No description."}
                       </p>
-                      <p className="mt-2 text-xs font-medium text-slate-400">
+                      <p className="mt-2 text-xs font-medium text-gray-500">
                         Channels: {(rule.channels || ["IN_APP"]).join(", ")}
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-                      <label className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700">
+                      <label className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-sm font-semibold text-gray-300">
                         <input
                           type="checkbox"
                           checked={Boolean(rule.enabled)}
@@ -614,7 +614,7 @@ export default function NotificationManagement() {
                       <button
                         type="button"
                         onClick={() => testRule(rule)}
-                        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border border-slate-300 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-white/10 px-4 text-sm font-semibold text-gray-300 hover:bg-white/5 transition"
                       >
                         <Zap size={16} />
                         Test
@@ -624,7 +624,7 @@ export default function NotificationManagement() {
                 ))}
               </div>
             ) : (
-              <p className="p-6 text-sm text-slate-500">No automation rules yet.</p>
+              <p className="p-6 text-sm text-gray-500">No automation rules yet.</p>
             )}
           </section>
         )}
@@ -634,10 +634,10 @@ export default function NotificationManagement() {
             {templates.map((template) => (
               <article
                 key={template.id || template.title}
-                className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm"
+                className="rounded-3xl border border-white/10 bg-[#171717] p-5 shadow-sm hover:border-gold/40 transition-colors"
               >
                 <div className="flex items-start justify-between gap-3">
-                  <h2 className="text-base font-semibold text-slate-950">
+                  <h2 className="text-base font-semibold text-white">
                     {template.title}
                   </h2>
                   <span
@@ -648,7 +648,7 @@ export default function NotificationManagement() {
                     {template.priority || "INFO"}
                   </span>
                 </div>
-                <p className="mt-2 text-sm leading-6 text-slate-600">
+                <p className="mt-2 text-sm leading-6 text-gray-400">
                   {template.content || template.message}
                 </p>
                 <button
@@ -661,7 +661,7 @@ export default function NotificationManagement() {
                       priority: template.priority || "INFO",
                     }))
                   }
-                  className="mt-4 inline-flex min-h-10 items-center justify-center rounded-lg border border-slate-300 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  className="mt-4 inline-flex min-h-10 w-full items-center justify-center rounded-xl border border-white/10 px-4 text-sm font-semibold text-gray-300 hover:bg-white/5 transition"
                 >
                   Use template
                 </button>

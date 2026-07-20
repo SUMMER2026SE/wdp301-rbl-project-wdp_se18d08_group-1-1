@@ -655,7 +655,7 @@ export default function ParkingLotsBuilder({ floor, dbSlots = [], onSave, onCanc
             
             {/* Zone Name Tag (floating outside the box) */}
             <div 
-               className={`absolute -top-6 left-0 px-3 py-1 rounded-t-md bg-[#181c23] border border-b-0 shadow-md font-bold text-[10px] tracking-widest uppercase select-none pointer-events-auto cursor-pointer hover:bg-slate-800 transition-colors ${!el.name ? 'text-red-400 border-red-500/50 z-50' : 'text-cyan-300 border-cyan-500/50 z-20'}`}
+               className={`absolute -top-6 left-0 px-3 py-1 rounded-t-md bg-[#171717] border border-b-0 shadow-md font-bold text-[10px] tracking-widest uppercase select-none pointer-events-auto cursor-pointer hover:bg-slate-800 transition-colors ${!el.name ? 'text-red-400 border-red-500/50 z-50' : 'text-cyan-300 border-cyan-500/50 z-20'}`}
                onMouseDown={(e) => {
                   e.stopPropagation();
                   if (e.shiftKey) {
@@ -676,10 +676,10 @@ export default function ParkingLotsBuilder({ floor, dbSlots = [], onSave, onCanc
   };
 
   return (
-    <div className="flex h-full w-full bg-[#12151c] text-white">
+    <div className="flex h-full w-full bg-[#080808] text-white">
       {/* Left Sidebar Palette */}
       <div 
-        className="border-r border-white/10 bg-[#181c23] flex flex-col relative shrink-0"
+        className="border-r border-white/10 bg-[#171717] flex flex-col relative shrink-0"
         style={{ width: leftSidebarWidth }}
       >
         <div className="p-4 border-b border-white/10">
@@ -922,7 +922,7 @@ export default function ParkingLotsBuilder({ floor, dbSlots = [], onSave, onCanc
 
       {/* Right Sidebar Properties */}
       <div 
-        className="border-l border-white/10 bg-[#181c23] p-6 flex flex-col gap-4 relative shrink-0"
+        className="border-l border-white/10 bg-[#171717] p-6 flex flex-col gap-4 relative shrink-0"
         style={{ width: rightSidebarWidth }}
       >
         {/* Resizer Handle */}
@@ -1119,7 +1119,7 @@ export default function ParkingLotsBuilder({ floor, dbSlots = [], onSave, onCanc
       {/* Delete Warning Modal */}
       {deleteWarning && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm">
-          <div className="bg-[#181c23] border border-red-500/50 shadow-[0_0_40px_rgba(239,68,68,0.2)] rounded-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+          <div className="bg-[#171717] border border-red-500/50 shadow-[0_0_40px_rgba(239,68,68,0.2)] rounded-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <div className="p-6">
               <div className="flex items-center gap-4 mb-4 text-red-500">
                 <AlertCircle size={32} />

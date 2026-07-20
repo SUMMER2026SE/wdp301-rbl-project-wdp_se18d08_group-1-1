@@ -34,6 +34,10 @@ const slotSchema = new mongoose.Schema(
       enum: ["available", "occupied", "maintenance", "booked"],
       default: "available",
     },
+    maintenanceReason: {
+      type: String,
+      default: null,
+    },
     reservedFor: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -42,6 +46,11 @@ const slotSchema = new mongoose.Schema(
     reservedBySubscriptionId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Subscription",
+      default: null,
+    },
+    reservedByEntitlementId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "MembershipSlotEntitlement",
       default: null,
     },
     reservedUntil: {
@@ -57,5 +66,6 @@ const slotSchema = new mongoose.Schema(
 // Ensure slotNumber is unique within a zone or floor
 slotSchema.index({ floorID: 1, slotNumber: 1 }, { unique: true });
 slotSchema.index({ reservedBySubscriptionId: 1 });
+slotSchema.index({ reservedByEntitlementId: 1 });
 
 module.exports = mongoose.model("Slot", slotSchema);

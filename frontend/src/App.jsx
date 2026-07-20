@@ -47,6 +47,7 @@ import BookingManagement from "./pages/Staff/BookingManagement";
 // Pages – Customer
 import CustomerProfile from "./pages/Customer/CustomerProfile";
 import Membership from "./pages/Customer/Membership";
+import MembershipTransfers from "./pages/Customer/MembershipTransfers";
 import MyVehicles from "./pages/Customer/MyVehicles";
 import WalletPage from "./pages/Wallet/WalletPage";
 import ParkingHistory from "./pages/Customer/ParkingHistory";
@@ -77,36 +78,36 @@ export default function App() {
           />
           <Route path="/kiost/*" element={<Navigate to="/kiosk" replace />} />
 
-        {/* ── Public: Navbar + Footer ── */}
-        <Route element={<MainLayout />}>
-          <Route path="/" element={<GuestHome />} />
-          <Route path="/parking-map" element={<ParkingMap />} />
-          <Route path="/services" element={<ServiceList />} />
-          <Route path="/services/:id" element={<ServiceDetail />} />
-          <Route path="/policies" element={<PolicyList />} />
-          <Route path="/policies/:slug" element={<PolicyDetail />} />
-          <Route path="/policy" element={<Navigate to="/policies" replace />} />
-          
-          {/* Protected routes that use MainLayout (Light theme with top navbar) */}
-          <Route
-            path="/booking"
-            element={
-              <ProtectedRoute allowedRoles={["customer"]}>
-                <CreateBookingPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/membership"
-            element={
-              <ProtectedRoute allowedRoles={["customer"]}>
-                <Membership />
-              </ProtectedRoute>
-            }
-          />
-        </Route>
+          {/* ── Public: Navbar + Footer ── */}
+          <Route element={<MainLayout />}>
+            <Route path="/" element={<GuestHome />} />
+            <Route path="/parking-map" element={<ParkingMap />} />
+            <Route path="/services" element={<ServiceList />} />
+            <Route path="/services/:id" element={<ServiceDetail />} />
+            <Route path="/policies" element={<PolicyList />} />
+            <Route path="/policies/:slug" element={<PolicyDetail />} />
+            <Route path="/policy" element={<Navigate to="/policies" replace />} />
 
-        {/* ── Standalone auth page ── */}
+            {/* Protected routes that use MainLayout (Light theme with top navbar) */}
+            <Route
+              path="/booking"
+              element={
+                <ProtectedRoute allowedRoles={["customer"]}>
+                  <CreateBookingPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/membership"
+              element={
+                <ProtectedRoute allowedRoles={["customer"]}>
+                  <Membership />
+                </ProtectedRoute>
+              }
+            />
+          </Route>
+
+          {/* ── Standalone auth page ── */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/oauth/callback" element={<OAuthCallback />} />
 
@@ -177,6 +178,10 @@ export default function App() {
             }
           >
             <Route path="/profile" element={<CustomerProfile />} />
+            <Route
+              path="/customer/membership-transfers"
+              element={<MembershipTransfers />}
+            />
             <Route path="/customer/vehicles" element={<MyVehicles />} />
             <Route path="/customer/wallet" element={<WalletPage />} />
             <Route path="/customer/history" element={<ParkingHistory />} />

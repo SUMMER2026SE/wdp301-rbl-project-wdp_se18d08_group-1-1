@@ -12,6 +12,7 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -20,10 +21,17 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { EmptyState, ErrorState, ScreenHeader } from '@/components/common';
 import { QRCodeDisplay } from '@/components/booking/QRCodeDisplay';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
+import { useAuth } from '@/hooks/useAuth';
 import type { WalletStackParamList } from '@/navigation/types';
 import { subscriptionsService } from '@/services/api/subscriptions';
 import { walletService } from '@/services/api/wallet';
-import type { MembershipStatus, SubscriptionPaymentMethod, SubscriptionRenewalQuote } from '@/types/subscription.types';
+import type {
+  MembershipEntitlementTransfer,
+  MembershipStatus,
+  ReservedSlot,
+  SubscriptionPaymentMethod,
+  SubscriptionRenewalQuote,
+} from '@/types/subscription.types';
 import { formatCurrency, formatDate } from '@/utils/formatters';
 
 type Props = NativeStackScreenProps<WalletStackParamList, 'Membership'>;
@@ -525,6 +533,7 @@ function StickyMembershipCTA({ onPress }: { onPress: () => void }) {
 }
 
 export const MembershipScreen = ({ navigation }: Props) => {
+  const { user } = useAuth();
   const [membership, setMembership] = useState<MembershipStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -534,19 +543,28 @@ export const MembershipScreen = ({ navigation }: Props) => {
   const [renewalLoading, setRenewalLoading] = useState(false);
   const [walletBalance, setWalletBalance] = useState(0);
   const [renewalKey, setRenewalKey] = useState('');
+  const [renewalEntitlementId, setRenewalEntitlementId] = useState('');
   const [qrPayload, setQrPayload] = useState<string | null>(null);
   const [qrError, setQrError] = useState('');
+  const [transfers, setTransfers] = useState<MembershipEntitlementTransfer[]>([]);
+  const [transferSlot, setTransferSlot] = useState<ReservedSlot | null>(null);
+  const [recipientEmail, setRecipientEmail] = useState('');
+  const [askingPrice, setAskingPrice] = useState('');
+  const [transferReason, setTransferReason] = useState('');
+  const [transferLoading, setTransferLoading] = useState(false);
 
   const loadMembership = useCallback(async () => {
     setError('');
     try {
-      const [membershipResponse, walletResponse] = await Promise.all([
+      const [membershipResponse, walletResponse, transferResponse] = await Promise.all([
         subscriptionsService.getMembership(),
         walletService.getWallet(),
+        subscriptionsService.getEntitlementTransfers(),
       ]);
       const membershipData = membershipResponse.data || null;
       setMembership(membershipData);
       setWalletBalance(walletResponse.data?.balance || 0);
+      setTransfers(transferResponse.data || []);
       if (membershipData?.status === 'active' && membershipData.subscriptionId) {
         try {
           const qrResponse = await subscriptionsService.getMembershipQr(
@@ -580,13 +598,16 @@ export const MembershipScreen = ({ navigation }: Props) => {
 
   const active = membership?.status === 'active';
 
-  const openRenewal = async () => {
-    if (!membership?.subscriptionId) return;
+  const openRenewal = async (entitlementId?: string | null) => {
+    if (!entitlementId && !membership?.subscriptionId) return;
     setRenewalLoading(true);
     setRenewalError('');
     try {
-      const response = await subscriptionsService.getRenewalQuote(membership.subscriptionId);
+      const response = entitlementId
+        ? await subscriptionsService.getEntitlementRenewalQuote(entitlementId)
+        : await subscriptionsService.getRenewalQuote(membership!.subscriptionId!);
       setRenewalQuote(response.data || null);
+      setRenewalEntitlementId(entitlementId || '');
       setRenewalMethod(walletBalance >= (response.data?.amount || 0) ? 'wallet' : 'payos');
       setRenewalKey(Crypto.randomUUID());
     } catch (renewError) {
@@ -597,17 +618,33 @@ export const MembershipScreen = ({ navigation }: Props) => {
   };
 
   const confirmRenewal = async () => {
-    if (!membership?.subscriptionId || !renewalQuote || !renewalKey) return;
+    if ((!membership?.subscriptionId && !renewalEntitlementId) || !renewalQuote || !renewalKey) return;
     setRenewalLoading(true);
     setRenewalError('');
     try {
       if (renewalMethod === 'wallet') {
-        const response = await subscriptionsService.renewWithWallet(membership.subscriptionId, renewalKey);
+        const response = renewalEntitlementId
+          ? await subscriptionsService.renewEntitlementWithWallet(
+              renewalEntitlementId,
+              renewalKey,
+            )
+          : await subscriptionsService.renewWithWallet(
+              membership!.subscriptionId!,
+              renewalKey,
+            );
         setWalletBalance(response.data?.walletBalance ?? Math.max(0, walletBalance - renewalQuote.amount));
         setRenewalQuote(null);
         await loadMembership();
       } else {
-        const response = await subscriptionsService.createRenewalPayment(membership.subscriptionId, renewalKey);
+        const response = renewalEntitlementId
+          ? await subscriptionsService.createEntitlementRenewalPayment(
+              renewalEntitlementId,
+              renewalKey,
+            )
+          : await subscriptionsService.createRenewalPayment(
+              membership!.subscriptionId!,
+              renewalKey,
+            );
         navigation.navigate('SubscriptionPaymentStatus', {
           orderCode: response.data?.orderCode || 0,
           checkoutUrl: response.data?.checkoutUrl,
@@ -620,6 +657,69 @@ export const MembershipScreen = ({ navigation }: Props) => {
       setRenewalError(renewError instanceof Error ? renewError.message : 'Renewal failed.');
     } finally {
       setRenewalLoading(false);
+    }
+  };
+
+  const refreshTransfers = async () => {
+    const response = await subscriptionsService.getEntitlementTransfers();
+    setTransfers(response.data || []);
+  };
+
+  const submitTransfer = async () => {
+    if (
+      !transferSlot?.entitlementId ||
+      !recipientEmail.trim() ||
+      !transferReason.trim()
+    ) return;
+    setTransferLoading(true);
+    setRenewalError('');
+    try {
+      await subscriptionsService.createEntitlementTransfer(
+        transferSlot.entitlementId,
+        {
+          toUserEmail: recipientEmail.trim(),
+          askingPrice: Number(askingPrice || 0),
+          reason: transferReason.trim(),
+        },
+      );
+      setTransferSlot(null);
+      setRecipientEmail('');
+      setAskingPrice('');
+      setTransferReason('');
+      await refreshTransfers();
+    } catch (transferError) {
+      setRenewalError(
+        transferError instanceof Error
+          ? transferError.message
+          : 'Unable to create transfer.',
+      );
+    } finally {
+      setTransferLoading(false);
+    }
+  };
+
+  const updateTransfer = async (
+    transfer: MembershipEntitlementTransfer,
+    action: 'accept' | 'reject' | 'settle',
+  ) => {
+    setTransferLoading(true);
+    setRenewalError('');
+    try {
+      if (action === 'accept') {
+        await subscriptionsService.acceptEntitlementTransfer(transfer._id);
+      } else if (action === 'reject') {
+        await subscriptionsService.rejectEntitlementTransfer(transfer._id);
+      } else {
+        await subscriptionsService.settleEntitlementTransfer(transfer._id);
+        await loadMembership();
+      }
+      await refreshTransfers();
+    } catch (transferError) {
+      setRenewalError(
+        transferError instanceof Error ? transferError.message : 'Unable to update transfer.',
+      );
+    } finally {
+      setTransferLoading(false);
     }
   };
 
@@ -652,54 +752,294 @@ export const MembershipScreen = ({ navigation }: Props) => {
           onAction={() => navigation.navigate('SubscriptionPackages')}
         />
       ) : (
-        <>
-          <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-            <MembershipHero active={active} membership={membership} />
-            <BenefitsStrip membership={membership} />
-            <ReservedSpacesBlock membership={membership} />
-            <RenewalInfo
-              membership={membership}
-              renewalLoading={renewalLoading}
-              renewalQuote={renewalQuote}
-              onReview={openRenewal}
+        <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+          <View style={styles.heroCard}>
+            <LinearGradient
+              colors={active ? ['rgba(212,175,55,0.18)', 'rgba(13,13,13,0)'] : ['rgba(255,77,77,0.14)', 'rgba(13,13,13,0)']}
+              end={{ x: 1, y: 1 }}
+              start={{ x: 0, y: 0 }}
+              style={StyleSheet.absoluteFill}
             />
-            <RenewalReviewPanel
-              renewalError={renewalError}
-              renewalLoading={renewalLoading}
-              renewalMethod={renewalMethod}
-              renewalQuote={renewalQuote}
-              walletBalance={walletBalance}
-              onConfirm={confirmRenewal}
-              onMethodChange={setRenewalMethod}
-            />
-            {active ? (
-              <StaggeredView delay={500} style={styles.sectionBlock}>
-                <MinimalHeading>Membership QR</MinimalHeading>
-                {qrPayload ? (
-                  <>
-                    <QRCodeDisplay
-                      value={qrPayload}
-                      reference={membership.subscriptionId || undefined}
-                      shareLabel="VALO membership"
-                      shareTitle="Share membership pass"
-                      showBrightnessControl
-                    />
-                    <Text style={styles.qrHint}>
-                      Use this pass for every membership visit. It expires with your plan.
-                    </Text>
-                  </>
-                ) : (
-                  <View style={styles.qrState}>
-                    <Text style={styles.qrError}>
-                      {qrError || 'Membership QR is unavailable.'}
-                    </Text>
-                  </View>
-                )}
-              </StaggeredView>
+            <View style={styles.heroTop}>
+              <View style={[styles.heroIcon, { backgroundColor: active ? 'rgba(212,175,55,0.14)' : 'rgba(255,77,77,0.12)' }]}>
+                <Ionicons name="ribbon-outline" size={28} color={active ? COLORS.gold : COLORS.error} />
+              </View>
+              <View style={[styles.statusPill, { backgroundColor: active ? 'rgba(126,232,162,0.12)' : 'rgba(255,77,77,0.12)' }]}>
+                <View style={[styles.statusDot, { backgroundColor: active ? COLORS.success : COLORS.error }]} />
+                <Text style={[styles.statusText, { color: active ? COLORS.success : COLORS.error }]}>
+                  {active ? 'Active' : 'Expired'}
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.packageName}>{membership.package?.name ?? 'VALO Membership'}</Text>
+            {membership.expireAt ? (
+              <Text style={styles.expireText}>Expires: {formatDate(membership.expireAt)}</Text>
+            ) : (
+              <Text style={styles.expireText}>No expiration date</Text>
+            )}
+            {membership.expirationWarning ? (
+              <View style={styles.warningBox}>
+                <Ionicons name="alert-circle-outline" size={16} color={COLORS.warning} />
+                <Text style={styles.warningText}>Your membership expires within 7 days.</Text>
+              </View>
             ) : null}
-          </ScrollView>
-          <StickyMembershipCTA onPress={() => navigation.navigate('SubscriptionPackages')} />
-        </>
+          </View>
+
+          {active ? (
+            <View style={styles.section}>
+              <SectionTitle>Membership QR</SectionTitle>
+              {qrPayload ? (
+                <>
+                  <QRCodeDisplay
+                    value={qrPayload}
+                    reference={membership.subscriptionId || undefined}
+                    shareLabel="VALO membership"
+                    shareTitle="Share membership pass"
+                    showBrightnessControl
+                  />
+                  <Text style={styles.qrHint}>
+                    Use this pass for every membership visit. It expires with your plan.
+                  </Text>
+                </>
+              ) : (
+                <View style={styles.softState}>
+                  <Text style={styles.qrError}>
+                    {qrError || 'Membership QR is unavailable.'}
+                  </Text>
+                </View>
+              )}
+            </View>
+          ) : null}
+
+          <View style={styles.section}>
+            <SectionTitle>Benefits</SectionTitle>
+            <View style={styles.grid}>
+              <View style={styles.metricCard}>
+                <Text style={styles.metricValue}>{membership.freeServiceCount}</Text>
+                <Text style={styles.metricLabel}>Complimentary services</Text>
+              </View>
+              <View style={styles.metricCard}>
+                <Text style={styles.metricValue}>{membership.reservedSlots.length}</Text>
+                <Text style={styles.metricLabel}>Reserved spaces</Text>
+              </View>
+            </View>
+            {(membership.benefits ?? []).map((benefit) => (
+              <View key={benefit} style={styles.benefitRow}>
+                <Ionicons name="checkmark-circle-outline" size={18} color={COLORS.success} />
+                <Text style={styles.benefitText}>{benefit}</Text>
+              </View>
+            ))}
+          </View>
+
+          <View style={styles.section}>
+            <SectionTitle>Reserved spaces</SectionTitle>
+            {membership.reservedSlots.length === 0 ? (
+              <View style={styles.softState}>
+                <Text style={styles.softStateText}>No reserved spaces assigned.</Text>
+              </View>
+            ) : (
+              membership.reservedSlots.map((slot) => (
+                <View key={`${slot.floorId}-${slot.slotCode}`} style={styles.slotRow}>
+                  <Ionicons name="location-outline" size={18} color={COLORS.gold} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.slotText}>
+                      {slot.slotCode} - {slot.floorName || `Floor ${slot.floorNumber || ''}`}
+                    </Text>
+                    {slot.expireAt ? (
+                      <Text style={styles.renewalMeta}>Expires {formatDate(slot.expireAt)}</Text>
+                    ) : null}
+                  </View>
+                  {slot.entitlementId ? (
+                    <View style={styles.slotActions}>
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={() => void openRenewal(slot.entitlementId)}
+                        style={styles.slotAction}
+                      >
+                        <Text style={styles.slotActionText}>Renew</Text>
+                      </TouchableOpacity>
+                      {slot.canTransfer ? (
+                        <TouchableOpacity
+                          activeOpacity={0.8}
+                          onPress={() => setTransferSlot(slot)}
+                          style={styles.slotAction}
+                        >
+                          <Text style={styles.slotActionText}>Transfer</Text>
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+                  ) : null}
+                </View>
+              ))
+            )}
+          </View>
+
+          {transferSlot ? (
+            <View style={styles.section}>
+              <SectionTitle>{`Transfer ${transferSlot.slotCode}`}</SectionTitle>
+              <View style={styles.transferForm}>
+                <TextInput
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  onChangeText={setRecipientEmail}
+                  placeholder="Recipient email"
+                  placeholderTextColor={COLORS.textMuted}
+                  style={styles.transferInput}
+                  value={recipientEmail}
+                />
+                <TextInput
+                  keyboardType="number-pad"
+                  onChangeText={setAskingPrice}
+                  placeholder="Price in VND (0 is allowed)"
+                  placeholderTextColor={COLORS.textMuted}
+                  style={styles.transferInput}
+                  value={askingPrice}
+                />
+                <TextInput
+                  multiline
+                  onChangeText={setTransferReason}
+                  placeholder="Transfer reason"
+                  placeholderTextColor={COLORS.textMuted}
+                  style={[styles.transferInput, styles.transferReason]}
+                  value={transferReason}
+                />
+                <Text style={styles.renewalMeta}>
+                  Recipient pays the price plus a 5% fee (10,000-50,000 VND).
+                </Text>
+                <TouchableOpacity
+                  disabled={transferLoading}
+                  onPress={() => void submitTransfer()}
+                  style={styles.renewButton}
+                >
+                  {transferLoading ? (
+                    <ActivityIndicator color={COLORS.textInverse} size="small" />
+                  ) : null}
+                  <Text style={styles.renewButtonText}>Send invitation</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
+
+          {transfers.length ? (
+            <View style={styles.section}>
+              <SectionTitle>Transfer requests</SectionTitle>
+              {transfers.map((transfer) => {
+                const recipientId =
+                  typeof transfer.toUserId === 'string'
+                    ? transfer.toUserId
+                    : transfer.toUserId._id;
+                const entitlement =
+                  typeof transfer.entitlementId === 'string'
+                    ? null
+                    : transfer.entitlementId;
+                const isRecipient = recipientId === (user?._id || user?.id);
+                return (
+                  <View key={transfer._id} style={styles.transferCard}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.slotText}>
+                        {entitlement?.slotCode || 'Membership space'} · {transfer.status}
+                      </Text>
+                      <Text style={styles.renewalMeta}>
+                        {formatCurrency(transfer.askingPrice)} + {formatCurrency(transfer.transferFee)} fee
+                      </Text>
+                    </View>
+                    {isRecipient && transfer.status === 'PENDING_RECIPIENT' ? (
+                      <View style={styles.slotActions}>
+                        <TouchableOpacity
+                          onPress={() => void updateTransfer(transfer, 'reject')}
+                          style={styles.slotAction}
+                        >
+                          <Text style={styles.slotActionText}>Decline</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => void updateTransfer(transfer, 'accept')}
+                          style={styles.slotAction}
+                        >
+                          <Text style={styles.slotActionText}>Accept</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : null}
+                    {isRecipient && transfer.status === 'AWAITING_PAYMENT' ? (
+                      <TouchableOpacity
+                        onPress={() => void updateTransfer(transfer, 'settle')}
+                        style={styles.slotAction}
+                      >
+                        <Text style={styles.slotActionText}>Pay wallet</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                );
+              })}
+            </View>
+          ) : null}
+
+          <View style={styles.section}>
+            <SectionTitle>Renewal</SectionTitle>
+            <View style={styles.renewalCard}>
+              <Text style={styles.renewalPrice}>{formatCurrency(membership.renewal.price)}</Text>
+              {membership.renewal.nextRenewalDate ? (
+                <Text style={styles.renewalMeta}>Next renewal: {formatDate(membership.renewal.nextRenewalDate)}</Text>
+              ) : null}
+              <Text style={styles.renewalMessage}>{membership.renewal.message}</Text>
+              {membership.renewal.canRenew &&
+              !membership.reservedSlots.some((slot) => slot.entitlementId) &&
+              !renewalQuote ? (
+                <TouchableOpacity activeOpacity={0.85} style={styles.renewButton} onPress={() => void openRenewal()} disabled={renewalLoading}>
+                  {renewalLoading ? <ActivityIndicator color={COLORS.textInverse} size="small" /> : <Ionicons name="refresh-outline" size={18} color={COLORS.textInverse} />}
+                  <Text style={styles.renewButtonText}>Review renewal</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+            {renewalQuote ? (
+              <View style={styles.renewalReview}>
+                <View style={styles.renewalDates}>
+                  <View>
+                    <Text style={styles.reviewLabel}>Current expiry</Text>
+                    <Text style={styles.reviewValue}>{formatDate(renewalQuote.currentExpireAt)}</Text>
+                  </View>
+                  <Ionicons name="arrow-forward" size={16} color={COLORS.gold} />
+                  <View style={styles.reviewDateRight}>
+                    <Text style={styles.reviewLabel}>New expiry</Text>
+                    <Text style={styles.reviewValue}>{formatDate(renewalQuote.newExpireAt)}</Text>
+                  </View>
+                </View>
+                <Text style={styles.reviewAmount}>{formatCurrency(renewalQuote.amount)}</Text>
+                <Text style={styles.reviewMeta}>{renewalQuote.retainedSlots.length} spaces retained</Text>
+                <View style={styles.methodRow}>
+                  {(['wallet', 'payos'] as const).map((method) => (
+                    <TouchableOpacity
+                      key={method}
+                      activeOpacity={0.8}
+                      onPress={() => setRenewalMethod(method)}
+                      style={[styles.methodButton, renewalMethod === method && styles.methodButtonActive]}
+                    >
+                      <Ionicons name={method === 'wallet' ? 'wallet-outline' : 'qr-code-outline'} size={17} color={renewalMethod === method ? COLORS.gold : COLORS.textMuted} />
+                      <Text style={[styles.methodText, renewalMethod === method && styles.methodTextActive]}>{method === 'wallet' ? 'Wallet' : 'PayOS'}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                {renewalMethod === 'wallet' && walletBalance < renewalQuote.amount ? (
+                  <Text style={styles.renewalError}>Wallet balance is not enough.</Text>
+                ) : null}
+                {renewalError ? <Text style={styles.renewalError}>{renewalError}</Text> : null}
+                <TouchableOpacity
+                  activeOpacity={0.85}
+                  style={[styles.confirmRenewalButton, renewalLoading && styles.disabled]}
+                  disabled={renewalLoading || (renewalMethod === 'wallet' && walletBalance < renewalQuote.amount)}
+                  onPress={confirmRenewal}
+                >
+                  {renewalLoading ? <ActivityIndicator color={COLORS.textInverse} size="small" /> : <Ionicons name="checkmark-circle-outline" size={18} color={COLORS.textInverse} />}
+                  <Text style={styles.renewButtonText}>Pay {formatCurrency(renewalQuote.amount)}</Text>
+                </TouchableOpacity>
+              </View>
+            ) : renewalError ? <Text style={styles.renewalError}>{renewalError}</Text> : null}
+          </View>
+
+          <TouchableOpacity activeOpacity={0.85} style={styles.primaryButton} onPress={() => navigation.navigate('SubscriptionPackages')}>
+            <Ionicons name="cube-outline" size={20} color={COLORS.textInverse} />
+            <Text style={styles.primaryButtonText}>View membership plans</Text>
+          </TouchableOpacity>
+        </ScrollView>
       )}
     </SafeAreaView>
   );
@@ -991,34 +1331,64 @@ const styles = StyleSheet.create({
   },
   slotText: {
     color: COLORS.textSecondary,
-    flex: 1,
     fontSize: FONT_SIZES.sm,
   },
-  renewalSheet: {
-    gap: SPACING.sm,
+  slotAction: {
+    borderColor: COLORS.gold,
+    borderRadius: RADIUS.round,
+    borderWidth: 1,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.xs,
   },
-  renewalTop: {
+  slotActions: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: SPACING.sm,
+    gap: SPACING.xs,
   },
-  renewalIcon: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(226,186,75,0.1)',
-    borderRadius: RADIUS.md,
-    height: 40,
-    justifyContent: 'center',
-    width: 40,
-  },
-  renewalCopy: {
-    flex: 1,
-    minWidth: 0,
-  },
-  renewalLabel: {
-    color: COLORS.textMuted,
+  slotActionText: {
+    color: COLORS.gold,
     fontSize: FONT_SIZES.xs,
     fontWeight: '800',
-    textTransform: 'uppercase',
+  },
+  transferForm: {
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    gap: SPACING.sm,
+    padding: SPACING.md,
+  },
+  transferInput: {
+    backgroundColor: COLORS.surfaceElevated,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    color: COLORS.textPrimary,
+    minHeight: 48,
+    paddingHorizontal: SPACING.md,
+  },
+  transferReason: {
+    minHeight: 88,
+    paddingTop: SPACING.md,
+    textAlignVertical: 'top',
+  },
+  transferCard: {
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    padding: SPACING.md,
+  },
+  renewalCard: {
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    gap: 4,
+    padding: SPACING.md,
   },
   renewalPrice: {
     color: COLORS.gold,

@@ -8,6 +8,8 @@
     "dev": "nodemon src/server.js",
     "normalize:plates": "node src/scripts/normalizeLicensePlates.js",
     "migrate:wallet-idempotency": "node src/scripts/fixWalletIdempotencyIndex.js",
+    "migrate:membership-entitlements": "node src/scripts/backfillMembershipEntitlements.js",
+    "audit:membership-entitlements": "node src/scripts/auditMembershipEntitlements.js",
     "audit:refunds": "node src/scripts/auditRefundPolicyRollout.js",
     "test": "node --test src/tests/refund*.test.js",
     "test:notification": "node src/tests/notificationService.test.js"

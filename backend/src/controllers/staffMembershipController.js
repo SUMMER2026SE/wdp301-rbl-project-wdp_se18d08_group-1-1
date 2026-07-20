@@ -2,13 +2,16 @@ const mongoose = require('mongoose');
 const cloudinary = require('../config/cloudinary');
 const Session = require('../models/Session');
 const Subscription = require('../models/Subscription');
+const MembershipSlotEntitlement = require('../models/MembershipSlotEntitlement');
+const User = require('../models/User');
 const Vehicle = require('../models/Vehicle');
 const StaffSubscriptionAction = require('../models/StaffSubscriptionAction');
 const notifTriggers = require('../services/notificationTriggers');
 const {
   isMembershipQrAvailable,
-  parseAndVerifyMembershipQr,
+  parseAndVerifyAnyMembershipQr,
 } = require('../services/membershipQrService');
+const { isEnabled } = require('../utils/featureFlags');
 const { normalizeLicensePlate } = require('../utils/licensePlateUtils');
 
 const EVIDENCE_IMAGE_PATTERN = /^data:image\/(jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=\s]+$/;
@@ -51,9 +54,51 @@ const validateTransitionBody = (body = {}) => {
 };
 
 const findVerifiedMembership = async (payload) => {
-  const parsed = parseAndVerifyMembershipQr(payload);
-  const subscription = await Subscription.findById(parsed.subscriptionId);
+  const parsed = parseAndVerifyAnyMembershipQr(payload);
+  if (parsed.credentialType === 'ACCOUNT') {
+    const user = await User.findById(parsed.userId).select(
+      'username email status membership'
+    );
+    if (!user || Number(user.membership?.qrVersion || 1) !== parsed.version) {
+      throw Object.assign(new Error('Membership QR not found'), { statusCode: 404 });
+    }
+    if (!user.status) {
+      throw Object.assign(new Error('This membership account is inactive'), {
+        statusCode: 410,
+        code: 'MEMBERSHIP_QR_INACTIVE',
+      });
+    }
+    const entitlements = await MembershipSlotEntitlement.find({
+      ownerId: user._id,
+      status: { $in: ['active', 'transfer_locked'] },
+      expireAt: { $gt: new Date() },
+    })
+      .populate('packageId', 'name type price')
+      .populate('floorId', 'name floorNumber')
+      .sort({ expireAt: -1 });
+    if (!entitlements.length) {
+      throw Object.assign(new Error('This membership has no active parking spaces'), {
+        statusCode: 410,
+        code: 'MEMBERSHIP_QR_INACTIVE',
+      });
+    }
+    return {
+      parsed,
+      user,
+      userId: user._id,
+      credentialId: user._id,
+      entitlements,
+      subscription: null,
+    };
+  }
 
+  if (!isEnabled('MEMBERSHIP_LEGACY_QR_ENABLED', true)) {
+    throw Object.assign(new Error('This legacy membership QR is no longer accepted'), {
+      statusCode: 410,
+      code: 'MEMBERSHIP_QR_LEGACY_DISABLED',
+    });
+  }
+  const subscription = await Subscription.findById(parsed.subscriptionId);
   if (!subscription || Number(subscription.qrVersion || 1) !== parsed.version) {
     throw Object.assign(new Error('Membership QR not found'), { statusCode: 404 });
   }
@@ -63,13 +108,30 @@ const findVerifiedMembership = async (payload) => {
       { statusCode: 410, code: 'MEMBERSHIP_QR_INACTIVE' }
     );
   }
-
-  return { parsed, subscription };
+  const entitlements = await MembershipSlotEntitlement.find({
+    sourceSubscriptionId: subscription._id,
+    ownerId: subscription.user,
+    status: { $in: ['active', 'transfer_locked'] },
+    expireAt: { $gt: new Date() },
+  })
+    .populate('packageId', 'name type price')
+    .populate('floorId', 'name floorNumber');
+  const user = await User.findById(subscription.user).select(
+    'username email status membership'
+  );
+  return {
+    parsed,
+    user,
+    userId: subscription.user,
+    credentialId: subscription._id,
+    entitlements,
+    subscription,
+  };
 };
 
-const uploadEvidence = async (base64, subscriptionId, action) => {
+const uploadEvidence = async (base64, credentialId, action) => {
   const result = await cloudinary.uploader.upload(base64, {
-    folder: `valo-parking/staff-membership-evidence/${subscriptionId}`,
+    folder: `valo-parking/staff-membership-evidence/${credentialId}`,
     public_id: `${action.toLowerCase()}-${Date.now()}`,
     resource_type: 'image',
   });
@@ -78,14 +140,33 @@ const uploadEvidence = async (base64, subscriptionId, action) => {
 
 exports.resolveMembershipQr = async (req, res, next) => {
   try {
-    const { subscription } = await findVerifiedMembership(req.body?.payload);
-    await subscription.populate([
-      { path: 'user', select: 'username email' },
-      { path: 'ticketPackage', select: 'name type' },
-      { path: 'slots.floorId', select: 'name floorNumber' },
-    ]);
-
-    const userId = subscription.user?._id || subscription.user;
+    const verified = await findVerifiedMembership(req.body?.payload);
+    const { subscription, entitlements, user, userId, credentialId } = verified;
+    if (subscription) {
+      await subscription.populate([
+        { path: 'user', select: 'username email' },
+        { path: 'ticketPackage', select: 'name type' },
+        { path: 'slots.floorId', select: 'name floorNumber' },
+      ]);
+    }
+    const entitlementSlots = entitlements.map((entitlement) => ({
+      entitlementId: entitlement._id,
+      sourceSubscriptionId: entitlement.sourceSubscriptionId,
+      floorId: entitlement.floorId,
+      slotCode: entitlement.slotCode,
+      status: entitlement.status,
+      expireAt: entitlement.expireAt,
+    }));
+    const slots = entitlementSlots.length ? entitlementSlots : subscription?.slots || [];
+    const membership = {
+      _id: credentialId,
+      user: user || subscription.user,
+      ticketPackage: entitlements[0]?.packageId || subscription?.ticketPackage || null,
+      slots,
+      status: 'active',
+      expireAt: entitlements[0]?.expireAt || subscription?.expireAt,
+      credentialType: verified.parsed.credentialType,
+    };
     const [vehicles, activeSessions] = await Promise.all([
       Vehicle.find({ owner: userId, status: 'approved' })
         .select('licensePlate vehicleType brand model color')
@@ -94,10 +175,6 @@ exports.resolveMembershipQr = async (req, res, next) => {
         userId,
         type: 'SUBSCRIPTION',
         status: 'active',
-        $or: [
-          { subscriptionId: subscription._id },
-          { subscriptionId: null },
-        ],
       })
         .populate('floorId', 'name floorNumber')
         .sort({ checkInTime: -1 })
@@ -107,8 +184,8 @@ exports.resolveMembershipQr = async (req, res, next) => {
     const allowedActions = [];
     if (
       vehicles.length > 0 &&
-      subscription.slots.length > 0 &&
-      activeSessions.length < subscription.slots.length
+      slots.length > 0 &&
+      activeSessions.length < slots.length
     ) {
       allowedActions.push('CHECK_IN');
     }
@@ -120,7 +197,7 @@ exports.resolveMembershipQr = async (req, res, next) => {
       success: true,
       data: {
         credentialType: 'MEMBERSHIP',
-        membership: subscription,
+        membership,
         vehicles,
         activeSessions,
         allowedActions,
@@ -138,8 +215,9 @@ exports.transitionMembershipByQr = async (req, res, next) => {
       return res.status(400).json({ success: false, message: input.error });
     }
 
-    const { parsed, subscription } = await findVerifiedMembership(req.body?.payload);
-    if (String(parsed.subscriptionId) !== String(req.params.id)) {
+    const verified = await findVerifiedMembership(req.body?.payload);
+    const { subscription, entitlements, userId, credentialId } = verified;
+    if (String(credentialId) !== String(req.params.id)) {
       return res.status(400).json({
         success: false,
         message: 'QR code does not match this membership',
@@ -152,7 +230,11 @@ exports.transitionMembershipByQr = async (req, res, next) => {
     });
     if (existingAction) {
       if (
-        String(existingAction.subscriptionId) !== String(subscription._id) ||
+        ![
+          ...entitlements.map((item) => String(item.sourceSubscriptionId)),
+          ...(subscription?._id ? [String(subscription._id)] : []),
+        ]
+          .includes(String(existingAction.subscriptionId)) ||
         existingAction.action !== input.action
       ) {
         return res.status(409).json({
@@ -176,7 +258,7 @@ exports.transitionMembershipByQr = async (req, res, next) => {
     if (input.action === 'CHECK_IN') {
       vehicle = await Vehicle.findOne({
         _id: req.body.vehicleId,
-        owner: subscription.user,
+        owner: userId,
         status: 'approved',
       });
       if (!vehicle) {
@@ -185,11 +267,19 @@ exports.transitionMembershipByQr = async (req, res, next) => {
 
       const floorId = String(req.body.floorId);
       const parkingSlot = normalizeSlotCode(req.body.parkingSlot);
-      const ownsSlot = subscription.slots.some(
-        (slot) =>
-          String(slot.floorId) === floorId &&
-          normalizeSlotCode(slot.slotCode) === parkingSlot
+      const entitlement = entitlements.find(
+        (item) =>
+          String(item.floorId?._id || item.floorId) === floorId &&
+          normalizeSlotCode(item.slotCode) === parkingSlot
       );
+      const ownsLegacySlot =
+        !entitlements.length &&
+        subscription?.slots.some(
+          (slot) =>
+            String(slot.floorId) === floorId &&
+            normalizeSlotCode(slot.slotCode) === parkingSlot
+        );
+      const ownsSlot = Boolean(entitlement || ownsLegacySlot);
       if (!ownsSlot) {
         return res.status(403).json({
           success: false,
@@ -217,13 +307,14 @@ exports.transitionMembershipByQr = async (req, res, next) => {
 
       evidenceImageUrl = await uploadEvidence(
         input.evidenceImageBase64,
-        subscription._id,
+        credentialId,
         input.action
       );
       session = await Session.create({
         licensePlate: cleanPlate,
-        userId: subscription.user,
-        subscriptionId: subscription._id,
+        userId,
+        subscriptionId: entitlement?.sourceSubscriptionId || subscription?._id,
+        entitlementId: entitlement?._id || null,
         type: 'SUBSCRIPTION',
         source: 'staff_manual',
         vehicleType: vehicle.vehicleType,
@@ -239,13 +330,9 @@ exports.transitionMembershipByQr = async (req, res, next) => {
     } else {
       session = await Session.findOne({
         _id: req.body.sessionId,
-        userId: subscription.user,
+        userId,
         type: 'SUBSCRIPTION',
         status: 'active',
-        $or: [
-          { subscriptionId: subscription._id },
-          { subscriptionId: null },
-        ],
       });
       if (!session) {
         return res.status(404).json({
@@ -255,7 +342,7 @@ exports.transitionMembershipByQr = async (req, res, next) => {
       }
 
       vehicle = await Vehicle.findOne({
-        owner: subscription.user,
+        owner: userId,
         licensePlate: normalizeLicensePlate(session.licensePlate),
       });
       if (!vehicle) {
@@ -267,7 +354,7 @@ exports.transitionMembershipByQr = async (req, res, next) => {
 
       evidenceImageUrl = await uploadEvidence(
         input.evidenceImageBase64,
-        subscription._id,
+        credentialId,
         input.action
       );
       const updatedSession = await Session.findOneAndUpdate(
@@ -293,7 +380,8 @@ exports.transitionMembershipByQr = async (req, res, next) => {
     }
 
     await StaffSubscriptionAction.create({
-      subscriptionId: subscription._id,
+      subscriptionId: session.subscriptionId,
+      entitlementId: session.entitlementId || null,
       sessionId: session._id,
       staffId: req.user._id,
       action: input.action,
@@ -307,13 +395,13 @@ exports.transitionMembershipByQr = async (req, res, next) => {
       input.action === 'CHECK_IN'
         ? notifTriggers.notifyVehicleEntry(
             req.app,
-            subscription.user,
+            userId,
             vehicle.licensePlate,
             session.parkingSlot || 'N/A'
           )
         : notifTriggers.notifyVehicleExit(
             req.app,
-            subscription.user,
+            userId,
             vehicle.licensePlate,
             0
           );

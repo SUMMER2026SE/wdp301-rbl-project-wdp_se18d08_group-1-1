@@ -3,7 +3,7 @@ const Booking = require('../models/Booking');
 const notifTriggers = require('./notificationTriggers');
 const contractService = require('./contractService');
 const bookingRefundService = require('./bookingRefundService');
-
+const { isEnabled } = require('../utils/featureFlags');
 const CHECK_INTERVAL_MS = 60 * 1000; // 1 minute
 const CONTRACT_EXPIRATION_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 const LOW_BALANCE_THRESHOLD = 30000; // 30,000 VND
@@ -206,11 +206,95 @@ async function checkExpiredContracts(app) {
 async function checkVIPSubscriptions(app) {
   try {
     const Subscription = require('../models/Subscription');
+    const MembershipSlotEntitlement = require('../models/MembershipSlotEntitlement');
+    const {
+      recomputeUserMembership,
+    } = require('./membershipProjectionService');
     const now = new Date();
     const threeDaysFromNow = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+    const Slot = require('../models/Slot');
+    const {
+      releaseExpiredTransferLocks,
+    } = require('./membershipEntitlementTransferService');
+    await releaseExpiredTransferLocks(now);
+
+    const entitlementSubscriptions = await MembershipSlotEntitlement.distinct(
+      'sourceSubscriptionId'
+    );
+    const expiringEntitlements = await MembershipSlotEntitlement.find({
+      status: 'active',
+      expireAt: { $lte: threeDaysFromNow, $gt: now },
+      expireWarningSentAt: null,
+    });
+    for (const entitlement of expiringEntitlements) {
+      notifTriggers.notifySystemMessage(app, entitlement.ownerId, {
+        title: 'VIP parking space expiring',
+        body: `Your VIP space ${entitlement.slotCode} expires on ${entitlement.expireAt.toLocaleDateString()}. Renew this space to keep it reserved.`,
+        type: 'SYSTEM',
+      }).catch((err) => console.error('Failed to send VIP entitlement warning:', err));
+      entitlement.expireWarningSentAt = now;
+      await entitlement.save();
+    }
+
+    const expiredEntitlements = await MembershipSlotEntitlement.find({
+      status: { $in: ['active', 'transfer_locked'] },
+      expireAt: { $lte: now },
+    });
+    const affectedUsers = new Set();
+    const affectedSubscriptions = new Set();
+    for (const entitlement of expiredEntitlements) {
+      const updated = await MembershipSlotEntitlement.findOneAndUpdate(
+        {
+          _id: entitlement._id,
+          status: { $in: ['active', 'transfer_locked'] },
+          expireAt: { $lte: now },
+        },
+        { $set: { status: 'expired' } },
+        { new: true }
+      );
+      if (!updated) continue;
+      await Slot.updateOne(
+        {
+          _id: updated.slotId,
+          reservedByEntitlementId: updated._id,
+        },
+        {
+          $unset: {
+            reservedFor: '',
+            reservedBySubscriptionId: '',
+            reservedByEntitlementId: '',
+            reservedUntil: '',
+          },
+        }
+      );
+      affectedUsers.add(String(updated.ownerId));
+      affectedSubscriptions.add(String(updated.sourceSubscriptionId));
+      notifTriggers.notifySystemMessage(app, updated.ownerId, {
+        title: 'VIP parking space expired',
+        body: `Your VIP space ${updated.slotCode} has expired and was released.`,
+        type: 'SYSTEM',
+      }).catch((err) => console.error('Failed to send VIP entitlement expiry:', err));
+    }
+    for (const userId of affectedUsers) {
+      await recomputeUserMembership(userId, { rotateQr: true, now });
+    }
+    for (const subscriptionId of affectedSubscriptions) {
+      const remaining = await MembershipSlotEntitlement.findOne({
+        sourceSubscriptionId: subscriptionId,
+        status: { $in: ['active', 'transfer_locked'] },
+        expireAt: { $gt: now },
+      }).select('_id expireAt');
+      if (!remaining) {
+        await Subscription.updateOne(
+          { _id: subscriptionId },
+          { $set: { status: 'expired' } }
+        );
+      }
+    }
 
     // 1. Send warning for subscriptions expiring in <= 3 days
     const expiringSubscriptions = await Subscription.find({
+      _id: { $nin: entitlementSubscriptions },
       status: 'active',
       expireAt: { $lte: threeDaysFromNow, $gt: now },
       expireWarningSent: { $ne: true }
@@ -231,11 +315,11 @@ async function checkVIPSubscriptions(app) {
 
     // 2. Mark expired subscriptions
     const expiredSubscriptions = await Subscription.find({
+      _id: { $nin: entitlementSubscriptions },
       status: 'active',
       expireAt: { $lte: now }
     });
 
-    const Slot = require('../models/Slot');
     const User = require('../models/User');
     const useOwnerGuard = isEnabled(
       'SUBSCRIPTION_SLOT_OWNER_GUARD_ENABLED',
@@ -271,6 +355,7 @@ async function checkVIPSubscriptions(app) {
           $unset: {
             reservedFor: '',
             reservedBySubscriptionId: '',
+            reservedByEntitlementId: '',
             reservedUntil: '',
           },
         });

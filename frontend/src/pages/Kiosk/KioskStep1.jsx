@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Delete, AlertCircle } from 'lucide-react';
+import { Delete, AlertCircle, ScanLine } from 'lucide-react';
+import KioskQrScannerModal from './KioskQrScannerModal';
 import { API_BASE } from '../../services/api';
 import { isValidLicensePlate } from '../../utils/licensePlate';
 import ParkingFullModal from './ParkingFullModal';
@@ -11,6 +12,37 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
   const [showFullModal, setShowFullModal] = useState(false);
   const [modalTitle, setModalTitle] = useState(undefined);
   const [modalMessage, setModalMessage] = useState(undefined);
+  const [showQrModal, setShowQrModal] = useState(false);
+
+  const handleQrScan = async (qrPayload) => {
+    setShowQrModal(false);
+    setIsVerifying(true);
+    try {
+      const response = await fetch(`${API_BASE}/sessions/kiosk-verify-qr`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ qrPayload })
+      });
+      const data = await response.json();
+      if (data.success) {
+        updateFormData({
+          licensePlate: data.licensePlate,
+          phone: data.phone
+        });
+        // Immediately trigger normal license plate verification with the scanned data
+        setTimeout(() => {
+          setActiveField('plate');
+        }, 100);
+      } else {
+        setIsVerifying(false);
+        alert(data.message || 'Invalid QR code');
+      }
+    } catch (err) {
+      console.error(err);
+      setIsVerifying(false);
+      alert('Network error while verifying QR code.');
+    }
+  };
 
   // Auto-verify logic
   useEffect(() => {
@@ -204,7 +236,7 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
           <button
             key={num}
             onClick={() => handleKeyClick(num.toString())}
-            className="bg-[#0f172a] text-white text-2xl font-bold rounded-[14px] h-[52px] flex items-center justify-center active:bg-gray-700 active:scale-95 transition-all"
+            className="bg-[#0f172a] text-white text-2xl font-bold rounded-[14px] h-[44px] flex items-center justify-center active:bg-gray-700 active:scale-95 transition-all"
           >
             {num}
           </button>
@@ -215,7 +247,7 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
           <button
             key={num}
             onClick={() => handleKeyClick(num.toString())}
-            className="bg-[#0f172a] text-white text-2xl font-bold rounded-[14px] h-[52px] flex items-center justify-center active:bg-gray-700 active:scale-95 transition-all"
+            className="bg-[#0f172a] text-white text-2xl font-bold rounded-[14px] h-[44px] flex items-center justify-center active:bg-gray-700 active:scale-95 transition-all"
           >
             {num}
           </button>
@@ -224,7 +256,7 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
       {/* Delete Button Absolute Right */}
       <button
         onClick={handleDelete}
-        className="absolute right-0 top-0 h-[116px] w-11 flex items-center justify-center border-2 border-[#0f172a] bg-white rounded-[14px] text-[#0f172a] hover:bg-gray-100 active:bg-gray-200 active:scale-95 transition-all"
+        className="absolute right-0 top-0 h-[100px] w-11 flex items-center justify-center border-2 border-[#0f172a] bg-white rounded-[14px] text-[#0f172a] hover:bg-gray-100 active:bg-gray-200 active:scale-95 transition-all"
       >
         <Delete size={20} strokeWidth={2} />
       </button>
@@ -239,14 +271,14 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
   ];
 
   const renderKeyboard = () => (
-    <div className="w-full mx-auto relative mt-2 flex flex-col gap-2">
+    <div className="w-full mx-auto relative mt-1 flex flex-col gap-1.5">
       {qwertyRows.map((row, i) => (
         <div key={i} className={`flex justify-center gap-1.5 ${i === 1 ? 'px-3' : ''} ${i === 2 ? 'px-6' : ''}`}>
           {row.map(key => (
             <button
               key={key}
               onClick={() => handleKeyClick(key)}
-              className="bg-[#0f172a] text-white text-lg font-bold rounded-lg h-[44px] flex-1 max-w-[44px] flex items-center justify-center active:bg-gray-700 active:scale-95 transition-all shadow-sm"
+              className="bg-[#0f172a] text-white text-lg font-bold rounded-lg h-[40px] flex-1 max-w-[44px] flex items-center justify-center active:bg-gray-700 active:scale-95 transition-all shadow-sm"
             >
               {key}
             </button>
@@ -254,7 +286,7 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
           {i === 3 && (
             <button
               onClick={handleDelete}
-              className="bg-white border-2 border-[#0f172a] text-[#0f172a] text-sm font-bold rounded-lg h-[44px] px-3 flex items-center justify-center active:bg-gray-100 active:scale-95 transition-all shadow-sm ml-1"
+              className="bg-white border-2 border-[#0f172a] text-[#0f172a] text-sm font-bold rounded-lg h-[40px] px-3 flex items-center justify-center active:bg-gray-100 active:scale-95 transition-all shadow-sm ml-1"
             >
               <Delete size={20} strokeWidth={2} />
             </button>
@@ -264,7 +296,7 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
       <div className="flex justify-center gap-2 mt-1 px-10">
         <button
           onClick={handleSpace}
-          className="bg-[#0f172a] text-white text-sm font-bold rounded-lg h-[44px] flex-1 flex items-center justify-center active:bg-gray-700 active:scale-95 transition-all shadow-sm"
+          className="bg-[#0f172a] text-white text-sm font-bold rounded-lg h-[40px] flex-1 flex items-center justify-center active:bg-gray-700 active:scale-95 transition-all shadow-sm"
         >
           SPACE
         </button>
@@ -404,11 +436,11 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
       )}
 
       {/* ─── Yellow Card Container (Flat & Soft) ─── */}
-      <div className="bg-[#FFDF00] w-full rounded-[32px] py-6 px-4 sm:px-8 flex flex-col items-center transition-all duration-500">
+      <div className="bg-[#FFDF00] w-full rounded-[28px] py-4 px-4 sm:px-8 flex flex-col items-center transition-all duration-500">
 
         {/* License Plate Field */}
-        <div className="w-full text-center mb-4 relative flex flex-col items-center">
-          <label className="block text-xs font-bold text-[#0f172a] tracking-widest mb-2 uppercase">
+        <div className="w-full text-center mb-3 relative flex flex-col items-center">
+          <label className="block text-[10px] font-bold text-[#0f172a] tracking-widest mb-1 uppercase">
             License Plate Number
             {isVerifying && <span className="ml-2 text-blue-500 animate-pulse font-normal lowercase tracking-normal">(verifying...)</span>}
           </label>
@@ -423,23 +455,40 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
             </div>
           )}
           <div
-            className={`relative bg-white rounded-2xl h-[60px] flex items-center justify-center w-[90%] mx-auto transition-all border-2 cursor-pointer ${activeField === 'plate' ? 'border-[#0f172a] shadow-[0_4px_15px_rgba(0,0,0,0.05)]' : 'border-transparent'}`}
+            className={`relative bg-white rounded-2xl h-[52px] flex items-center justify-between px-2 w-[90%] mx-auto transition-all border-2 cursor-pointer ${activeField === 'plate' ? 'border-[#0f172a] shadow-[0_4px_15px_rgba(0,0,0,0.05)]' : 'border-transparent'}`}
             onClick={() => setActiveField('plate')}
           >
-            <span className="text-2xl font-bold font-mono tracking-[0.2em] text-[#0f172a]">
-              {formData.licensePlate || 'TAP TO ENTER'}
-            </span>
-            {activeField === 'plate' && (
-              <span className="w-0.5 h-[26px] bg-[#0f172a] animate-pulse ml-1"></span>
-            )}
+            {/* Left side empty for centering balance */}
+            <div className="w-[44px]"></div>
+
+            <div className="flex items-center justify-center">
+              <span className="text-2xl font-bold font-mono tracking-[0.2em] text-[#0f172a]">
+                {formData.licensePlate || 'TAP TO ENTER'}
+              </span>
+              {activeField === 'plate' && (
+                <span className="w-0.5 h-[26px] bg-[#0f172a] animate-pulse ml-1"></span>
+              )}
+            </div>
+
+            {/* QR Scan Button inside the input */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowQrModal(true);
+              }}
+              className="h-[40px] w-[44px] flex items-center justify-center bg-[#0f172a] text-[#FFDF00] rounded-xl hover:bg-black active:scale-95 transition-all shadow-sm"
+              title="Scan VIP / Booking QR"
+            >
+              <ScanLine size={20} strokeWidth={2.5} />
+            </button>
           </div>
         </div>
 
         {/* Phone Number Field */}
-        <div className="w-full text-center mb-5 animate-in fade-in slide-in-from-top-4 duration-500">
-          <label className="block text-xs font-bold text-[#0f172a] tracking-widest mb-2 uppercase">Enter Phone</label>
+        <div className="w-full text-center mb-3 animate-in fade-in slide-in-from-top-4 duration-500">
+          <label className="block text-[10px] font-bold text-[#0f172a] tracking-widest mb-1 uppercase">Enter Phone</label>
           <div
-            className={`relative bg-white rounded-2xl h-[60px] flex items-center justify-center px-6 w-[90%] mx-auto transition-all border-2 cursor-pointer ${activeField === 'phone' ? 'border-[#0f172a] shadow-[0_4px_15px_rgba(0,0,0,0.05)]' : 'border-transparent'}`}
+            className={`relative bg-white rounded-2xl h-[52px] flex items-center justify-center px-6 w-[90%] mx-auto transition-all border-2 cursor-pointer ${activeField === 'phone' ? 'border-[#0f172a] shadow-[0_4px_15px_rgba(0,0,0,0.05)]' : 'border-transparent'}`}
             onClick={() => setActiveField('phone')}
           >
             <div className="flex items-center justify-center w-full font-mono text-3xl font-bold pl-[0.2em]">
@@ -460,17 +509,25 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
 
       </div>
 
-      {/* Next Step Button */}
-      <button
-        onClick={handleManualNext}
-        disabled={isVerifying || !(formData.licensePlate || '') || !isValidLicensePlate(formData.licensePlate || '')}
-        className={`mt-6 mb-2 font-bold text-[18px] px-16 py-[16px] rounded-full transition-all border-2 ${(isVerifying || !(formData.licensePlate || '') || !isValidLicensePlate(formData.licensePlate || ''))
-          ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
-          : 'bg-[#0f172a] border-[#0f172a] text-white hover:bg-black shadow-[0_10px_20px_rgba(0,0,0,0.2)] active:scale-95'
-          }`}
-      >
-        Next step
-      </button>
+      {/* Actions Row */}
+      <div className="flex items-center justify-center mt-4 mb-1">
+        <button
+          onClick={handleManualNext}
+          disabled={isVerifying || !(formData.licensePlate || '') || !isValidLicensePlate(formData.licensePlate || '')}
+          className={`font-bold text-[16px] px-16 h-[52px] rounded-full transition-all border-2 ${(isVerifying || !(formData.licensePlate || '') || !isValidLicensePlate(formData.licensePlate || ''))
+            ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
+            : 'bg-[#0f172a] border-[#0f172a] text-white hover:bg-black shadow-[0_10px_20px_rgba(0,0,0,0.2)] active:scale-95'
+            }`}
+        >
+          Next step
+        </button>
+      </div>
+
+      <KioskQrScannerModal
+        isOpen={showQrModal}
+        onClose={() => setShowQrModal(false)}
+        onScan={handleQrScan}
+      />
 
       <ParkingFullModal
         isOpen={showFullModal}

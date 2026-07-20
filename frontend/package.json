@@ -13,6 +13,7 @@
     "@headlessui/react": "^2.2.10",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.1",
+    "@yudiel/react-qr-scanner": "^2.6.0",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
     "framer-motion": "^12.40.0",
