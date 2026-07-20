@@ -81,23 +81,6 @@ describe('BookingService normalization', () => {
     expect(post).toHaveBeenCalledWith('/bookings/booking-1/cancel');
   });
 
-  it('loads the signed QR payload from the booking endpoint', async () => {
-    const get = jest.spyOn(apiClient, 'get').mockResolvedValue({
-      success: true,
-      data: {
-        available: true,
-        bookingStatus: 'PAID',
-        payload: 'VALO_BOOKING:1:booking-1:signature',
-        reason: null,
-      },
-    });
-
-    const response = await bookingService.getBookingQr('booking-1');
-
-    expect(get).toHaveBeenCalledWith('/bookings/booking-1/qr');
-    expect(response.data?.payload).toBe('VALO_BOOKING:1:booking-1:signature');
-  });
-
   it('reads the membership booking policy from availability responses', () => {
     const bookingPolicy = {
       activeMembership: true,

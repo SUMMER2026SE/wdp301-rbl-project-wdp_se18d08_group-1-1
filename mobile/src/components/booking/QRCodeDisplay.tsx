@@ -6,12 +6,13 @@ import { AppText, Button, Card } from '@/components/common';
 import { colors, spacing } from '@/theme';
 
 interface QRCodeDisplayProps {
-  bookingId: string;
+  bookingId?: string;
   value?: string;
+  reference?: string;
+  shareLabel?: string;
+  shareTitle?: string;
   size?: number;
   showBrightnessControl?: boolean;
-  shareLabel?: string;
-  shareButtonTitle?: string;
 }
 
 export const isValidBookingQrValue = (value: string) =>
@@ -21,13 +22,15 @@ export const isValidBookingQrValue = (value: string) =>
 export const QRCodeDisplay = ({
   bookingId,
   value,
+  reference,
+  shareLabel = 'VALO parking pass',
+  shareTitle = 'Share pass',
   size = 200,
   showBrightnessControl = true,
-  shareLabel = 'VALO booking',
-  shareButtonTitle = 'Share booking',
 }: QRCodeDisplayProps) => {
   const [bright, setBright] = useState(false);
-  const qrValue = value ?? bookingId;
+  const qrValue = value || bookingId || '';
+  const displayReference = reference || bookingId;
 
   return (
     <Card style={[styles.card, bright && styles.bright]}>
@@ -47,7 +50,7 @@ export const QRCodeDisplay = ({
         />
       ) : null}
       <Button
-        title={shareButtonTitle}
+        title={shareTitle}
         variant="ghost"
         onPress={() => Share.share({ message: `${shareLabel}: ${qrValue}` })}
       />

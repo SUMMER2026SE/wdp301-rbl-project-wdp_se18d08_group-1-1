@@ -1,59 +1,84 @@
 const crypto = require('crypto');
 const mongoose = require('mongoose');
 
-const PREFIX = 'VALO_BOOKING';
-const VERSION = '1';
-const AVAILABLE_STATUSES = new Set(['PAID', 'ACTIVE', 'PAUSED']);
+const QR_PREFIX = 'VALO_BOOKING';
+const QR_VERSION = 1;
+const QR_ACTIVE_STATUSES = new Set(['PAID', 'ACTIVE', 'PAUSED']);
 
 const getSecret = () => {
-  const secret = process.env.QR_SIGNING_SECRET || process.env.JWT_SECRET;
-  if (!secret) throw new Error('QR signing secret is not configured');
+  const secret = process.env.BOOKING_QR_SECRET || process.env.JWT_SECRET;
+  if (!secret) {
+    throw Object.assign(new Error('Booking QR signing secret is not configured'), {
+      statusCode: 500,
+    });
+  }
   return secret;
 };
 
-const sign = (unsignedPayload) => crypto
-  .createHmac('sha256', getSecret())
-  .update(unsignedPayload)
-  .digest('base64url');
+const sign = (bookingId, version = QR_VERSION) =>
+  crypto
+    .createHmac('sha256', getSecret())
+    .update(`${QR_PREFIX}:${version}:${bookingId}`)
+    .digest('base64url');
 
-const createBookingQrPayload = (bookingId) => {
-  const unsignedPayload = `${PREFIX}:${VERSION}:${String(bookingId)}`;
-  return `${unsignedPayload}:${sign(unsignedPayload)}`;
+const buildBookingQrPayload = (booking) => {
+  const bookingId = String(booking?._id || booking);
+  const version = Number(booking?.qrVersion || QR_VERSION);
+
+  if (!mongoose.Types.ObjectId.isValid(bookingId)) {
+    throw Object.assign(new Error('Invalid booking ID'), { statusCode: 400 });
+  }
+
+  return `${QR_PREFIX}:${version}:${bookingId}:${sign(bookingId, version)}`;
 };
 
 const parseAndVerifyBookingQr = (payload) => {
-  const parts = typeof payload === 'string' ? payload.split(':') : [];
-  if (parts.length !== 4 || parts[0] !== PREFIX || parts[1] !== VERSION) return null;
-  const [, , bookingId, signature] = parts;
-  if (!mongoose.isValidObjectId(bookingId)) return null;
-  const expected = sign(`${PREFIX}:${VERSION}:${bookingId}`);
-  const actualBuffer = Buffer.from(signature);
-  const expectedBuffer = Buffer.from(expected);
-  if (actualBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(actualBuffer, expectedBuffer)) return null;
-  return { bookingId, version: VERSION };
-};
-
-const buildBookingQrData = (booking) => {
-  const bookingStatus = String(booking.status || '').toUpperCase();
-  if (!AVAILABLE_STATUSES.has(bookingStatus)) {
-    return {
-      available: false,
-      bookingStatus,
-      payload: null,
-      reason: 'This QR code is not available for the current booking status.',
-    };
+  if (typeof payload !== 'string' || payload.length > 512) {
+    throw Object.assign(new Error('Invalid booking QR code'), { statusCode: 400 });
   }
 
-  return {
-    available: true,
-    bookingStatus,
-    payload: createBookingQrPayload(booking._id),
-    reason: null,
-  };
+  const [prefix, rawVersion, bookingId, signature, ...extra] = payload.trim().split(':');
+  const version = Number(rawVersion);
+
+  if (
+    extra.length > 0 ||
+    prefix !== QR_PREFIX ||
+    !Number.isSafeInteger(version) ||
+    version < 1 ||
+    version > 1_000_000_000 ||
+    !mongoose.Types.ObjectId.isValid(bookingId) ||
+    !signature
+  ) {
+    throw Object.assign(new Error('Invalid booking QR code'), { statusCode: 400 });
+  }
+
+  const expected = sign(bookingId, version);
+  const actualBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expected);
+  if (
+    actualBuffer.length !== expectedBuffer.length ||
+    !crypto.timingSafeEqual(actualBuffer, expectedBuffer)
+  ) {
+    throw Object.assign(new Error('Booking QR signature is invalid'), { statusCode: 400 });
+  }
+
+  return { bookingId, version };
+};
+
+const isBookingQrAvailable = (booking) =>
+  Boolean(booking && QR_ACTIVE_STATUSES.has(String(booking.status).toUpperCase()));
+
+const getAllowedStaffActions = (booking) => {
+  const status = String(booking?.status || '').toUpperCase();
+  if (status === 'PAID') return ['CHECK_IN'];
+  if (status === 'ACTIVE') return ['CHECK_OUT'];
+  return [];
 };
 
 module.exports = {
-  buildBookingQrData,
-  createBookingQrPayload,
+  QR_ACTIVE_STATUSES,
+  buildBookingQrPayload,
+  getAllowedStaffActions,
+  isBookingQrAvailable,
   parseAndVerifyBookingQr,
 };
