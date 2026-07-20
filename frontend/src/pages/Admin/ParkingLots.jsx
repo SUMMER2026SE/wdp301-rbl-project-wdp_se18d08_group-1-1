@@ -44,6 +44,10 @@ export default function ParkingLots() {
   const [activeBookings, setActiveBookings] = useState([]);
   const [selectedItem, setSelectedItem] = useState(null);
   const [dbSlots, setDbSlots] = useState([]);
+
+  // Custom Modal State for Maintenance
+  const [maintenanceModal, setMaintenanceModal] = useState({ isOpen: false, item: null, isZone: false });
+  const [maintenanceReason, setMaintenanceReason] = useState("");
   
   // activeSessions to track live cars
   const [activeSessions, setActiveSessions] = useState([]);
@@ -446,11 +450,7 @@ export default function ParkingLots() {
                  if (res.ok) fetchDbSlots(currentFloorId);
                  else alert("Failed to end maintenance: " + (res.data?.message || "Unknown error"));
                } else {
-                 const reason = prompt("Enter reason for maintenance:");
-                 if (!reason) return;
-                 const res = await startMaintenance(isZone ? { zoneID: zoneId, reason } : { slotID: dbSlotInfo._id, reason });
-                 if (res.ok) fetchDbSlots(currentFloorId);
-                 else alert("Failed to start maintenance: " + (res.data?.message || "Unknown error"));
+                 setMaintenanceModal({ isOpen: true, item: isZone ? zoneId : dbSlotInfo._id, isZone });
                }
              } catch (e) {
                console.error("Maintenance toggle failed", e);
@@ -507,12 +507,33 @@ export default function ParkingLots() {
                 )}
 
                 {isMaintenance ? (
-                  <div className="flex flex-col gap-4 h-full items-center justify-center text-center py-10 opacity-80">
-                      <div className="w-16 h-16 rounded-full bg-red-900/30 flex items-center justify-center border border-red-500/50 mb-2">
+                  <div className="flex flex-col gap-3 h-full items-center justify-center text-center py-10 opacity-90">
+                      <div className="w-16 h-16 rounded-full bg-red-900/40 flex items-center justify-center border border-red-500/60 mb-2 shadow-[0_0_20px_rgba(239,68,68,0.3)]">
                           <span className="text-red-500 font-bold text-2xl">⚠</span>
                       </div>
-                      <p className="text-red-400 font-bold uppercase tracking-widest">Under Maintenance</p>
-                      <p className="text-xs text-red-500 max-w-[200px]">This {isZone ? "zone" : "slot"} is currently locked for maintenance.</p>
+                      
+                      {(!isZone && dbSlotInfo?.maintenanceReason) ? (
+                        <>
+                          <h3 className="text-xl font-bold text-white max-w-[280px] break-words leading-relaxed">
+                            {dbSlotInfo.maintenanceReason}
+                          </h3>
+                          <span className="bg-red-500/20 text-red-400 text-[10px] px-3 py-1 rounded-full border border-red-500/30 font-bold uppercase tracking-widest mt-1">
+                            Under Maintenance
+                          </span>
+                        </>
+                      ) : (
+                        <>
+                          <h3 className="text-xl font-bold text-white max-w-[280px] break-words leading-relaxed">
+                            System Maintenance
+                          </h3>
+                          <span className="bg-red-500/20 text-red-400 text-[10px] px-3 py-1 rounded-full border border-red-500/30 font-bold uppercase tracking-widest mt-1">
+                            Under Maintenance
+                          </span>
+                          <p className="text-xs text-slate-400 max-w-[250px] mt-2">
+                            This {isZone ? "zone" : "slot"} is currently locked for maintenance.
+                          </p>
+                        </>
+                      )}
                   </div>
                 ) : !isZone && selectedItem.session ? (
                   <div className="flex flex-col gap-4">
@@ -590,6 +611,71 @@ export default function ParkingLots() {
            </>
         )})()}
       </div>
+
+      {/* Maintenance Reason Modal */}
+      {maintenanceModal.isOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-[#171717] rounded-2xl border border-white/10 w-full max-w-md shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-6 border-b border-white/5">
+              <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center border border-red-500/30">
+                  <span className="text-red-500 text-sm">⚠</span>
+                </div>
+                Start Maintenance
+              </h3>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                  Reason for Maintenance
+                </label>
+                <textarea
+                  autoFocus
+                  className="w-full h-24 bg-black/50 border border-white/10 rounded-xl p-4 text-white placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/50 resize-none transition-all"
+                  placeholder="E.g., Cleaning, Repairing broken sensor..."
+                  value={maintenanceReason}
+                  onChange={(e) => setMaintenanceReason(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="p-6 bg-black/40 flex justify-end gap-3 border-t border-white/5">
+              <button
+                onClick={() => {
+                  setMaintenanceModal({ isOpen: false, item: null, isZone: false });
+                  setMaintenanceReason("");
+                }}
+                className="px-5 py-2.5 rounded-xl font-bold text-slate-300 hover:text-white hover:bg-white/5 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={!maintenanceReason.trim()}
+                onClick={async () => {
+                  if (!maintenanceReason.trim()) return;
+                  try {
+                    const { item, isZone } = maintenanceModal;
+                    const payload = isZone ? { zoneID: item, reason: maintenanceReason } : { slotID: item, reason: maintenanceReason };
+                    const res = await startMaintenance(payload);
+                    if (res.ok) {
+                      fetchDbSlots(currentFloorId);
+                      setMaintenanceModal({ isOpen: false, item: null, isZone: false });
+                      setMaintenanceReason("");
+                    } else {
+                      alert("Failed to start maintenance: " + (res.data?.message || "Unknown error"));
+                    }
+                  } catch (e) {
+                    console.error("Maintenance start failed", e);
+                    alert("Network error while trying to start maintenance.");
+                  }
+                }}
+                className="px-5 py-2.5 rounded-xl font-bold bg-red-500 hover:bg-red-600 text-white transition-colors shadow-[0_0_20px_rgba(239,68,68,0.3)] disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
