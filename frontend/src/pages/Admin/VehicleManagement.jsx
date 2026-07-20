@@ -127,12 +127,12 @@ function PendingCard({ vehicle, models, processing, onApprove, onReject, onPrevi
   const typeLabel = { car: 'Car', electric_car: 'Electric car' }[vehicle.vehicleType] || vehicle.vehicleType;
 
   return (
-    <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] shadow-sm flex flex-col sm:flex-row gap-4 p-5">
+    <div className="rounded-2xl border border-white/10 bg-[#171717] shadow-sm flex flex-col sm:flex-row gap-4 p-5">
 
       {/* Registration card image */}
       <div
-        className="shrink-0 w-full sm:w-44 h-32 rounded-xl overflow-hidden bg-gray-100 dark:bg-black/30
-          border border-gray-200 dark:border-white/10 flex items-center justify-center cursor-pointer group relative"
+        className="shrink-0 w-full sm:w-44 h-32 rounded-xl overflow-hidden bg-black/30
+          border border-white/10 flex items-center justify-center cursor-pointer group relative"
         onClick={() => vehicle.registrationCardImage && onPreviewImage(vehicle.registrationCardImage)}
       >
         {vehicle.registrationCardImage ? (
@@ -153,7 +153,7 @@ function PendingCard({ vehicle, models, processing, onApprove, onReject, onPrevi
       {/* Info */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap mb-1">
-          <h3 className="font-black text-base text-gray-900 dark:text-white">
+          <h3 className="font-black text-base text-white">
             {[vehicle.brand, vehicle.model].filter(Boolean).join(' ') || 'No name yet'}
           </h3>
           <span className="text-[10px] font-bold bg-orange-500/15 text-orange-400 border border-orange-500/30 rounded-full px-2 py-0.5">
@@ -161,25 +161,25 @@ function PendingCard({ vehicle, models, processing, onApprove, onReject, onPrevi
           </span>
         </div>
 
-        <p className="text-lg font-black font-mono text-gray-700 dark:text-gray-200 tracking-widest mb-2">
+        <p className="text-lg font-black font-mono text-gray-200 tracking-widest mb-2">
           {formatLicensePlateDisplay(vehicle.licensePlateDisplay || vehicle.licensePlate)}
         </p>
 
-        <div className="flex items-center gap-2 flex-wrap text-sm text-gray-500 dark:text-gray-400 mb-3">
+        <div className="flex items-center gap-2 flex-wrap text-sm text-gray-400 mb-3">
           <span className="inline-flex items-center gap-1 text-[11px] font-semibold bg-white/5 border border-white/10 rounded-full px-2.5 py-0.5">
             {vehicle.vehicleType === 'electric_car' ? <Zap size={11} /> : <Car size={11} />}
             {typeLabel}
           </span>
           {vehicle.hexColor && (
             <span className="flex items-center gap-1">
-              <span className="inline-block w-3.5 h-3.5 rounded-full border border-gray-300 dark:border-white/20"
+              <span className="inline-block w-3.5 h-3.5 rounded-full border border-white/20"
                 style={{ backgroundColor: vehicle.hexColor }} />
               <span className="font-mono text-xs">{vehicle.hexColor}</span>
             </span>
           )}
           <span>
             Owner:&nbsp;
-            <span className="font-semibold text-gray-700 dark:text-gray-200">
+            <span className="font-semibold text-gray-200">
               {vehicle.owner?.name || vehicle.owner?.email || '—'}
             </span>
           </span>
@@ -207,7 +207,7 @@ function PendingCard({ vehicle, models, processing, onApprove, onReject, onPrevi
             className={`cursor-pointer rounded-xl border-2 border-dashed px-4 py-3 flex items-center gap-3 transition
               ${localFile
                 ? 'border-yellow-500/50 bg-yellow-500/5'
-                : 'border-gray-300 dark:border-white/15 hover:border-yellow-500/40 hover:bg-yellow-500/5'
+                : 'border-white/15 hover:border-yellow-500/40 hover:bg-yellow-500/5'
               }`}
           >
             <input
@@ -273,9 +273,9 @@ function PendingCard({ vehicle, models, processing, onApprove, onReject, onPrevi
 
 // ── Main component ─────────────────────────────────────────────────────────
 const inputCls =
-  'w-full rounded-xl border border-gray-300 dark:border-white/15 bg-white dark:bg-white/5 ' +
-  'px-3.5 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 ' +
-  'focus:outline-none focus:ring-2 focus:ring-yellow-500/50 transition';
+  'w-full rounded-xl border border-white/10 bg-black ' +
+  'px-3.5 py-2.5 text-sm text-white placeholder-gray-500 ' +
+  'focus:outline-none focus:ring-1 focus:ring-yellow-500/50 transition shadow-inner';
 
 export default function VehicleManagement() {
   const [tab, setTab] = useState('pending');
@@ -422,28 +422,28 @@ export default function VehicleManagement() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-8 py-10">
+    <div className="p-6 md:p-8 mx-auto min-h-[calc(100vh-70px)] overflow-auto bg-[#080808]">
+      <div className="max-w-4xl mx-auto">
 
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">
-            Vehicles &amp; 3D Models
-          </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Approve vehicles, upload 3D models, and sync everything on one page.
-          </p>
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-yellow-500/20 bg-yellow-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-yellow-300">
+            <Car size={12} /> Vehicles
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">Vehicles &amp; 3D Models</h1>
+          <p className="text-gray-400 text-sm mt-1">Approve vehicles, upload 3D models, and sync everything on one page.</p>
         </div>
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1 p-1 rounded-2xl bg-gray-100 dark:bg-white/[0.05] border border-gray-200 dark:border-white/10 mb-8 w-fit">
+      <div className="flex gap-1 p-1 rounded-2xl bg-[#171717] border border-white/10 mb-8 w-fit shadow-sm">
         <button
           onClick={() => setTab('pending')}
           className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
             tab === 'pending'
-              ? 'bg-white dark:bg-white/10 text-gray-900 dark:text-white shadow-sm'
-              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+              ? 'bg-white/10 text-white shadow-sm'
+              : 'text-gray-400 hover:text-gray-200'
           }`}
         >
           <Clock size={15} />
@@ -458,8 +458,8 @@ export default function VehicleManagement() {
           onClick={() => setTab('models')}
           className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all ${
             tab === 'models'
-              ? 'bg-white dark:bg-white/10 text-gray-900 dark:text-white shadow-sm'
-              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
+              ? 'bg-white/10 text-white shadow-sm'
+              : 'text-gray-400 hover:text-gray-200'
           }`}
         >
           <Box size={15} />
@@ -479,8 +479,8 @@ export default function VehicleManagement() {
             </p>
             <button
               onClick={loadPending}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 dark:border-white/10
-                text-xs font-semibold text-gray-600 dark:text-gray-300
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-white/10
+                text-xs font-semibold text-gray-300
                 hover:border-yellow-500/40 hover:text-yellow-500 transition-all"
             >
               <RefreshCw size={13} className={pendingLoading ? 'animate-spin' : ''} />
@@ -495,11 +495,11 @@ export default function VehicleManagement() {
           )}
 
           {!pendingLoading && pending.length === 0 && (
-            <div className="rounded-2xl border border-dashed border-gray-200 dark:border-white/10
-              bg-gray-50 dark:bg-white/[0.02] flex flex-col items-center justify-center py-20 text-center">
+            <div className="rounded-2xl border border-dashed border-white/10
+              bg-white/[0.02] flex flex-col items-center justify-center py-20 text-center">
               <CheckCircle2 size={32} className="text-green-400 mb-3" />
-              <p className="font-bold text-gray-700 dark:text-gray-300">All vehicles have been approved</p>
-              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">No vehicles are pending approval</p>
+              <p className="font-bold text-gray-300">All vehicles have been approved</p>
+              <p className="text-sm text-gray-400 mt-1">No vehicles are pending approval</p>
             </div>
           )}
 
@@ -544,8 +544,8 @@ export default function VehicleManagement() {
               </button>
               <button
                 onClick={loadModels}
-                className="p-2.5 rounded-xl border border-gray-200 dark:border-white/10
-                  hover:bg-gray-100 dark:hover:bg-white/10 transition"
+                className="p-2.5 rounded-xl border border-white/10
+                  hover:bg-white/10 transition"
                 title="Refresh list"
               >
                 <RefreshCw size={15} className={modelsLoading ? 'animate-spin' : ''} />
@@ -572,9 +572,9 @@ export default function VehicleManagement() {
           {/* Upload form */}
           <form
             onSubmit={handleUpload}
-            className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] p-6 mb-6 shadow-sm"
+            className="rounded-3xl border border-white/10 bg-[#171717] p-6 mb-6 shadow-sm"
           >
-            <h2 className="text-base font-bold text-gray-800 dark:text-white mb-5">Upload new model</h2>
+            <h2 className="text-base font-bold text-white mb-5">Upload new model</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
               <div>
                 <label className="text-[10px] text-gray-500 dark:text-gray-400 uppercase tracking-widest font-semibold mb-1 block">
@@ -604,7 +604,7 @@ export default function VehicleManagement() {
               className={`cursor-pointer rounded-xl border-2 border-dashed px-6 py-8 flex flex-col items-center gap-2 transition mb-5
                 ${uploadFile
                   ? 'border-yellow-500/50 bg-yellow-500/5'
-                  : 'border-gray-300 dark:border-white/15 hover:border-yellow-500/40 hover:bg-yellow-500/5'
+                  : 'border-white/15 hover:border-yellow-500/40 hover:bg-yellow-500/5'
                 }`}
             >
               <input
@@ -641,9 +641,9 @@ export default function VehicleManagement() {
           </form>
 
           {/* Models list */}
-          <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-100 dark:border-white/8 flex items-center justify-between">
-              <h2 className="text-base font-bold text-gray-800 dark:text-white">
+          <div className="rounded-3xl border border-white/10 bg-[#171717] shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between">
+              <h2 className="text-base font-bold text-white">
                 Model list ({models.length})
               </h2>
             </div>
@@ -658,15 +658,15 @@ export default function VehicleManagement() {
                 <p className="text-sm text-gray-500">No models yet</p>
               </div>
             ) : (
-              <ul className="divide-y divide-gray-100 dark:divide-white/[0.05]">
+              <ul className="divide-y divide-white/[0.05]">
                 {models.map((m) => (
                   <li key={m.publicId}
-                    className="flex items-center gap-4 px-6 py-4 hover:bg-gray-50 dark:hover:bg-white/[0.03] group transition">
+                    className="flex items-center gap-4 px-6 py-4 hover:bg-white/[0.03] group transition">
                     <div className="w-9 h-9 rounded-xl bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center shrink-0">
                       <Car size={16} className="text-yellow-500" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-800 dark:text-white font-mono truncate">{m.publicId}</p>
+                      <p className="text-sm font-semibold text-white font-mono truncate">{m.publicId}</p>
                       <p className="text-[11px] text-gray-500 mt-0.5">
                         {(m.bytes / 1024).toFixed(0)} KB &nbsp;·&nbsp; {new Date(m.createdAt).toLocaleDateString('vi-VN')}
                       </p>
@@ -717,19 +717,19 @@ export default function VehicleManagement() {
       {/* Confirm delete dialog */}
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-white/10 shadow-2xl p-7 max-w-sm w-full">
+          <div className="bg-[#171717] rounded-3xl border border-white/10 shadow-2xl p-7 max-w-sm w-full">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
                 <AlertCircle size={18} className="text-red-500" />
               </div>
-              <p className="font-bold text-gray-900 dark:text-white">Delete this model?</p>
+              <p className="font-bold text-white">Delete this model?</p>
             </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 font-mono bg-gray-100 dark:bg-white/8 rounded-lg px-3 py-2">
+            <p className="text-sm text-gray-400 mb-6 font-mono bg-white/5 rounded-lg px-3 py-2">
               {deleteTarget}
             </p>
             <div className="flex gap-3">
               <button onClick={() => setDeleteTarget(null)}
-                className="flex-1 py-2.5 rounded-xl border border-gray-300 dark:border-white/15 text-sm font-semibold hover:bg-gray-50 dark:hover:bg-white/5 transition">
+                className="flex-1 py-2.5 rounded-xl border border-white/15 text-sm font-semibold hover:bg-white/5 transition">
                 Cancel
               </button>
               <button onClick={handleDelete}
@@ -753,6 +753,7 @@ export default function VehicleManagement() {
           {toast.msg}
         </div>
       )}
+      </div>
     </div>
   );
 }

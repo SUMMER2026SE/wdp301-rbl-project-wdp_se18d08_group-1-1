@@ -65,34 +65,33 @@ export default function SubscriptionManagement() {
   };
 
   return (
-    <div className="p-6 max-w-[1400px] mx-auto min-h-screen text-slate-200">
-      <div className="flex justify-between items-end mb-6 border-b border-white/10 pb-4">
+    <div className="p-6 md:p-8 mx-auto min-h-[calc(100vh-70px)] overflow-auto bg-[#080808]">
+      <div className="max-w-[1400px] mx-auto">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6 border-b border-white/10 pb-4">
         <div>
-          <h1 className="text-3xl font-black tracking-tight text-white flex items-center gap-3">
-            <Crown className="w-8 h-8 text-yellow-400" />
-            VIP Memberships
-          </h1>
-          <p className="text-slate-400 mt-2 text-sm">
-            View and manage customer subscriptions and VIP parking slots.
-          </p>
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-yellow-500/20 bg-yellow-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-yellow-300">
+            <Crown size={12} /> VIP Subscriptions
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">VIP Memberships</h1>
+          <p className="text-gray-400 text-sm mt-1">View and manage customer subscriptions and VIP parking slots.</p>
         </div>
         
         <button 
           onClick={fetchSubscriptions}
-          className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-xl transition shadow-lg border border-white/5"
+          className="flex items-center gap-2 bg-white/5 hover:bg-white/10 text-white px-4 py-2.5 rounded-xl transition shadow-lg border border-white/10 text-sm font-semibold"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </button>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-4 mb-6 bg-slate-900/50 p-4 rounded-2xl border border-white/5 backdrop-blur-md">
+      <div className="flex flex-col sm:flex-row gap-4 mb-6 bg-[#171717] p-4 rounded-2xl border border-white/10 shadow-lg">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
           <input
             type="text"
             placeholder="Search by customer name, phone, or email..."
-            className="w-full pl-10 pr-4 py-2.5 bg-slate-800/50 border border-white/10 rounded-xl focus:outline-none focus:border-yellow-400/50 focus:ring-1 focus:ring-yellow-400/50 transition text-sm"
+            className="w-full pl-10 pr-4 py-2.5 bg-black border border-white/10 rounded-xl focus:outline-none focus:border-[#ffd555] focus:ring-1 focus:ring-[#ffd555]/50 transition text-sm text-white placeholder-white/40 shadow-inner"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -101,7 +100,7 @@ export default function SubscriptionManagement() {
         <div className="relative min-w-[200px]">
           <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
           <select
-            className="w-full pl-10 pr-4 py-2.5 bg-slate-800/50 border border-white/10 rounded-xl focus:outline-none focus:border-yellow-400/50 focus:ring-1 focus:ring-yellow-400/50 transition appearance-none text-sm text-slate-300"
+            className="w-full pl-10 pr-4 py-2.5 bg-black border border-white/10 rounded-xl focus:outline-none focus:border-[#ffd555] focus:ring-1 focus:ring-[#ffd555]/50 transition appearance-none text-sm text-white shadow-inner cursor-pointer"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
           >
@@ -120,11 +119,11 @@ export default function SubscriptionManagement() {
         </div>
       )}
 
-      <div className="bg-slate-900/50 border border-white/5 rounded-2xl overflow-hidden backdrop-blur-md shadow-xl">
+      <div className="bg-[#171717] border border-white/10 rounded-2xl overflow-hidden shadow-lg">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-slate-800/50 text-xs uppercase tracking-wider text-slate-400 border-b border-white/5">
+              <tr className="bg-white/5 text-xs uppercase tracking-wider text-gray-400 border-b border-white/10">
                 <th className="p-4 font-medium">Customer</th>
                 <th className="p-4 font-medium">Package</th>
                 <th className="p-4 font-medium">VIP Slots</th>
@@ -133,7 +132,7 @@ export default function SubscriptionManagement() {
                 <th className="p-4 font-medium">Status</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5 text-sm">
+            <tbody className="divide-y divide-white/10 text-sm">
               {loading ? (
                 <tr>
                   <td colSpan="6" className="p-8 text-center text-slate-500">
@@ -201,6 +200,7 @@ export default function SubscriptionManagement() {
             </tbody>
           </table>
         </div>
+      </div>
       </div>
     </div>
   );

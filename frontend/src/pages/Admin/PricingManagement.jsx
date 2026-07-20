@@ -147,17 +147,21 @@ export default function PricingManagement() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-full min-h-[400px]">
+      <div className="flex justify-center items-center h-full min-h-[calc(100vh-70px)] bg-[#080808]">
         <Loader2 className="animate-spin text-gold w-8 h-8" />
       </div>
     );
   }
 
   return (
-    <div className="p-6 md:p-8 max-w-5xl mx-auto h-full overflow-auto">
+    <div className="p-6 md:p-8 mx-auto min-h-[calc(100vh-70px)] overflow-auto bg-[#080808]">
+      <div className="max-w-5xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-3xl lg:text-4xl font-black text-white tracking-tight">Pricing Management</h1>
-        <p className="text-gray-400 font-medium mt-1">Configure time blocks and price caps for parking sessions.</p>
+        <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-yellow-500/20 bg-yellow-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-yellow-300">
+          <Edit2 size={12} /> Pricing
+        </div>
+        <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">Pricing Management</h1>
+        <p className="text-gray-400 text-sm mt-1">Configure time blocks and price caps for parking sessions.</p>
       </div>
 
       {error && (
@@ -174,7 +178,7 @@ export default function PricingManagement() {
         </div>
       )}
 
-      <div className="bg-[#181C23] border border-white/5 rounded-3xl p-6 shadow-sm mb-8">
+      <div className="bg-[#171717] border border-white/10 rounded-3xl p-6 shadow-sm mb-8">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-bold text-white">Time Blocks</h2>
           <button
@@ -187,14 +191,14 @@ export default function PricingManagement() {
 
         <div className="space-y-4">
           {timeBlocks.map((block, index) => (
-            <div key={index} className="flex flex-wrap items-end gap-4 p-5 border border-white/10 rounded-2xl bg-[#0B0E17] hover:border-gold/30 transition-colors shadow-sm">
+            <div key={index} className="flex flex-wrap items-end gap-4 p-5 border border-white/10 rounded-2xl bg-black hover:border-gold/30 transition-colors shadow-sm">
               <div className="flex-1 min-w-[140px]">
                 <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Start Time</label>
                 <div className="relative">
                   <select
                     value={block.startHour}
                     onChange={e => handleTimeBlockChange(index, 'startHour', e.target.value)}
-                    className="w-full appearance-none bg-[#181C23] border border-white/10 rounded-xl px-4 py-3 text-sm font-semibold text-white outline-none focus:border-gold focus:ring-1 focus:ring-gold/50 transition-shadow cursor-pointer"
+                    className="w-full appearance-none bg-[#171717] border border-white/10 rounded-xl px-4 py-3 text-sm font-semibold text-white outline-none focus:border-gold focus:ring-1 focus:ring-gold/50 transition-shadow cursor-pointer"
                   >
                     {Array.from({ length: 24 }).map((_, i) => (
                       <option key={`start-${i}`} value={i}>
@@ -214,7 +218,7 @@ export default function PricingManagement() {
                   <select
                     value={block.endHour}
                     onChange={e => handleTimeBlockChange(index, 'endHour', e.target.value)}
-                    className="w-full appearance-none bg-[#181C23] border border-white/10 rounded-xl px-4 py-3 text-sm font-semibold text-white outline-none focus:border-gold focus:ring-1 focus:ring-gold/50 transition-shadow cursor-pointer"
+                    className="w-full appearance-none bg-[#171717] border border-white/10 rounded-xl px-4 py-3 text-sm font-semibold text-white outline-none focus:border-gold focus:ring-1 focus:ring-gold/50 transition-shadow cursor-pointer"
                   >
                     {Array.from({ length: 25 }).map((_, i) => (
                       <option key={`end-${i}`} value={i}>
@@ -237,7 +241,7 @@ export default function PricingManagement() {
                     step="1000"
                     value={block.price}
                     onChange={e => handleTimeBlockChange(index, 'price', e.target.value)}
-                    className="w-full bg-[#181C23] border border-white/10 rounded-xl pl-4 pr-12 py-3 text-sm font-bold text-white outline-none focus:border-gold focus:ring-1 focus:ring-gold/50 transition-shadow"
+                    className="w-full bg-[#171717] border border-white/10 rounded-xl pl-4 pr-12 py-3 text-sm font-bold text-white outline-none focus:border-gold focus:ring-1 focus:ring-gold/50 transition-shadow"
                     placeholder="0"
                   />
                   <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-gray-400 font-bold text-xs">
@@ -265,13 +269,13 @@ export default function PricingManagement() {
         </div>
       </div>
 
-      <div className="bg-[#181C23] border border-white/5 rounded-3xl p-6 shadow-sm mb-8">
+      <div className="bg-[#171717] border border-white/10 rounded-3xl p-6 shadow-sm mb-8">
         <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
           <span>Price Caps</span>
           <span className="text-xs font-normal text-gray-400 bg-white/5 px-2 py-1 rounded-md">Maximum limits</span>
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          <div className="p-5 border border-white/5 rounded-2xl bg-[#0B0E17]">
+          <div className="p-5 border border-white/10 rounded-2xl bg-black">
             <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">12-Hour Maximum Cap</label>
             <div className="relative">
               <input
@@ -280,7 +284,7 @@ export default function PricingManagement() {
                 step="1000"
                 value={caps.cap12h}
                 onChange={e => setCaps({...caps, cap12h: e.target.value === '' ? '' : Number(e.target.value)})}
-                className="w-full bg-[#181C23] border border-white/10 rounded-xl pl-4 pr-12 py-3 text-sm font-bold text-white outline-none focus:border-gold focus:ring-1 focus:ring-gold/50 transition-shadow"
+                className="w-full bg-[#171717] border border-white/10 rounded-xl pl-4 pr-12 py-3 text-sm font-bold text-white outline-none focus:border-gold focus:ring-1 focus:ring-gold/50 transition-shadow"
               />
               <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-gray-400 font-bold text-xs">
                 VND
@@ -289,7 +293,7 @@ export default function PricingManagement() {
             <p className="text-xs text-gray-500 mt-2">Maximum amount charged for a 12-hour continuous stay.</p>
           </div>
           
-          <div className="p-5 border border-white/5 rounded-2xl bg-[#0B0E17]">
+          <div className="p-5 border border-white/10 rounded-2xl bg-black">
             <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">24-Hour Maximum Cap</label>
             <div className="relative">
               <input
@@ -298,7 +302,7 @@ export default function PricingManagement() {
                 step="1000"
                 value={caps.cap24h}
                 onChange={e => setCaps({...caps, cap24h: e.target.value === '' ? '' : Number(e.target.value)})}
-                className="w-full bg-[#181C23] border border-white/10 rounded-xl pl-4 pr-12 py-3 text-sm font-bold text-white outline-none focus:border-gold focus:ring-1 focus:ring-gold/50 transition-shadow"
+                className="w-full bg-[#171717] border border-white/10 rounded-xl pl-4 pr-12 py-3 text-sm font-bold text-white outline-none focus:border-gold focus:ring-1 focus:ring-gold/50 transition-shadow"
               />
               <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-gray-400 font-bold text-xs">
                 VND
@@ -320,6 +324,7 @@ export default function PricingManagement() {
         </button>
       </div>
 
+      </div>
     </div>
   );
 }
