@@ -56,7 +56,7 @@ const buildMembershipPayload = async (membership = {}, userId = null) => {
  */
 const getProfile = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user._id);
+    const user = await User.findById(req.user._id).select('+password');
     const userDetail = await UserDetail.findOne({ userId: req.user._id });
 
     if (!user) {
@@ -76,7 +76,7 @@ const getProfile = async (req, res, next) => {
         email: user.email,
         role: user.role,
         status: user.status,
-        isGoogleUser: !!user.googleId,
+        isGoogleUser: !!user.googleId && !user.password,
         createdAt: user.createdAt,
         profile: {
           firstName: userDetail?.firstName || "",
