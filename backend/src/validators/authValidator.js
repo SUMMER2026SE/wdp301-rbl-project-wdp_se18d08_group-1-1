@@ -27,6 +27,14 @@ const registerValidator = [
     .isLength({ min: 6 })
     .withMessage("Password must be at least 6 characters"),
 
+  body("phone")
+    .optional({ values: "falsy" })
+    .trim()
+    .isLength({ min: 7, max: 20 })
+    .withMessage("Phone number must be between 7 and 20 characters")
+    .matches(/^[+()\-\s\d]+$/)
+    .withMessage("Please provide a valid phone number"),
+
   body("confirmPassword")
     .notEmpty()
     .withMessage("Confirm password is required")

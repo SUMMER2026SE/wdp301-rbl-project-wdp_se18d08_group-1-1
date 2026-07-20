@@ -6,10 +6,12 @@ import type {
   MembershipStatus,
   SubscriptionPackage,
 } from '@/types/subscription.types';
+import type { SignedQrResponse } from '@/types/qr.types';
 
 export const subscriptionsService = {
   getPackages: () => apiClient.get<APIResponse<SubscriptionPackage[]>>('/ticket-packages/active'),
   getMembership: () => apiClient.get<APIResponse<MembershipStatus>>('/users/membership'),
+  getMembershipQr: () => apiClient.get<APIResponse<SignedQrResponse>>('/subscriptions/membership/qr'),
   createPayment: (data: CreateSubscriptionPaymentRequest) =>
     apiClient.post<CreateSubscriptionPaymentResponse>('/subscriptions/payment', data),
   verifyPayment: (data: { orderCode: number }) =>

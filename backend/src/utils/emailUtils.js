@@ -30,6 +30,7 @@ const generateOTP = () => {
 const sendOTPEmail = async (toEmail, otp) => {
   const transporter = createTransporter();
   const webOtpLine = buildWebOtpLine(otp);
+  const otpMinutes = Number(process.env.OTP_EXPIRATION_MINUTES) || 5;
 
   await transporter.sendMail({
     from: `"VALO Parking" <${process.env.EMAIL_USER}>`,
@@ -37,21 +38,21 @@ const sendOTPEmail = async (toEmail, otp) => {
     subject: 'Your Email Verification OTP Code',
     text: [
       'Email Verification',
-      'Use the OTP below to verify your email address. It will expire in 10 minutes.',
+      `Verify your VALO Parking account. This code will expire in ${otpMinutes} minutes.`,
       '',
       otp,
       '',
-      'If you did not request this, please ignore this email.',
+      'Do not share this code with anyone. If you did not create a VALO Parking account, you can ignore this email.',
       webOtpLine,
     ].join('\n'),
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px; border: 1px solid #e5e7eb; border-radius: 8px;">
-        <h2 style="color: #1f2937; margin-bottom: 8px;">Email Verification</h2>
-        <p style="color: #6b7280; margin-bottom: 24px;">Use the OTP below to verify your email address. It will expire in <strong>10 minutes</strong>.</p>
+        <h2 style="color: #1f2937; margin-bottom: 8px;">Verify your VALO Parking account</h2>
+        <p style="color: #6b7280; margin-bottom: 24px;">Your verification code will expire in <strong>${otpMinutes} minutes</strong>.</p>
         <div style="background: #f3f4f6; border-radius: 8px; padding: 20px; text-align: center; letter-spacing: 8px; font-size: 32px; font-weight: bold; color: #111827;">
           ${otp}
         </div>
-        <p style="color: #9ca3af; font-size: 13px; margin-top: 24px;">If you did not request this, please ignore this email.</p>
+        <p style="color: #9ca3af; font-size: 13px; margin-top: 24px;">Do not share this code. If you did not create an account, you can ignore this email.</p>
         <p style="color: #d1d5db; font-size: 1px; line-height: 1px; margin: 0;">${webOtpLine}</p>
       </div>
     `,

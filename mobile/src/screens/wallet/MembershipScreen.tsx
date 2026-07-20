@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { EmptyState, ErrorState, ScreenHeader, SectionTitle } from '@/components/common';
+import { QRCodeDisplay } from '@/components/booking/QRCodeDisplay';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
 import type { WalletStackParamList } from '@/navigation/types';
 import { subscriptionsService } from '@/services/api/subscriptions';
@@ -26,6 +27,9 @@ export const MembershipScreen = ({ navigation }: Props) => {
   const [membership, setMembership] = useState<MembershipStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [qrPayload, setQrPayload] = useState<string | null>(null);
+  const [qrLoading, setQrLoading] = useState(false);
+  const [qrError, setQrError] = useState('');
 
   const loadMembership = useCallback(async () => {
     setError('');
@@ -45,6 +49,40 @@ export const MembershipScreen = ({ navigation }: Props) => {
   }, [loadMembership]);
 
   const active = membership?.status === 'active';
+
+  useEffect(() => {
+    if (!active) {
+      setQrPayload(null);
+      setQrLoading(false);
+      setQrError('');
+      return;
+    }
+
+    let mounted = true;
+    setQrLoading(true);
+    setQrError('');
+    setQrPayload(null);
+    void subscriptionsService.getMembershipQr()
+      .then((response) => {
+        if (!mounted) return;
+        const qr = response.data;
+        if (qr?.available && qr.payload) {
+          setQrPayload(qr.payload);
+        } else {
+          setQrError(qr?.reason || 'Membership QR is unavailable.');
+        }
+      })
+      .catch((loadError) => {
+        if (mounted) {
+          setQrError(loadError instanceof Error ? loadError.message : 'Unable to load the membership QR.');
+        }
+      })
+      .finally(() => {
+        if (mounted) setQrLoading(false);
+      });
+
+    return () => { mounted = false; };
+  }, [active]);
 
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
@@ -98,6 +136,30 @@ export const MembershipScreen = ({ navigation }: Props) => {
               </View>
             ) : null}
           </View>
+
+          {active ? (
+            <View style={styles.section}>
+              <SectionTitle>Membership QR</SectionTitle>
+              {qrLoading ? (
+                <View style={styles.qrState}>
+                  <ActivityIndicator color={COLORS.gold} size="large" />
+                  <Text style={styles.qrStateText}>Loading secure QR...</Text>
+                </View>
+              ) : qrPayload ? (
+                <QRCodeDisplay
+                  bookingId={membership.package?.id ?? 'membership'}
+                  shareButtonTitle="Share membership"
+                  shareLabel="VALO membership"
+                  value={qrPayload}
+                />
+              ) : (
+                <View style={styles.qrState}>
+                  <Ionicons color={COLORS.textMuted} name="qr-code-outline" size={28} />
+                  <Text style={styles.qrStateText}>{qrError || 'Membership QR is unavailable.'}</Text>
+                </View>
+              )}
+            </View>
+          ) : null}
 
           <View style={styles.section}>
             <SectionTitle>Benefits</SectionTitle>
@@ -239,6 +301,23 @@ const styles = StyleSheet.create({
   },
   section: {
     gap: SPACING.sm,
+  },
+  qrState: {
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    gap: SPACING.sm,
+    justifyContent: 'center',
+    minHeight: 132,
+    padding: SPACING.lg,
+  },
+  qrStateText: {
+    color: COLORS.textMuted,
+    fontSize: FONT_SIZES.sm,
+    lineHeight: 20,
+    textAlign: 'center',
   },
   grid: {
     flexDirection: 'row',

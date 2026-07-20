@@ -20,9 +20,11 @@ import {
   BookingActionModal,
   type BookingModalVariant,
 } from '@/components/booking/BookingActionModal';
+import { QRCodeDisplay } from '@/components/booking/QRCodeDisplay';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
 import { useBooking } from '@/hooks/useBooking';
 import type { BookingStackParamList } from '@/navigation/BookingStackNavigator';
+import bookingService from '@/services/BookingService';
 import { vehiclesService } from '@/services/api/vehicles';
 import type { BookingStatus, PaymentStatus } from '@/types/booking.types';
 import type { Vehicle } from '@/types/models';
@@ -94,6 +96,9 @@ export const BookingDetailScreen = ({ navigation, route }: Props) => {
   const [selectedVehicleId, setSelectedVehicleId] = useState('');
   const [vehiclesLoading, setVehiclesLoading] = useState(false);
   const [actionDialog, setActionDialog] = useState<ActionDialog | null>(null);
+  const [qrPayload, setQrPayload] = useState<string | null>(null);
+  const [qrLoading, setQrLoading] = useState(false);
+  const [qrError, setQrError] = useState('');
   const booking = getBookingById(route.params.bookingId);
 
   useEffect(() => {
@@ -101,6 +106,42 @@ export const BookingDetailScreen = ({ navigation, route }: Props) => {
       void fetchBookings();
     }
   }, [booking, fetchBookings]);
+
+  useEffect(() => {
+    if (!booking) return;
+    const qrEligible = ['confirmed', 'active', 'paused'].includes(booking.status);
+    if (!qrEligible) {
+      setQrPayload(null);
+      setQrLoading(false);
+      setQrError('This QR code is no longer available for this booking.');
+      return;
+    }
+
+    let active = true;
+    setQrLoading(true);
+    setQrError('');
+    setQrPayload(null);
+    void bookingService.getBookingQr(booking._id)
+      .then((response) => {
+        if (!active) return;
+        const qr = response.data;
+        if (qr?.available && qr.payload) {
+          setQrPayload(qr.payload);
+        } else {
+          setQrError(qr?.reason || 'This QR code is no longer available.');
+        }
+      })
+      .catch((loadError) => {
+        if (active) {
+          setQrError(loadError instanceof Error ? loadError.message : 'Unable to load the booking QR code.');
+        }
+      })
+      .finally(() => {
+        if (active) setQrLoading(false);
+      });
+
+    return () => { active = false; };
+  }, [booking?._id, booking?.status]);
 
   useEffect(() => {
     if (!vehicleModalVisible) return;
@@ -335,6 +376,23 @@ export const BookingDetailScreen = ({ navigation, route }: Props) => {
               <Text style={styles.timeDate}>{safeFormat(booking.endTime, 'dd/MM/yyyy')}</Text>
             </View>
           </View>
+        </View>
+
+        <View style={styles.section}>
+          <SectionTitle>Entry QR</SectionTitle>
+          {qrLoading ? (
+            <View style={styles.qrState}>
+              <ActivityIndicator color={COLORS.gold} size="large" />
+              <Text style={styles.qrStateText}>Loading secure QR...</Text>
+            </View>
+          ) : qrPayload ? (
+            <QRCodeDisplay bookingId={booking._id} value={qrPayload} />
+          ) : (
+            <View style={styles.qrState}>
+              <Ionicons color={COLORS.textMuted} name="qr-code-outline" size={28} />
+              <Text style={styles.qrStateText}>{qrError || 'QR is unavailable for this booking.'}</Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.section}>
@@ -628,6 +686,18 @@ const styles = StyleSheet.create({
   statusText: { fontSize: FONT_SIZES.sm, fontWeight: '600' },
   floorName: { color: COLORS.textSecondary, fontSize: FONT_SIZES.sm },
   section: { gap: SPACING.sm },
+  qrState: {
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    gap: SPACING.sm,
+    justifyContent: 'center',
+    minHeight: 132,
+    padding: SPACING.lg,
+  },
+  qrStateText: { color: COLORS.textMuted, fontSize: FONT_SIZES.sm, lineHeight: 20, textAlign: 'center' },
   timeRow: {
     alignItems: 'center',
     backgroundColor: COLORS.surface,
