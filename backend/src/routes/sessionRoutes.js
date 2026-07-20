@@ -13,6 +13,9 @@ router.post('/verify-plate', sessionController.verifyPlate);
 // GET /api/sessions/check-full
 router.get('/check-full', sessionController.checkParkingFull);
 
+// POST /api/sessions/kiosk-verify-qr
+router.post('/kiosk-verify-qr', sessionController.kioskVerifyQr);
+
 // POST /api/sessions/kiosk-entry
 router.post('/kiosk-entry', sessionController.createKioskSession);
 
