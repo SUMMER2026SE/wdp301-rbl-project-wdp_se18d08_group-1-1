@@ -292,6 +292,10 @@ function MinimalHeading({ children }: { children: React.ReactNode }) {
   return <Text style={styles.minimalHeading}>{children}</Text>;
 }
 
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return <Text style={styles.minimalHeading}>{children}</Text>;
+}
+
 function ReservedSpacesBlock({ membership }: { membership: MembershipStatus }) {
   return (
     <StaggeredView delay={260} style={styles.sectionBlock}>
@@ -1093,6 +1097,15 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.14,
     shadowRadius: 26,
   },
+  heroCard: {
+    backgroundColor: COLORS.surface,
+    borderColor: 'rgba(226,186,75,0.22)',
+    borderRadius: RADIUS.xl,
+    borderWidth: 1,
+    minHeight: 154,
+    overflow: 'hidden',
+    padding: SPACING.lg,
+  },
   heroRim: {
     ...StyleSheet.absoluteFillObject,
     borderRadius: RADIUS.xl,
@@ -1204,6 +1217,17 @@ const styles = StyleSheet.create({
     gap: SPACING.xs,
     marginTop: SPACING.sm,
   },
+  warningBox: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,193,7,0.1)',
+    borderColor: 'rgba(255,193,7,0.22)',
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: SPACING.xs,
+    marginTop: SPACING.sm,
+    padding: SPACING.sm,
+  },
   warningText: {
     color: COLORS.warning,
     flex: 1,
@@ -1233,10 +1257,38 @@ const styles = StyleSheet.create({
     minHeight: 88,
     padding: SPACING.md,
   },
+  softState: {
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 70,
+    padding: SPACING.md,
+  },
+  softStateText: {
+    color: COLORS.textMuted,
+    fontSize: FONT_SIZES.sm,
+    textAlign: 'center',
+  },
   metricStrip: {
     alignItems: 'stretch',
     flexDirection: 'row',
     minHeight: 72,
+  },
+  grid: {
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  metricCard: {
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    flex: 1,
+    minHeight: 82,
+    padding: SPACING.md,
   },
   metricItem: {
     flex: 1,
@@ -1281,6 +1333,9 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
   sectionBlock: {
+    gap: SPACING.md,
+  },
+  section: {
     gap: SPACING.md,
   },
   minimalHeading: {
@@ -1390,6 +1445,37 @@ const styles = StyleSheet.create({
     gap: 4,
     padding: SPACING.md,
   },
+  renewalSheet: {
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    gap: SPACING.sm,
+    padding: SPACING.md,
+  },
+  renewalTop: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: SPACING.sm,
+  },
+  renewalIcon: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(226,186,75,0.1)',
+    borderRadius: RADIUS.md,
+    height: 42,
+    justifyContent: 'center',
+    width: 42,
+  },
+  renewalCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  renewalLabel: {
+    color: COLORS.textMuted,
+    fontSize: FONT_SIZES.xs,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
   renewalPrice: {
     color: COLORS.gold,
     fontSize: 25,
@@ -1425,6 +1511,16 @@ const styles = StyleSheet.create({
     color: COLORS.gold,
     fontSize: FONT_SIZES.sm,
     fontWeight: '900',
+  },
+  renewButton: {
+    alignItems: 'center',
+    backgroundColor: COLORS.gold,
+    borderRadius: RADIUS.md,
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    justifyContent: 'center',
+    minHeight: 48,
+    paddingHorizontal: SPACING.md,
   },
   renewalReview: {
     borderColor: 'rgba(226,186,75,0.18)',

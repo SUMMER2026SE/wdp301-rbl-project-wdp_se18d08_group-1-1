@@ -43,6 +43,7 @@ exports.startMaintenance = async (req, res) => {
     for (const slot of affectedSlots) {
       // Change status to maintenance
       slot.status = "maintenance";
+      slot.maintenanceReason = reason;
       await slot.save();
 
       // Create log
@@ -100,7 +101,9 @@ exports.endMaintenance = async (req, res) => {
     for (const slot of affectedSlots) {
       // Only process slots that are actually in maintenance
       if (slot.status === "maintenance") {
+        // Clear maintenance status
         slot.status = "available";
+        slot.maintenanceReason = null;
         await slot.save();
 
         // Find the active log and close it

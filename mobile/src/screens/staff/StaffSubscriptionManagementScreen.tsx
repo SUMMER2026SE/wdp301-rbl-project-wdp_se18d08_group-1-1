@@ -1,23 +1,75 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { format } from 'date-fns';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from 'react-native';
+import { FlatList, RefreshControl, ScrollView, StatusBar, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { EmptyState, ErrorState, ScreenHeader } from '@/components/common';
+import { EmptyState, ErrorState } from '@/components/common';
+import {
+  AnimatedPressable,
+  FadeInView,
+  MetricStrip,
+  OperationalMetric,
+  SkeletonBlock,
+  StaffHeader,
+  StatusBadge,
+  staffToneColor,
+} from '@/components/staff';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
 import type { StaffManagementStackParamList } from '@/navigation/StaffNavigator';
-import { staffService, type StaffSubscription } from '@/services/api/staff';
 import { statisticsService, type AdminSubscriptionStatistics } from '@/services/api/statistics';
+import { staffService, type StaffSubscription } from '@/services/api/staff';
 import { formatCurrency } from '@/utils/formatters';
 
 type Props = NativeStackScreenProps<StaffManagementStackParamList, 'Subscriptions'>;
 const FILTERS = ['all', 'active', 'pending', 'expired', 'cancelled'] as const;
 
-const statusTone = (status: string) => status === 'active' ? COLORS.success : status === 'pending' ? COLORS.warning : status === 'expired' ? COLORS.error : COLORS.textMuted;
+const statusTone = (status: string) => {
+  if (status === 'active') return 'success' as const;
+  if (status === 'pending') return 'warning' as const;
+  if (status === 'expired' || status === 'cancelled') return 'danger' as const;
+  return 'muted' as const;
+};
+
+function MembershipRow({
+  amount,
+  email,
+  plates,
+  status,
+  title,
+}: {
+  amount: string;
+  email: string;
+  plates: string;
+  status: string;
+  title: string;
+}) {
+  const tone = statusTone(status);
+  const accent = staffToneColor(tone);
+
+  return (
+    <AnimatedPressable row>
+      <View style={styles.membershipRow}>
+        <View style={[styles.membershipIcon, { backgroundColor: `${accent}14` }]}>
+          <Ionicons name="diamond-outline" size={19} color={accent} />
+        </View>
+        <View style={styles.membershipCopy}>
+          <Text numberOfLines={1} style={styles.membershipTitle}>{title}</Text>
+          <Text numberOfLines={1} style={styles.membershipMeta}>{email}</Text>
+          <Text numberOfLines={1} style={styles.membershipMeta}>{plates}</Text>
+        </View>
+        <View style={styles.membershipRight}>
+          <Text numberOfLines={1} style={styles.amountText}>{amount}</Text>
+          <StatusBadge label={status} tone={tone} />
+        </View>
+      </View>
+    </AnimatedPressable>
+  );
+}
 
 export function StaffSubscriptionManagementScreen({ navigation }: Props) {
+  const tabBarHeight = useBottomTabBarHeight();
   const [items, setItems] = useState<StaffSubscription[]>([]);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>('all');
@@ -43,66 +95,180 @@ export function StaffSubscriptionManagementScreen({ navigation }: Props) {
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
-  const filtered = useMemo(() => items.filter((item) => {
-    const needle = query.trim().toLowerCase();
-    const matchesSearch = !needle || [item.user?.username, item.user?.email, ...(item.user?.vehicles ?? [])].filter(Boolean).some((value) => value?.toLowerCase().includes(needle));
-    return matchesSearch && (filter === 'all' || item.status === filter);
-  }), [filter, items, query]);
+  const filtered = useMemo(
+    () => items.filter((item) => {
+      const needle = query.trim().toLowerCase();
+      const matchesSearch = !needle || [item.user?.username, item.user?.email, ...(item.user?.vehicles ?? [])]
+        .filter(Boolean)
+        .some((value) => value?.toLowerCase().includes(needle));
+      return matchesSearch && (filter === 'all' || item.status === filter);
+    }),
+    [filter, items, query],
+  );
+
+  const refresh = async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  };
 
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
-      <ScreenHeader title="VIP subscriptions" subtitle={`${items.length} subscriptions`} onBack={() => navigation.navigate('ManagementHome')} />
+      <StaffHeader
+        eyebrow="Memberships"
+        title="VIP memberships"
+        onBack={() => navigation.navigate('ManagementHome')}
+        right={<StatusBadge label={`${items.length} total`} />}
+      />
+
       {statistics ? (
-        <View style={styles.pulse}>
-          <View style={styles.pulseMetric}><Text style={styles.pulseLabel}>Active</Text><Text style={styles.pulseValue}>{statistics.summary.active}</Text></View>
-          <View style={styles.pulseMetric}><Text style={styles.pulseLabel}>Expiring</Text><Text style={styles.pulseValue}>{statistics.summary.expiringWithin7Days}</Text></View>
-          <View style={styles.pulseMetric}><Text style={styles.pulseLabel}>Renewal</Text><Text style={styles.pulseValue}>{statistics.summary.renewalRate}%</Text></View>
-        </View>
+        <FadeInView style={styles.summary}>
+          <MetricStrip>
+            <OperationalMetric icon="diamond-outline" label="Active" tone="success" value={statistics.summary.active} />
+            <OperationalMetric icon="timer-outline" label="Expiring" tone="warning" value={statistics.summary.expiringWithin7Days} />
+            <OperationalMetric icon="repeat-outline" label="Renewal" value={`${statistics.summary.renewalRate}%`} />
+          </MetricStrip>
+        </FadeInView>
       ) : null}
-      <View style={styles.search}><Ionicons name="search-outline" size={18} color={COLORS.textMuted} /><TextInput value={query} onChangeText={setQuery} placeholder="Customer, email, or license plate" placeholderTextColor={COLORS.textMuted} style={styles.searchInput} /></View>
+
+      <FadeInView delay={45} style={styles.search}>
+        <Ionicons name="search-outline" size={17} color={COLORS.textMuted} />
+        <TextInput
+          accessibilityLabel="Search memberships"
+          onChangeText={setQuery}
+          placeholder="Customer, email, or license plate"
+          placeholderTextColor={COLORS.textMuted}
+          style={styles.searchInput}
+          value={query}
+        />
+      </FadeInView>
+
       <ScrollView horizontal style={styles.filterScroll} contentContainerStyle={styles.filters} showsHorizontalScrollIndicator={false}>
-        {FILTERS.map((item) => <Pressable key={item} onPress={() => setFilter(item)} style={[styles.filter, filter === item && styles.filterActive]}><Text style={[styles.filterText, filter === item && styles.filterTextActive]}>{item.charAt(0).toUpperCase() + item.slice(1)}</Text></Pressable>)}
+        {FILTERS.map((item) => {
+          const active = filter === item;
+          return (
+            <AnimatedPressable key={item} onPress={() => setFilter(item)} style={[styles.filter, active && styles.filterActive]}>
+              <Text numberOfLines={1} style={[styles.filterText, active && styles.filterTextActive]}>
+                {item.charAt(0).toUpperCase() + item.slice(1)}
+              </Text>
+            </AnimatedPressable>
+          );
+        })}
       </ScrollView>
-      {loading ? <View style={styles.center}><ActivityIndicator color={COLORS.gold} size="large" /></View> : error ? <ErrorState message={error} onRetry={load} /> : (
+
+      {loading ? (
+        <SubscriptionSkeleton />
+      ) : error ? (
+        <ErrorState message={error} onRetry={load} />
+      ) : (
         <FlatList
           data={filtered}
           keyExtractor={(item) => item._id}
-          contentContainerStyle={styles.list}
-          refreshControl={<RefreshControl refreshing={refreshing} tintColor={COLORS.gold} onRefresh={async () => { setRefreshing(true); await load(); setRefreshing(false); }} />}
-          renderItem={({ item }) => {
-            const tone = statusTone(item.status);
-            return <View style={styles.card}>
-              <View style={styles.cardHeader}>
-                <View style={styles.customerIcon}><Ionicons name="diamond-outline" size={20} color={COLORS.gold} /></View>
-                <View style={styles.customerCopy}><Text style={styles.customerName}>{item.user?.username || 'Unknown customer'}</Text><Text style={styles.customerEmail}>{item.user?.email || 'No email'}</Text></View>
-                <View style={[styles.status, { borderColor: tone, backgroundColor: `${tone}18` }]}><Text style={[styles.statusText, { color: tone }]}>{item.status.toUpperCase()}</Text></View>
-              </View>
-              <View style={styles.packageRow}><View><Text style={styles.packageLabel}>Plan</Text><Text style={styles.packageName}>{item.ticketPackage?.name || 'Unknown plan'}</Text></View><Text style={styles.amount}>{formatCurrency(item.amount)}</Text></View>
-              <View style={styles.period}><Text style={styles.periodText}>{format(new Date(item.validFrom), 'dd MMM yyyy')}</Text><Ionicons name="arrow-forward" size={14} color={COLORS.textMuted} /><Text style={styles.periodText}>{format(new Date(item.expireAt), 'dd MMM yyyy')}</Text></View>
-              <View style={styles.tags}>
-                {(item.user?.vehicles ?? []).map((plate) => <View key={plate} style={styles.plateTag}><Text style={styles.plateText}>{plate}</Text></View>)}
-                {(item.slots ?? []).map((slot) => <View key={`${typeof slot.floorId === 'object' ? slot.floorId?._id : slot.floorId}-${slot.slotCode}`} style={styles.slotTag}><Text style={styles.slotText}>{typeof slot.floorId === 'object' ? slot.floorId?.name || 'Floor' : 'Floor'} / {slot.slotCode}</Text></View>)}
-              </View>
-            </View>;
-          }}
-          ListEmptyComponent={<EmptyState icon="diamond-outline" title="No subscriptions found" message="Try a different search or status." />}
+          contentContainerStyle={[styles.list, { paddingBottom: tabBarHeight + SPACING.lg }]}
+          refreshControl={<RefreshControl refreshing={refreshing} tintColor={COLORS.gold} onRefresh={refresh} />}
+          renderItem={({ item, index }) => (
+            <FadeInView delay={Math.min(index * 28, 180)}>
+              <MembershipRow
+                amount={formatCurrency(item.amount)}
+                email={item.user?.email || 'No email'}
+                plates={(item.user?.vehicles ?? []).join(', ') || 'No vehicle'}
+                status={item.status}
+                title={item.user?.username || item.ticketPackage?.name || 'Unknown customer'}
+              />
+            </FadeInView>
+          )}
+          ListEmptyComponent={<EmptyState icon="diamond-outline" title="No memberships found" message="Try a different search or status." />}
+          showsVerticalScrollIndicator={false}
         />
       )}
     </SafeAreaView>
   );
 }
 
+function SubscriptionSkeleton() {
+  return (
+    <View style={styles.skeleton}>
+      {[0, 1, 2, 3, 4].map((item) => (
+        <View key={item} style={styles.skeletonRow}>
+          <SkeletonBlock height={18} width="50%" />
+          <SkeletonBlock height={14} width="84%" />
+        </View>
+      ))}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  safe: { backgroundColor: COLORS.background, flex: 1 }, center: { alignItems: 'center', flex: 1, justifyContent: 'center' },
-  search: { alignItems: 'center', backgroundColor: COLORS.surface, borderColor: COLORS.border, borderRadius: RADIUS.md, borderWidth: 1, flexDirection: 'row', gap: SPACING.sm, marginHorizontal: SPACING.lg, marginTop: SPACING.sm, minHeight: 46, paddingHorizontal: SPACING.md }, searchInput: { color: COLORS.textPrimary, flex: 1, fontSize: FONT_SIZES.sm },
-  filterScroll: { flexGrow: 0 }, filters: { gap: SPACING.sm, padding: SPACING.lg, paddingBottom: SPACING.md }, filter: { borderColor: COLORS.border, borderRadius: RADIUS.round, borderWidth: 1, justifyContent: 'center', minHeight: 36, paddingHorizontal: SPACING.md }, filterActive: { backgroundColor: 'rgba(226,186,75,0.1)', borderColor: COLORS.gold }, filterText: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs, fontWeight: '600' }, filterTextActive: { color: COLORS.gold },
-  list: { gap: SPACING.md, padding: SPACING.lg, paddingTop: 0, paddingBottom: SPACING.xxl }, card: { backgroundColor: COLORS.surface, borderColor: COLORS.border, borderRadius: RADIUS.lg, borderWidth: 1, gap: SPACING.md, padding: SPACING.md }, cardHeader: { alignItems: 'center', flexDirection: 'row', gap: SPACING.sm }, customerIcon: { alignItems: 'center', backgroundColor: 'rgba(226,186,75,0.1)', borderRadius: RADIUS.md, height: 42, justifyContent: 'center', width: 42 }, customerCopy: { flex: 1, minWidth: 0 }, customerName: { color: COLORS.textPrimary, fontSize: FONT_SIZES.md, fontWeight: '700' }, customerEmail: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs, marginTop: 2 }, status: { borderRadius: RADIUS.round, borderWidth: 1, paddingHorizontal: SPACING.sm, paddingVertical: 4 }, statusText: { fontSize: 9, fontWeight: '800' },
-  pulse: { flexDirection: 'row', marginHorizontal: SPACING.lg, marginTop: SPACING.sm, marginBottom: SPACING.sm, backgroundColor: COLORS.surface, borderColor: COLORS.border, borderWidth: 1, borderRadius: RADIUS.lg, padding: SPACING.md },
-  pulseMetric: { flex: 1, borderLeftColor: COLORS.border, borderLeftWidth: 1, paddingLeft: SPACING.sm },
-  pulseLabel: { color: COLORS.textMuted, fontSize: 10 },
-  pulseValue: { color: COLORS.gold, fontSize: FONT_SIZES.lg, fontWeight: '900', marginTop: 3 },
-  packageRow: { alignItems: 'flex-end', borderTopColor: COLORS.border, borderTopWidth: StyleSheet.hairlineWidth, flexDirection: 'row', justifyContent: 'space-between', paddingTop: SPACING.sm }, packageLabel: { color: COLORS.textMuted, fontSize: 10 }, packageName: { color: COLORS.textPrimary, fontSize: FONT_SIZES.sm, fontWeight: '700', marginTop: 2 }, amount: { color: COLORS.gold, fontSize: FONT_SIZES.md, fontWeight: '800' }, period: { alignItems: 'center', backgroundColor: COLORS.surfaceElevated, borderRadius: RADIUS.md, flexDirection: 'row', gap: SPACING.sm, justifyContent: 'center', padding: SPACING.sm }, periodText: { color: COLORS.textSecondary, fontSize: FONT_SIZES.xs }, tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 }, plateTag: { backgroundColor: 'rgba(226,186,75,0.1)', borderRadius: RADIUS.sm, paddingHorizontal: SPACING.sm, paddingVertical: 4 }, plateText: { color: COLORS.gold, fontSize: 10, fontWeight: '700' }, slotTag: { backgroundColor: 'rgba(226,186,75,0.1)', borderRadius: RADIUS.sm, paddingHorizontal: SPACING.sm, paddingVertical: 4 }, slotText: { color: COLORS.gold, fontSize: 10, fontWeight: '700' },
+  safe: { backgroundColor: COLORS.background, flex: 1 },
+  summary: { paddingHorizontal: SPACING.lg },
+  search: {
+    alignItems: 'center',
+    backgroundColor: COLORS.surface,
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    marginHorizontal: SPACING.lg,
+    marginTop: SPACING.md,
+    minHeight: 50,
+    paddingHorizontal: SPACING.sm,
+  },
+  searchInput: { color: COLORS.textPrimary, flex: 1, fontSize: FONT_SIZES.sm },
+  filterScroll: { flexGrow: 0 },
+  filters: { gap: SPACING.sm, paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm },
+  filter: {
+    alignItems: 'center',
+    borderColor: COLORS.border,
+    borderRadius: RADIUS.round,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 42,
+    minWidth: 78,
+    paddingHorizontal: SPACING.md,
+  },
+  filterActive: {
+    backgroundColor: 'rgba(226,186,75,0.12)',
+    borderColor: COLORS.gold,
+    shadowColor: COLORS.gold,
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+  },
+  filterText: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs, fontWeight: '800' },
+  filterTextActive: { color: COLORS.gold },
+  list: { paddingHorizontal: SPACING.lg, paddingTop: 0 },
+  membershipRow: {
+    alignItems: 'center',
+    borderBottomColor: COLORS.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    gap: SPACING.sm,
+    minHeight: 72,
+    paddingVertical: SPACING.sm,
+  },
+  membershipIcon: {
+    alignItems: 'center',
+    borderRadius: RADIUS.md,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
+  membershipCopy: { flex: 1, minWidth: 0 },
+  membershipTitle: { color: COLORS.textPrimary, fontSize: FONT_SIZES.md, fontWeight: '900' },
+  membershipMeta: { color: COLORS.textMuted, fontSize: FONT_SIZES.xs, marginTop: 2 },
+  membershipRight: { alignItems: 'flex-end', gap: 5, maxWidth: 116 },
+  amountText: { color: COLORS.textSecondary, fontSize: FONT_SIZES.xs, fontWeight: '900' },
+  skeleton: { gap: SPACING.md, padding: SPACING.lg },
+  skeletonRow: {
+    borderBottomColor: COLORS.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    gap: SPACING.sm,
+    minHeight: 72,
+    paddingVertical: SPACING.sm,
+  },
 });

@@ -14,6 +14,8 @@ const notifTriggers = require('../services/notificationTriggers');
 const walletService = require('../services/walletService');
 const pricingEngine = require('../services/pricingEngine');
 const bookingRefundService = require('../services/bookingRefundService');
+const { parseAndVerifyAnyMembershipQr } = require('../services/membershipQrService');
+const { parseAndVerifyBookingQr } = require('../services/bookingQrService');
 const { normalizeLicensePlate } = require('../utils/licensePlateUtils');
 
 const normalizeSlotCode = (slotCode = '') => String(slotCode || '').trim().toUpperCase();
@@ -383,6 +385,64 @@ exports.checkParkingFull = async (req, res, next) => {
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
+
+/**
+ * Verify QR Code from Kiosk (Step 1)
+ * POST /api/sessions/kiosk-verify-qr
+ */
+exports.kioskVerifyQr = async (req, res) => {
+  try {
+    const { qrPayload } = req.body;
+    if (!qrPayload) {
+      return res.status(400).json({ success: false, message: 'QR Payload is required' });
+    }
+
+    if (qrPayload.startsWith('VALO_BOOKING')) {
+      const parsed = parseAndVerifyBookingQr(qrPayload);
+      const booking = await Booking.findById(parsed.bookingId).populate('vehicleId userId');
+      if (!booking) return res.status(404).json({ success: false, message: 'Booking not found' });
+      
+      return res.status(200).json({
+        success: true,
+        type: 'BOOKING',
+        licensePlate: booking.vehicleId?.licensePlate || booking.licensePlate || '',
+        phone: booking.userId?.phone || booking.phone || '',
+      });
+    } 
+    
+    if (qrPayload.startsWith('VALO_MEMBERSHIP')) {
+      const parsed = parseAndVerifyAnyMembershipQr(qrPayload);
+      let userId = parsed.userId;
+
+      if (parsed.credentialType === 'LEGACY_SUBSCRIPTION') {
+        const Subscription = require('../models/Subscription'); // Load model dynamically or at top
+        const sub = await Subscription.findById(parsed.subscriptionId);
+        if (!sub) return res.status(404).json({ success: false, message: 'Subscription not found' });
+        userId = sub.user;
+      }
+      
+      const user = await User.findById(userId);
+      if (!user) return res.status(404).json({ success: false, message: 'VIP account not found' });
+
+      // Find user's active vehicle (or just the first one if there are multiple)
+      const vehicle = await Vehicle.findOne({ ownerId: userId, status: 'active' });
+
+      return res.status(200).json({
+        success: true,
+        type: 'MEMBERSHIP',
+        licensePlate: vehicle?.licensePlate || '',
+        phone: user.phone || '',
+      });
+    }
+
+    return res.status(400).json({ success: false, message: 'Invalid QR format' });
+
+  } catch (error) {
+    console.error('kioskVerifyQr error:', error);
+    res.status(400).json({ success: false, message: error.message || 'Invalid QR code' });
+  }
+};
+
 
 /**
  * Check-in xe từ Kiosk

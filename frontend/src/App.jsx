@@ -78,36 +78,36 @@ export default function App() {
           />
           <Route path="/kiost/*" element={<Navigate to="/kiosk" replace />} />
 
-        {/* ── Public: Navbar + Footer ── */}
-        <Route element={<MainLayout />}>
-          <Route path="/" element={<GuestHome />} />
-          <Route path="/parking-map" element={<ParkingMap />} />
-          <Route path="/services" element={<ServiceList />} />
-          <Route path="/services/:id" element={<ServiceDetail />} />
-          <Route path="/policies" element={<PolicyList />} />
-          <Route path="/policies/:slug" element={<PolicyDetail />} />
-          <Route path="/policy" element={<Navigate to="/policies" replace />} />
-          
-          {/* Protected routes that use MainLayout (Light theme with top navbar) */}
-          <Route
-            path="/booking"
-            element={
-              <ProtectedRoute allowedRoles={["customer"]}>
-                <CreateBookingPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/membership"
-            element={
-              <ProtectedRoute allowedRoles={["customer"]}>
-                <Membership />
-              </ProtectedRoute>
-            }
-          />
-        </Route>
+          {/* ── Public: Navbar + Footer ── */}
+          <Route element={<MainLayout />}>
+            <Route path="/" element={<GuestHome />} />
+            <Route path="/parking-map" element={<ParkingMap />} />
+            <Route path="/services" element={<ServiceList />} />
+            <Route path="/services/:id" element={<ServiceDetail />} />
+            <Route path="/policies" element={<PolicyList />} />
+            <Route path="/policies/:slug" element={<PolicyDetail />} />
+            <Route path="/policy" element={<Navigate to="/policies" replace />} />
 
-        {/* ── Standalone auth page ── */}
+            {/* Protected routes that use MainLayout (Light theme with top navbar) */}
+            <Route
+              path="/booking"
+              element={
+                <ProtectedRoute allowedRoles={["customer"]}>
+                  <CreateBookingPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/membership"
+              element={
+                <ProtectedRoute allowedRoles={["customer"]}>
+                  <Membership />
+                </ProtectedRoute>
+              }
+            />
+          </Route>
+
+          {/* ── Standalone auth page ── */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/oauth/callback" element={<OAuthCallback />} />
 
