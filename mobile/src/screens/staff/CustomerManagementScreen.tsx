@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -18,7 +19,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { EmptyState, ErrorState, ScreenHeader } from '@/components/common';
+import { EmptyState, ErrorState } from '@/components/common';
+import { AnimatedPressable, FadeInView, StaffHeader, StatusBadge } from '@/components/staff';
 import { COLORS, FONT_SIZES, RADIUS, SPACING } from '@/constants/theme';
 import { useAppAlert } from '@/contexts/AppAlertContext';
 import { useToast } from '@/hooks/useToast';
@@ -47,6 +49,7 @@ const formatDate = (value?: string) => {
 };
 
 export function CustomerManagementScreen({ navigation }: Props) {
+  const tabBarHeight = useBottomTabBarHeight();
   const { alert } = useAppAlert();
   const toast = useToast();
   const [customers, setCustomers] = useState<StaffCustomer[]>([]);
@@ -199,18 +202,18 @@ export function CustomerManagementScreen({ navigation }: Props) {
   return (
     <SafeAreaView edges={['top']} style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
-      <ScreenHeader
-        title="Customer management"
+      <StaffHeader
+        title="Customers"
         subtitle={`${customers.length} customers`}
         onBack={() => navigation.navigate('ManagementHome')}
       />
 
-      <View style={styles.searchWrap}>
+      <FadeInView style={styles.searchWrap}>
         <Ionicons name="search-outline" size={19} color={COLORS.textMuted} />
         <TextInput
           accessibilityLabel="Search customers"
           onChangeText={setQuery}
-          placeholder="Search name, email, or phone"
+          placeholder="Search name, email or phone"
           placeholderTextColor={COLORS.textMuted}
           style={styles.searchInput}
           value={query}
@@ -224,7 +227,7 @@ export function CustomerManagementScreen({ navigation }: Props) {
             <Ionicons name="close-circle" size={20} color={COLORS.textMuted} />
           </TouchableOpacity>
         ) : null}
-      </View>
+      </FadeInView>
 
       {loading ? (
         <View style={styles.center}>
@@ -234,7 +237,7 @@ export function CustomerManagementScreen({ navigation }: Props) {
         <ErrorState message={error} onRetry={load} />
       ) : (
         <FlatList
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, { paddingBottom: tabBarHeight + SPACING.lg }]}
           data={filtered}
           keyExtractor={(item) => item._id}
           refreshControl={
@@ -248,33 +251,30 @@ export function CustomerManagementScreen({ navigation }: Props) {
               }}
             />
           }
-          renderItem={({ item }) => {
+          renderItem={({ item, index }) => {
             const active = isCustomerActive(item);
             return (
-              <Pressable
-                accessibilityLabel={`View ${customerName(item)} details`}
-                accessibilityRole="button"
-                onPress={() => openCustomer(item)}
-                style={({ pressed }) => [styles.card, pressed && styles.pressed]}
-              >
-                <CustomerAvatar customer={item} size={46} />
-                <View style={styles.cardCopy}>
-                  <Text numberOfLines={1} style={styles.name}>
-                    {customerName(item)}
-                  </Text>
-                  <Text numberOfLines={1} style={styles.email}>
-                    {item.email}
-                  </Text>
-                  <Text style={styles.phone}>
-                    {item.profile?.phone || 'No phone number'}
-                  </Text>
-                </View>
-                <View style={[styles.status, !active && styles.statusBlocked]}>
-                  <Text style={[styles.statusText, !active && styles.statusTextBlocked]}>
-                    {active ? 'Active' : 'Blocked'}
-                  </Text>
-                </View>
-              </Pressable>
+              <FadeInView delay={Math.min(index * 28, 180)}>
+                <AnimatedPressable
+                  accessibilityLabel={`View ${customerName(item)} details`}
+                  row
+                  onPress={() => openCustomer(item)}
+                >
+                  <View style={styles.customerRow}>
+                    <CustomerAvatar customer={item} size={46} />
+                    <View style={styles.cardCopy}>
+                      <Text numberOfLines={1} style={styles.name}>
+                        {customerName(item)}
+                      </Text>
+                      <Text numberOfLines={1} style={styles.email}>
+                        {item.email || item.profile?.phone || 'No contact'}
+                      </Text>
+                    </View>
+                    <StatusBadge label={active ? 'Active' : 'Blocked'} tone={active ? 'success' : 'danger'} />
+                    <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+                  </View>
+                </AnimatedPressable>
+              </FadeInView>
             );
           }}
           ListEmptyComponent={
@@ -683,12 +683,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: SPACING.sm,
     marginHorizontal: SPACING.lg,
-    marginVertical: SPACING.sm,
-    minHeight: 48,
-    paddingHorizontal: SPACING.md,
+    marginTop: SPACING.sm,
+    minHeight: 50,
+    paddingHorizontal: SPACING.sm,
   },
   searchInput: { color: COLORS.textPrimary, flex: 1, fontSize: FONT_SIZES.sm },
-  list: { gap: SPACING.sm, padding: SPACING.lg, paddingBottom: SPACING.xxl },
+  list: { paddingHorizontal: SPACING.lg, paddingTop: SPACING.md },
+  customerRow: {
+    alignItems: 'center',
+    borderBottomColor: COLORS.border,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    gap: SPACING.md,
+    minHeight: 78,
+    paddingVertical: SPACING.sm,
+  },
   card: {
     alignItems: 'center',
     backgroundColor: COLORS.surface,
