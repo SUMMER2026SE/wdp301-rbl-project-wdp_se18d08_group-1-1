@@ -3,13 +3,26 @@ const Booking = require('../models/Booking');
 const Subscription = require('../models/Subscription');
 const SubscriptionRenewal = require('../models/SubscriptionRenewal');
 const WalletTransaction = require('../models/WalletTransaction');
-
-const DAY_MS = 24 * 60 * 60 * 1000;
+const {
+  DAY_MS,
+  VIETNAM_OFFSET_MS,
+  parseVietnamCalendarDate,
+  startOfVietnamDay,
+  buildBookingDayOverlapMatch,
+} = require('../utils/bookingDateRange');
+const {
+  getBookingFinancialSummaryMap,
+} = require('./bookingFinancialService');
 const BOOKING_SOURCES = ['booking', 'booking_order'];
 const PAID_BOOKING_STATUSES = ['PAID', 'ACTIVE', 'PAUSED', 'EXPIRED', 'COMPLETED', 'CANCELLED'];
 
-const startOfUtcMonth = (date) =>
-  new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+const startOfVietnamMonth = (date) => {
+  const localDate = new Date(date.getTime() + VIETNAM_OFFSET_MS);
+  return new Date(
+    Date.UTC(localDate.getUTCFullYear(), localDate.getUTCMonth(), 1) -
+      VIETNAM_OFFSET_MS
+  );
+};
 
 const resolveDateRange = (filters = {}, now = new Date()) => {
   const range = filters.range || '30d';
@@ -19,12 +32,19 @@ const resolveDateRange = (filters = {}, now = new Date()) => {
   if (filters.startDate || filters.endDate) {
     startDate = filters.startDate ? new Date(filters.startDate) : null;
     endDate = filters.endDate ? new Date(filters.endDate) : endDate;
+  } else if (range === 'daily') {
+    startDate = filters.date
+      ? parseVietnamCalendarDate(filters.date)
+      : startOfVietnamDay(now);
+    endDate = new Date(startDate.getTime() + DAY_MS - 1);
+  } else if (range === 'today') {
+    startDate = startOfVietnamDay(now);
   } else if (range === '7d') {
     startDate = new Date(now.getTime() - 7 * DAY_MS);
   } else if (range === '30d') {
     startDate = new Date(now.getTime() - 30 * DAY_MS);
   } else if (range === 'month') {
-    startDate = startOfUtcMonth(now);
+    startDate = startOfVietnamMonth(now);
   } else if (range !== 'all') {
     throw Object.assign(new Error('Unsupported statistics range'), { statusCode: 400 });
   }
@@ -49,6 +69,22 @@ const buildCreatedAtMatch = ({ startDate, endDate }) => {
   const createdAt = { $lte: endDate };
   if (startDate) createdAt.$gte = startDate;
   return { createdAt };
+};
+
+const buildBookingScheduleMatch = ({ startDate, endDate }, range) => {
+  if (!startDate) return {};
+
+  if (range === 'today' || range === 'daily') {
+    return buildBookingDayOverlapMatch({
+      startDate,
+      endDate: new Date(startDate.getTime() + DAY_MS - 1),
+    });
+  }
+
+  const scheduledStart = { $gte: startDate };
+  scheduledStart.$lt = endDate;
+
+  return { scheduledStart };
 };
 
 const getTimelineBucket = (filters, period) => {
@@ -158,6 +194,48 @@ const walletBookingSummary = async (match) => {
   };
 };
 
+const normalizeCompletedBookingStatistics = (row) => ({
+  count: Number(row?.count || 0),
+  prepaidRevenue: Number(row?.prepaidRevenue || 0),
+  additionalRevenue: Number(row?.additionalRevenue || 0),
+  grossRevenue: Number(row?.grossRevenue || 0),
+  refundPaid: Number(row?.refundPaid || 0),
+  actualRevenue: Number(row?.actualRevenue || 0),
+});
+
+const getCompletedBookingStatistics = async (bookingMatch) => {
+  const bookings = await Booking.find({
+    status: 'COMPLETED',
+    ...bookingMatch,
+  })
+    .select('prepaidAmount paidOverageAdjustments refundSettlements')
+    .lean();
+  const financialSummaries = await getBookingFinancialSummaryMap(bookings);
+
+  return normalizeCompletedBookingStatistics(
+    bookings.reduce(
+      (summary, booking) => {
+        const financial = financialSummaries.get(String(booking._id));
+        summary.count += 1;
+        summary.prepaidRevenue += financial.prepaidCollected;
+        summary.additionalRevenue += financial.additionalCollected;
+        summary.grossRevenue += financial.grossRevenue;
+        summary.refundPaid += financial.refundPaid;
+        summary.actualRevenue += financial.actualRevenue;
+        return summary;
+      },
+      {
+        count: 0,
+        prepaidRevenue: 0,
+        additionalRevenue: 0,
+        grossRevenue: 0,
+        refundPaid: 0,
+        actualRevenue: 0,
+      }
+    )
+  );
+};
+
 const getCustomerBookingStatistics = async (userId, filters = {}) => {
   const period = resolveDateRange(filters);
   const userObjectId = new mongoose.Types.ObjectId(userId);
@@ -197,17 +275,47 @@ const getCustomerBookingStatistics = async (userId, filters = {}) => {
 const getAdminBookingStatistics = async (filters = {}) => {
   const period = resolveDateRange(filters);
   const createdAtMatch = buildCreatedAtMatch(period);
+  const bookingScheduleMatch = buildBookingScheduleMatch(period, filters.range || '30d');
+  const bookingScopeMatch = {
+    ...bookingScheduleMatch,
+    ...(filters.range !== 'all' && filters.floorId
+      ? { floorId: new mongoose.Types.ObjectId(filters.floorId) }
+      : {}),
+  };
   const timelineBucket = getTimelineBucket(filters, period);
-  const [bookingRows, wallet, byStatus, byPaymentMethod, timelineRows] = await Promise.all([
-    Booking.aggregate(bookingSummaryPipeline(createdAtMatch)),
+  const [
+    bookingRows,
+    wallet,
+    completed,
+    cancelledCount,
+    availabilityRows,
+    byStatus,
+    byPaymentMethod,
+    timelineRows,
+  ] = await Promise.all([
+    Booking.aggregate(bookingSummaryPipeline(bookingScopeMatch)),
     walletBookingSummary(createdAtMatch),
+    getCompletedBookingStatistics(bookingScopeMatch),
+    Booking.countDocuments({
+      status: 'CANCELLED',
+      ...bookingScopeMatch,
+    }),
     Booking.aggregate([
-      { $match: createdAtMatch },
+      {
+        $group: {
+          _id: null,
+          earliestBookingAt: { $min: '$scheduledStart' },
+          latestBookingAt: { $max: '$scheduledStart' },
+        },
+      },
+    ]),
+    Booking.aggregate([
+      { $match: bookingScopeMatch },
       { $group: { _id: '$status', count: { $sum: 1 }, value: { $sum: '$prepaidAmount' } } },
       { $sort: { count: -1 } },
     ]),
     Booking.aggregate([
-      { $match: createdAtMatch },
+      { $match: bookingScopeMatch },
       { $group: { _id: '$paymentMethod', count: { $sum: 1 }, value: { $sum: '$prepaidAmount' } } },
       { $sort: { count: -1 } },
     ]),
@@ -247,7 +355,16 @@ const getAdminBookingStatistics = async (filters = {}) => {
 
   return {
     period,
+    periodBasis: 'bookingSchedule',
     operational: normalizeBookingSummary(bookingRows[0]),
+    completed,
+    cancelled: {
+      count: Number(cancelledCount || 0),
+    },
+    availability: {
+      earliestBookingAt: availabilityRows[0]?.earliestBookingAt || null,
+      latestBookingAt: availabilityRows[0]?.latestBookingAt || null,
+    },
     money: {
       ...wallet,
       financialCoverage: 'partial',
@@ -451,8 +568,11 @@ module.exports = {
   getAdminSubscriptionStatistics,
   _private: {
     resolveDateRange,
+    parseVietnamCalendarDate,
     normalizeBookingSummary,
     buildCreatedAtMatch,
+    buildBookingScheduleMatch,
     getTimelineBucket,
+    normalizeCompletedBookingStatistics,
   },
 };

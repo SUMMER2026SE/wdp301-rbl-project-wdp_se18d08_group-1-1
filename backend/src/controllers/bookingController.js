@@ -17,6 +17,9 @@ const notifTriggers = require('../services/notificationTriggers');
 const contractService = require('../services/contractService');
 const bookingRefundService = require('../services/bookingRefundService');
 const {
+  getBookingFinancialSummaryMap,
+} = require('../services/bookingFinancialService');
+const {
   attachPaidBookingSnapshots,
   getEffectiveRefundPolicySnapshot,
   transitionPendingBookingToPaid,
@@ -2236,23 +2239,15 @@ exports.getAllBookings = async (req, res, next) => {
   try {
     const { date, floorId } = req.query;
     const Booking = require('../models/Booking');
+    const {
+      resolveVietnamCalendarDay,
+      buildBookingDayOverlapMatch,
+    } = require('../utils/bookingDateRange');
 
     let filter = {};
 
     if (date) {
-      // Date string format YYYY-MM-DD
-      const startOfDay = new Date(date);
-      startOfDay.setHours(0, 0, 0, 0);
-
-      const endOfDay = new Date(date);
-      endOfDay.setHours(23, 59, 59, 999);
-
-      // Bookings that overlap with the day
-      filter.$or = [
-        { scheduledStart: { $gte: startOfDay, $lte: endOfDay } },
-        { scheduledEnd: { $gte: startOfDay, $lte: endOfDay } },
-        { scheduledStart: { $lte: startOfDay }, scheduledEnd: { $gte: endOfDay } }
-      ];
+      filter = buildBookingDayOverlapMatch(resolveVietnamCalendarDay(date));
     }
 
     if (floorId) {
@@ -2263,15 +2258,24 @@ exports.getAllBookings = async (req, res, next) => {
       .populate('userId', 'fullName phone email')
       .populate('vehicleId', 'licensePlate brand color')
       .populate('floorId', 'name floorNumber')
-      .sort({ scheduledStart: 1 });
+      .sort({ scheduledStart: 1 })
+      .lean();
+    const financialSummaries = await getBookingFinancialSummaryMap(bookings);
+    const bookingRows = bookings.map((booking) => ({
+      ...booking,
+      financialSummary: financialSummaries.get(String(booking._id)),
+    }));
 
     res.status(200).json({
       success: true,
-      data: bookings
+      data: bookingRows
     });
   } catch (error) {
     console.error('Error getAllBookings:', error);
-    res.status(500).json({ success: false, message: 'Lỗi tải danh sách Booking' });
+    res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.statusCode ? error.message : 'Lỗi tải danh sách Booking',
+    });
   }
 };
 

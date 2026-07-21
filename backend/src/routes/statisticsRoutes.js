@@ -2,16 +2,9 @@ const express = require('express');
 const { protect, authorize } = require('../middlewares/authMiddleware');
 const statisticsController = require('../controllers/statisticsController');
 const { statisticsQueryValidator } = require('../validators/statisticsValidator');
-const { isEnabled, defaultForCurrentEnvironment } = require('../utils/featureFlags');
 
 const router = express.Router();
 
-router.use((req, res, next) => {
-  if (!isEnabled('STATISTICS_V2_ENABLED', defaultForCurrentEnvironment())) {
-    return res.status(404).json({ success: false, message: 'Statistics are not enabled.' });
-  }
-  next();
-});
 router.use(protect);
 
 router.get(

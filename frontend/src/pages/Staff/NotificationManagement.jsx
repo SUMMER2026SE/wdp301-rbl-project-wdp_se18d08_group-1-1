@@ -7,6 +7,7 @@ import {
   Check,
   CheckCircle2,
   Globe2,
+  History,
   Info,
   Loader2,
   Search,
@@ -165,10 +166,16 @@ function LiveBadge({ socket }) {
 }
 
 function StatsRow({ stats }) {
+  const iconMap = {
+    history: History,
+    success: CheckCircle2,
+    error: AlertTriangle,
+  };
+
   const cards = [
-    { label: "Total Sent (History)", value: stats.totalSent, tone: "info", icon: "OK" },
-    { label: "Sent Successfully", value: stats.success, tone: "success", icon: "API" },
-    { label: "Warnings & Errors", value: stats.errors, tone: "error", icon: "!" },
+    { label: "Total Sent (History)", value: stats.totalSent, tone: "info", icon: "history" },
+    { label: "Sent Successfully", value: stats.success, tone: "success", icon: "success" },
+    { label: "Warnings & Errors", value: stats.errors, tone: "error", icon: "error" },
   ];
 
   const toneMap = {
@@ -179,15 +186,18 @@ function StatsRow({ stats }) {
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      {cards.map((c) => (
-        <div key={c.label} className="rounded-xl border border-white/5 bg-[#1A1A1A] p-5 shadow-lg">
-          <div className={`w-11 h-11 rounded-lg border ${toneMap[c.tone]} grid place-items-center text-sm font-bold`}>
-            {c.icon}
+      {cards.map((c) => {
+        const IconComponent = iconMap[c.icon];
+        return (
+          <div key={c.label} className="rounded-xl border border-white/5 bg-[#1A1A1A] p-5 shadow-lg">
+            <div className={`w-11 h-11 rounded-lg border ${toneMap[c.tone]} grid place-items-center`}>
+              <IconComponent size={24} />
+            </div>
+            <div className="mt-4 text-4xl font-bold tracking-tight text-white">{c.value}</div>
+            <div className="text-sm text-gray-400 mt-1">{c.label}</div>
           </div>
-          <div className="mt-4 text-4xl font-bold tracking-tight text-white">{c.value}</div>
-          <div className="text-sm text-gray-400 mt-1">{c.label}</div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

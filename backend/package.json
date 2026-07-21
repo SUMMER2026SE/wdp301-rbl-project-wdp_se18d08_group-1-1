@@ -11,7 +11,7 @@
     "migrate:membership-entitlements": "node src/scripts/backfillMembershipEntitlements.js",
     "audit:membership-entitlements": "node src/scripts/auditMembershipEntitlements.js",
     "audit:refunds": "node src/scripts/auditRefundPolicyRollout.js",
-    "test": "node --test src/tests/*.unit.test.js src/tests/refund*.test.js",
+    "test": "node --test src/tests/*.unit.test.js src/tests/refund*.test.js src/tests/statisticsService.test.js",
     "test:notification": "node src/tests/notificationService.test.js"
   },
   "keywords": [],
