@@ -172,7 +172,10 @@ export type TransactionType =
   | 'topup'
   | 'TOP_UP'
   | 'PAYMENT'
-  | 'REFUND';
+  | 'REFUND'
+  | 'TRANSFER_OUT'
+  | 'TRANSFER_IN'
+  | 'TRANSFER_FEE';
 
 export type TransactionStatus =
   | 'pending'

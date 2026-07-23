@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { apiFetch } from "../services/api";
 import { logoutUser } from "../services/authService";
 import { clearAuthSession, notifyAuthChange } from "../services/authStorage";
@@ -135,7 +135,7 @@ const NAV_CONFIG = {
     { label: "Home", icon: <Home size={18} />, to: "/" },
     { label: "Profile", icon: <User size={18} />, to: "/profile" },
     {
-      label: "Membership Transfers",
+      label: "Membership ",
       icon: <ArrowLeftRight size={18} />,
       to: "/customer/membership-transfers",
     },
@@ -193,7 +193,6 @@ const getInitials = (name = "") =>
 
 export default function DashboardLayout() {
   const navigate = useNavigate();
-  const location = useLocation();
   const [user, setUser] = useState(() =>
     JSON.parse(sessionStorage.getItem("valo_user") || "{}"),
   );
@@ -553,8 +552,7 @@ export default function DashboardLayout() {
 
         {/* Page content */}
         <main
-          className={`flex-1 overflow-y-auto bg-gray-100 transition-colors duration-300 dark:bg-[#0D0D0D] ${location.pathname.startsWith("/admin") ? "scrollbar-hidden" : ""
-            }`}
+          className="scrollbar-hidden flex-1 overflow-y-auto bg-gray-100 transition-colors duration-300 dark:bg-[#0D0D0D]"
         >
           <Outlet />
         </main>

@@ -9,6 +9,7 @@ import {
   deleteVehicle, setDefaultVehicle, scanRegistrationCard,
 } from '../../services/vehicleService';
 import CarViewer from '../../components/CarViewer';
+import CustomerPageHeader from '../../components/Customer/CustomerPageHeader';
 import garageBg from '../../assets/images/garage-bg.png';
 import { formatLicensePlateDisplay, normalizeLicensePlate } from '../../utils/licensePlate';
 
@@ -727,25 +728,21 @@ export default function MyVehicles() {
       <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-black/80" />
 
       {/* ── Top bar ── */}
-      <div className="relative z-10 flex items-center justify-between px-6 pt-5 pb-2">
-        <div>
-          <h1 className="text-xl font-black text-white tracking-tight drop-shadow-lg">
-            My Garage
-          </h1>
-          <p className="text-sm text-white/55 mt-0.5">
-            {vehicles.length > 0 ? `${vehicles.length} vehicles` : 'No vehicles yet'}
-          </p>
-        </div>
-        <button
-          onClick={openAdd}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl
-            bg-yellow-500 hover:bg-yellow-400 text-black
-            text-sm font-bold transition-colors shadow-lg shadow-yellow-500/30"
-        >
-          <Plus size={15} />
-          Add vehicle
-        </button>
-      </div>
+      <CustomerPageHeader
+        icon={Car}
+        title="My Garage"
+        description={vehicles.length > 0 ? `${vehicles.length} vehicles` : 'No vehicles yet'}
+        className="relative z-10 px-6 pb-4 pt-5"
+        action={
+          <button
+            onClick={openAdd}
+            className="flex min-h-11 items-center gap-2 rounded-xl bg-yellow-500 px-4 text-sm font-bold text-black shadow-lg shadow-yellow-500/30 transition-colors hover:bg-yellow-400"
+          >
+            <Plus size={15} />
+            Add vehicle
+          </button>
+        }
+      />
 
       {/* ── Info sub-bar (below header) ── */}
       {!loading && selected && (

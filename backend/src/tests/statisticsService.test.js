@@ -230,6 +230,17 @@ test('platform service revenue excludes paid services that are not completed', (
   assert.equal(result.serviceBookingCount, 0);
 });
 
+test('platform revenue includes realized membership transfer fees exactly once', () => {
+  const result = _private.calculatePlatformRevenueTotal({
+    vipRevenue: 500000,
+    bookingRevenue: 300000,
+    serviceRevenue: 75000,
+    membershipTransferFeeRevenue: 12200,
+  });
+
+  assert.equal(result, 887200);
+});
+
 test('platform revenue uses lifecycle timestamps with a legacy fallback', () => {
   const period = {
     startDate: new Date('2030-03-01T00:00:00.000Z'),
