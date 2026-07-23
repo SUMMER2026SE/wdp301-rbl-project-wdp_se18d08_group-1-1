@@ -2,13 +2,14 @@ import { useCallback, useEffect, useState } from "react";
 import { Plus, Edit, Copy, Trash2, X } from "lucide-react";
 import ParkingLotsBuilder from "./ParkingLotsBuilder/ParkingLotsBuilder";
 import ParkingMapGrid from "../../components/ParkingMapGrid";
+import AdminSelect from "../../components/Admin/AdminSelect";
 import { getAllFloors, createFloor, updateFloorLayout, deleteFloor, getFloorSlots } from "../../services/parkingFloorService";
 import { startMaintenance, endMaintenance } from "../../services/maintenanceService";
-import { apiFetch, API_BASE } from "../../services/api";
+import { API_BASE } from "../../services/api";
 import { getAvailableBookingSlots, getActiveHolds, getActiveMapBookings } from "../../services/bookingService";
 
 const LiveDuration = ({ checkInTime, expectedDurationHours }) => {
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 1000);
@@ -220,6 +221,7 @@ export default function ParkingLots() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchLiveData();
     const interval = setInterval(fetchLiveData, 15000); // refresh every 15s
     return () => clearInterval(interval);
@@ -378,17 +380,20 @@ export default function ParkingLots() {
       
       {/* Top Toolbar */}
       <div className="absolute top-4 left-8 z-50 flex items-center gap-4 bg-[#171717]/80 backdrop-blur border border-white/10 p-2 rounded-xl shadow-lg">
-        <select 
-          className="bg-black/40 border border-white/20 rounded p-2 text-white text-sm outline-none font-bold min-w-[120px]"
+        <AdminSelect
           value={currentFloorId || ""}
-          onChange={(e) => setCurrentFloorId(e.target.value === "" ? null : e.target.value)}
-        >
-          {floors.length > 0 && <option value="">-- Overview (All Floors) --</option>}
-          {floors.map(f => (
-            <option key={f._id} value={f._id}>{f.name}</option>
-          ))}
-          {floors.length === 0 && <option value="">No floors available</option>}
-        </select>
+          onChange={(nextFloorId) => setCurrentFloorId(nextFloorId === "" ? null : nextFloorId)}
+          options={
+            floors.length > 0
+              ? [
+                  { value: "", label: "Overview (All Floors)" },
+                  ...floors.map((floor) => ({ value: floor._id, label: floor.name })),
+                ]
+              : [{ value: "", label: "No floors available" }]
+          }
+          className="min-w-[190px]"
+          ariaLabel="Select parking floor"
+        />
         
         <button onClick={handleCreateFloor} className="p-2 bg-white/5 hover:bg-white/10 rounded-lg transition border border-white/10" title="Add new floor">
           <Plus size={18} className="text-cyan-400" />
