@@ -535,7 +535,7 @@ export default function DashboardLayout() {
 
         {/* Page content */}
         <main
-          className={`flex-1 overflow-y-auto bg-gray-100 transition-colors duration-300 dark:bg-[#0D0D0D] ${location.pathname === "/admin/revenue" ? "scrollbar-hidden" : ""
+          className={`flex-1 overflow-y-auto bg-gray-100 transition-colors duration-300 dark:bg-[#0D0D0D] ${location.pathname.startsWith("/admin") ? "scrollbar-hidden" : ""
             }`}
         >
           <Outlet />

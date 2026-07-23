@@ -1,13 +1,280 @@
-import { useState, useEffect } from 'react';
-import { Loader2, Search, Filter, RefreshCw, Crown } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  AlertCircle,
+  CheckCircle2,
+  Clock3,
+  Crown,
+  Filter,
+  Mail,
+  ParkingCircle,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  TimerReset,
+  UserRound,
+  X,
+} from 'lucide-react';
 import { apiFetch } from '../../services/api';
+import AdminSelect from '../../components/Admin/AdminSelect';
+
+const currencyFormatter = new Intl.NumberFormat('vi-VN');
+const dateFormatter = new Intl.DateTimeFormat('en-GB', {
+  day: '2-digit',
+  month: 'short',
+  year: 'numeric',
+});
+
+const formatCurrency = (value = 0) => `${currencyFormatter.format(Number(value) || 0)} VND`;
+
+const formatDate = (value) => {
+  if (!value) return 'Not available';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Not available';
+  return dateFormatter.format(date);
+};
+
+const daysUntil = (value) => {
+  if (!value) return null;
+  const end = new Date(value);
+  if (Number.isNaN(end.getTime())) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  end.setHours(0, 0, 0, 0);
+  return Math.ceil((end.getTime() - today.getTime()) / 86400000);
+};
+
+const titleCase = (value = '') => {
+  if (!value) return 'Unknown';
+  return String(value).charAt(0).toUpperCase() + String(value).slice(1);
+};
+
+const getStatusClass = (status) => {
+  switch (status) {
+    case 'active':
+      return 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300';
+    case 'pending':
+      return 'border-amber-400/25 bg-amber-400/10 text-amber-300';
+    case 'expired':
+      return 'border-slate-400/20 bg-slate-400/10 text-slate-300';
+    case 'cancelled':
+    case 'failed':
+      return 'border-rose-400/25 bg-rose-400/10 text-rose-300';
+    default:
+      return 'border-slate-400/20 bg-slate-400/10 text-slate-300';
+  }
+};
+
+const getPackageClass = (type) => {
+  switch (type) {
+    case 'monthly':
+      return 'border-yellow-400/25 bg-yellow-400/10 text-yellow-300';
+    case 'yearly':
+      return 'border-purple-400/25 bg-purple-400/10 text-purple-300';
+    default:
+      return 'border-cyan-400/25 bg-cyan-400/10 text-cyan-300';
+  }
+};
+
+function SummaryItem({ icon: Icon, label, value, support, tone = 'text-yellow-300' }) {
+  return (
+    <div className="flex min-w-0 items-center gap-4 px-5 py-4 md:border-l md:border-white/10 md:first:border-l-0">
+      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border bg-white/[0.03] ${tone}`}>
+        <Icon size={18} />
+      </div>
+      <div className="min-w-0">
+        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">{label}</p>
+        <p className="mt-1 font-mono text-xl font-black text-white">{value}</p>
+        <p className="mt-0.5 truncate text-xs font-semibold text-slate-400">{support}</p>
+      </div>
+    </div>
+  );
+}
+
+function LoadingRows() {
+  return (
+    <div className="space-y-2">
+      {[0, 1, 2, 3, 4].map((item) => (
+        <div key={item} className="h-20 animate-pulse rounded-2xl border border-white/10 bg-white/[0.04] motion-reduce:animate-none" />
+      ))}
+    </div>
+  );
+}
+
+function StatusBadge({ status }) {
+  return (
+    <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-black ${getStatusClass(status)}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${status === 'active' ? 'bg-emerald-300' : status === 'pending' ? 'bg-amber-300' : status === 'expired' ? 'bg-slate-400' : 'bg-rose-300'}`} />
+      {titleCase(status)}
+    </span>
+  );
+}
+
+function SlotBadge({ slot }) {
+  if (!slot) {
+    return <span className="text-xs font-semibold italic text-slate-500">Not assigned</span>;
+  }
+
+  return (
+    <span className="inline-flex items-center gap-2 rounded-xl border border-yellow-400/20 bg-yellow-400/10 px-3 py-2 text-xs font-black text-yellow-300 transition group-hover:border-yellow-300/35">
+      <ParkingCircle size={14} />
+      <span className="text-slate-300">{slot.floorId?.name || 'Floor'}</span>
+      <span className="text-yellow-300">{slot.slotCode}</span>
+    </span>
+  );
+}
+
+function MembershipRow({ sub, index }) {
+  const remaining = daysUntil(sub.expireAt);
+  const packageType = sub.ticketPackage?.type || '';
+  const vehicles = sub.user?.vehicles || [];
+  const vehicleText = vehicles.length ? `${vehicles.length} vehicle${vehicles.length > 1 ? 's' : ''} on file` : 'No vehicle on file';
+
+  return (
+    <article
+      className="group relative overflow-hidden rounded-2xl border border-white/10 bg-[#10141d]/80 transition duration-200 hover:-translate-y-0.5 hover:border-white/20 hover:bg-[#141a25] motion-reduce:transform-none motion-reduce:transition-none"
+      style={{ animationDelay: `${index * 35}ms` }}
+    >
+      <div className="absolute left-0 top-0 h-full w-1 bg-gradient-to-b from-yellow-300 to-amber-500 opacity-0 transition group-hover:opacity-80" />
+      <div className="grid gap-4 px-4 py-4 md:grid-cols-[minmax(220px,1.35fr)_minmax(145px,0.9fr)_minmax(150px,1fr)_minmax(130px,0.8fr)_minmax(150px,0.9fr)_110px] md:items-center md:px-5">
+        <div className="min-w-0">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-slate-300">
+              <UserRound size={17} />
+            </div>
+            <div className="min-w-0">
+              <h3 className="truncate text-sm font-black text-white sm:text-base">{sub.user?.username || 'Unknown User'}</h3>
+              <p className="mt-0.5 truncate text-xs font-semibold text-slate-400">{sub.user?.email || 'No email'}</p>
+            </div>
+          </div>
+          <p className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500" title={vehicles.join(', ')}>
+            <Mail size={12} />
+            {vehicleText}
+          </p>
+        </div>
+
+        <div className="flex items-start justify-between gap-3 md:block">
+          <span className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 md:hidden">Package</span>
+          <div className="text-right md:text-left">
+            <p className="font-black text-slate-100">{sub.ticketPackage?.name || 'Unknown Package'}</p>
+            {packageType && (
+              <span className={`mt-2 inline-flex rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] ${getPackageClass(packageType)}`}>
+                {packageType}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-3 md:block">
+          <span className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 md:hidden">VIP Slot</span>
+          <div className="flex flex-wrap justify-end gap-1.5 md:justify-start">
+            {sub.slots && sub.slots.length > 0 ? sub.slots.map((slot) => (
+              <SlotBadge key={`${slot.floorId?._id || slot.floorId}-${slot.slotCode}`} slot={slot} />
+            )) : (
+              <SlotBadge />
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-start justify-between gap-3 md:block">
+          <span className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 md:hidden">Amount</span>
+          <div className="text-right md:text-left">
+            <p className="font-mono text-sm font-black text-white">{formatCurrency(sub.amount)}</p>
+            {sub.paymentStatus && <p className="mt-1 text-xs font-semibold text-slate-500">{titleCase(sub.paymentStatus)}</p>}
+          </div>
+        </div>
+
+        <div className="flex items-start justify-between gap-3 md:block">
+          <span className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 md:hidden">Period</span>
+          <div className="text-right text-xs font-semibold text-slate-400 md:text-left">
+            <p>{formatDate(sub.validFrom)}</p>
+            <p className="mt-1 text-slate-500">to {formatDate(sub.expireAt)}</p>
+            {remaining !== null && remaining >= 0 && (
+              <p className={`mt-1 ${remaining <= 30 ? 'text-amber-300' : 'text-slate-500'}`}>
+                {remaining === 0 ? 'Expires today' : `${remaining} days left`}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-3 md:block">
+          <span className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 md:hidden">Status</span>
+          <StatusBadge status={sub.status} />
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function TransferReviewSection({ transfers, onReview }) {
+  const pendingTransfers = transfers.filter((item) => item.status === 'PENDING_ADMIN');
+
+  if (!pendingTransfers.length) {
+    return (
+      <section className="mb-6 flex flex-col gap-3 border-y border-white/10 py-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="font-black text-white">Transfer reviews</h2>
+          <p className="mt-1 text-sm font-medium text-slate-500">No membership transfers require review.</p>
+        </div>
+        <span className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-400/15 bg-emerald-400/10 px-3 py-1 text-xs font-black text-emerald-300">
+          <CheckCircle2 size={14} /> 0 pending
+        </span>
+      </section>
+    );
+  }
+
+  return (
+    <section className="mb-6 border-y border-amber-400/20 py-4">
+      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="font-black text-white">Transfer reviews</h2>
+          <p className="mt-1 text-sm font-medium text-slate-500">Only recipient-accepted requests can be approved.</p>
+        </div>
+        <span className="inline-flex w-fit items-center gap-2 rounded-full border border-amber-400/25 bg-amber-400/10 px-3 py-1 text-xs font-black text-amber-300">
+          <TimerReset size={14} /> {pendingTransfers.length} pending
+        </span>
+      </div>
+
+      <div className="divide-y divide-white/10">
+        {pendingTransfers.map((transfer) => (
+          <div key={transfer._id} className="flex flex-col gap-3 py-3 lg:flex-row lg:items-center">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-black text-slate-100">
+                {transfer.entitlementId?.slotCode || 'Parking space'} · {transfer.fromUserId?.email || 'Sender'} → {transfer.toUserId?.email || 'Recipient'}
+              </p>
+              <p className="mt-1 text-xs font-semibold text-slate-500">
+                Price {formatCurrency(transfer.askingPrice)} · Fee {formatCurrency(transfer.transferFee)}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => onReview(transfer._id, false)}
+                className="h-10 rounded-xl border border-rose-500/25 px-4 text-xs font-black text-rose-300 transition hover:bg-rose-500/10 focus:outline-none focus:ring-2 focus:ring-rose-300/50"
+              >
+                Reject
+              </button>
+              <button
+                type="button"
+                onClick={() => onReview(transfer._id, true)}
+                className="h-10 rounded-xl bg-emerald-400 px-4 text-xs font-black text-slate-950 transition hover:bg-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-200/70"
+              >
+                Approve & lock 24h
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 export default function SubscriptionManagement() {
   const [subscriptions, setSubscriptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all'); // all, active, expired, pending, etc.
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [packageFilter, setPackageFilter] = useState('all');
   const [transfers, setTransfers] = useState([]);
 
   const fetchSubscriptions = async () => {
@@ -15,16 +282,16 @@ export default function SubscriptionManagement() {
       setLoading(true);
       setError('');
       const token = localStorage.getItem('accessToken');
-      
+
       const [res, transferRes] = await Promise.all([
-        apiFetch(`/subscriptions/all`, {
-          headers: { Authorization: `Bearer ${token}` }
+        apiFetch('/subscriptions/all', {
+          headers: { Authorization: `Bearer ${token}` },
         }),
         apiFetch('/admin/membership-entitlement-transfers', {
-          headers: { Authorization: `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${token}` },
         }),
       ]);
-      
+
       if (res.ok && res.data?.success) {
         setSubscriptions(res.data.data);
       } else {
@@ -67,227 +334,197 @@ export default function SubscriptionManagement() {
     return () => window.clearTimeout(timerId);
   }, []);
 
-  const filteredSubscriptions = subscriptions.filter(sub => {
-    const matchesStatus = statusFilter === 'all' || sub.status === statusFilter;
-    const searchLower = searchTerm.toLowerCase();
-    const userName = sub.user?.username?.toLowerCase() || '';
-    const userEmail = sub.user?.email?.toLowerCase() || '';
-    
-    const matchesSearch = userName.includes(searchLower) || 
-                          userEmail.includes(searchLower);
-                          
-    return matchesStatus && matchesSearch;
-  });
+  const statusOptions = useMemo(() => {
+    const actualStatuses = subscriptions.map((sub) => sub.status).filter(Boolean);
+    return Array.from(new Set(['active', 'pending', 'expired', 'cancelled', 'failed', ...actualStatuses]));
+  }, [subscriptions]);
 
-  const getStatusBadge = (status) => {
-    switch (status) {
-      case 'active':
-        return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/50">Active</span>;
-      case 'expired':
-        return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-500/20 text-red-400 border border-red-500/50">Expired</span>;
-      case 'pending':
-        return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/50">Pending</span>;
-      case 'cancelled':
-        return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-500/20 text-gray-400 border border-gray-500/50">Cancelled</span>;
-      default:
-        return <span className="px-2 py-1 text-xs font-semibold rounded-full bg-gray-500/20 text-gray-400 border border-gray-500/50">{status}</span>;
-    }
-  };
+  const packageOptions = useMemo(() => {
+    const actualPackages = subscriptions
+      .map((sub) => sub.ticketPackage?.type)
+      .filter(Boolean);
+    return Array.from(new Set(actualPackages));
+  }, [subscriptions]);
+
+  const filteredSubscriptions = useMemo(() => {
+    const searchLower = searchTerm.trim().toLowerCase();
+    return subscriptions.filter((sub) => {
+      const matchesStatus = statusFilter === 'all' || sub.status === statusFilter;
+      const matchesPackage = packageFilter === 'all' || sub.ticketPackage?.type === packageFilter;
+      const matchesSearch = !searchLower || [
+        sub.user?.username,
+        sub.user?.email,
+        ...(sub.user?.vehicles || []),
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(searchLower));
+
+      return matchesStatus && matchesPackage && matchesSearch;
+    });
+  }, [subscriptions, searchTerm, statusFilter, packageFilter]);
+
+  const pendingTransfers = transfers.filter((item) => item.status === 'PENDING_ADMIN');
+
+  const summary = useMemo(() => {
+    const active = subscriptions.filter((sub) => sub.status === 'active').length;
+    const expiringSoon = subscriptions.filter((sub) => {
+      const remaining = daysUntil(sub.expireAt);
+      return sub.status === 'active' && remaining !== null && remaining >= 0 && remaining <= 30;
+    }).length;
+
+    return {
+      total: subscriptions.length,
+      active,
+      expiringSoon,
+      pendingTransfers: pendingTransfers.length,
+    };
+  }, [subscriptions, pendingTransfers.length]);
+
+  const hasFilters = searchTerm || statusFilter !== 'all' || packageFilter !== 'all';
 
   return (
-    <div className="p-6 md:p-8 mx-auto min-h-[calc(100vh-70px)] overflow-auto bg-[#080808]">
-      <div className="max-w-[1400px] mx-auto">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6 border-b border-white/10 pb-4">
-        <div>
-          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-yellow-500/20 bg-yellow-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-yellow-300">
-            <Crown size={12} /> VIP Subscriptions
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">VIP Memberships</h1>
-          <p className="text-gray-400 text-sm mt-1">View and manage customer subscriptions and VIP parking slots.</p>
-        </div>
-        
-        <button 
-          onClick={fetchSubscriptions}
-          className="flex items-center gap-2 bg-white/5 hover:bg-white/10 text-white px-4 py-2.5 rounded-xl transition shadow-lg border border-white/10 text-sm font-semibold"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
-      </div>
-
-      <div className="flex flex-col sm:flex-row gap-4 mb-6 bg-[#171717] p-4 rounded-2xl border border-white/10 shadow-lg">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
-          <input
-            type="text"
-            placeholder="Search by customer name, phone, or email..."
-            className="w-full pl-10 pr-4 py-2.5 bg-black border border-white/10 rounded-xl focus:outline-none focus:border-[#ffd555] focus:ring-1 focus:ring-[#ffd555]/50 transition text-sm text-white placeholder-white/40 shadow-inner"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
-        
-        <div className="relative min-w-[200px]">
-          <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
-          <select
-            className="w-full pl-10 pr-4 py-2.5 bg-black border border-white/10 rounded-xl focus:outline-none focus:border-[#ffd555] focus:ring-1 focus:ring-[#ffd555]/50 transition appearance-none text-sm text-white shadow-inner cursor-pointer"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-          >
-            <option value="all">All Statuses</option>
-            <option value="active">Active</option>
-            <option value="pending">Pending</option>
-            <option value="expired">Expired</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
-        </div>
-      </div>
-
-      {error && (
-        <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-xl mb-6 text-sm flex items-center gap-2">
-          {error}
-        </div>
-      )}
-
-      <section className="mb-6 rounded-2xl border border-white/5 bg-slate-900/50 p-5">
-        <div className="mb-4 flex items-center justify-between">
+    <div className="relative min-h-[calc(100vh-70px)] overflow-auto bg-[#050505] px-4 py-6 text-white sm:px-6 md:px-8">
+      <div className="pointer-events-none absolute right-0 top-0 h-80 w-80 rounded-full bg-yellow-400/[0.06] blur-3xl" />
+      <div className="relative mx-auto max-w-[1400px]">
+        <header className="mb-6 flex flex-col justify-between gap-4 border-b border-white/10 pb-5 md:flex-row md:items-end">
           <div>
-            <h2 className="font-black text-white">Membership transfer reviews</h2>
-            <p className="mt-1 text-xs text-slate-500">
-              Only recipient-accepted requests can be approved.
-            </p>
+            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-yellow-500/25 bg-yellow-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-yellow-300">
+              <Crown size={12} /> VIP Subscriptions
+            </div>
+            <h1 className="text-3xl font-black tracking-tight text-white sm:text-4xl">VIP Memberships</h1>
+            <p className="mt-2 text-sm font-medium text-slate-400">View and manage customer subscriptions and VIP parking slots.</p>
           </div>
-          <span className="rounded-full bg-amber-500/10 px-3 py-1 text-xs font-bold text-amber-400">
-            {transfers.filter((item) => item.status === 'PENDING_ADMIN').length} pending
-          </span>
-        </div>
-        <div className="space-y-2">
-          {transfers.filter((item) => item.status === 'PENDING_ADMIN').length === 0 ? (
-            <p className="rounded-xl bg-slate-800/40 p-4 text-sm text-slate-500">
-              No transfer is waiting for review.
-            </p>
-          ) : (
-            transfers
-              .filter((item) => item.status === 'PENDING_ADMIN')
-              .map((transfer) => (
-                <div
-                  key={transfer._id}
-                  className="flex flex-col gap-3 rounded-xl border border-white/5 bg-slate-800/40 p-4 lg:flex-row lg:items-center"
-                >
-                  <div className="flex-1">
-                    <p className="font-bold text-slate-200">
-                      {transfer.entitlementId?.slotCode || 'Parking space'} ·{' '}
-                      {transfer.fromUserId?.email} → {transfer.toUserId?.email}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      Price {Number(transfer.askingPrice || 0).toLocaleString('vi-VN')} VND ·
-                      Fee {Number(transfer.transferFee || 0).toLocaleString('vi-VN')} VND
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => reviewTransfer(transfer._id, false)}
-                      className="rounded-lg border border-rose-500/30 px-4 py-2 text-xs font-bold text-rose-400"
-                    >
-                      Reject
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => reviewTransfer(transfer._id, true)}
-                      className="rounded-lg bg-emerald-500 px-4 py-2 text-xs font-black text-slate-950"
-                    >
-                      Approve & lock 24h
-                    </button>
-                  </div>
-                </div>
-              ))
-          )}
-        </div>
-      </section>
 
-      <div className="bg-slate-900/50 border border-white/5 rounded-2xl overflow-hidden backdrop-blur-md shadow-xl">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-white/5 text-xs uppercase tracking-wider text-gray-400 border-b border-white/10">
-                <th className="p-4 font-medium">Customer</th>
-                <th className="p-4 font-medium">Package</th>
-                <th className="p-4 font-medium">VIP Slots</th>
-                <th className="p-4 font-medium">Amount</th>
-                <th className="p-4 font-medium">Period</th>
-                <th className="p-4 font-medium">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/10 text-sm">
-              {loading ? (
-                <tr>
-                  <td colSpan="6" className="p-8 text-center text-slate-500">
-                    <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
-                    Loading subscriptions...
-                  </td>
-                </tr>
-              ) : filteredSubscriptions.length === 0 ? (
-                <tr>
-                  <td colSpan="6" className="p-8 text-center text-slate-500">
-                    No subscriptions found matching your criteria.
-                  </td>
-                </tr>
-              ) : (
-                filteredSubscriptions.map(sub => (
-                  <tr key={sub._id} className="hover:bg-white/[0.02] transition-colors">
-                    <td className="p-4">
-                      <div className="font-semibold text-slate-200">{sub.user?.username || 'Unknown User'}</div>
-                      <div className="text-xs text-slate-500">{sub.user?.email || 'No email'}</div>
-                      {sub.user?.vehicles && sub.user.vehicles.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-1">
-                          {sub.user.vehicles.map(plate => (
-                            <span key={plate} className="px-1.5 py-0.5 text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded font-mono font-medium">
-                              {plate}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </td>
-                    <td className="p-4">
-                      <div className="text-slate-200 font-medium">{sub.ticketPackage?.name || 'Unknown Package'}</div>
-                      <div className="text-xs text-slate-500 capitalize mt-1">{sub.ticketPackage?.type} package</div>
-                    </td>
-                    <td className="p-4">
-                      <div className="flex flex-wrap gap-1">
-                        {sub.slots && sub.slots.length > 0 ? sub.slots.map(slot => (
-                          <span key={`${slot.floorId?._id || slot.floorId}-${slot.slotCode}`} className="px-2 py-1 text-[10px] bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 rounded-md font-mono font-bold">
-                            {slot.floorId?.name || 'Floor'} - {slot.slotCode}
-                          </span>
-                        )) : (
-                          <span className="text-slate-500 text-xs italic">No slots</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="p-4 text-slate-300 font-medium">
-                      {sub.amount?.toLocaleString('vi-VN')} VND
-                      <div className="text-[10px] text-slate-500 mt-1 uppercase">
-                        {sub.paymentStatus}
-                      </div>
-                    </td>
-                    <td className="p-4">
-                      <div className="text-xs text-slate-400">
-                        <span className="text-slate-500">From:</span> {new Date(sub.validFrom).toLocaleDateString()}
-                      </div>
-                      <div className="text-xs text-slate-400 mt-1">
-                        <span className="text-slate-500">To:</span> {new Date(sub.expireAt).toLocaleDateString()}
-                      </div>
-                    </td>
-                    <td className="p-4">
-                      {getStatusBadge(sub.status)}
-                    </td>
-                  </tr>
-                ))
+          <button
+            type="button"
+            onClick={fetchSubscriptions}
+            disabled={loading}
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 text-sm font-black text-white transition hover:border-yellow-300/30 hover:bg-yellow-300/10 hover:text-yellow-100 disabled:cursor-not-allowed disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-yellow-300/50"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+        </header>
+
+        <section className="mb-5 grid overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] sm:grid-cols-2 lg:grid-cols-4">
+          <SummaryItem icon={Crown} label="Total VIP" value={summary.total.toLocaleString('vi-VN')} support="Loaded memberships" />
+          <SummaryItem icon={ShieldCheck} label="Active" value={summary.active.toLocaleString('vi-VN')} support="Current active status" tone="text-emerald-300" />
+          <SummaryItem icon={Clock3} label="Expiring Soon" value={summary.expiringSoon.toLocaleString('vi-VN')} support="Within 30 days" tone="text-amber-300" />
+          <SummaryItem icon={TimerReset} label="Transfers" value={summary.pendingTransfers.toLocaleString('vi-VN')} support="Pending admin review" tone="text-purple-300" />
+        </section>
+
+        <section className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center">
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
+            <input
+              type="text"
+              placeholder="Search by customer name, email, or vehicle..."
+              className="h-12 w-full rounded-xl border border-white/10 bg-black/70 pl-11 pr-11 text-sm font-semibold text-white outline-none transition placeholder:text-slate-600 focus:border-[#ffd555]/60 focus:ring-2 focus:ring-[#ffd555]/10"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm('')}
+                aria-label="Clear membership search"
+                className="absolute right-3 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-slate-500 transition hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-yellow-300/50"
+              >
+                <X size={15} />
+              </button>
+            )}
+          </div>
+
+          <AdminSelect
+            value={statusFilter}
+            onChange={setStatusFilter}
+            options={[
+              { value: 'all', label: 'All Statuses' },
+              ...statusOptions.map((status) => ({ value: status, label: titleCase(status) })),
+            ]}
+            icon={Filter}
+            className="lg:w-52"
+            ariaLabel="Filter subscriptions by status"
+          />
+
+          {packageOptions.length > 0 && (
+            <AdminSelect
+              value={packageFilter}
+              onChange={setPackageFilter}
+              options={[
+                { value: 'all', label: 'All packages' },
+                ...packageOptions.map((type) => ({ value: type, label: titleCase(type) })),
+              ]}
+              icon={Crown}
+              className="lg:w-52"
+              align="right"
+              ariaLabel="Filter subscriptions by package"
+            />
+          )}
+        </section>
+
+        {error && (
+          <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-300 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2">
+              <AlertCircle size={17} />
+              <span className="font-semibold">{error}</span>
+            </div>
+            <button
+              type="button"
+              onClick={fetchSubscriptions}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-300/20 px-3 py-2 text-xs font-black text-red-100 transition hover:bg-red-400/10 focus:outline-none focus:ring-2 focus:ring-red-300/50"
+            >
+              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+              Retry
+            </button>
+          </div>
+        )}
+
+        <TransferReviewSection transfers={transfers} onReview={reviewTransfer} />
+
+        <section>
+          <div className="hidden px-5 pb-3 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 md:grid md:grid-cols-[minmax(220px,1.35fr)_minmax(145px,0.9fr)_minmax(150px,1fr)_minmax(130px,0.8fr)_minmax(150px,0.9fr)_110px]">
+            <span>Customer</span>
+            <span>Package</span>
+            <span>VIP Slot</span>
+            <span>Amount</span>
+            <span>Period</span>
+            <span>Status</span>
+          </div>
+
+          {loading ? (
+            <LoadingRows />
+          ) : filteredSubscriptions.length === 0 ? (
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-6 py-10 text-center">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-yellow-400/20 bg-yellow-400/10 text-yellow-300">
+                <Crown size={22} />
+              </div>
+              <h2 className="text-lg font-black text-white">No VIP memberships found</h2>
+              <p className="mx-auto mt-2 max-w-md text-sm font-medium text-slate-400">
+                {hasFilters ? 'Adjust the search or filters to see more memberships.' : 'No subscriptions are available from the current response.'}
+              </p>
+              {hasFilters && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchTerm('');
+                    setStatusFilter('all');
+                    setPackageFilter('all');
+                  }}
+                  className="mt-5 inline-flex h-10 items-center justify-center rounded-xl border border-yellow-300/20 px-4 text-sm font-black text-yellow-200 transition hover:bg-yellow-300/10 focus:outline-none focus:ring-2 focus:ring-yellow-300/50"
+                >
+                  Clear filters
+                </button>
               )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {filteredSubscriptions.map((sub, index) => (
+                <MembershipRow key={sub._id} sub={sub} index={index} />
+              ))}
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );

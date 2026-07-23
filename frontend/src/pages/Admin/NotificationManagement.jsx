@@ -12,6 +12,7 @@ import {
 import { useSocket } from "../../hooks/useSocket";
 import { DEFAULT_TEMPLATES } from "../../lib/notifications/types";
 import * as notifApi from "../../services/notificationService";
+import AdminSelect from "../../components/Admin/AdminSelect";
 
 const TABS = [
   { key: "live", label: "Live feed", icon: Bell },
@@ -21,6 +22,7 @@ const TABS = [
 ];
 
 const PRIORITIES = ["INFO", "LOW", "MEDIUM", "HIGH", "URGENT"];
+const priorityOptions = PRIORITIES.map((priority) => ({ value: priority, label: priority }));
 
 const PRIORITY_BADGE = {
   INFO: "bg-sky-50 text-sky-700 border-sky-200",
@@ -345,18 +347,14 @@ export default function NotificationManagement() {
                 placeholder="Search by title or content"
                 className="min-h-10 flex-1 rounded-xl border border-white/10 bg-black text-white px-3 text-sm outline-none focus:border-yellow-500/50 focus:ring-1 focus:ring-yellow-500/50 placeholder-gray-500"
               />
-              <select
+              <AdminSelect
                 value={priorityFilter}
-                onChange={(event) => setPriorityFilter(event.target.value)}
-                className="min-h-10 rounded-xl border border-white/10 bg-black text-white px-3 text-sm outline-none focus:border-yellow-500/50 focus:ring-1 focus:ring-yellow-500/50"
-              >
-                <option value="ALL">All priorities</option>
-                {PRIORITIES.map((priority) => (
-                  <option key={priority} value={priority}>
-                    {priority}
-                  </option>
-                ))}
-              </select>
+                onChange={setPriorityFilter}
+                options={[{ value: 'ALL', label: 'All priorities' }, ...priorityOptions]}
+                icon={Bell}
+                className="min-w-44"
+                ariaLabel="Filter notifications by priority"
+              />
               <button
                 type="button"
                 onClick={markAllAsRead}
@@ -454,17 +452,14 @@ export default function NotificationManagement() {
               </label>
               <label className="grid gap-2 text-sm font-medium text-gray-300">
                 Priority
-                <select
+                <AdminSelect
                   value={form.priority}
-                  onChange={(event) => updateForm("priority", event.target.value)}
-                  className="min-h-10 rounded-xl border border-white/10 bg-black text-white px-3 text-sm outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/20"
-                >
-                  {PRIORITIES.map((priority) => (
-                    <option key={priority} value={priority}>
-                      {priority}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(nextPriority) => updateForm("priority", nextPriority)}
+                  options={priorityOptions}
+                  icon={Bell}
+                  className="w-full"
+                  ariaLabel="Select notification priority"
+                />
               </label>
             </div>
 
@@ -481,17 +476,14 @@ export default function NotificationManagement() {
             <div className="grid gap-4 lg:grid-cols-3">
               <label className="grid gap-2 text-sm font-medium text-gray-300">
                 Audience
-                <select
+                <AdminSelect
                   value={form.targetType}
-                  onChange={(event) => updateForm("targetType", event.target.value)}
-                  className="min-h-10 rounded-xl border border-white/10 bg-black text-white px-3 text-sm outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500/20"
-                >
-                  {TARGET_TYPES.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
+                  onChange={(nextType) => updateForm("targetType", nextType)}
+                  options={TARGET_TYPES}
+                  icon={Globe}
+                  className="w-full"
+                  ariaLabel="Select notification audience"
+                />
               </label>
               <label className="grid gap-2 text-sm font-medium text-gray-300">
                 Expires after hours
