@@ -134,6 +134,11 @@ export default function StaffNavigator() {
       <Tab.Screen
         name="Manage"
         component={ManagementStackNavigator}
+        listeners={({ navigation }) => ({
+          tabPress: () => {
+            navigation.navigate('Manage', { screen: 'ManagementHome' });
+          },
+        })}
         options={{
           tabBarLabel: 'Manage',
           tabBarIcon: ({ focused, color }) => tabIcon(focused, 'briefcase', 'briefcase-outline', color),
@@ -153,12 +158,12 @@ export default function StaffNavigator() {
 
 const tabStyles = StyleSheet.create({
   bar: {
-    backgroundColor: '#111A24',
-    borderTopColor: 'rgba(212,175,55,0.16)',
+    backgroundColor: '#0F1013',
+    borderTopColor: 'rgba(244,197,66,0.18)',
     borderTopWidth: 1,
-    height: Platform.OS === 'ios' ? 88 : 72,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 10,
-    paddingTop: 10,
+    height: Platform.OS === 'ios' ? 90 : 76,
+    paddingBottom: Platform.OS === 'ios' ? 25 : 12,
+    paddingTop: 9,
   },
   label: {
     fontSize: FONT_SIZES.xs,
@@ -167,12 +172,14 @@ const tabStyles = StyleSheet.create({
   },
   iconWrap: {
     alignItems: 'center',
-    borderRadius: RADIUS.md,
-    height: 40,
+    borderRadius: RADIUS.round,
+    height: 42,
     justifyContent: 'center',
-    width: 44,
+    width: 48,
   },
   iconWrapActive: {
-    backgroundColor: 'rgba(212,175,55,0.14)',
+    backgroundColor: 'rgba(244,197,66,0.15)',
+    borderColor: 'rgba(244,197,66,0.26)',
+    borderWidth: 1,
   },
 });

@@ -207,22 +207,22 @@ export default function VehicleModels() {
   };
 
   const inputCls =
-    'w-full rounded-xl border border-gray-300 dark:border-white/15 bg-white dark:bg-white/5 ' +
-    'px-3.5 py-2.5 text-sm text-gray-900 dark:text-white placeholder-gray-400 ' +
-    'focus:outline-none focus:ring-2 focus:ring-yellow-500/50 transition';
+    'w-full rounded-xl border border-white/10 bg-black ' +
+    'px-3.5 py-2.5 text-sm text-white placeholder-gray-500 ' +
+    'focus:outline-none focus:ring-1 focus:ring-yellow-500/50 transition shadow-inner';
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-8 py-10">
+    <div className="p-6 md:p-8 mx-auto min-h-[calc(100vh-70px)] overflow-auto bg-[#080808]">
+      <div className="max-w-4xl mx-auto">
 
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">
-            3D Vehicle Models
-          </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Upload file <code className="font-mono bg-gray-100 dark:bg-white/10 px-1 rounded">.glb</code> for each vehicle brand. The backend will match automatically when the user adds a vehicle.
-          </p>
+          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-yellow-500/20 bg-yellow-500/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-yellow-300">
+            <Car size={12} /> Models
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">3D Vehicle Models</h1>
+          <p className="text-gray-400 text-sm mt-1">Upload file <code className="font-mono bg-white/10 px-1 rounded">.glb</code> for each vehicle brand. The backend will match automatically when the user adds a vehicle.</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -238,7 +238,7 @@ export default function VehicleModels() {
               : <RefreshCw size={14} />}
             Sync vehicles
           </button>
-          <button onClick={loadModels} className="p-2.5 rounded-xl border border-gray-200 dark:border-white/10 hover:bg-gray-100 dark:hover:bg-white/10 transition" title="Refresh list">
+          <button onClick={loadModels} className="p-2.5 rounded-xl border border-white/10 hover:bg-white/10 transition" title="Refresh list">
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
           </button>
         </div>
@@ -262,8 +262,8 @@ export default function VehicleModels() {
 
       {/* Upload form */}
       <form onSubmit={handleUpload}
-        className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] p-6 mb-8 shadow-sm">
-        <h2 className="text-base font-bold text-gray-800 dark:text-white mb-5">Upload new model</h2>
+        className="rounded-3xl border border-white/10 bg-[#171717] p-6 mb-8 shadow-sm">
+        <h2 className="text-base font-bold text-white mb-5">Upload new model</h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
           <div>
@@ -306,7 +306,7 @@ export default function VehicleModels() {
           className={`cursor-pointer rounded-xl border-2 border-dashed px-6 py-8 flex flex-col items-center gap-2 transition mb-5
             ${file
               ? 'border-yellow-500/50 bg-yellow-500/5'
-              : 'border-gray-300 dark:border-white/15 hover:border-yellow-500/40 hover:bg-yellow-500/5'
+              : 'border-white/15 hover:border-yellow-500/40 hover:bg-yellow-500/5'
             }`}
         >
           <input
@@ -344,9 +344,9 @@ export default function VehicleModels() {
       </form>
 
       {/* Model list */}
-      <div className="rounded-2xl border border-gray-200 dark:border-white/10 bg-white dark:bg-white/[0.03] shadow-sm overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-100 dark:border-white/8 flex items-center justify-between">
-          <h2 className="text-base font-bold text-gray-800 dark:text-white">
+      <div className="rounded-3xl border border-white/10 bg-[#171717] shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between">
+          <h2 className="text-base font-bold text-white">
             Model list ({models.length})
           </h2>
         </div>
@@ -361,14 +361,14 @@ export default function VehicleModels() {
             <p className="text-sm text-gray-500">No models yet</p>
           </div>
         ) : (
-          <ul className="divide-y divide-gray-100 dark:divide-white/[0.05]">
+          <ul className="divide-y divide-white/[0.05]">
             {models.map((m) => (
-              <li key={m.publicId} className="flex items-center gap-4 px-6 py-4 hover:bg-gray-50 dark:hover:bg-white/[0.03] group transition">
+              <li key={m.publicId} className="flex items-center gap-4 px-6 py-4 hover:bg-white/[0.03] group transition">
                 <div className="w-9 h-9 rounded-xl bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center shrink-0">
                   <Car size={16} className="text-yellow-500" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-800 dark:text-white font-mono truncate">
+                  <p className="text-sm font-semibold text-white font-mono truncate">
                     {m.publicId}
                   </p>
                   <p className="text-[11px] text-gray-500 mt-0.5">
@@ -413,19 +413,19 @@ export default function VehicleModels() {
       {/* Confirm delete dialog */}
       {deleteTarget && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-white/10 shadow-2xl p-7 max-w-sm w-full">
+          <div className="bg-[#171717] rounded-3xl border border-white/10 shadow-2xl p-7 max-w-sm w-full">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
                 <AlertCircle size={18} className="text-red-500" />
               </div>
-              <p className="font-bold text-gray-900 dark:text-white">Delete this model?</p>
+              <p className="font-bold text-white">Delete this model?</p>
             </div>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-6 font-mono bg-gray-100 dark:bg-white/8 rounded-lg px-3 py-2">
+            <p className="text-sm text-gray-400 mb-6 font-mono bg-white/5 rounded-lg px-3 py-2">
               {deleteTarget}
             </p>
             <div className="flex gap-3">
               <button onClick={() => setDeleteTarget(null)}
-                className="flex-1 py-2.5 rounded-xl border border-gray-300 dark:border-white/15 text-sm font-semibold hover:bg-gray-50 dark:hover:bg-white/5 transition">
+                className="flex-1 py-2.5 rounded-xl border border-white/15 text-sm font-semibold hover:bg-white/5 transition">
                 Cancel
               </button>
               <button onClick={handleDelete}
@@ -448,6 +448,7 @@ export default function VehicleModels() {
           {toast.msg}
         </div>
       )}
+    </div>
     </div>
   );
 }
