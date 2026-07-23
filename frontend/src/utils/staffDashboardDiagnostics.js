@@ -33,6 +33,29 @@ const bookingTimestamp = (booking) => {
   return Number.isNaN(timestamp) ? 0 : timestamp;
 };
 
+export const getStaffDashboardSyncStatus = ({
+  floors = false,
+  bookings = false,
+  sessions = false,
+} = {}) => {
+  const unavailableSources = [
+    !floors && 'Floor',
+    !bookings && 'booking',
+    !sessions && 'session',
+  ].filter(Boolean);
+  const lastSource = unavailableSources.pop();
+  const sourceLabel = unavailableSources.length > 0
+    ? `${unavailableSources.join(', ')} and ${lastSource}`
+    : lastSource;
+
+  return {
+    isAvailable: !sourceLabel,
+    error: sourceLabel
+      ? `${sourceLabel.charAt(0).toUpperCase()}${sourceLabel.slice(1)} data unavailable.`
+      : '',
+  };
+};
+
 export const buildStaffDashboardMetrics = ({
   floors = [],
   dbSlots = [],

@@ -11,7 +11,10 @@ import { getAllFloors, getFloorSlots } from '../../services/parkingFloorService'
 import { getAllBookings } from '../../services/bookingService';
 import { API_BASE } from '../../services/api';
 import { getAdminPlatformRevenueStatistics } from '../../services/statisticsService';
-import { buildStaffDashboardMetrics } from '../../utils/staffDashboardDiagnostics';
+import {
+  buildStaffDashboardMetrics,
+  getStaffDashboardSyncStatus,
+} from '../../utils/staffDashboardDiagnostics';
 import toast, { Toaster } from 'react-hot-toast';
 
 const formatCurrency = (value) => new Intl.NumberFormat('vi-VN', {
@@ -199,6 +202,9 @@ export default function StaffDashboard() {
     EMPTY_REVENUE_STATISTICS
   );
   const [revenueError, setRevenueError] = useState('');
+  const [syncStatus, setSyncStatus] = useState(() =>
+    getStaffDashboardSyncStatus()
+  );
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
@@ -214,7 +220,24 @@ export default function StaffDashboard() {
       const sessionsRes = await fetch(`${API_BASE}/sessions`);
       const sessionsData = await sessionsRes.json();
 
-      const fetchedFloors = floorsRes.data?.success ? (floorsRes.data.data || floorsRes.data.floors || []) : [];
+      const floorSourceSucceeded = Boolean(
+        floorsRes.ok && floorsRes.data?.success
+      );
+      const bookingSourceSucceeded = Boolean(
+        bookingsRes.ok && bookingsRes.data?.success
+      );
+      const sessionSourceSucceeded = Boolean(
+        sessionsRes.ok && sessionsData?.success
+      );
+      setSyncStatus(getStaffDashboardSyncStatus({
+        floors: floorSourceSucceeded,
+        bookings: bookingSourceSucceeded,
+        sessions: sessionSourceSucceeded,
+      }));
+
+      const fetchedFloors = floorSourceSucceeded
+        ? (floorsRes.data.data || floorsRes.data.floors || [])
+        : [];
       setFloors(fetchedFloors);
       
       if (fetchedFloors.length > 0) {
@@ -226,8 +249,8 @@ export default function StaffDashboard() {
         setDbSlots([]);
       }
 
-      if (bookingsRes.data?.success) setBookings(bookingsRes.data.data || []);
-      if (sessionsData.success) setSessions(sessionsData.data || []);
+      setBookings(bookingSourceSucceeded ? (bookingsRes.data.data || []) : []);
+      setSessions(sessionSourceSucceeded ? (sessionsData.data || []) : []);
       if (revenueRes.ok && revenueRes.data?.success) {
         setRevenueStatistics(normalizeRevenueStatistics(revenueRes.data.data));
         setRevenueError('');
@@ -238,6 +261,11 @@ export default function StaffDashboard() {
       }
 
     } catch {
+      setFloors([]);
+      setBookings([]);
+      setSessions([]);
+      setDbSlots([]);
+      setSyncStatus(getStaffDashboardSyncStatus());
       toast.error('Failed to sync dashboard data');
     } finally {
       setLoading(false);
@@ -353,12 +381,20 @@ export default function StaffDashboard() {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black tracking-tight bg-gradient-to-r from-white via-white to-white/60 bg-clip-text text-transparent">System Overview</h1>
-          <p className="text-emerald-400/80 text-sm mt-1.5 font-medium flex items-center gap-2">
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-            </span>
-            Real-time data synced
+          <p className={`text-sm mt-1.5 font-medium flex items-center gap-2 ${
+            syncStatus.isAvailable ? 'text-emerald-400/80' : 'text-red-400/90'
+          }`}>
+            {syncStatus.isAvailable ? (
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+              </span>
+            ) : (
+              <span className="inline-flex h-2.5 w-2.5 rounded-full bg-red-500" />
+            )}
+            {syncStatus.isAvailable
+              ? 'Real-time data synced'
+              : `Operational sync unavailable: ${syncStatus.error}`}
           </p>
         </div>
         <div className="text-right">
@@ -644,41 +680,51 @@ export default function StaffDashboard() {
           
           <h3 className="text-white font-extrabold text-lg mb-5 relative z-10">Lot Diagnostics</h3>
           <div className="space-y-3 relative z-10">
-            {occupancyRate > 90 ? (
-              <AlertPill
-                icon={<AlertTriangle size={16} className="text-yellow-400" />}
-                text={`Lot ${activeFloor?.name || 'A'} is nearing capacity (${occupancyRate}%). Consider diverting incoming traffic.`}
-                time="Active Now" level="warn"
-              />
-            ) : (
-              <AlertPill
-                icon={<CheckCircle2 size={16} className="text-emerald-400" />}
-                text={`Lot ${activeFloor?.name || 'A'} capacity is optimal (${occupancyRate}%).`}
-                time="Active Now" level="ok"
-              />
-            )}
-            
-            {cancellationsToday > 0 && (
-              <AlertPill
-                icon={<FileWarning size={16} className="text-orange-400" />}
-                text={`${cancellationsToday} booking(s) cancelled today. Please review cancellation logs.`}
-                time="Today" level="warn"
-              />
-            )}
-
-            {maintenanceSlots.length > 0 && (
-              <AlertPill
-                icon={<Wrench size={16} className="text-orange-400" />}
-                text={`${maintenanceSlots.length} slot(s) under maintenance: ${maintenanceSlots.map((slot) => `${slot.slotNumber}${slot.maintenanceReason ? ` (${slot.maintenanceReason})` : ''}`).join(', ')}`}
-                time="Database status" level="warn"
-              />
-            )}
-            {overdueSessions.length > 0 && (
+            {!syncStatus.isAvailable ? (
               <AlertPill
                 icon={<AlertTriangle size={16} className="text-red-400" />}
-                text={`${overdueSessions.length} active session(s) exceeded their expected duration.`}
-                time="Requires attention" level="error"
+                text={`Operational diagnostics unavailable. ${syncStatus.error}`}
+                time="Data synchronization failed" level="error"
               />
+            ) : (
+              <>
+                {occupancyRate > 90 ? (
+                  <AlertPill
+                    icon={<AlertTriangle size={16} className="text-yellow-400" />}
+                    text={`Lot ${activeFloor?.name || 'A'} is nearing capacity (${occupancyRate}%). Consider diverting incoming traffic.`}
+                    time="Active Now" level="warn"
+                  />
+                ) : (
+                  <AlertPill
+                    icon={<CheckCircle2 size={16} className="text-emerald-400" />}
+                    text={`Lot ${activeFloor?.name || 'A'} capacity is optimal (${occupancyRate}%).`}
+                    time="Active Now" level="ok"
+                  />
+                )}
+            
+                {cancellationsToday > 0 && (
+                  <AlertPill
+                    icon={<FileWarning size={16} className="text-orange-400" />}
+                    text={`${cancellationsToday} booking(s) cancelled today. Please review cancellation logs.`}
+                    time="Today" level="warn"
+                  />
+                )}
+
+                {maintenanceSlots.length > 0 && (
+                  <AlertPill
+                    icon={<Wrench size={16} className="text-orange-400" />}
+                    text={`${maintenanceSlots.length} slot(s) under maintenance: ${maintenanceSlots.map((slot) => `${slot.slotNumber}${slot.maintenanceReason ? ` (${slot.maintenanceReason})` : ''}`).join(', ')}`}
+                    time="Database status" level="warn"
+                  />
+                )}
+                {overdueSessions.length > 0 && (
+                  <AlertPill
+                    icon={<AlertTriangle size={16} className="text-red-400" />}
+                    text={`${overdueSessions.length} active session(s) exceeded their expected duration.`}
+                    time="Requires attention" level="error"
+                  />
+                )}
+              </>
             )}
 
             <AlertPill

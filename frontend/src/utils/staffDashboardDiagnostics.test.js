@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildStaffDashboardMetrics } from './staffDashboardDiagnostics.js';
+import {
+  buildStaffDashboardMetrics,
+  getStaffDashboardSyncStatus,
+} from './staffDashboardDiagnostics.js';
 
 const floor = {
   _id: 'floor-1',
@@ -62,4 +65,26 @@ test('counts only cancellations from the current day and sorts recent bookings n
   const result = buildStaffDashboardMetrics({ floors: [floor], dbSlots: [], sessions: [], bookings, now: new Date('2026-07-24T12:00:00.000Z') });
   assert.equal(result.cancellationsToday, 1);
   assert.deepEqual(result.recentBookings.map((booking) => booking._id), ['latest', 'new', 'old']);
+});
+
+test('reports healthy diagnostics only after every operational source succeeds', () => {
+  assert.deepEqual(getStaffDashboardSyncStatus({
+    floors: true,
+    bookings: true,
+    sessions: true,
+  }), {
+    isAvailable: true,
+    error: '',
+  });
+});
+
+test('reports failed operational sources as unavailable diagnostics', () => {
+  assert.deepEqual(getStaffDashboardSyncStatus({
+    floors: true,
+    bookings: false,
+    sessions: false,
+  }), {
+    isAvailable: false,
+    error: 'Booking and session data unavailable.',
+  });
 });
