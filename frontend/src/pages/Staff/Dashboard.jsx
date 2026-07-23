@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { format, isToday } from 'date-fns';
+import { format } from 'date-fns';
 import {
   MonitorCheck, Car, FileWarning, ClipboardList,
   TrendingUp, CheckCircle2, AlertTriangle, DoorOpen,
@@ -11,6 +11,7 @@ import { getAllFloors, getFloorSlots } from '../../services/parkingFloorService'
 import { getAllBookings } from '../../services/bookingService';
 import { API_BASE } from '../../services/api';
 import { getAdminPlatformRevenueStatistics } from '../../services/statisticsService';
+import { buildStaffDashboardMetrics } from '../../utils/staffDashboardDiagnostics';
 import toast, { Toaster } from 'react-hot-toast';
 
 const formatCurrency = (value) => new Intl.NumberFormat('vi-VN', {
@@ -252,53 +253,20 @@ export default function StaffDashboard() {
     };
   }, [fetchData]);
 
-  const { totalSlots, activeFloor, activeFloorSlots, vehiclesInside, violationsCount, recentBookings, occupancyRate } = useMemo(() => {
-    let tSlots = 0;
-    floors.forEach(f => {
-      const elements = f.layoutData?.elements || [];
-      tSlots += elements.filter(e => e.type?.startsWith('slot')).length;
-    });
-
-    // 1. Vehicles Inside Now (Active Sessions)
-    const activeSessions = sessions.filter(s => s.status === 'active' || s.status === 'ACTIVE');
-    const vInside = activeSessions.length;
-
-    // 2. Violations Today (Cancelled Bookings today)
-    const cancelledToday = bookings.filter(b => 
-      b.status === 'CANCELLED' && 
-      isToday(new Date(b.updatedAt || b.createdAt))
-    );
-    const vCount = cancelledToday.length;
-
-    // Sort bookings descending by creation time (or start time)
-    const sortedBookings = [...bookings].sort((a, b) => new Date(b.createdAt || b.scheduledStart) - new Date(a.createdAt || a.scheduledStart)).reverse();
-    const recent = sortedBookings.slice(0, 5);
-
-    const aFloor = floors.length > 0 ? floors[0] : null;
-    let aFloorSlots = [];
-    if (aFloor) {
-      const elements = aFloor.layoutData?.elements || [];
-      aFloorSlots = elements.filter(e => e.type?.startsWith('slot'))
-                            .map(e => ({ id: e.id, name: e.name || '', type: e.type }))
-                            .sort((a, b) => {
-                              const nameA = a.name || a.id;
-                              const nameB = b.name || b.id;
-                              return nameA.localeCompare(nameB, undefined, { numeric: true });
-                            });
-    }
-
-    const occRate = tSlots > 0 ? Math.round((vInside / tSlots) * 100) : 0;
-
-    return { 
-      totalSlots: tSlots, 
-      activeFloor: aFloor, 
-      activeFloorSlots: aFloorSlots, 
-      vehiclesInside: vInside, 
-      violationsCount: vCount,
-      recentBookings: recent,
-      occupancyRate: occRate
-    };
-  }, [floors, bookings, sessions]);
+  const {
+    totalSlots,
+    activeFloor,
+    activeFloorSlots,
+    vehiclesInside,
+    cancellationsToday,
+    recentBookings,
+    occupancyRate,
+    maintenanceSlots,
+    overdueSessions,
+  } = useMemo(
+    () => buildStaffDashboardMetrics({ floors, dbSlots, sessions, bookings }),
+    [floors, dbSlots, sessions, bookings]
+  );
 
   const activeFloorZones = useMemo(() => {
     const slotsByZone = activeFloorSlots.reduce((zones, slot) => {
@@ -428,7 +396,7 @@ export default function StaffDashboard() {
               color="from-orange-600/80 to-orange-500/20"
               hoverBorder="hover:border-orange-500/30"
               label="Cancellations"
-              value={violationsCount}
+              value={cancellationsToday}
               sub="Requires attention"
             />
           </div>
@@ -690,11 +658,26 @@ export default function StaffDashboard() {
               />
             )}
             
-            {violationsCount > 0 && (
+            {cancellationsToday > 0 && (
               <AlertPill
                 icon={<FileWarning size={16} className="text-orange-400" />}
-                text={`${violationsCount} booking(s) cancelled today. Please review cancellation logs.`}
+                text={`${cancellationsToday} booking(s) cancelled today. Please review cancellation logs.`}
                 time="Today" level="warn"
+              />
+            )}
+
+            {maintenanceSlots.length > 0 && (
+              <AlertPill
+                icon={<Wrench size={16} className="text-orange-400" />}
+                text={`${maintenanceSlots.length} slot(s) under maintenance: ${maintenanceSlots.map((slot) => `${slot.slotNumber}${slot.maintenanceReason ? ` (${slot.maintenanceReason})` : ''}`).join(', ')}`}
+                time="Database status" level="warn"
+              />
+            )}
+            {overdueSessions.length > 0 && (
+              <AlertPill
+                icon={<AlertTriangle size={16} className="text-red-400" />}
+                text={`${overdueSessions.length} active session(s) exceeded their expected duration.`}
+                time="Requires attention" level="error"
               />
             )}
 
