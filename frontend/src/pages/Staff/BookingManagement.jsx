@@ -9,7 +9,8 @@ import {
 import { getAllFloors } from '../../services/parkingFloorService';
 import { getAllBookings } from '../../services/bookingService';
 import { getAdminBookingStatistics } from '../../services/statisticsService';
-import toast, { Toaster } from 'react-hot-toast';
+import { getResponseAvailability } from '../../utils/staffOperationalAvailability';
+import { Toaster } from 'react-hot-toast';
 
 const STATISTICS_RANGES = [
   { value: 'daily', label: 'Daily' },
@@ -206,6 +207,7 @@ export default function BookingManagement() {
   const [floors, setFloors] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [dataError, setDataError] = useState('');
 
   const [selectedFloor, setSelectedFloor] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -238,16 +240,32 @@ export default function BookingManagement() {
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
+      setDataError('');
       try {
         const [floorsRes, bookingsRes] = await Promise.all([
           getAllFloors(),
           getAllBookings({ date: format(currentDate, 'yyyy-MM-dd') })
         ]);
-        if (floorsRes.data?.success) setFloors(floorsRes.data.data || floorsRes.data.floors || []);
-        if (bookingsRes.data?.success) setBookings(bookingsRes.data.data || []);
+        const floorsState = getResponseAvailability(floorsRes, 'Unable to load parking floors.');
+        const bookingsState = getResponseAvailability(bookingsRes, 'Unable to load bookings.');
+        if (!floorsState.isAvailable || !bookingsState.isAvailable) {
+          setFloors([]);
+          setBookings([]);
+          setDataError(
+            [
+              !floorsState.isAvailable ? floorsState.error : '',
+              !bookingsState.isAvailable ? bookingsState.error : '',
+            ].filter(Boolean).join(' '),
+          );
+          return;
+        }
+        setFloors(floorsState.data || floorsRes.data.floors || []);
+        setBookings(bookingsState.data || []);
         setSelectedBooking(null);
       } catch (error) {
-        toast.error(error?.message || 'Failed to load booking data');
+        setFloors([]);
+        setBookings([]);
+        setDataError(error?.message || 'Failed to load booking data.');
       } finally {
         setLoading(false);
       }
@@ -486,9 +504,9 @@ export default function BookingManagement() {
                   <h2 className="text-base font-extrabold tracking-tight text-white">
                     Booking Performance
                   </h2>
-                  <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/20 bg-emerald-500/10 px-2 py-0.5 text-[8px] font-black uppercase tracking-widest text-emerald-300">
-                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-                    Live
+                  <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[8px] font-black uppercase tracking-widest ${statisticsError ? 'border-red-400/20 bg-red-500/10 text-red-300' : statisticsLoading ? 'border-amber-400/20 bg-amber-500/10 text-amber-300' : 'border-emerald-400/20 bg-emerald-500/10 text-emerald-300'}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${statisticsError ? 'bg-red-400' : statisticsLoading ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400 animate-pulse'}`} />
+                    {statisticsError ? 'Data unavailable' : statisticsLoading ? 'Updating' : 'Live'}
                   </span>
                 </div>
                 <p className="mt-0.5 text-[11px] font-medium text-white/40">
@@ -628,6 +646,12 @@ export default function BookingManagement() {
             <div className="h-full flex flex-col items-center justify-center text-white/30 gap-4">
               <Loader2 className="animate-spin text-emerald-500" size={32} />
               <span className="font-medium tracking-wide">Syncing bookings...</span>
+            </div>
+          ) : dataError ? (
+            <div className="h-64 flex flex-col items-center justify-center border-2 border-dashed border-red-500/30 rounded-[32px] bg-red-500/[0.05] text-red-200 text-center px-6" role="alert">
+              <AlertTriangle size={40} className="mb-4 text-red-400" />
+              <p className="font-medium">Booking data unavailable</p>
+              <p className="mt-2 text-sm text-red-200/70">{dataError}</p>
             </div>
           ) : filteredBookings.length === 0 ? (
             <div className="h-64 flex flex-col items-center justify-center border-2 border-dashed border-white/10 rounded-[32px] bg-white/[0.02] text-white/40">

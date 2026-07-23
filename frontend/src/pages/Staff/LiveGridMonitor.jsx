@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import ParkingMapGrid from "../../components/ParkingMapGrid";
-import { getAllFloors } from "../../services/parkingFloorService";
-import { getActiveSessions, getSessionResponseState } from "../../services/sessionService";
+import { getAllFloors, getFloorSlots } from "../../services/parkingFloorService";
+import { getActiveSessions } from "../../services/sessionService";
 import { MonitorCheck, X } from "lucide-react";
 import StaffCheckoutModal from "./StaffCheckoutModal";
 import { getAvailableBookingSlots, getActiveHolds, getActiveMapBookings } from "../../services/bookingService";
+import { getRequiredSourcesAvailability } from "../../utils/staffOperationalAvailability";
 
 export default function LiveGridMonitor() {
   const [floors, setFloors] = useState([]);
@@ -12,8 +13,8 @@ export default function LiveGridMonitor() {
   const [loading, setLoading] = useState(true);
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [activeSessions, setActiveSessions] = useState([]);
-  const [sessionDataAvailable, setSessionDataAvailable] = useState(false);
-  const [sessionDataError, setSessionDataError] = useState('Live session data is unavailable.');
+  const [liveDataAvailable, setLiveDataAvailable] = useState(false);
+  const [liveDataError, setLiveDataError] = useState('Live operational data is unavailable.');
   const [availableSlots, setAvailableSlots] = useState(null);
   const [activeHolds, setActiveHolds] = useState([]);
   const [activeBookings, setActiveBookings] = useState([]);
@@ -21,93 +22,79 @@ export default function LiveGridMonitor() {
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
 
   useEffect(() => {
-    const fetchDbSlots = async () => {
-      try {
-        const { getFloorSlots } = await import('../../services/parkingFloorService');
-        if (currentFloorId) {
-          const res = await getFloorSlots(currentFloorId);
-          if (res.ok && res.data.success) {
-            setDbSlots(res.data.data);
-          }
-        } else {
-          if (floors.length === 0) {
-            setDbSlots([]);
-            return;
-          }
-          const promises = floors.map(f => getFloorSlots(f._id));
-          const results = await Promise.all(promises);
-          const allSlots = results.flatMap(r => (r.ok && r.data.success) ? r.data.data : []);
-          setDbSlots(allSlots);
-        }
-      } catch (e) {
-        console.error("Failed to fetch slots", e);
-      }
-    };
-    fetchDbSlots();
-  }, [currentFloorId, floors]);
-
-  useEffect(() => {
     document.body.classList.add("bg-[#0b0e16]");
     return () => document.body.classList.remove("bg-[#0b0e16]");
   }, []);
 
-  const fetchFloors = async () => {
+  const invalidateLiveData = useCallback((message) => {
+    setFloors([]);
+    setDbSlots([]);
+    setActiveSessions([]);
+    setAvailableSlots(null);
+    setActiveHolds([]);
+    setActiveBookings([]);
+    setLiveDataAvailable(false);
+    setLiveDataError(message);
+    setSelectedSlot(null);
+    setShowCheckoutModal(false);
+  }, []);
+
+  const fetchLiveStatus = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await getAllFloors();
-      if (res.ok && res.data.data) {
-        setFloors(res.data.data);
-      }
-    } catch (e) {
-      console.error(e);
-    }
-    setLoading(false);
-  };
-
-  const fetchLiveStatus = async () => {
-    try {
-      const res = await getActiveSessions();
-      const sessionState = getSessionResponseState(res);
-      setActiveSessions(sessionState.sessions);
-      setSessionDataAvailable(sessionState.isAvailable);
-      setSessionDataError(sessionState.error);
-      if (!sessionState.isAvailable) {
-        setSelectedSlot(null);
-        setShowCheckoutModal(false);
+      const floorsRes = await getAllFloors();
+      const floorsState = getRequiredSourcesAvailability([{ name: 'Floors', response: floorsRes }]);
+      if (!floorsState.isAvailable) {
+        invalidateLiveData(floorsState.error);
+        return;
       }
 
+      const nextFloors = floorsRes.data.data || [];
+      const floorSlotResults = await Promise.all(
+        nextFloors.map(async (floor) => ({
+          name: `Floor slots (${floor.name || floor._id})`,
+          response: await getFloorSlots(floor._id),
+        })),
+      );
       const startTimeStr = new Date().toISOString();
       const endTimeStr = new Date(Date.now() + 60 * 1000).toISOString();
-      const availableRes = await getAvailableBookingSlots({
-        startTime: startTimeStr,
-        endTime: endTimeStr,
-      });
-      if (availableRes.ok && availableRes.data?.data?.slots) {
-        setAvailableSlots(availableRes.data.data.slots);
+      const [sessionsRes, availableRes, holdsRes, bookingsRes] = await Promise.all([
+        getActiveSessions(),
+        getAvailableBookingSlots({ startTime: startTimeStr, endTime: endTimeStr }),
+        getActiveHolds(),
+        getActiveMapBookings(),
+      ]);
+      const availability = getRequiredSourcesAvailability([
+        { name: 'Floors', response: floorsRes },
+        ...floorSlotResults,
+        { name: 'Active sessions', response: sessionsRes },
+        { name: 'Available booking slots', response: availableRes },
+        { name: 'Active holds', response: holdsRes },
+        { name: 'Active map bookings', response: bookingsRes },
+      ]);
+      if (!availability.isAvailable) {
+        invalidateLiveData(availability.error);
+        return;
       }
 
-      const holdsRes = await getActiveHolds();
-      if (holdsRes.ok && holdsRes.data?.data) {
-        setActiveHolds(holdsRes.data.data);
-      }
-      
-      const bookingsRes = await getActiveMapBookings();
-      if (bookingsRes.ok && bookingsRes.data?.data) {
-        setActiveBookings(bookingsRes.data.data);
-      }
+      setFloors(nextFloors);
+      setDbSlots(floorSlotResults.flatMap(({ response }) => response.data.data || []));
+      setActiveSessions(sessionsRes.data.data || []);
+      setAvailableSlots(availableRes.data.data?.slots || []);
+      setActiveHolds(holdsRes.data.data || []);
+      setActiveBookings(bookingsRes.data.data || []);
+      setLiveDataAvailable(true);
+      setLiveDataError('');
     } catch (err) {
       console.error("Failed to fetch live status", err);
-      setActiveSessions([]);
-      setSessionDataAvailable(false);
-      setSessionDataError('Live session data is unavailable.');
-      setSelectedSlot(null);
-      setShowCheckoutModal(false);
+      invalidateLiveData(err?.message || 'Live operational data is unavailable.');
+    } finally {
+      setLoading(false);
     }
-  };
+  }, [invalidateLiveData]);
 
   useEffect(() => {
     const timerId = window.setTimeout(() => {
-      fetchFloors();
       fetchLiveStatus();
     }, 0);
     const interval = setInterval(fetchLiveStatus, 15000); // refresh every 15s
@@ -115,7 +102,7 @@ export default function LiveGridMonitor() {
       window.clearTimeout(timerId);
       clearInterval(interval);
     };
-  }, []);
+  }, [fetchLiveStatus]);
 
   return (
     <div className="flex flex-col h-[calc(100vh-70px)] bg-[#0b0e16] text-gray-200 font-sans relative overflow-hidden"
@@ -139,15 +126,15 @@ export default function LiveGridMonitor() {
           {floors.length === 0 && <option value="">No floors available</option>}
         </select>
         <div className="flex items-center gap-1.5 px-3">
-            <div className={`w-2 h-2 rounded-full ${sessionDataAvailable ? 'bg-emerald-400 animate-pulse' : 'bg-red-500'}`} />
-            <span className={`text-[10px] font-mono ${sessionDataAvailable ? 'text-gray-400' : 'text-red-400'}`}>
-              {sessionDataAvailable ? 'LIVE UPDATE' : 'SESSION DATA UNAVAILABLE'}
+            <div className={`w-2 h-2 rounded-full ${liveDataAvailable ? 'bg-emerald-400 animate-pulse' : 'bg-red-500'}`} />
+            <span className={`text-[10px] font-mono ${liveDataAvailable ? 'text-gray-400' : 'text-red-400'}`}>
+              {liveDataAvailable ? 'LIVE UPDATE' : 'LIVE DATA UNAVAILABLE'}
             </span>
         </div>
       </div>
 
       <div className="flex-1 overflow-hidden relative">
-        {sessionDataAvailable ? (
+        {liveDataAvailable ? (
           <ParkingMapGrid
             floors={floors}
             currentFloorId={currentFloorId}
@@ -164,8 +151,8 @@ export default function LiveGridMonitor() {
         ) : (
           <div className="flex h-full items-center justify-center p-6" role="alert">
             <div className="max-w-md rounded-2xl border border-red-500/30 bg-red-950/20 p-6 text-center shadow-lg">
-              <p className="text-sm font-bold uppercase tracking-[0.16em] text-red-400">Live session data unavailable</p>
-              <p className="mt-2 text-sm text-red-200/80">{sessionDataError}</p>
+              <p className="text-sm font-bold uppercase tracking-[0.16em] text-red-400">Live operational data unavailable</p>
+              <p className="mt-2 text-sm text-red-200/80">{liveDataError}</p>
             </div>
           </div>
         )}

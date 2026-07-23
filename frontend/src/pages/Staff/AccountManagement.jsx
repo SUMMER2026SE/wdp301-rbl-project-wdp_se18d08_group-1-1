@@ -8,6 +8,7 @@ import {
   RefreshCw, Eye, Lock
 } from 'lucide-react';
 import { apiFetch } from '../../services/api';
+import { getResponseAvailability } from '../../utils/staffOperationalAvailability';
 
 // --- Constants ---------------------------------------------------------------
 const ROLES = {
@@ -150,6 +151,7 @@ export default function AccountManagement() {
   // -- State --
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const filterRole = 'customer'; // Always customer for Staff
   const [filterStatus, setFilterStatus] = useState('all');
@@ -171,13 +173,22 @@ export default function AccountManagement() {
   const fetchUsers = async () => {
     try {
       setLoading(true);
+      setLoadError('');
       const res = await apiFetch('/staff/users', { headers: authHeader });
-      if (res.ok && res.data?.success) {
-        // Strict Data Filtering: ONLY fetch and display accounts where role === 'customer'
-        const customersOnly = res.data.data.filter(u => u.role === 'customer');
-        setUsers(customersOnly);
+      const responseState = getResponseAvailability(res, 'Unable to load customer accounts.');
+      if (!responseState.isAvailable) {
+        setUsers([]);
+        setLoadError(responseState.error);
+        return;
       }
-    } catch (e) { console.error(e); }
+      // Strict Data Filtering: ONLY fetch and display accounts where role === 'customer'
+      const customersOnly = (responseState.data || []).filter(u => u.role === 'customer');
+      setUsers(customersOnly);
+    } catch (e) {
+      console.error(e);
+      setUsers([]);
+      setLoadError(e?.message || 'Unable to load customer accounts.');
+    }
     finally { setLoading(false); }
   };
 
@@ -526,7 +537,16 @@ export default function AccountManagement() {
             </thead>
             <tbody>
               {loading && Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)}
-              {!loading && pageUsers.length === 0 && (
+              {!loading && loadError && (
+                <tr><td colSpan="8" className="py-20 text-center">
+                  <div className="flex flex-col items-center gap-3 text-red-300" role="alert">
+                    <AlertTriangle size={36} />
+                    <span className="text-sm font-medium">Customer data unavailable</span>
+                    <span className="max-w-md text-xs text-red-200/70">{loadError}</span>
+                  </div>
+                </td></tr>
+              )}
+              {!loading && !loadError && pageUsers.length === 0 && (
                 <tr><td colSpan="8" className="py-20 text-center">
                   <div className="flex flex-col items-center gap-3 text-white/30">
                     <UserX size={36} />

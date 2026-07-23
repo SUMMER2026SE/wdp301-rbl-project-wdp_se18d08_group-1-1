@@ -255,11 +255,12 @@ export default function TicketPackages() {
         headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` },
       });
       const data = await res.json();
-      if (data.success) {
+      if (res.ok && data.success) {
         setPackages(data.data);
         setError('');
       } else {
         setPackages([]);
+        setError(data?.message || 'Failed to load ticket packages');
       }
     } catch (err) {
       console.error(err);
