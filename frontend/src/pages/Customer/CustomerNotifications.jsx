@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Bell, CheckCheck, Search, ChevronDown } from 'lucide-react';
 import { useNotifications } from '../../hooks/useNotifications';
 import NotificationItem from '../../components/notifications/NotificationItem';
@@ -13,7 +14,8 @@ const TYPE_FILTERS = [
   { value: 'SYSTEM', label: 'System' },
 ];
 
-export default function CustomerNotifications() {
+export default function CustomerNotifications({ contextRole = 'customer' }) {
+  const navigate = useNavigate();
   const {
     notifications,
     unreadCount,
@@ -25,7 +27,7 @@ export default function CustomerNotifications() {
     markAllAsRead,
     deleteNotification,
     updateFilters,
-  } = useNotifications({ autoFetch: true, limit: 20 });
+  } = useNotifications({ autoFetch: true, limit: 20, contextRole });
 
   const [searchInput, setSearchInput] = useState('');
 
@@ -107,6 +109,15 @@ export default function CustomerNotifications() {
                   notification={n}
                   onRead={markAsRead}
                   onDelete={deleteNotification}
+                  onClick={() => {
+                    if (contextRole === 'customer' && n.type === 'BOOKING') {
+                      navigate(
+                        n.metadata?.bookingId
+                          ? `/customer/booking?bookingId=${n.metadata.bookingId}`
+                          : '/customer/booking'
+                      );
+                    }
+                  }}
                 />
               ))}
 

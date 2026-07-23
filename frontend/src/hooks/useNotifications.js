@@ -2,6 +2,23 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSocket } from './useSocket';
 import * as notifApi from '../services/notificationService';
 
+const NOTIFICATIONS_CHANGED_EVENT = 'valo_notifications_changed';
+
+function getNotificationId(notification) {
+  return String(notification.notificationId || notification._id);
+}
+
+function requireSuccessfulResponse(response, fallbackMessage) {
+  if (!response?.ok) {
+    throw new Error(response?.data?.message || fallbackMessage);
+  }
+  return response;
+}
+
+function broadcastNotificationsChanged() {
+  window.dispatchEvent(new Event(NOTIFICATIONS_CHANGED_EVENT));
+}
+
 /**
  * useNotifications — custom hook for notification state management.
  *
@@ -21,6 +38,11 @@ export function useNotifications({ autoFetch = true, limit = 20, contextRole } =
   const [hasMore, setHasMore] = useState(true);
   const [filters, setFilters] = useState({ type: null, isRead: null, search: '' });
   const isMounted = useRef(true);
+  const receivedIds = useRef(new Set());
+  const notificationsRef = useRef([]);
+  const pendingReadIds = useRef(new Set());
+  const pendingDeleteIds = useRef(new Set());
+  const markingAllRef = useRef(false);
 
   // ── Fetch unread count ──
   const fetchUnreadCount = useCallback(async () => {
@@ -53,15 +75,28 @@ export function useNotifications({ autoFetch = true, limit = 20, contextRole } =
       if (filters.search) params.search = filters.search;
 
       const res = await notifApi.getNotifications(params);
+      requireSuccessfulResponse(res, 'Unable to load notifications');
 
-      if (res.ok && isMounted.current) {
+      if (isMounted.current) {
         const newNotifs = res.data?.data || [];
         const pagination = res.data?.pagination || {};
+        newNotifs.forEach((item) => {
+          receivedIds.current.add(String(item.notificationId || item._id));
+        });
 
         if (replace) {
+          notificationsRef.current = newNotifs;
           setNotifications(newNotifs);
         } else {
-          setNotifications((prev) => [...prev, ...newNotifs]);
+          setNotifications((prev) => {
+            const existingIds = new Set(prev.map(getNotificationId));
+            const next = [
+              ...prev,
+              ...newNotifs.filter((item) => !existingIds.has(getNotificationId(item))),
+            ];
+            notificationsRef.current = next;
+            return next;
+          });
         }
 
         setPage(pageNum);
@@ -73,7 +108,7 @@ export function useNotifications({ autoFetch = true, limit = 20, contextRole } =
     } finally {
       if (isMounted.current) setLoading(false);
     }
-  }, [filters, limit]);
+  }, [contextRole, filters, limit]);
 
   // ── Initial fetch ──
   useEffect(() => {
@@ -96,21 +131,45 @@ export function useNotifications({ autoFetch = true, limit = 20, contextRole } =
     if (!socket) return;
 
     const handleNew = (notification) => {
-      setNotifications((prev) => [
-        {
-          _id: `temp_${Date.now()}`,
-          notificationId: notification._id,
-          title: notification.title,
-          content: notification.content,
-          type: notification.type,
-          priority: notification.priority,
-          metadata: notification.metadata,
-          isRead: false,
-          readAt: null,
-          createdAt: notification.createdAt || new Date().toISOString(),
-        },
-        ...prev,
-      ]);
+      if (
+        notification.targetType === 'ROLE_BASED' &&
+        contextRole &&
+        !notification.targetRoles?.includes(contextRole)
+      ) {
+        return;
+      }
+
+      const notificationId = String(notification._id);
+      if (receivedIds.current.has(notificationId)) return;
+      receivedIds.current.add(notificationId);
+      setUnreadCount((count) => count + 1);
+
+      const matchesType = !filters.type || notification.type === filters.type;
+      const matchesRead = filters.isRead !== true && filters.isRead !== 'true';
+      const searchValue = filters.search.trim().toLowerCase();
+      const matchesSearch =
+        !searchValue ||
+        notification.title?.toLowerCase().includes(searchValue) ||
+        notification.content?.toLowerCase().includes(searchValue);
+
+      if (matchesType && matchesRead && matchesSearch) {
+        setNotifications((prev) => {
+          const next = [{
+            _id: `temp_${Date.now()}`,
+            notificationId: notification._id,
+            title: notification.title,
+            content: notification.content,
+            type: notification.type,
+            priority: notification.priority,
+            metadata: notification.metadata,
+            isRead: false,
+            readAt: null,
+            createdAt: notification.createdAt || new Date().toISOString(),
+          }, ...prev];
+          notificationsRef.current = next;
+          return next;
+        });
+      }
     };
 
     const handleUnreadCount = (data) => {
@@ -124,7 +183,20 @@ export function useNotifications({ autoFetch = true, limit = 20, contextRole } =
       socket.off('notification:new', handleNew);
       socket.off('notification:unreadCount', handleUnreadCount);
     };
-  }, [socket]);
+  }, [contextRole, filters, socket]);
+
+  useEffect(() => {
+    const handleNotificationsChanged = () => {
+      fetchNotifications(1, true);
+      fetchUnreadCount();
+    };
+    window.addEventListener(NOTIFICATIONS_CHANGED_EVENT, handleNotificationsChanged);
+    return () =>
+      window.removeEventListener(
+        NOTIFICATIONS_CHANGED_EVENT,
+        handleNotificationsChanged
+      );
+  }, [fetchNotifications, fetchUnreadCount]);
 
   // ── Actions ──
   const fetchMore = useCallback(() => {
@@ -134,26 +206,40 @@ export function useNotifications({ autoFetch = true, limit = 20, contextRole } =
   }, [loading, hasMore, page, fetchNotifications]);
 
   const markAsRead = useCallback(async (notificationId) => {
+    const id = String(notificationId);
+    const current = notifications.find((item) => getNotificationId(item) === id);
+    if (!current || current.isRead || pendingReadIds.current.has(id)) return false;
+    pendingReadIds.current.add(id);
+
     try {
       // Optimistic update
       setNotifications((prev) =>
         prev.map((n) =>
-          (n.notificationId || n._id) === notificationId
+          String(n.notificationId || n._id) === String(notificationId)
             ? { ...n, isRead: true, readAt: new Date().toISOString() }
             : n
         )
       );
       setUnreadCount((c) => Math.max(0, c - 1));
 
-      await notifApi.markAsRead(notificationId);
+      const response = await notifApi.markAsRead(notificationId);
+      requireSuccessfulResponse(response, 'Unable to mark notification as read');
+      broadcastNotificationsChanged();
+      return true;
     } catch {
       // Revert on failure — re-fetch
       fetchNotifications(1, true);
       fetchUnreadCount();
+      return false;
+    } finally {
+      pendingReadIds.current.delete(id);
     }
-  }, [fetchNotifications, fetchUnreadCount]);
+  }, [notifications, fetchNotifications, fetchUnreadCount]);
 
   const markAllAsRead = useCallback(async () => {
+    if (markingAllRef.current || unreadCount === 0) return false;
+    markingAllRef.current = true;
+
     try {
       // Optimistic update
       setNotifications((prev) =>
@@ -161,29 +247,49 @@ export function useNotifications({ autoFetch = true, limit = 20, contextRole } =
       );
       setUnreadCount(0);
 
-      await notifApi.markAllAsRead();
+      const response = await notifApi.markAllAsRead();
+      requireSuccessfulResponse(response, 'Unable to mark all notifications as read');
+      broadcastNotificationsChanged();
+      return true;
     } catch {
       fetchNotifications(1, true);
       fetchUnreadCount();
+      return false;
+    } finally {
+      markingAllRef.current = false;
     }
-  }, [fetchNotifications, fetchUnreadCount]);
+  }, [fetchNotifications, fetchUnreadCount, unreadCount]);
 
   const deleteNotification = useCallback(async (notificationId) => {
+    const id = String(notificationId);
+    if (pendingDeleteIds.current.has(id)) return false;
+    pendingDeleteIds.current.add(id);
+
     try {
       // Optimistic update
       setNotifications((prev) =>
-        prev.filter((n) => (n.notificationId || n._id) !== notificationId)
+        prev.filter(
+          (n) => String(n.notificationId || n._id) !== String(notificationId)
+        )
       );
 
-      const was = notifications.find((n) => (n.notificationId || n._id) === notificationId);
+      const was = notifications.find(
+        (n) => String(n.notificationId || n._id) === String(notificationId)
+      );
       if (was && !was.isRead) {
         setUnreadCount((c) => Math.max(0, c - 1));
       }
 
-      await notifApi.deleteNotification(notificationId);
+      const response = await notifApi.deleteNotification(notificationId);
+      requireSuccessfulResponse(response, 'Unable to delete notification');
+      broadcastNotificationsChanged();
+      return true;
     } catch {
       fetchNotifications(1, true);
       fetchUnreadCount();
+      return false;
+    } finally {
+      pendingDeleteIds.current.delete(id);
     }
   }, [notifications, fetchNotifications, fetchUnreadCount]);
 

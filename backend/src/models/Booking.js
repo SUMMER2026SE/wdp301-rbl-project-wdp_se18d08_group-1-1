@@ -130,6 +130,9 @@ const bookingSchema = new mongoose.Schema(
       enum: ['PENDING', 'PAID', 'ACTIVE', 'PAUSED', 'EXPIRED', 'COMPLETED', 'CANCELLED'],
       default: 'PENDING',
     },
+    paidAt: { type: Date, default: null, index: true },
+    cancelledAt: { type: Date, default: null, index: true },
+    completedAt: { type: Date, default: null, index: true },
     qrVersion: {
       type: Number,
       default: 1,
@@ -169,5 +172,38 @@ const bookingSchema = new mongoose.Schema(
 // Indexes
 bookingSchema.index({ vehicleId: 1, scheduledStart: 1, scheduledEnd: 1 });
 bookingSchema.index({ status: 1 });
+
+const lifecycleTimestampForStatus = (status) => {
+  if (status === 'PAID') return 'paidAt';
+  if (status === 'CANCELLED') return 'cancelledAt';
+  if (status === 'COMPLETED') return 'completedAt';
+  return null;
+};
+
+bookingSchema.pre('save', function stampLifecycleTransition(next) {
+  if (!this.isModified('status')) return next();
+  const timestampField = lifecycleTimestampForStatus(this.status);
+  if (timestampField && !this[timestampField]) this[timestampField] = new Date();
+  return next();
+});
+
+bookingSchema.pre(
+  ['findOneAndUpdate', 'updateOne', 'updateMany'],
+  function stampLifecycleQueryTransition(next) {
+    const update = this.getUpdate() || {};
+    const nextStatus = update.$set?.status ?? update.status;
+    const timestampField = lifecycleTimestampForStatus(nextStatus);
+    if (!timestampField) return next();
+
+    update.$set = {
+      ...(update.$set || {}),
+      [timestampField]: update.$set?.[timestampField] || new Date(),
+      status: nextStatus,
+    };
+    if (Object.prototype.hasOwnProperty.call(update, 'status')) delete update.status;
+    this.setUpdate(update);
+    return next();
+  }
+);
 
 module.exports = mongoose.model('Booking', bookingSchema);
