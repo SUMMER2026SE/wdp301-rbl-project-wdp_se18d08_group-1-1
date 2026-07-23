@@ -22,8 +22,24 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack, i
   const [checkingSlots, setCheckingSlots] = useState(false);
 
   const bookingMode = formData.bookingMode || 'hourly';
-  const appliedPricing = formData.pricingPackage || DEFAULT_PRICING;
-  const hourlyRate = Number(appliedPricing.price || DEFAULT_PRICING.price);
+  const [pricingConfig, setPricingConfig] = useState(null);
+
+  const calculateCurrentHourlyRate = () => {
+    if (!pricingConfig || !pricingConfig.timeBlocks) return 10000;
+    const now = new Date();
+    const currentHour = now.getHours();
+    const block = pricingConfig.timeBlocks.find(b => {
+      if (b.startHour < b.endHour) {
+        return currentHour >= b.startHour && currentHour < b.endHour;
+      } else {
+        return currentHour >= b.startHour || currentHour < b.endHour;
+      }
+    });
+    return block ? block.price : 10000;
+  };
+  
+  const appliedPricing = formData.pricingPackage || { name: 'Standard' };
+  const hourlyRate = formData.pricingPackage?.price ? Number(formData.pricingPackage.price) : calculateCurrentHourlyRate();
 
   useEffect(() => {
     const fetchDbSlots = async () => {
@@ -59,6 +75,12 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack, i
           }
         } else {
           setError(floorData.message);
+        }
+
+        const pricingRes = await fetch(`${API_BASE}/bookings/pricing-config`);
+        const pricingData = await pricingRes.json();
+        if (pricingData.success) {
+          setPricingConfig(pricingData.data);
         }
 
         const sessionRes = await fetch(`${API_BASE}/sessions/active-status`);
@@ -248,12 +270,14 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack, i
                 <div className="flex justify-between items-end border-t border-white/10 pt-4 mt-2">
                   <div>
                     <p className="text-[10px] text-gray-400 font-medium">Applied Pricing</p>
-                    <p className="font-bold text-sm">{appliedPricing.name}</p>
+                    <p className="font-bold text-sm">
+                      {formData.isVipReallocation ? 'VIP Subscription' : appliedPricing.name}
+                    </p>
                   </div>
                   <div className="text-right">
                     <p className="text-[10px] text-gray-400 font-medium">Rate</p>
                     <p className="font-bold text-sm text-[#FFDF00]">
-                      {`${hourlyRate.toLocaleString('vi-VN')} VND / hr`}
+                      {formData.isVipReallocation ? '0 VND / hr' : `${hourlyRate.toLocaleString('vi-VN')} VND / hr`}
                     </p>
                   </div>
                 </div>
@@ -262,8 +286,12 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack, i
               <div className="mt-auto">
                 <div className="border-t-2 border-dashed border-gray-200 pt-6 pb-2">
                   <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs text-gray-500 font-medium">Standard Rate</span>
-                    <span className="text-sm font-bold text-gray-700">{hourlyRate.toLocaleString('vi-VN')} VND / hr</span>
+                    <span className="text-xs text-gray-500 font-medium">
+                      {formData.isVipReallocation ? 'Temporary VIP Slot' : 'Standard Rate'}
+                    </span>
+                    <span className="text-sm font-bold text-gray-700">
+                      {formData.isVipReallocation ? '0 VND / hr' : `${hourlyRate.toLocaleString('vi-VN')} VND / hr`}
+                    </span>
                   </div>
                   <div className="flex justify-between items-center mb-4">
                     <span className="text-xs text-gray-500 font-medium">Taxes & Fees</span>
@@ -273,15 +301,26 @@ export default function KioskStep2({ formData, updateFormData, onNext, onBack, i
                   <div className="flex justify-between items-end bg-gray-50 p-4 rounded-2xl">
                     <div className="flex items-center gap-2 text-[#0f172a]">
                       <CreditCard size={20} />
-                      <span className="text-xs font-bold uppercase tracking-widest">Pay at Exit</span>
+                      <span className="text-xs font-bold uppercase tracking-widest">
+                        {formData.isVipReallocation ? 'Included in VIP' : 'Pay at Exit'}
+                      </span>
                     </div>
-                    <div className="flex flex-col items-end">
-                      <span className="text-3xl font-black text-[#0f172a] leading-none">{hourlyRate.toLocaleString('vi-VN')}</span>
-                      <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">VND / hr</span>
-                    </div>
+                    {!formData.isVipReallocation && (
+                      <div className="flex flex-col items-end">
+                        <span className="text-3xl font-black text-[#0f172a] leading-none">{hourlyRate.toLocaleString('vi-VN')}</span>
+                        <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">VND / hr</span>
+                      </div>
+                    )}
+                    {formData.isVipReallocation && (
+                      <div className="flex flex-col items-end">
+                        <span className="text-3xl font-black text-emerald-500 leading-none">FREE</span>
+                      </div>
+                    )}
                   </div>
                   <p className="text-[10px] text-gray-500 text-center mt-3 font-medium">
-                    * Price is calculated from the member package configured by admin; no package selection is needed at the kiosk.
+                    {formData.isVipReallocation
+                      ? '* This slot is temporarily assigned to you as a replacement for your occupied VIP slot. No extra charges apply.'
+                      : '* Price is calculated from the member package configured by admin; no package selection is needed at the kiosk.'}
                   </p>
                 </div>
 
