@@ -2,6 +2,88 @@ const Notification = require('../models/Notification');
 const UserNotification = require('../models/UserNotification');
 const NotificationEventLog = require('../models/NotificationEventLog');
 const User = require('../models/User');
+const mongoose = require('mongoose');
+
+const SYSTEM_USER_ROLES = ['customer', 'staff', 'admin'];
+const RECIPIENT_BATCH_SIZE = 1000;
+
+function createServiceError(message, statusCode = 400) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
+function escapeRegex(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function normalizeUserIds(userIds) {
+  const values = (Array.isArray(userIds) ? userIds : [userIds])
+    .filter((value) => value !== undefined && value !== null && value !== '')
+    .map((value) => String(value));
+
+  const uniqueIds = [...new Set(values)];
+  const invalidIds = uniqueIds.filter((id) => !mongoose.Types.ObjectId.isValid(id));
+  if (invalidIds.length) {
+    throw createServiceError(`Invalid recipient ID: ${invalidIds[0]}`);
+  }
+
+  return uniqueIds;
+}
+
+async function resolveRecipients(userIds, { requireActive = false } = {}) {
+  const normalizedIds = normalizeUserIds(userIds);
+  if (!normalizedIds.length) {
+    throw createServiceError('At least one recipient is required');
+  }
+
+  const query = { _id: { $in: normalizedIds } };
+  if (requireActive) query.status = true;
+
+  const users = await User.find(query).select('_id').lean();
+  const foundIds = new Set(users.map((user) => String(user._id)));
+  const unavailableIds = normalizedIds.filter((id) => !foundIds.has(id));
+
+  if (unavailableIds.length) {
+    throw createServiceError(
+      requireActive
+        ? `Recipient does not exist or is inactive: ${unavailableIds[0]}`
+        : `Recipient does not exist: ${unavailableIds[0]}`
+    );
+  }
+
+  return normalizedIds;
+}
+
+async function insertRecipientRecords(notificationId, userIds) {
+  for (let index = 0; index < userIds.length; index += RECIPIENT_BATCH_SIZE) {
+    const batch = userIds.slice(index, index + RECIPIENT_BATCH_SIZE).map((userId) => ({
+      userId,
+      notificationId,
+    }));
+    await UserNotification.insertMany(batch, { ordered: true });
+  }
+}
+
+async function createWithRecipients(notificationData, userIds) {
+  const notification = await Notification.create({
+    ...notificationData,
+    recipientCount: userIds.length,
+  });
+
+  try {
+    if (userIds.length) {
+      await insertRecipientRecords(notification._id, userIds);
+    }
+    return notification;
+  } catch (error) {
+    await Promise.allSettled([
+      UserNotification.deleteMany({ notificationId: notification._id }),
+      Notification.findByIdAndDelete(notification._id),
+    ]);
+    throw error;
+  }
+}
 
 // ─── Notification Templates ────────────────────────────────────────────────────
 const NOTIFICATION_TEMPLATES = {
@@ -124,8 +206,38 @@ const NOTIFICATION_TEMPLATES = {
   },
   BOOKING_CHECKIN_EXPIRED: {
     title: 'Check-in time expired',
-    content: 'You missed the check-in time for your booking at {slotInfo}. The booking may be cancelled.',
+    content: 'You are more than 15 minutes late for your booking at {slotInfo}. You have 15 minutes left before it is cancelled.',
     type: 'BOOKING',
+    priority: 'ERROR',
+  },
+  BOOKING_ENDING_SOON: {
+    title: 'Booking time is almost over',
+    content: 'Your booking at {slotInfo} has {minutes} minutes remaining. Extend it now if you need more time.',
+    type: 'BOOKING',
+    priority: 'WARNING',
+  },
+  BOOKING_TIME_EXPIRED: {
+    title: 'Booking time expired',
+    content: 'Your booking at {slotInfo} has reached its scheduled end time. Please check out or extend it to avoid overtime charges.',
+    type: 'BOOKING',
+    priority: 'ERROR',
+  },
+  BOOKING_NO_SHOW_CANCELLED: {
+    title: 'Booking cancelled due to no-show',
+    content: 'Your booking at {slotInfo} was cancelled because check-in was more than 30 minutes late.',
+    type: 'BOOKING',
+    priority: 'ERROR',
+  },
+  VIP_EXPIRING_SOON: {
+    title: 'VIP Pass expiring soon',
+    content: 'Your monthly parking pass expires on {expireDate}. Renew it to keep your reserved parking benefits.',
+    type: 'SYSTEM',
+    priority: 'WARNING',
+  },
+  VIP_EXPIRED: {
+    title: 'VIP Pass expired',
+    content: 'Your monthly parking pass has expired. Its reserved parking slots have been released.',
+    type: 'SYSTEM',
     priority: 'ERROR',
   },
   TRANSFER_REQUEST_CREATED: {
@@ -271,61 +383,50 @@ function fillTemplate(template, data = {}) {
 }
 
 // ─── Create notification for a single user ──────────────────────────────────────
-async function createForUser(userId, data, createdBy = null) {
-  const notification = await Notification.create({
+async function createForUser(userId, data, createdBy = null, options = {}) {
+  const [resolvedUserId] = await resolveRecipients([userId], options);
+  return createWithRecipients({
     title: data.title,
     content: data.content,
     type: data.type || 'SYSTEM',
     priority: data.priority || 'INFO',
     targetType: 'SINGLE_USER',
-    targetUsers: [userId],
+    targetUsers: [resolvedUserId],
     createdBy,
     metadata: data.metadata || {},
-  });
-
-  await UserNotification.create({
-    userId,
-    notificationId: notification._id,
-  });
-
-  return notification;
+  }, [resolvedUserId]);
 }
 
 // ─── Create notification for multiple users ─────────────────────────────────────
-async function createForUsers(userIds, data, createdBy = null) {
-  const notification = await Notification.create({
+async function createForUsers(userIds, data, createdBy = null, options = {}) {
+  const resolvedUserIds = await resolveRecipients(userIds, options);
+  return createWithRecipients({
     title: data.title,
     content: data.content,
     type: data.type || 'SYSTEM',
     priority: data.priority || 'INFO',
     targetType: 'MULTI_USER',
-    targetUsers: userIds,
+    targetUsers: resolvedUserIds,
     createdBy,
     metadata: data.metadata || {},
-  });
-
-  const userNotifs = userIds.map((uid) => ({
-    userId: uid,
-    notificationId: notification._id,
-  }));
-
-  await UserNotification.insertMany(userNotifs, { ordered: false }).catch(() => {
-    // Ignore duplicate key errors for idempotency
-  });
-
-  return notification;
+  }, resolvedUserIds);
 }
 
 // ─── Create notification for all users ──────────────────────────────────────────
 async function createForAllUsers(data, createdBy = null) {
-  // Get all active customer user IDs
-  const users = await User.find({ status: true, role: { $in: ['customer'] } })
+  const users = await User.find({
+    status: true,
+    role: { $in: SYSTEM_USER_ROLES },
+  })
     .select('_id')
     .lean();
 
-  const userIds = users.map((u) => u._id);
+  const userIds = users.map((user) => String(user._id));
+  if (!userIds.length) {
+    throw createServiceError('No active system users found');
+  }
 
-  const notification = await Notification.create({
+  const notification = await createWithRecipients({
     title: data.title,
     content: data.content,
     type: data.type || 'SYSTEM',
@@ -334,32 +435,28 @@ async function createForAllUsers(data, createdBy = null) {
     targetUsers: [],
     createdBy,
     metadata: data.metadata || {},
-  });
-
-  if (userIds.length > 0) {
-    const userNotifs = userIds.map((uid) => ({
-      userId: uid,
-      notificationId: notification._id,
-    }));
-
-    await UserNotification.insertMany(userNotifs, { ordered: false }).catch(() => {
-      // Ignore duplicate key errors
-    });
-  }
+  }, userIds);
 
   return { notification, userIds };
 }
 
 // ─── Create notification for specific roles ─────────────────────────────────────
 async function createForRole(roles, data, createdBy = null) {
-  const roleArray = Array.isArray(roles) ? roles : [roles];
+  const roleArray = [...new Set(Array.isArray(roles) ? roles : [roles])];
+  if (!roleArray.length || roleArray.some((role) => !SYSTEM_USER_ROLES.includes(role))) {
+    throw createServiceError('Invalid notification target role');
+  }
+
   const users = await User.find({ status: true, role: { $in: roleArray } })
     .select('_id')
     .lean();
 
-  const userIds = users.map((u) => u._id);
+  const userIds = users.map((user) => String(user._id));
+  if (!userIds.length) {
+    throw createServiceError('No active users found for the selected role');
+  }
 
-  const notification = await Notification.create({
+  const notification = await createWithRecipients({
     title: data.title,
     content: data.content,
     type: data.type || 'SYSTEM',
@@ -369,24 +466,19 @@ async function createForRole(roles, data, createdBy = null) {
     targetUsers: [],
     createdBy,
     metadata: data.metadata || {},
-  });
-
-  if (userIds.length > 0) {
-    const userNotifs = userIds.map((uid) => ({
-      userId: uid,
-      notificationId: notification._id,
-    }));
-
-    await UserNotification.insertMany(userNotifs, { ordered: false }).catch(() => {
-      // Ignore duplicate key errors
-    });
-  }
+  }, userIds);
 
   return { notification, userIds };
 }
 
 // ─── Create auto notification with deduplication ────────────────────────────────
 async function createAutoNotification(eventType, referenceId, userId, templateKey, templateData = {}) {
+  const template = NOTIFICATION_TEMPLATES[templateKey];
+  if (!template) {
+    console.error(`[NotificationService] Template not found: ${templateKey}`);
+    return null;
+  }
+
   // Check dedup
   try {
     await NotificationEventLog.create({ eventType, referenceId });
@@ -398,17 +490,17 @@ async function createAutoNotification(eventType, referenceId, userId, templateKe
     throw err;
   }
 
-  const template = NOTIFICATION_TEMPLATES[templateKey];
-  if (!template) {
-    console.error(`[NotificationService] Template not found: ${templateKey}`);
-    return null;
-  }
-
   const filled = fillTemplate(template, templateData);
-  const notification = await createForUser(userId, {
-    ...filled,
-    metadata: { eventType, referenceId, ...templateData },
-  });
+  let notification;
+  try {
+    notification = await createForUser(userId, {
+      ...filled,
+      metadata: { eventType, referenceId, ...templateData },
+    });
+  } catch (error) {
+    await NotificationEventLog.deleteOne({ eventType, referenceId }).catch(() => {});
+    throw error;
+  }
 
   // Update event log with notificationId
   await NotificationEventLog.findOneAndUpdate(
@@ -421,6 +513,12 @@ async function createAutoNotification(eventType, referenceId, userId, templateKe
 
 // ─── Create broadcast auto notification ─────────────────────────────────────────
 async function createBroadcastAutoNotification(eventType, referenceId, templateKey, templateData = {}) {
+  const template = NOTIFICATION_TEMPLATES[templateKey];
+  if (!template) {
+    console.error(`[NotificationService] Template not found: ${templateKey}`);
+    return null;
+  }
+
   try {
     await NotificationEventLog.create({ eventType, referenceId });
   } catch (err) {
@@ -430,17 +528,17 @@ async function createBroadcastAutoNotification(eventType, referenceId, templateK
     throw err;
   }
 
-  const template = NOTIFICATION_TEMPLATES[templateKey];
-  if (!template) {
-    console.error(`[NotificationService] Template not found: ${templateKey}`);
-    return null;
-  }
-
   const filled = fillTemplate(template, templateData);
-  const result = await createForAllUsers({
-    ...filled,
-    metadata: { eventType, referenceId, ...templateData },
-  });
+  let result;
+  try {
+    result = await createForAllUsers({
+      ...filled,
+      metadata: { eventType, referenceId, ...templateData },
+    });
+  } catch (error) {
+    await NotificationEventLog.deleteOne({ eventType, referenceId }).catch(() => {});
+    throw error;
+  }
 
   await NotificationEventLog.findOneAndUpdate(
     { eventType, referenceId },
@@ -482,19 +580,15 @@ async function getUserNotifications(userId, filters = {}) {
   ];
 
   if (filters.contextRole) {
-    if (filters.contextRole === 'customer') {
-      pipeline.push({
-        $match: {
-          $or: [
-            { 'notification.targetRoles': 'customer' },
-            { 'notification.targetRoles': { $exists: false } },
-            { 'notification.targetRoles': { $size: 0 } }
-          ]
-        }
-      });
-    } else {
-      pipeline.push({ $match: { 'notification.targetRoles': filters.contextRole } });
-    }
+    pipeline.push({
+      $match: {
+        $or: [
+          { 'notification.targetRoles': filters.contextRole },
+          { 'notification.targetRoles': { $exists: false } },
+          { 'notification.targetRoles': { $size: 0 } },
+        ],
+      },
+    });
   }
 
   // Type filter
@@ -504,7 +598,7 @@ async function getUserNotifications(userId, filters = {}) {
 
   // Search filter
   if (search) {
-    const searchRegex = new RegExp(search, 'i');
+    const searchRegex = new RegExp(escapeRegex(search), 'i');
     pipeline.push({
       $match: {
         $or: [
@@ -573,19 +667,15 @@ async function getUnreadCount(userId, contextRole) {
   ];
 
   if (contextRole) {
-    if (contextRole === 'customer') {
-      pipeline.push({
-        $match: {
-          $or: [
-            { 'notification.targetRoles': 'customer' },
-            { 'notification.targetRoles': { $exists: false } },
-            { 'notification.targetRoles': { $size: 0 } }
-          ]
-        }
-      });
-    } else {
-      pipeline.push({ $match: { 'notification.targetRoles': contextRole } });
-    }
+    pipeline.push({
+      $match: {
+        $or: [
+          { 'notification.targetRoles': contextRole },
+          { 'notification.targetRoles': { $exists: false } },
+          { 'notification.targetRoles': { $size: 0 } },
+        ],
+      },
+    });
   }
 
   pipeline.push({ $count: 'total' });
@@ -702,7 +792,7 @@ async function getAdminNotifications(filters = {}) {
   if (type) query.type = type;
   if (priority) query.priority = priority;
   if (search) {
-    const searchRegex = new RegExp(search, 'i');
+    const searchRegex = new RegExp(escapeRegex(search), 'i');
     const matchedUsers = await User.find({
       $or: [
         { email: searchRegex },
@@ -759,7 +849,10 @@ async function getAdminNotifications(filters = {}) {
 
 module.exports = {
   NOTIFICATION_TEMPLATES,
+  SYSTEM_USER_ROLES,
   fillTemplate,
+  normalizeUserIds,
+  resolveRecipients,
   createForUser,
   createForUsers,
   createForAllUsers,

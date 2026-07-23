@@ -7,6 +7,7 @@ const BookingHold = require('../models/BookingHold');
 const ParkingFloor = require('../models/ParkingFloor');
 const mongoose = require('mongoose');
 const MembershipSlotEntitlement = require('../models/MembershipSlotEntitlement');
+const Subscription = require('../models/Subscription');
 const payos = require('../config/payos');
 const cloudinary = require('../config/cloudinary');
 const { sendKioskCheckInEmail, sendCheckoutEmail } = require('../utils/emailUtils');
@@ -86,6 +87,7 @@ exports.verifyPlate = async (req, res, next) => {
     let userId = null;
     let isMonthly = false;
     let subscription = null;
+    let quotaExhausted = false;
 
     if (registeredVehicle) {
       isRegisteredVehicle = true;
@@ -142,13 +144,16 @@ exports.verifyPlate = async (req, res, next) => {
           subscription.assignedSlot = availableSlot;
           
           // CRITICAL: We MUST create a short hold for the fast-pass to prevent race condition with Vehicle 2
-          const holdEnd = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes hold
+          const holdStart = new Date();
+          const holdEnd = new Date(holdStart.getTime() + 5 * 60 * 1000); // 5 minutes hold
           const fastPassHold = new BookingHold({
             floorId: availableSlot.floorId?._id || availableSlot.floorId,
             slotCode: normalizeSlotCode(availableSlot.slotCode),
             userId,
             licensePlate: cleanPlate,
             status: 'active',
+            startTime: holdStart,
+            endTime: holdEnd,
             expiresAt: holdEnd
           });
           await fastPassHold.save();
@@ -156,6 +161,8 @@ exports.verifyPlate = async (req, res, next) => {
           // If all slots are occupied, but AT LEAST ONE is occupied by a stranger, we still consider them VIP for TC4
           isMonthly = true;
           subscription = activeSubscription;
+        } else if (occupiedBySelfCount === activeSubscription.slots.length) {
+          quotaExhausted = true;
         }
       }
     }
@@ -286,12 +293,13 @@ exports.verifyPlate = async (req, res, next) => {
       if (unavailableKeys.size >= totalSlots) {
         isFull = true;
       } else if (isVIP || isRegisteredVehicle) {
-        // Auto assign a slot for VIP/Registered vehicles
-        const availableSlot = allSlots.find(s => !unavailableKeys.has(`${s.floorId.toString()}_${s.slotCode}`));
-        if (availableSlot) {
-          vipAssignedSlot = availableSlot.slotCode;
-          vipAssignedFloorId = availableSlot.floorId;
-          vipAssignedFloorName = availableSlot.floorName;
+        const availableSlots = allSlots.filter(s => !unavailableKeys.has(`${s.floorId.toString()}_${s.slotCode}`));
+        // ONLY auto-assign if there is exactly 1 slot left.
+        // Otherwise, let them pick on the map.
+        if (availableSlots.length === 1) {
+          vipAssignedSlot = availableSlots[0].slotCode;
+          vipAssignedFloorId = availableSlots[0].floorId;
+          vipAssignedFloorName = availableSlots[0].floorName;
         }
       }
     }
@@ -313,6 +321,7 @@ exports.verifyPlate = async (req, res, next) => {
         assignedFloorId: booking?.floorId?._id || subscription?.assignedSlot?.floorId?._id || subscription?.assignedSlot?.floorId || vipAssignedFloorId || null,
         assignedFloorName: booking?.floorId?.name || subscription?.assignedSlot?.floorId?.name || vipAssignedFloorName || null,
         requiresSlotReallocation,
+        quotaExhausted,
       }
     });
 
@@ -605,11 +614,31 @@ exports.createKioskSession = async (req, res, next) => {
           } else {
             // At least one slot is occupied by an UNAUTHORIZED vehicle (someone else)
             // Apply TC4: find an alternative slot for free!
-            const floorsData = await ParkingFloor.find().lean();
             let alternativeSlot = null;
             let altFloorId = null;
-            
-            for (const floor of floorsData) {
+
+            // FIRST: Check if the user already selected a slot on the kiosk map (Step 2)
+            if (parkingSlot && floorId) {
+              // Validate if the selected slot is indeed free
+              const isOccupied = await Session.findOne({ floorId, parkingSlot: normalizeSlotCode(parkingSlot), status: 'active' });
+              const isBooked = await Booking.findOne({
+                floorId,
+                parkingSlot: normalizeSlotCode(parkingSlot),
+                status: { $in: ['PAID', 'PAUSED'] },
+                scheduledStart: { $lte: new Date(now.getTime() + 30 * 60 * 1000) },
+                scheduledEnd: { $gte: now }
+              });
+              
+              if (!isOccupied && !isBooked) {
+                alternativeSlot = parkingSlot;
+                altFloorId = floorId;
+              }
+            }
+
+            // Fallback: If no valid slot was provided, scan all floors automatically
+            if (!alternativeSlot) {
+              const floorsData = await ParkingFloor.find().lean();
+              for (const floor of floorsData) {
               if (!floor.layoutData || !floor.layoutData.elements) continue;
               
               const standardSlots = floor.layoutData.elements.filter(el => el.type === 'slot' || el.type === 'slot-ev');
@@ -657,6 +686,7 @@ exports.createKioskSession = async (req, res, next) => {
                 break;
               }
               if (alternativeSlot) break;
+              }
             }
             
             if (alternativeSlot) {

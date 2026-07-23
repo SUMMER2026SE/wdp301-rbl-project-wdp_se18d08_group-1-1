@@ -10,6 +10,8 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
   const [isVerifying, setIsVerifying] = useState(false);
   const [duplicateError, setDuplicateError] = useState('');
   const [showFullModal, setShowFullModal] = useState(false);
+  const [showReallocationModal, setShowReallocationModal] = useState(false);
+  const [reallocationMessage, setReallocationMessage] = useState('');
   const [modalTitle, setModalTitle] = useState(undefined);
   const [modalMessage, setModalMessage] = useState(undefined);
   const [showQrModal, setShowQrModal] = useState(false);
@@ -81,20 +83,22 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
                 isMonthly: verifyData.isMonthly,
                 membershipType: verifyData.membershipType || null,
                 hasPreBooking: verifyData.hasPreBooking,
+          isVipReallocation: !!verifyData.requiresSlotReallocation,
+                isVipReallocation: !!verifyData.requiresSlotReallocation,
                 selectedSlot: verifyData.assignedSlot,
                 floorId: verifyData.assignedFloorId || null,
                 bookingId: verifyData.bookingId || null,
                 bookingFloorName: verifyData.assignedFloorName || null,
                 durationHours: verifyData.bookingDurationHours || formData.durationHours || 1,
-                licensePlate: plate,
+                licensePlate: formData.licensePlate,
                 phone: verifyData.phone || formData.phone || '',
                 ticketPackageId: verifyData.bookingTicketPackageId || formData.ticketPackageId || null,
                 bookingMode: verifyData.bookingMode || formData.bookingMode || 'hourly',
               });
 
               if (verifyData.requiresSlotReallocation) {
-                alert('Your booking has expired, and the previous parking space is now occupied. Please select another available space on the map (no extra charge).');
-                onNext('2');
+                setReallocationMessage('Your previous slot is currently occupied. Please select another available slot on the map (No extra charge).');
+                setShowReallocationModal(true);
               } else {
                 onNext('3');
               }
@@ -106,7 +110,7 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
                 isRegisteredVehicle: !!verifyData.isRegisteredVehicle,
                 membershipType: verifyData.membershipType || null,
                 phone: verifyData.phone || formData.phone || '',
-                licensePlate: plate,
+                licensePlate: formData.licensePlate,
                 pricingPackage: verifyData.pricingPackage || null,
                 pricingSource: verifyData.pricingSource || 'default',
                 ticketPackageId: verifyData.pricingPackage?._id || null,
@@ -115,7 +119,12 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
                 floorId: verifyData.assignedFloorId || null,
                 bookingFloorName: verifyData.assignedFloorName || null,
               });
-              onNext(verifyData.assignedSlot ? '3' : '2');
+              if (verifyData.quotaExhausted) {
+                setReallocationMessage('Your VIP quota has been reached (maximum number of slots in use). Please select another slot on the map and pay the standard hourly rate to continue.');
+                setShowReallocationModal(true);
+              } else {
+                onNext(verifyData.assignedSlot ? '3' : '2');
+              }
             } else if (verifyData.phone && verifyData.phone.length >= 10) {
               // Returning guests with phone number, subject to full check
               if (formData.isParkingFull || verifyData.isFull) {
@@ -131,7 +140,7 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
                 isRegisteredVehicle: false,
                 membershipType: verifyData.membershipType || null,
                 phone: verifyData.phone,
-                licensePlate: plate,
+                licensePlate: formData.licensePlate,
                 pricingPackage: verifyData.pricingPackage || null,
                 pricingSource: verifyData.pricingSource || 'default',
                 ticketPackageId: verifyData.pricingPackage?._id || null,
@@ -337,15 +346,15 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
           bookingId: verifyData.bookingId || null,
           bookingFloorName: verifyData.assignedFloorName || null,
           durationHours: verifyData.bookingDurationHours || formData.durationHours || 1,
-          licensePlate: plate,
+          licensePlate: formData.licensePlate,
           phone: verifyData.phone || phone,
           ticketPackageId: verifyData.bookingTicketPackageId || formData.ticketPackageId || null,
           bookingMode: verifyData.bookingMode || formData.bookingMode || 'hourly',
         });
 
         if (verifyData.requiresSlotReallocation) {
-          alert('Booking của bạn đã quá hạn và ô đỗ cũ đã được sử dụng. Vui lòng chọn một ô đỗ trống khác trên bản đồ (Không mất thêm phí).');
-          onNext('2'); // Chuyển sang chọn Map
+          setReallocationMessage('Your previous slot is currently occupied. Please select another available slot on the map (No extra charge).');
+          setShowReallocationModal(true);
         } else {
           onNext('3'); // Fast-pass
         }
@@ -358,14 +367,19 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
           isRegisteredVehicle: true,
           membershipType: verifyData.membershipType || null,
           phone: verifyData.phone || phone,
-          licensePlate: plate,
+          licensePlate: formData.licensePlate,
           pricingPackage: verifyData.pricingPackage || formData.pricingPackage || null,
           pricingSource: verifyData.pricingSource || formData.pricingSource || 'default',
           ticketPackageId: verifyData.pricingPackage?._id || formData.ticketPackageId || null,
           bookingMode: formData.bookingMode || 'hourly',
         });
         setIsVerifying(false);
-        onNext('2');
+        if (verifyData.quotaExhausted) {
+          setReallocationMessage('Your VIP quota has been reached (maximum number of slots in use). Please select another slot on the map and pay the standard hourly rate to continue.');
+          setShowReallocationModal(true);
+        } else {
+          onNext('2');
+        }
       }
       else if (data.success && verifyData.phone && verifyData.phone.length >= 10) {
         if (formData.isParkingFull || verifyData.isFull) {
@@ -379,7 +393,7 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
         updateFormData({
           step3Mode: 'policy',
           phone: verifyData.phone,
-          licensePlate: plate,
+          licensePlate: formData.licensePlate,
           pricingPackage: verifyData.pricingPackage || formData.pricingPackage || null,
           pricingSource: verifyData.pricingSource || formData.pricingSource || 'default',
           ticketPackageId: verifyData.pricingPackage?._id || formData.ticketPackageId || null,
@@ -402,7 +416,7 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
         setIsVerifying(false);
         updateFormData({
           step3Mode: 'policy',
-          licensePlate: plate,
+          licensePlate: formData.licensePlate,
           phone,
           isVIP: false,
           isRegisteredVehicle: false,
@@ -535,6 +549,32 @@ export default function KioskStep1({ formData, updateFormData, onNext }) {
         title={modalTitle}
         message={modalMessage}
       />
+
+      {/* Reallocation Modal */}
+      {showReallocationModal && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white rounded-[32px] p-8 max-w-[400px] w-full shadow-2xl flex flex-col items-center text-center animate-in zoom-in-95 duration-300">
+            <div className="w-20 h-20 bg-amber-100 text-amber-500 rounded-full flex items-center justify-center mb-6 shadow-inner">
+              <AlertCircle size={40} strokeWidth={2.5} />
+            </div>
+            <h3 className="text-xl font-black text-slate-800 uppercase tracking-wide mb-3">
+              {reallocationMessage.includes('hết chỗ') ? 'Slot Limit Reached' : 'Slot Reallocation'}
+            </h3>
+            <p className="text-sm font-medium text-slate-600 mb-8 leading-relaxed">
+              {reallocationMessage}
+            </p>
+            <button
+              onClick={() => {
+                setShowReallocationModal(false);
+                onNext('2');
+              }}
+              className="w-full h-[60px] bg-amber-500 hover:bg-amber-400 text-white text-lg font-black rounded-2xl transition-all shadow-[0_8px_20px_rgba(245,158,11,0.3)] active:scale-95"
+            >
+              CHOOSE NEW SLOT
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
