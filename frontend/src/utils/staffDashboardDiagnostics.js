@@ -59,6 +59,26 @@ export const getStaffDashboardSyncStatus = ({
   };
 };
 
+export const getStaffDashboardViewAvailability = ({
+  floors = false,
+  bookings = false,
+  sessions = false,
+  slotsOk = false,
+} = {}) => {
+  const managedSlots = floors && slotsOk;
+  const vehiclesInside = sessions;
+  const cancellations = bookings;
+
+  return {
+    liveGrid: managedSlots && vehiclesInside && cancellations,
+    activityStream: bookings,
+    managedSlots,
+    vehiclesInside,
+    occupancy: managedSlots && vehiclesInside,
+    cancellations,
+  };
+};
+
 export const buildStaffDashboardMetrics = ({
   floors = [],
   dbSlots = [],

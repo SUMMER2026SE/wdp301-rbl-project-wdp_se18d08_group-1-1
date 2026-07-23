@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   buildStaffDashboardMetrics,
   getStaffDashboardSyncStatus,
+  getStaffDashboardViewAvailability,
 } from './staffDashboardDiagnostics.js';
 
 const floor = {
@@ -118,5 +119,37 @@ test('reports unavailable diagnostics when a configured floor slot source fails'
       sessions: true,
       slotsOk: false,
     },
+  });
+});
+
+test('enables every staff view when its sync sources are available', () => {
+  assert.deepEqual(getStaffDashboardViewAvailability({
+    floors: true,
+    bookings: true,
+    sessions: true,
+    slotsOk: true,
+  }), {
+    liveGrid: true,
+    activityStream: true,
+    managedSlots: true,
+    vehiclesInside: true,
+    occupancy: true,
+    cancellations: true,
+  });
+});
+
+test('disables views that depend on unavailable booking or session data', () => {
+  assert.deepEqual(getStaffDashboardViewAvailability({
+    floors: true,
+    bookings: false,
+    sessions: false,
+    slotsOk: true,
+  }), {
+    liveGrid: false,
+    activityStream: false,
+    managedSlots: true,
+    vehiclesInside: false,
+    occupancy: false,
+    cancellations: false,
   });
 });

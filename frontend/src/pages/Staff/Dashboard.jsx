@@ -14,6 +14,7 @@ import { getAdminPlatformRevenueStatistics } from '../../services/statisticsServ
 import {
   buildStaffDashboardMetrics,
   getStaffDashboardSyncStatus,
+  getStaffDashboardViewAvailability,
 } from '../../utils/staffDashboardDiagnostics';
 import toast, { Toaster } from 'react-hot-toast';
 
@@ -301,6 +302,9 @@ export default function StaffDashboard() {
     () => buildStaffDashboardMetrics({ floors, dbSlots, sessions, bookings }),
     [floors, dbSlots, sessions, bookings]
   );
+  const viewAvailability = getStaffDashboardViewAvailability(
+    syncStatus.sources
+  );
 
   const activeFloorZones = useMemo(() => {
     const slotsByZone = activeFloorSlots.reduce((zones, slot) => {
@@ -422,24 +426,30 @@ export default function StaffDashboard() {
               color="from-yellow-600/80 to-yellow-500/20"
               hoverBorder="hover:border-yellow-500/30"
               label="Managed Slots"
-              value={syncStatus.sources.floors && syncStatus.sources.slotsOk ? totalSlots : '—'}
-              sub={`${floors.length} active floors`}
+              value={viewAvailability.managedSlots ? totalSlots : '—'}
+              sub={viewAvailability.managedSlots
+                ? `${floors.length} active floors`
+                : 'Data unavailable'}
             />
             <StatCard
               icon={<Car size={20} className="text-sky-100" />}
               color="from-sky-600/80 to-sky-500/20"
               hoverBorder="hover:border-sky-500/30"
               label="Vehicles Inside"
-              value={syncStatus.sources.sessions ? vehiclesInside : '—'}
-              sub={`${occupancyRate}% occupancy`}
+              value={viewAvailability.vehiclesInside ? vehiclesInside : '—'}
+              sub={viewAvailability.occupancy
+                ? `${occupancyRate}% occupancy`
+                : 'Data unavailable'}
             />
             <StatCard
               icon={<FileWarning size={20} className="text-orange-100" />}
               color="from-orange-600/80 to-orange-500/20"
               hoverBorder="hover:border-orange-500/30"
               label="Cancellations"
-              value={syncStatus.sources.bookings ? cancellationsToday : '—'}
-              sub="Requires attention"
+              value={viewAvailability.cancellations ? cancellationsToday : '—'}
+              sub={viewAvailability.cancellations
+                ? 'Requires attention'
+                : 'Data unavailable'}
             />
           </div>
         </section>
@@ -505,16 +515,38 @@ export default function StaffDashboard() {
               </h3>
               <p className="text-gray-400 text-xs mt-1 font-medium tracking-wide uppercase">Real-time slot telemetry</p>
             </div>
-            <div className="flex items-center gap-2 bg-black/40 px-3 py-1.5 rounded-full border border-white/5 shadow-inner">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border shadow-inner ${
+              viewAvailability.liveGrid
+                ? 'bg-black/40 border-white/5'
+                : 'bg-red-500/10 border-red-500/30'
+            }`}>
+              {viewAvailability.liveGrid ? (
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+              ) : (
+                <span className="inline-flex h-2 w-2 rounded-full bg-red-500" />
+              )}
+              <span className={`text-[11px] font-bold uppercase tracking-widest ${
+                viewAvailability.liveGrid ? 'text-emerald-400' : 'text-red-400'
+              }`}>
+                {viewAvailability.liveGrid ? 'Live Sync' : 'Data unavailable'}
               </span>
-              <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-widest">Live Sync</span>
             </div>
           </div>
           
-          <div className="max-h-[450px] overflow-y-auto scrollbar-hidden relative z-10 pb-4">
+          {!viewAvailability.liveGrid && (
+            <div className="relative z-10 flex flex-col items-center justify-center py-20 text-center">
+              <AlertTriangle size={48} className="mb-4 text-red-400" />
+              <p className="font-medium text-red-200">Live grid data unavailable.</p>
+              <p className="mt-1 text-xs text-red-300/70">
+                Floor, slot, session, or booking data could not be synchronized.
+              </p>
+            </div>
+          )}
+
+          <div className={`${viewAvailability.liveGrid ? 'max-h-[450px] overflow-y-auto pb-4' : 'hidden'} scrollbar-hidden relative z-10`}>
             {activeFloorZones.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 opacity-50">
                 <MonitorCheck size={48} className="text-gray-600 mb-4" />
@@ -561,7 +593,7 @@ export default function StaffDashboard() {
           </div>
 
           {/* Legend */}
-          <div className="flex items-center gap-6 mt-2 pt-4 border-t border-white/10 relative z-10">
+          <div className={`${viewAvailability.liveGrid ? 'flex' : 'hidden'} items-center gap-6 mt-2 pt-4 border-t border-white/10 relative z-10`}>
             {[
               { color: 'bg-gray-500 shadow-[0_0_8px_rgba(107,114,128,0.5)]', label: 'Occupied' },
               { color: 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.5)]', label: 'Empty' },
@@ -660,7 +692,13 @@ export default function StaffDashboard() {
             </span>
           </div>
           <div className="space-y-2 relative z-10 bg-black/20 p-2 rounded-2xl border border-white/5">
-            {recentBookings.length === 0 ? (
+            {!viewAvailability.activityStream ? (
+              <div className="py-8 flex flex-col items-center text-center">
+                <AlertTriangle size={32} className="text-red-400 mb-2" />
+                <p className="text-red-200 font-medium">Activity data unavailable.</p>
+                <p className="text-xs text-red-300/70 mt-1">Booking records could not be synchronized.</p>
+              </div>
+            ) : recentBookings.length === 0 ? (
               <div className="py-8 flex flex-col items-center opacity-50">
                 <Activity size={32} className="text-gray-500 mb-2" />
                 <p className="text-white font-medium">No activities today.</p>
