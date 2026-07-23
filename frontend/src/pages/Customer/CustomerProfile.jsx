@@ -314,6 +314,16 @@ export default function CustomerProfile() {
           }),
         );
         window.dispatchEvent(new Event("valo_auth_change"));
+
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get("membershipPayment") === "success") {
+          setToast({
+            msg: "VIP package activated and your parking slot has been reserved.",
+            type: "success",
+          });
+          window.history.replaceState({}, document.title, window.location.pathname);
+          window.setTimeout(() => setToast(null), 3500);
+        }
       }
     };
     fetchUserData();

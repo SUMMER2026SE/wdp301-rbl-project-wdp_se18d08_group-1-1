@@ -22,6 +22,9 @@ const {
 const {
   getUnmigratedLegacySlots,
 } = require('../services/membershipProjectionService');
+const {
+  buildSubscriptionPaymentUrls,
+} = require('../utils/subscriptionPaymentUrls');
 
 const buildExpirationDate = (packageType, fromDate = new Date()) => {
   const expireAt = new Date(fromDate);
@@ -58,14 +61,15 @@ exports.createSubscriptionPayment = async (req, res, next) => {
 
     // Calculate expiration date
     const expireAt = buildExpirationDate(ticketPackage.type);
+    const paymentUrls = buildSubscriptionPaymentUrls(orderCode);
 
     // Call PayOS API to create payment link
     const paymentData = {
       orderCode,
       amount: parseInt(amount),
       description: `VIP ${ticketPackage.type === 'monthly' ? 'Thang' : 'Nam'}`,
-      returnUrl: process.env.PAYOS_RETURN_URL || `${process.env.CLIENT_URL}/membership?orderCode=${orderCode}`,
-      cancelUrl: process.env.PAYOS_CANCEL_URL || `${process.env.CLIENT_URL}/membership?orderCode=${orderCode}&cancel=true`,
+      returnUrl: paymentUrls.returnUrl,
+      cancelUrl: paymentUrls.cancelUrl,
       items: [
         {
           name: `VIP ${ticketPackage.type === 'monthly' ? 'Month' : 'Year'}`,
@@ -688,12 +692,13 @@ exports.renewSubscription = async (req, res, next) => {
       }
     } else if (paymentMethod === 'PAYOS') {
       const orderCode = Number(String(Date.now()).slice(-6) + Math.floor(Math.random() * 100));
+      const paymentUrls = buildSubscriptionPaymentUrls(orderCode);
       const paymentData = {
         orderCode,
         amount: parseInt(amount),
         description: `Renew VIP ${ticketPackage.type}`,
-        returnUrl: process.env.PAYOS_RETURN_URL || `${process.env.CLIENT_URL}/membership?orderCode=${orderCode}`,
-        cancelUrl: process.env.PAYOS_CANCEL_URL || `${process.env.CLIENT_URL}/membership?orderCode=${orderCode}&cancel=true`,
+        returnUrl: paymentUrls.returnUrl,
+        cancelUrl: paymentUrls.cancelUrl,
         items: [{ name: `Renew VIP ${ticketPackage.type}`, quantity: 1, price: parseInt(amount) }]
       };
 

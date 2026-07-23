@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Crown, Sparkles, Check, Loader2, ArrowRight, AlertCircle, QrCode, Wallet } from 'lucide-react';
+import { Crown, Sparkles, Check, Loader2, ArrowRight, AlertCircle, ChevronDown, QrCode, Wallet } from 'lucide-react';
 import {
   getTicketPackages,
   createSubscriptionPayment,
@@ -16,6 +16,87 @@ import ParkingMapViewer from '../../components/ParkingMapViewer';
 import PolicyAcceptancePrompt from '../../components/policies/PolicyAcceptancePrompt';
 import { extractMissingPolicies, isPolicyAcceptanceRequired } from '../../utils/policyErrors';
 import toast, { Toaster } from 'react-hot-toast';
+
+const CustomFloorPicker = ({ floors, value, onChange }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+  const selectedFloor = floors.find((floor) => floor._id === value);
+
+  useEffect(() => {
+    const handlePointerDown = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') setIsOpen(false);
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  const selectFloor = (floorId) => {
+    onChange(floorId);
+    setIsOpen(false);
+  };
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        type="button"
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
+        onClick={() => setIsOpen((current) => !current)}
+        className="flex h-12 w-full items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-4 text-left text-sm font-semibold text-gray-800 outline-none transition hover:border-gold/50 focus:border-gold focus:ring-1 focus:ring-gold"
+      >
+        <span className="min-w-0 truncate">{selectedFloor?.name || 'Select floor'}</span>
+        <ChevronDown
+          size={15}
+          className={`ml-3 shrink-0 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+        />
+      </button>
+
+      {isOpen && (
+        <div
+          role="listbox"
+          className="absolute left-0 right-0 top-full z-50 mt-2 max-h-56 overflow-y-auto rounded-2xl border border-gray-100 bg-white py-2 shadow-2xl animate-in fade-in zoom-in-95 duration-100"
+        >
+          <div className="mb-2 border-b border-gray-100 px-4 pb-2">
+            <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">
+              Select floor
+            </span>
+          </div>
+
+          {floors.map((floor) => {
+            const isActive = floor._id === value;
+            return (
+              <button
+                key={floor._id}
+                type="button"
+                role="option"
+                aria-selected={isActive}
+                onClick={() => selectFloor(floor._id)}
+                className={`mx-2 flex w-[calc(100%_-_1rem)] items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition ${
+                  isActive
+                    ? 'bg-gold/10 font-bold text-gold'
+                    : 'font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+              >
+                <span className="min-w-0 truncate">{floor.name}</span>
+                {isActive && <span className="ml-3 h-1.5 w-1.5 shrink-0 rounded-full bg-gold" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export default function Membership() {
   const navigate = useNavigate();
@@ -100,9 +181,8 @@ export default function Membership() {
             if (res.ok && res.data?.success) {
               clearInterval(intervalId);
               await syncCurrentUserProfile();
-              setSuccess(true);
               setVerifying(false);
-              window.history.replaceState({}, document.title, window.location.pathname);
+              window.location.replace('/profile?membershipPayment=success');
             } else if (attempts >= 100) { // Timeout after 5 minutes (3s * 100)
               clearInterval(intervalId);
               setVerifying(false);
@@ -551,15 +631,11 @@ export default function Membership() {
               <div className="w-full md:w-80 bg-white rounded-2xl border border-gray-200 p-6 shadow-sm flex flex-col">
                 <div className="mb-6">
                   <label className="block text-xs font-black text-gray-400 uppercase tracking-widest mb-3">Parking floor</label>
-                  <select 
-                    className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-semibold text-gray-800 outline-none focus:border-gold focus:ring-1 focus:ring-gold"
+                  <CustomFloorPicker
+                    floors={floors}
                     value={currentFloorId || ''}
-                    onChange={(e) => setCurrentFloorId(e.target.value)}
-                  >
-                    {floors.map(f => (
-                      <option key={f._id} value={f._id}>{f.name}</option>
-                    ))}
-                  </select>
+                    onChange={setCurrentFloorId}
+                  />
                 </div>
                 
                 <div className="mb-6 flex-1">

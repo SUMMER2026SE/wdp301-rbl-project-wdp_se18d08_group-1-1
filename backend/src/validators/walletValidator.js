@@ -1,14 +1,34 @@
 const { body, query } = require('express-validator');
 
+const BOOKING_SHORTFALL_PURPOSE = 'booking_shortfall';
+const DEFAULT_MIN_TOP_UP = 10000;
+const BOOKING_SHORTFALL_MIN_TOP_UP = 1;
+const MAX_TOP_UP = 10000000;
+
+const getMinimumTopUpAmount = (purpose) =>
+  purpose === BOOKING_SHORTFALL_PURPOSE
+    ? BOOKING_SHORTFALL_MIN_TOP_UP
+    : DEFAULT_MIN_TOP_UP;
+
 /**
  * Validation rules for wallet top-up
  */
 const topUpValidator = [
+  body('purpose')
+    .optional()
+    .isIn([BOOKING_SHORTFALL_PURPOSE])
+    .withMessage('Invalid top-up purpose'),
   body('amount')
     .notEmpty()
     .withMessage('Amount is required')
-    .isInt({ min: 10000, max: 10000000 })
-    .withMessage('Amount must be between 10,000 and 10,000,000 VND'),
+    .isInt()
+    .withMessage('Amount must be a whole number')
+    .custom((value, { req }) => {
+      const amount = Number(value);
+      const minimum = getMinimumTopUpAmount(req.body?.purpose);
+      return amount >= minimum && amount <= MAX_TOP_UP;
+    })
+    .withMessage('Amount is outside the allowed top-up range'),
 ];
 
 /**
@@ -34,6 +54,8 @@ const transactionQueryValidator = [
 ];
 
 module.exports = {
+  BOOKING_SHORTFALL_PURPOSE,
+  getMinimumTopUpAmount,
   topUpValidator,
   transactionQueryValidator,
 };

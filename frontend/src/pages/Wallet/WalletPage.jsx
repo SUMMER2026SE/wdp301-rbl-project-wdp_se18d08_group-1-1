@@ -98,6 +98,7 @@ export default function WalletPage() {
   const [error, setError] = useState("");
   const [modal, setModal] = useState(null);
   const [pollingOrderCode, setPollingOrderCode] = useState(null);
+  const [pollingShowsOverlay, setPollingShowsOverlay] = useState(false);
   const [verifyingPayment, setVerifyingPayment] = useState(false);
   const [toast, setToast] = useState(null);
   const [policyPrompt, setPolicyPrompt] = useState({
@@ -155,6 +156,7 @@ export default function WalletPage() {
         // Auto-sync pending topups if webhook was missed locally
         const pendingTopUp = txData.find(tx => tx.status === 'PENDING' && tx.type === 'TOP_UP' && tx.payosOrderCode);
         if (pendingTopUp) {
+          setPollingShowsOverlay(false);
           setPollingOrderCode(pendingTopUp.payosOrderCode);
         }
         window.dispatchEvent(
@@ -201,6 +203,7 @@ export default function WalletPage() {
     }
 
     const timerId = window.setTimeout(() => {
+      setPollingShowsOverlay(true);
       setPollingOrderCode(orderCode);
     }, 0);
     return () => window.clearTimeout(timerId);
@@ -210,39 +213,50 @@ export default function WalletPage() {
     if (!pollingOrderCode) return undefined;
 
     const verifyingTimerId = window.setTimeout(() => {
-      setVerifyingPayment(true);
+      setVerifyingPayment(pollingShowsOverlay);
     }, 0);
+
+    const stopPolling = () => {
+      clearInterval(intervalId);
+      setPollingOrderCode(null);
+      setPollingShowsOverlay(false);
+      setVerifyingPayment(false);
+    };
+
     const intervalId = setInterval(async () => {
       try {
         const statusRes = await getTopUpStatus(pollingOrderCode);
-        if (!statusRes.ok) return;
+        if (!statusRes.ok) {
+          stopPolling();
+          showToast(
+            statusRes.data?.message || "Unable to verify the pending top-up",
+            "error",
+          );
+          return;
+        }
 
         const txStatus = String(statusRes.data?.data?.status || "").toUpperCase();
 
         if (["COMPLETED", "SUCCESS", "PAID"].includes(txStatus)) {
-          clearInterval(intervalId);
-          setPollingOrderCode(null);
-          setVerifyingPayment(false);
+          stopPolling();
           showToast("Top-up completed successfully");
           fetchWalletData();
         }
 
         if (["CANCELLED", "CANCELED", "FAILED"].includes(txStatus)) {
-          clearInterval(intervalId);
-          setPollingOrderCode(null);
-          setVerifyingPayment(false);
+          stopPolling();
           showToast("Payment failed or was cancelled", "error");
           fetchWalletData();
         }
       } catch (err) {
         console.error("Failed to verify top-up status:", err);
+        stopPolling();
+        showToast("Unable to verify the pending top-up", "error");
       }
     }, 3000);
 
     const timeoutId = setTimeout(() => {
-      clearInterval(intervalId);
-      setPollingOrderCode(null);
-      setVerifyingPayment(false);
+      stopPolling();
       showToast("Payment verification timed out", "warning");
       fetchWalletData();
     }, 300000);
@@ -252,7 +266,7 @@ export default function WalletPage() {
       clearInterval(intervalId);
       clearTimeout(timeoutId);
     };
-  }, [fetchWalletData, pollingOrderCode, showToast]);
+  }, [fetchWalletData, pollingOrderCode, pollingShowsOverlay, showToast]);
 
   useEffect(() => {
     if (!modal) return undefined;
@@ -383,7 +397,10 @@ export default function WalletPage() {
         <TopUpModal
           wallet={wallet}
           onClose={() => setModal(null)}
-          onStartPolling={setPollingOrderCode}
+          onStartPolling={(orderCode) => {
+            setPollingShowsOverlay(true);
+            setPollingOrderCode(orderCode);
+          }}
           onPolicyRequired={(missingPolicies) => {
             setModal(null);
             setPolicyPrompt({ open: true, missingPolicies });

@@ -10,11 +10,14 @@ export const getWalletInfo = () =>
     headers: getAuthHeaders(),
   });
 
-export const createTopUpUrl = (amount) =>
+export const createTopUpUrl = (amount, options = {}) =>
   apiFetch('/wallet/top-up', {
     method: 'POST',
     headers: getAuthHeaders(),
-    body: JSON.stringify({ amount: Number(amount) }),
+    body: JSON.stringify({
+      amount: Number(amount),
+      ...(options.purpose ? { purpose: options.purpose } : {}),
+    }),
   });
 
 export const getTopUpStatus = (orderCode, cancel = false) => {
