@@ -9,7 +9,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { getAllFloors, getFloorSlots } from '../../services/parkingFloorService';
 import { getAllBookings } from '../../services/bookingService';
-import { API_BASE } from '../../services/api';
+import { getAllSessions } from '../../services/sessionService';
 import { getAdminPlatformRevenueStatistics } from '../../services/statisticsService';
 import {
   buildStaffDashboardMetrics,
@@ -217,9 +217,7 @@ export default function StaffDashboard() {
         getAdminPlatformRevenueStatistics('all'),
       ]);
       
-      // Fetch sessions separately using API_BASE
-      const sessionsRes = await fetch(`${API_BASE}/sessions`);
-      const sessionsData = await sessionsRes.json();
+      const sessionsRes = await getAllSessions();
 
       const floorSourceSucceeded = Boolean(
         floorsRes.ok && floorsRes.data?.success
@@ -228,7 +226,7 @@ export default function StaffDashboard() {
         bookingsRes.ok && bookingsRes.data?.success
       );
       const sessionSourceSucceeded = Boolean(
-        sessionsRes.ok && sessionsData?.success
+        sessionsRes.ok && sessionsRes.data?.success
       );
       const fetchedFloors = floorSourceSucceeded
         ? (floorsRes.data.data || floorsRes.data.floors || [])
@@ -257,7 +255,7 @@ export default function StaffDashboard() {
       }));
 
       setBookings(bookingSourceSucceeded ? (bookingsRes.data.data || []) : []);
-      setSessions(sessionSourceSucceeded ? (sessionsData.data || []) : []);
+      setSessions(sessionSourceSucceeded ? (sessionsRes.data.data || []) : []);
       if (revenueRes.ok && revenueRes.data?.success) {
         setRevenueStatistics(normalizeRevenueStatistics(revenueRes.data.data));
         setRevenueError('');

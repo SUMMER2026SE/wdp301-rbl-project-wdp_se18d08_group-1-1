@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import ParkingMapGrid from "../../components/ParkingMapGrid";
 import { getAllFloors } from "../../services/parkingFloorService";
-import { apiFetch } from "../../services/api";
+import { getActiveSessions } from "../../services/sessionService";
 import { MonitorCheck, X } from "lucide-react";
 import StaffCheckoutModal from "./StaffCheckoutModal";
 import { getAvailableBookingSlots, getActiveHolds, getActiveMapBookings } from "../../services/bookingService";
@@ -64,11 +64,7 @@ export default function LiveGridMonitor() {
 
   const fetchLiveStatus = async () => {
     try {
-      const token = localStorage.getItem("accessToken");
-      const res = await apiFetch("/sessions/active-status", {
-        method: "GET",
-        headers: token ? { Authorization: `Bearer ${token}` } : {}
-      });
+      const res = await getActiveSessions();
       if (res.ok && res.data.success) {
         setActiveSessions(res.data.data);
       }

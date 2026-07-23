@@ -1,21 +1,26 @@
 import { useCallback, useState, useEffect } from 'react';
 import { Camera, X, ShieldCheck } from 'lucide-react';
-import { API_BASE } from '../../services/api';
+import { getAllSessions } from '../../services/sessionService';
 
 export default function SessionManagement() {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [selectedSession, setSelectedSession] = useState(null);
 
   const fetchSessions = useCallback(async () => {
+    setLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/sessions`);
-      const data = await response.json();
-      if (data.success) {
-        setSessions(data.data);
+      const response = await getAllSessions();
+      if (response.ok && response.data?.success) {
+        setSessions(response.data.data || []);
+        setError('');
+      } else {
+        setError(response.data?.message || 'Failed to load sessions. Please try again.');
       }
     } catch (error) {
       console.error('Failed to fetch sessions:', error);
+      setError('Failed to load sessions. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -43,6 +48,8 @@ export default function SessionManagement() {
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
         {loading ? (
           <div className="p-10 text-center text-gray-500">Loading sessions...</div>
+        ) : error ? (
+          <div className="p-10 text-center text-red-600" role="alert">{error}</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
