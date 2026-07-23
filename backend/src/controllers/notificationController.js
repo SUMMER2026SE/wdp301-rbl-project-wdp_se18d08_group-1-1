@@ -19,7 +19,15 @@ const createNotification = async (req, res, next) => {
       });
     }
 
-    const { title, content, type, priority, targetType, targetUsers } = req.body;
+    const {
+      title,
+      content,
+      type,
+      priority,
+      targetType,
+      targetUsers,
+      targetRoles,
+    } = req.body;
     const createdBy = req.user._id;
     const io = req.app.get('io');
 
@@ -30,9 +38,8 @@ const createNotification = async (req, res, next) => {
         { title, content, type, priority },
         createdBy
       );
-      // Broadcast to all online users
       if (io) {
-        broadcastNotification(io, result.notification);
+        broadcastNotification(io, result.notification, result.userIds);
       }
 
       return res.status(201).json({
@@ -53,11 +60,12 @@ const createNotification = async (req, res, next) => {
       const notification = await notificationService.createForUser(
         targetUsers[0],
         { title, content, type, priority },
-        createdBy
+        createdBy,
+        { requireActive: true }
       );
 
       if (io) {
-        await emitNotification(io, targetUsers[0], notification);
+        await emitNotification(io, notification.targetUsers[0], notification);
       }
 
       return res.status(201).json({
@@ -78,19 +86,46 @@ const createNotification = async (req, res, next) => {
       const notification = await notificationService.createForUsers(
         targetUsers,
         { title, content, type, priority },
-        createdBy
+        createdBy,
+        { requireActive: true }
       );
 
       if (io) {
-        for (const uid of targetUsers) {
-          await emitNotification(io, uid, notification);
+        for (let index = 0; index < notification.targetUsers.length; index += 1) {
+          await emitNotification(io, notification.targetUsers[index], notification, {
+            notifyAdmins: index === 0,
+            updateUnreadCount: false,
+          });
         }
       }
 
       return res.status(201).json({
         success: true,
-        message: `Notification sent to ${targetUsers.length} users`,
+        message: `Notification sent to ${notification.recipientCount} users`,
         data: notification,
+      });
+    }
+
+    if (targetType === 'ROLE_BASED') {
+      const result = await notificationService.createForRole(
+        targetRoles,
+        { title, content, type, priority },
+        createdBy
+      );
+
+      if (io) {
+        for (let index = 0; index < result.userIds.length; index += 1) {
+          await emitNotification(io, result.userIds[index], result.notification, {
+            notifyAdmins: index === 0,
+            updateUnreadCount: false,
+          });
+        }
+      }
+
+      return res.status(201).json({
+        success: true,
+        message: `Notification sent to ${result.userIds.length} users in role(s): ${targetRoles.join(', ')}`,
+        data: result.notification,
       });
     }
 
@@ -110,14 +145,14 @@ const createNotification = async (req, res, next) => {
  */
 const getUserNotifications = async (req, res, next) => {
   try {
-    const { page, limit, type, isRead, search, contextRole } = req.query;
+    const { page, limit, type, isRead, search } = req.query;
     const result = await notificationService.getUserNotifications(req.user._id, {
       page,
       limit,
       type,
       isRead,
       search,
-      contextRole,
+      contextRole: req.user.role,
     });
 
     res.status(200).json({
@@ -137,8 +172,7 @@ const getUserNotifications = async (req, res, next) => {
  */
 const getUnreadCount = async (req, res, next) => {
   try {
-    const { contextRole } = req.query;
-    const count = await notificationService.getUnreadCount(req.user._id, contextRole);
+    const count = await notificationService.getUnreadCount(req.user._id, req.user.role);
     res.status(200).json({
       success: true,
       data: { count },
@@ -175,8 +209,11 @@ const createInternalReport = async (req, res, next) => {
       // emitNotification or broadcast to admins
       // Since createForRole will resolve users with role 'admin'
       const { notification, userIds } = result;
-      for (const uid of userIds) {
-        await emitNotification(io, uid, notification);
+      for (let index = 0; index < userIds.length; index += 1) {
+        await emitNotification(io, userIds[index], notification, {
+          notifyAdmins: index === 0,
+          updateUnreadCount: false,
+        });
       }
     }
 

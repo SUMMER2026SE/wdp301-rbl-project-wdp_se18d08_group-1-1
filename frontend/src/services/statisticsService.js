@@ -4,21 +4,26 @@ const authHeader = () => ({
   Authorization: `Bearer ${localStorage.getItem('accessToken')}`,
 });
 
-const withRange = (endpoint, range = '30d') =>
-  `${endpoint}?${new URLSearchParams({ range }).toString()}`;
+const withRange = (endpoint, range = '30d', filters = {}) =>
+  `${endpoint}?${new URLSearchParams({ range, ...filters }).toString()}`;
 
 export const getCustomerBookingStatistics = (range = '30d') =>
   apiFetch(withRange('/statistics/customer/bookings', range), {
     headers: authHeader(),
   });
 
-export const getAdminBookingStatistics = (range = '30d') =>
-  apiFetch(withRange('/statistics/admin/bookings', range), {
+export const getAdminBookingStatistics = (range = '30d', filters = {}) =>
+  apiFetch(withRange('/statistics/admin/bookings', range, filters), {
     headers: authHeader(),
   });
 
 export const getAdminSubscriptionStatistics = (range = '30d') =>
   apiFetch(withRange('/statistics/admin/subscriptions', range), {
+    headers: authHeader(),
+  });
+
+export const getAdminPlatformRevenueStatistics = (range = 'all') =>
+  apiFetch(withRange('/statistics/admin/platform-revenue', range), {
     headers: authHeader(),
   });
 

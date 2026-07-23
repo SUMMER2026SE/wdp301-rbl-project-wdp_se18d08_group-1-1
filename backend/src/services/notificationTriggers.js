@@ -493,6 +493,181 @@ async function notifyBookingCancelled(app, userId, bookingDetails = {}) {
   }
 }
 
+function bookingTimestamp(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'unknown' : String(date.getTime());
+}
+
+async function createDirectBookingNotification(
+  app,
+  userId,
+  bookingDetails,
+  { eventType, referenceSuffix, templateKey, templateData = {} }
+) {
+  if (!userId || !bookingDetails?.bookingId) return null;
+
+  const notification = await notificationService.createAutoNotification(
+    eventType,
+    `booking_${bookingDetails.bookingId}_${referenceSuffix}`,
+    userId,
+    templateKey,
+    {
+      bookingId: String(bookingDetails.bookingId),
+      slotInfo: bookingDetails.slotInfo || 'N/A',
+      scheduledStart: bookingDetails.scheduledStart,
+      scheduledEnd: bookingDetails.scheduledEnd,
+      ...templateData,
+    }
+  );
+
+  if (notification) {
+    const io = getIO(app);
+    if (io) await emitNotification(io, userId, notification);
+  }
+
+  return notification;
+}
+
+async function notifyBookingCheckinReminder(app, userId, bookingDetails, minutesLeft) {
+  try {
+    if (![30, 15].includes(minutesLeft)) return null;
+    const scheduleKey = bookingTimestamp(bookingDetails?.scheduledStart);
+    return await createDirectBookingNotification(app, userId, bookingDetails, {
+      eventType: `BOOKING_CHECKIN_REMINDER_${minutesLeft}`,
+      referenceSuffix: `checkin_${minutesLeft}_${scheduleKey}`,
+      templateKey: 'BOOKING_CHECKIN_REMINDER',
+      templateData: { minutes: minutesLeft },
+    });
+  } catch (err) {
+    console.error('[NotifTrigger] notifyBookingCheckinReminder error:', err.message);
+    return null;
+  }
+}
+
+async function notifyBookingCheckinExpired(app, userId, bookingDetails) {
+  try {
+    const scheduleKey = bookingTimestamp(bookingDetails?.scheduledStart);
+    return await createDirectBookingNotification(app, userId, bookingDetails, {
+      eventType: 'BOOKING_CHECKIN_EXPIRED',
+      referenceSuffix: `checkin_expired_${scheduleKey}`,
+      templateKey: 'BOOKING_CHECKIN_EXPIRED',
+    });
+  } catch (err) {
+    console.error('[NotifTrigger] notifyBookingCheckinExpired error:', err.message);
+    return null;
+  }
+}
+
+async function notifyBookingEndingSoon(app, userId, bookingDetails, minutesLeft) {
+  try {
+    if (![30, 15, 5].includes(minutesLeft)) return null;
+    const scheduleKey = bookingTimestamp(bookingDetails?.scheduledEnd);
+    return await createDirectBookingNotification(app, userId, bookingDetails, {
+      eventType: `BOOKING_ENDING_${minutesLeft}`,
+      referenceSuffix: `ending_${minutesLeft}_${scheduleKey}`,
+      templateKey: 'BOOKING_ENDING_SOON',
+      templateData: { minutes: minutesLeft },
+    });
+  } catch (err) {
+    console.error('[NotifTrigger] notifyBookingEndingSoon error:', err.message);
+    return null;
+  }
+}
+
+async function notifyBookingTimeExpired(app, userId, bookingDetails) {
+  try {
+    const scheduleKey = bookingTimestamp(bookingDetails?.scheduledEnd);
+    return await createDirectBookingNotification(app, userId, bookingDetails, {
+      eventType: 'BOOKING_TIME_EXPIRED',
+      referenceSuffix: `time_expired_${scheduleKey}`,
+      templateKey: 'BOOKING_TIME_EXPIRED',
+    });
+  } catch (err) {
+    console.error('[NotifTrigger] notifyBookingTimeExpired error:', err.message);
+    return null;
+  }
+}
+
+async function notifyBookingNoShowCancelled(app, userId, bookingDetails) {
+  try {
+    const scheduleKey = bookingTimestamp(bookingDetails?.scheduledStart);
+    return await createDirectBookingNotification(app, userId, bookingDetails, {
+      eventType: 'BOOKING_NO_SHOW_CANCELLED',
+      referenceSuffix: `no_show_cancelled_${scheduleKey}`,
+      templateKey: 'BOOKING_NO_SHOW_CANCELLED',
+    });
+  } catch (err) {
+    console.error('[NotifTrigger] notifyBookingNoShowCancelled error:', err.message);
+    return null;
+  }
+}
+
+async function createDirectSubscriptionNotification(
+  app,
+  userId,
+  subscriptionDetails,
+  { eventType, referenceSuffix, templateKey }
+) {
+  if (!userId || !subscriptionDetails?.subscriptionId) return null;
+
+  const notification = await notificationService.createAutoNotification(
+    eventType,
+    `subscription_${subscriptionDetails.subscriptionId}_${referenceSuffix}`,
+    userId,
+    templateKey,
+    {
+      subscriptionId: String(subscriptionDetails.subscriptionId),
+      expireAt: subscriptionDetails.expireAt,
+      expireDate: subscriptionDetails.expireDate || 'N/A',
+    }
+  );
+
+  if (notification) {
+    const io = getIO(app);
+    if (io) await emitNotification(io, userId, notification);
+  }
+
+  return notification;
+}
+
+async function notifyVipExpiringSoon(app, userId, subscriptionDetails) {
+  try {
+    const expirationKey = bookingTimestamp(subscriptionDetails?.expireAt);
+    return await createDirectSubscriptionNotification(
+      app,
+      userId,
+      subscriptionDetails,
+      {
+        eventType: 'VIP_EXPIRING_SOON',
+        referenceSuffix: `expiring_${expirationKey}`,
+        templateKey: 'VIP_EXPIRING_SOON',
+      }
+    );
+  } catch (err) {
+    console.error('[NotifTrigger] notifyVipExpiringSoon error:', err.message);
+    return null;
+  }
+}
+
+async function notifyVipExpired(app, userId, subscriptionDetails) {
+  try {
+    const expirationKey = bookingTimestamp(subscriptionDetails?.expireAt);
+    return await createDirectSubscriptionNotification(
+      app,
+      userId,
+      subscriptionDetails,
+      {
+        eventType: 'VIP_EXPIRED',
+        referenceSuffix: `expired_${expirationKey}`,
+        templateKey: 'VIP_EXPIRED',
+      }
+    );
+  } catch (err) {
+    console.error('[NotifTrigger] notifyVipExpired error:', err.message);
+    return null;
+  }
+}
+
 async function sendTransferNotification(app, userIds, eventType, templateKey, transfer, templateData = {}) {
   const ids = userIds.filter(Boolean).map(String);
   const io = getIO(app);
@@ -826,7 +1001,7 @@ async function notifySystemMaintenance(app) {
     );
     if (result) {
       const io = getIO(app);
-      if (io) broadcastNotification(io, result.notification);
+      if (io) broadcastNotification(io, result.notification, result.userIds);
       queueBroadcastEmail(result.userIds, 'system.maintenance');
       await updateRuleLastTriggered('system.maintenance');
     }
@@ -846,7 +1021,7 @@ async function notifyVersionUpdate(app) {
     );
     if (result) {
       const io = getIO(app);
-      if (io) broadcastNotification(io, result.notification);
+      if (io) broadcastNotification(io, result.notification, result.userIds);
       queueBroadcastEmail(result.userIds, 'system.update');
       await updateRuleLastTriggered('system.update');
     }
@@ -881,6 +1056,13 @@ module.exports = {
   // Booking
   notifyBookingSuccess,
   notifyBookingCancelled,
+  notifyBookingCheckinReminder,
+  notifyBookingCheckinExpired,
+  notifyBookingEndingSoon,
+  notifyBookingTimeExpired,
+  notifyBookingNoShowCancelled,
+  notifyVipExpiringSoon,
+  notifyVipExpired,
   notifyTransferRequestCreated,
   notifyTransferApproved,
   notifyTransferRejected,

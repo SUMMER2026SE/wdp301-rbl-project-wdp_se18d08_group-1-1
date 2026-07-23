@@ -56,15 +56,19 @@ exports.searchUsers = async (req, res, next) => {
   try {
     const q = req.query.q || "";
     const User = require("../models/User"); // Import here to avoid circular dependencies if any
+    const escapedQuery = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-    const filter = q
-      ? {
+    const filter = {
+      status: true,
+      ...(q
+        ? {
           $or: [
-            { username: { $regex: q, $options: "i" } },
-            { email: { $regex: q, $options: "i" } },
+            { username: { $regex: escapedQuery, $options: "i" } },
+            { email: { $regex: escapedQuery, $options: "i" } },
           ],
         }
-      : {};
+        : {}),
+    };
 
     const users = await User.find(filter)
       .select("username email role status")

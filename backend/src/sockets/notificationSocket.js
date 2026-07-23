@@ -38,7 +38,7 @@ function setupNotificationSocket(io) {
 
     // Send initial unread count
     try {
-      const unreadCount = await notificationService.getUnreadCount(userId);
+      const unreadCount = await notificationService.getUnreadCount(userId, socket.userRole);
       socket.emit('notification:unreadCount', { count: unreadCount });
     } catch (err) {
       console.error('Error fetching unread count on connect:', err.message);
@@ -49,10 +49,7 @@ function setupNotificationSocket(io) {
       try {
         const { notificationId } = data;
         await notificationService.markAsRead(userId, notificationId);
-        const unreadCount = await notificationService.getUnreadCount(userId);
-
-        // Emit updated count to all sockets of this user
-        emitToUser(io, userId, 'notification:unreadCount', { count: unreadCount });
+        await emitUnreadCountsToUser(io, userId);
 
         if (typeof callback === 'function') {
           callback({ success: true });
@@ -70,7 +67,7 @@ function setupNotificationSocket(io) {
       try {
         await notificationService.markAllAsRead(userId);
 
-        emitToUser(io, userId, 'notification:unreadCount', { count: 0 });
+        await emitUnreadCountsToUser(io, userId);
 
         if (typeof callback === 'function') {
           callback({ success: true });
@@ -88,9 +85,7 @@ function setupNotificationSocket(io) {
       try {
         const { notificationId } = data;
         await notificationService.deleteNotification(userId, notificationId);
-        const unreadCount = await notificationService.getUnreadCount(userId);
-
-        emitToUser(io, userId, 'notification:unreadCount', { count: unreadCount });
+        await emitUnreadCountsToUser(io, userId);
 
         if (typeof callback === 'function') {
           callback({ success: true });
@@ -132,6 +127,31 @@ function emitToUser(io, userId, event, data) {
 }
 
 /**
+ * Recalculate unread counts using each socket's authenticated role.
+ */
+async function emitUnreadCountsToUser(io, userId) {
+  const userSockets = onlineUsers.get(String(userId));
+  if (!userSockets) return;
+
+  const countsByRole = new Map();
+  for (const socketId of userSockets) {
+    const socket = io.sockets.sockets.get(socketId);
+    if (!socket) continue;
+
+    const role = socket.userRole;
+    if (!countsByRole.has(role)) {
+      countsByRole.set(
+        role,
+        await notificationService.getUnreadCount(userId, role)
+      );
+    }
+    socket.emit('notification:unreadCount', {
+      count: countsByRole.get(role),
+    });
+  }
+}
+
+/**
  * Emit an event to all connected admin/staff sockets.
  */
 function emitToAdmins(io, event, data) {
@@ -145,7 +165,12 @@ function emitToAdmins(io, event, data) {
 /**
  * Emit a new notification to a user (with unread count update)
  */
-async function emitNotification(io, userId, notification) {
+async function emitNotification(
+  io,
+  userId,
+  notification,
+  { notifyAdmins = true, updateUnreadCount = true } = {}
+) {
   const payload = {
     _id: notification._id,
     title: notification.title,
@@ -155,25 +180,30 @@ async function emitNotification(io, userId, notification) {
     metadata: notification.metadata,
     createdAt: notification.createdAt,
     targetType: notification.targetType,
+    targetRoles: notification.targetRoles,
     targetUsers: notification.targetUsers,
+    recipientCount: notification.recipientCount,
   };
 
   emitToUser(io, userId, 'notification:new', payload);
-  emitToAdmins(io, 'notification:admin:new', payload);
+  if (notifyAdmins) {
+    emitToAdmins(io, 'notification:admin:new', payload);
+  }
 
   // Also update unread count
-  try {
-    const unreadCount = await notificationService.getUnreadCount(userId);
-    emitToUser(io, userId, 'notification:unreadCount', { count: unreadCount });
-  } catch (err) {
-    console.error('Error emitting unread count:', err.message);
+  if (updateUnreadCount) {
+    try {
+      await emitUnreadCountsToUser(io, userId);
+    } catch (err) {
+      console.error('Error emitting unread count:', err.message);
+    }
   }
 }
 
 /**
  * Broadcast a notification event to all online users
  */
-function broadcastNotification(io, notification) {
+function broadcastNotification(io, notification, userIds = []) {
   const payload = {
     _id: notification._id,
     title: notification.title,
@@ -183,16 +213,21 @@ function broadcastNotification(io, notification) {
     metadata: notification.metadata,
     createdAt: notification.createdAt,
     targetType: notification.targetType,
+    targetRoles: notification.targetRoles,
     targetUsers: notification.targetUsers,
+    recipientCount: notification.recipientCount,
   };
 
-  io.emit('notification:new', payload);
+  for (const userId of new Set(userIds.map(String))) {
+    emitToUser(io, userId, 'notification:new', payload);
+  }
   emitToAdmins(io, 'notification:admin:new', payload);
 }
 
 module.exports = {
   setupNotificationSocket,
   emitToUser,
+  emitUnreadCountsToUser,
   emitToAdmins,
   emitNotification,
   broadcastNotification,
