@@ -22,6 +22,11 @@ export const getAdminSubscriptionStatistics = (range = '30d') =>
     headers: authHeader(),
   });
 
+export const getAdminPlatformRevenueStatistics = (range = 'all') =>
+  apiFetch(withRange('/statistics/admin/platform-revenue', range), {
+    headers: authHeader(),
+  });
+
 const getRevenueDateRange = (range) => {
   if (range === 'all') return {};
   const endDate = new Date();

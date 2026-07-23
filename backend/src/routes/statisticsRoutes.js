@@ -25,5 +25,11 @@ router.get(
   statisticsQueryValidator,
   statisticsController.getAdminSubscriptions
 );
+router.get(
+  '/admin/platform-revenue',
+  authorize('staff', 'admin'),
+  statisticsQueryValidator,
+  statisticsController.getAdminPlatformRevenue
+);
 
 module.exports = router;

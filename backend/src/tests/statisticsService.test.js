@@ -144,3 +144,101 @@ test('completed revenue summary keeps gross and actual revenue separate', () => 
     actualRevenue: 560000,
   });
 });
+
+test('platform booking revenue separates parking and service without double counting', () => {
+  const bookings = [
+    {
+      _id: 'booking-with-snapshot',
+      paymentBreakdownSnapshot: {
+        source: 'calculated',
+        parkingAmount: 70,
+        serviceAmount: 30,
+        totalAmount: 100,
+      },
+      refundSettlements: [{
+        payoutStatus: 'credited',
+        refundableServiceAmount: 10,
+      }],
+    },
+    {
+      _id: 'legacy-booking',
+      refundSettlements: [],
+    },
+  ];
+  const financialSummaries = new Map([
+    ['booking-with-snapshot', {
+      prepaidCollected: 100,
+      grossRevenue: 130,
+      refundPaid: 10,
+      actualRevenue: 120,
+    }],
+    ['legacy-booking', {
+      prepaidCollected: 50,
+      grossRevenue: 50,
+      refundPaid: 0,
+      actualRevenue: 50,
+    }],
+  ]);
+  const completedServices = new Map([
+    ['booking-with-snapshot', 30],
+    ['legacy-booking', 15],
+  ]);
+
+  const result = _private.calculatePlatformBookingRevenue(
+    bookings,
+    financialSummaries,
+    completedServices
+  );
+
+  assert.deepEqual(result, {
+    bookingRevenue: 135,
+    serviceRevenue: 35,
+    completedBookingCount: 2,
+    serviceBookingCount: 2,
+  });
+  assert.equal(result.bookingRevenue + result.serviceRevenue, 170);
+});
+
+test('platform service revenue excludes paid services that are not completed', () => {
+  const bookings = [{
+    _id: 'booking-with-pending-service',
+    paymentBreakdownSnapshot: {
+      source: 'calculated',
+      parkingAmount: 80,
+      serviceAmount: 20,
+      totalAmount: 100,
+    },
+    refundSettlements: [],
+  }];
+  const financialSummaries = new Map([
+    ['booking-with-pending-service', {
+      prepaidCollected: 100,
+      grossRevenue: 100,
+      refundPaid: 0,
+      actualRevenue: 100,
+    }],
+  ]);
+
+  const result = _private.calculatePlatformBookingRevenue(
+    bookings,
+    financialSummaries,
+    new Map()
+  );
+
+  assert.equal(result.bookingRevenue, 80);
+  assert.equal(result.serviceRevenue, 0);
+  assert.equal(result.serviceBookingCount, 0);
+});
+
+test('platform revenue uses lifecycle timestamps with a legacy fallback', () => {
+  const period = {
+    startDate: new Date('2030-03-01T00:00:00.000Z'),
+    endDate: new Date('2030-03-31T23:59:59.999Z'),
+  };
+  const match = _private.buildLifecycleDateMatch('completedAt', 'updatedAt', period);
+
+  assert.equal(match.$or[0].completedAt.$gte, period.startDate);
+  assert.equal(match.$or[0].completedAt.$lte, period.endDate);
+  assert.equal(match.$or[1].completedAt, null);
+  assert.equal(match.$or[1].updatedAt.$gte, period.startDate);
+});

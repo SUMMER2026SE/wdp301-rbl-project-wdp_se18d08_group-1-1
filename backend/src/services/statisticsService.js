@@ -1,7 +1,9 @@
 const mongoose = require('mongoose');
 const Booking = require('../models/Booking');
+const BookingService = require('../models/BookingService');
 const Subscription = require('../models/Subscription');
 const SubscriptionRenewal = require('../models/SubscriptionRenewal');
+const MembershipEntitlementRenewal = require('../models/MembershipEntitlementRenewal');
 const WalletTransaction = require('../models/WalletTransaction');
 const {
   DAY_MS,
@@ -202,6 +204,212 @@ const normalizeCompletedBookingStatistics = (row) => ({
   refundPaid: Number(row?.refundPaid || 0),
   actualRevenue: Number(row?.actualRevenue || 0),
 });
+
+const buildLifecycleDateMatch = (field, fallbackField, period) => {
+  if (!period.startDate) return {};
+  const dateRange = { $gte: period.startDate, $lte: period.endDate };
+  return {
+    $or: [
+      { [field]: dateRange },
+      {
+        [field]: null,
+        [fallbackField]: dateRange,
+      },
+    ],
+  };
+};
+
+const calculatePlatformBookingRevenue = (
+  bookings,
+  financialSummaries,
+  completedServiceAmountByBooking = new Map()
+) => bookings.reduce(
+  (summary, booking) => {
+    const bookingId = String(booking._id);
+    const financial = financialSummaries.get(bookingId) || {
+      prepaidCollected: 0,
+      grossRevenue: 0,
+      refundPaid: 0,
+      actualRevenue: 0,
+    };
+    const grossRevenue = Math.max(
+      0,
+      Number(financial.grossRevenue) ||
+        (Number(financial.actualRevenue) || 0) + (Number(financial.refundPaid) || 0)
+    );
+    const refundPaid = Math.min(
+      grossRevenue,
+      Math.max(0, Number(financial.refundPaid) || 0)
+    );
+    const snapshot = booking.paymentBreakdownSnapshot;
+    const paidServiceAmount = Math.min(
+      Math.max(0, Number(financial.prepaidCollected) || 0),
+      Math.max(
+        0,
+        snapshot?.source
+          ? Number(snapshot.serviceAmount) || 0
+          : Number(completedServiceAmountByBooking.get(bookingId)) || 0
+      )
+    );
+    const completedServiceAmount = Math.max(
+      0,
+      Number(completedServiceAmountByBooking.get(bookingId)) || 0
+    );
+    const grossServiceAmount = Math.min(
+      paidServiceAmount,
+      completedServiceAmount
+    );
+    const recordedServiceRefund = (booking.refundSettlements || []).reduce(
+      (total, settlement) => settlement?.payoutStatus === 'credited'
+        ? total + Math.max(0, Number(settlement.refundableServiceAmount) || 0)
+        : total,
+      0
+    );
+    const paidServiceRefund = Math.min(
+      paidServiceAmount,
+      refundPaid,
+      recordedServiceRefund
+    );
+    const serviceRevenue = Math.max(
+      0,
+      grossServiceAmount - Math.min(grossServiceAmount, paidServiceRefund)
+    );
+    const grossBookingAmount = Math.max(0, grossRevenue - paidServiceAmount);
+    const bookingRefund = Math.min(
+      grossBookingAmount,
+      Math.max(0, refundPaid - paidServiceRefund)
+    );
+    const bookingRevenue = Math.max(0, grossBookingAmount - bookingRefund);
+
+    summary.bookingRevenue += bookingRevenue;
+    summary.serviceRevenue += serviceRevenue;
+    summary.completedBookingCount += 1;
+    if (grossServiceAmount > 0) summary.serviceBookingCount += 1;
+    return summary;
+  },
+  {
+    bookingRevenue: 0,
+    serviceRevenue: 0,
+    completedBookingCount: 0,
+    serviceBookingCount: 0,
+  }
+);
+
+const aggregatePaidAmount = async (Model, match) => {
+  const rows = await Model.aggregate([
+    { $match: match },
+    {
+      $group: {
+        _id: null,
+        amount: { $sum: '$amount' },
+        count: { $sum: 1 },
+      },
+    },
+  ]);
+  return {
+    amount: Number(rows[0]?.amount || 0),
+    count: Number(rows[0]?.count || 0),
+  };
+};
+
+const getAdminPlatformRevenueStatistics = async (filters = {}) => {
+  const period = resolveDateRange({ range: 'all', ...filters });
+  const bookingDateMatch = buildLifecycleDateMatch(
+    'completedAt',
+    'updatedAt',
+    period
+  );
+  const renewalDateMatch = buildLifecycleDateMatch('paidAt', 'createdAt', period);
+  const subscriptionDateMatch = period.startDate
+    ? buildCreatedAtMatch(period)
+    : {};
+
+  const [
+    completedBookings,
+    subscriptionPurchases,
+    subscriptionRenewals,
+    entitlementRenewals,
+  ] = await Promise.all([
+    Booking.find({ status: 'COMPLETED', ...bookingDateMatch })
+      .select(
+        'prepaidAmount paymentBreakdownSnapshot paidOverageAdjustments refundSettlements completedAt updatedAt'
+      )
+      .lean(),
+    aggregatePaidAmount(Subscription, {
+      paymentStatus: 'paid',
+      ...subscriptionDateMatch,
+    }),
+    aggregatePaidAmount(SubscriptionRenewal, {
+      status: 'paid',
+      ...renewalDateMatch,
+    }),
+    aggregatePaidAmount(MembershipEntitlementRenewal, {
+      status: 'paid',
+      ...renewalDateMatch,
+    }),
+  ]);
+
+  const bookingIds = completedBookings.map((booking) => booking._id);
+  const [financialSummaries, completedServiceRows] = await Promise.all([
+    getBookingFinancialSummaryMap(completedBookings),
+    bookingIds.length
+      ? BookingService.aggregate([
+        {
+          $match: {
+            bookingId: { $in: bookingIds },
+            status: 'done',
+          },
+        },
+        {
+          $group: {
+            _id: '$bookingId',
+            amount: { $sum: '$price' },
+          },
+        },
+      ])
+      : [],
+  ]);
+  const completedServiceAmountByBooking = new Map(
+    completedServiceRows.map((row) => [String(row._id), Number(row.amount) || 0])
+  );
+  const bookingRevenue = calculatePlatformBookingRevenue(
+    completedBookings,
+    financialSummaries,
+    completedServiceAmountByBooking
+  );
+  const vipRevenue =
+    subscriptionPurchases.amount +
+    subscriptionRenewals.amount +
+    entitlementRenewals.amount;
+  const vipTransactionCount =
+    subscriptionPurchases.count +
+    subscriptionRenewals.count +
+    entitlementRenewals.count;
+  const totalRevenue =
+    vipRevenue + bookingRevenue.bookingRevenue + bookingRevenue.serviceRevenue;
+
+  return {
+    period,
+    currency: 'VND',
+    basis: 'realized_completed_revenue',
+    vip: {
+      revenue: vipRevenue,
+      transactionCount: vipTransactionCount,
+      purchaseRevenue: subscriptionPurchases.amount,
+      renewalRevenue:
+        subscriptionRenewals.amount + entitlementRenewals.amount,
+    },
+    booking: {
+      revenue: bookingRevenue.bookingRevenue,
+      completedCount: bookingRevenue.completedBookingCount,
+    },
+    service: {
+      revenue: bookingRevenue.serviceRevenue,
+      completedBookingCount: bookingRevenue.serviceBookingCount,
+    },
+    totalRevenue,
+  };
+};
 
 const getCompletedBookingStatistics = async (bookingMatch) => {
   const bookings = await Booking.find({
@@ -566,6 +774,7 @@ module.exports = {
   getCustomerBookingStatistics,
   getAdminBookingStatistics,
   getAdminSubscriptionStatistics,
+  getAdminPlatformRevenueStatistics,
   _private: {
     resolveDateRange,
     parseVietnamCalendarDate,
@@ -574,5 +783,7 @@ module.exports = {
     buildBookingScheduleMatch,
     getTimelineBucket,
     normalizeCompletedBookingStatistics,
+    buildLifecycleDateMatch,
+    calculatePlatformBookingRevenue,
   },
 };

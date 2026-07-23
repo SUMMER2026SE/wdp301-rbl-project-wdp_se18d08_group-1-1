@@ -45,8 +45,19 @@ const getAdminSubscriptions = async (req, res, next) => {
   }
 };
 
+const getAdminPlatformRevenue = async (req, res, next) => {
+  try {
+    if (handleValidation(req, res)) return;
+    const data = await statisticsService.getAdminPlatformRevenueStatistics(req.query);
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getCustomerBookings,
   getAdminBookings,
   getAdminSubscriptions,
+  getAdminPlatformRevenue,
 };

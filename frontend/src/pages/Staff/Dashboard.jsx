@@ -1,35 +1,92 @@
-import { useState, useEffect, useMemo } from 'react';
-import { format, differenceInMinutes, startOfDay, isToday } from 'date-fns';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { format, isToday } from 'date-fns';
 import {
   MonitorCheck, Car, FileWarning, ClipboardList,
-  TrendingUp, CheckCircle2, AlertTriangle, Clock, DoorOpen,
-  XCircle, ArrowRightCircle, QrCode, Activity, PlayCircle, Crown
+  TrendingUp, CheckCircle2, AlertTriangle, DoorOpen,
+  ArrowRightCircle, QrCode, Activity, PlayCircle, Crown,
+  CircleDollarSign, CalendarCheck2, Wrench
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { getAllFloors, getFloorSlots } from '../../services/parkingFloorService';
 import { getAllBookings } from '../../services/bookingService';
 import { API_BASE } from '../../services/api';
+import { getAdminPlatformRevenueStatistics } from '../../services/statisticsService';
 import toast, { Toaster } from 'react-hot-toast';
 
+const formatCurrency = (value) => new Intl.NumberFormat('vi-VN', {
+  style: 'currency',
+  currency: 'VND',
+  maximumFractionDigits: 0,
+}).format(Number(value || 0));
+
+const EMPTY_REVENUE_STATISTICS = Object.freeze({
+  vip: { revenue: 0, transactionCount: 0 },
+  booking: { revenue: 0, completedCount: 0 },
+  service: { revenue: 0, completedBookingCount: 0 },
+  totalRevenue: 0,
+});
+
+const normalizeRevenueStatistics = (statistics) => ({
+  vip: {
+    revenue: Number(statistics?.vip?.revenue || 0),
+    transactionCount: Number(statistics?.vip?.transactionCount || 0),
+  },
+  booking: {
+    revenue: Number(statistics?.booking?.revenue || 0),
+    completedCount: Number(statistics?.booking?.completedCount || 0),
+  },
+  service: {
+    revenue: Number(statistics?.service?.revenue || 0),
+    completedBookingCount: Number(
+      statistics?.service?.completedBookingCount || 0
+    ),
+  },
+  totalRevenue: Number(statistics?.totalRevenue || 0),
+});
+
+const getSlotZoneKey = (slot) => {
+  const slotLabel = String(slot?.name || slot?.id || '').trim();
+  const firstCharacter = slotLabel.charAt(0).toUpperCase();
+
+  return /^[A-Z]$/.test(firstCharacter) ? firstCharacter : 'OTHER';
+};
+
+const compareSlotLabels = (firstSlot, secondSlot) => {
+  const firstLabel = firstSlot.name || firstSlot.id;
+  const secondLabel = secondSlot.name || secondSlot.id;
+
+  return firstLabel.localeCompare(secondLabel, undefined, {
+    numeric: true,
+    sensitivity: 'base',
+  });
+};
+
 // ─── Stat Card ─────────────────────────────────────────────────────────────────
-const StatCard = ({ icon, label, value, sub, color, borderGlow }) => (
-  <div className={`relative overflow-hidden bg-[#16181F]/80 backdrop-blur-md border border-white/5 rounded-2xl p-5 flex flex-col gap-4 hover:border-${borderGlow}/30 transition-all duration-300 group shadow-[0_0_15px_rgba(0,0,0,0.5)]`}>
+const StatCard = ({ icon, label, value, sub, color, hoverBorder }) => (
+  <div className={`group relative flex h-full min-w-0 flex-col overflow-hidden rounded-2xl border border-white/5 bg-[#16181F]/80 p-4 shadow-[0_0_15px_rgba(0,0,0,0.5)] backdrop-blur-md transition-all duration-300 ${hoverBorder}`}>
     {/* Subtle gradient background glow */}
     <div className={`absolute -inset-20 opacity-0 group-hover:opacity-10 transition-opacity duration-500 blur-3xl ${color}`} />
     
-    <div className="flex items-center justify-between relative z-10">
-      <div className={`w-12 h-12 rounded-xl flex items-center justify-center bg-gradient-to-br ${color} shadow-lg shadow-black/50 ring-1 ring-white/10 group-hover:scale-110 transition-transform duration-300`}>
+    <div className="relative z-10 flex min-w-0 items-center gap-3">
+      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${color} shadow-lg shadow-black/50 ring-1 ring-white/10 transition-transform duration-300 group-hover:scale-105`}>
         {icon}
       </div>
-      <div className="bg-white/5 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity">
-        <TrendingUp size={14} className="text-emerald-400" />
+      <div className="min-w-0 flex-1">
+        <p className="whitespace-nowrap text-lg font-black leading-none tracking-tight text-white tabular-nums xl:text-xl 2xl:text-[17px]">
+          {value}
+        </p>
+        <p className="mt-1 text-[10px] font-bold uppercase leading-4 tracking-[0.12em] text-gray-400">
+          {label}
+        </p>
       </div>
+      <TrendingUp size={13} className="shrink-0 text-white/15 transition-colors group-hover:text-emerald-400/70" />
     </div>
-    <div className="relative z-10 mt-2">
-      <p className="text-3xl font-black text-white tracking-tight">{value}</p>
-      <p className="text-xs text-gray-400 font-medium mt-1 uppercase tracking-wider">{label}</p>
-      {sub && <p className="text-[11px] text-emerald-400/90 mt-1.5 font-semibold flex items-center gap-1"><Activity size={10}/> {sub}</p>}
-    </div>
+    {sub && (
+      <p className="relative z-10 mt-2 flex items-center gap-1 text-[10px] font-semibold leading-4 text-emerald-400/90">
+        <Activity size={10} className="shrink-0" />
+        <span>{sub}</span>
+      </p>
+    )}
   </div>
 );
 
@@ -137,20 +194,19 @@ export default function StaffDashboard() {
   const [bookings, setBookings] = useState([]);
   const [sessions, setSessions] = useState([]);
   const [dbSlots, setDbSlots] = useState([]);
+  const [revenueStatistics, setRevenueStatistics] = useState(
+    EMPTY_REVENUE_STATISTICS
+  );
+  const [revenueError, setRevenueError] = useState('');
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 30000); // refresh every 30s
-    return () => clearInterval(interval);
-  }, []);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       // Fetch floors and bookings
-      const [floorsRes, bookingsRes] = await Promise.all([
+      const [floorsRes, bookingsRes, revenueRes] = await Promise.all([
         getAllFloors(),
-        getAllBookings() // Fetch all bookings to calculate today's cancelled/violations
+        getAllBookings(), // Fetch all bookings to calculate today's cancelled/violations
+        getAdminPlatformRevenueStatistics('all'),
       ]);
       
       // Fetch sessions separately using API_BASE
@@ -171,15 +227,32 @@ export default function StaffDashboard() {
 
       if (bookingsRes.data?.success) setBookings(bookingsRes.data.data || []);
       if (sessionsData.success) setSessions(sessionsData.data || []);
+      if (revenueRes.ok && revenueRes.data?.success) {
+        setRevenueStatistics(normalizeRevenueStatistics(revenueRes.data.data));
+        setRevenueError('');
+      } else {
+        setRevenueError(
+          revenueRes.data?.message || 'Revenue data could not be synchronized.'
+        );
+      }
 
-    } catch (error) {
+    } catch {
       toast.error('Failed to sync dashboard data');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const { totalSlots, activeFloor, activeFloorSlots, vehiclesInside, avgDwellTimeStr, violationsCount, recentBookings, occupancyRate } = useMemo(() => {
+  useEffect(() => {
+    const initialFetch = setTimeout(fetchData, 0);
+    const interval = setInterval(fetchData, 30000); // refresh every 30s
+    return () => {
+      clearTimeout(initialFetch);
+      clearInterval(interval);
+    };
+  }, [fetchData]);
+
+  const { totalSlots, activeFloor, activeFloorSlots, vehiclesInside, violationsCount, recentBookings, occupancyRate } = useMemo(() => {
     let tSlots = 0;
     floors.forEach(f => {
       const elements = f.layoutData?.elements || [];
@@ -190,26 +263,7 @@ export default function StaffDashboard() {
     const activeSessions = sessions.filter(s => s.status === 'active' || s.status === 'ACTIVE');
     const vInside = activeSessions.length;
 
-    // 2. Avg Dwell Time (from completed sessions today)
-    const todaySessions = sessions.filter(s => 
-      (s.status === 'completed' || s.status === 'COMPLETED') && 
-      s.checkOutTime && 
-      isToday(new Date(s.checkOutTime))
-    );
-
-    let avgDwellStr = "0h 0m";
-    if (todaySessions.length > 0) {
-      let totalMinutes = 0;
-      todaySessions.forEach(s => {
-        totalMinutes += Math.abs(differenceInMinutes(new Date(s.checkOutTime), new Date(s.checkInTime)));
-      });
-      const avgMinutes = Math.round(totalMinutes / todaySessions.length);
-      const h = Math.floor(avgMinutes / 60);
-      const m = avgMinutes % 60;
-      avgDwellStr = `${h}h ${m}m`;
-    }
-
-    // 3. Violations Today (Cancelled Bookings today)
+    // 2. Violations Today (Cancelled Bookings today)
     const cancelledToday = bookings.filter(b => 
       b.status === 'CANCELLED' && 
       isToday(new Date(b.updatedAt || b.createdAt))
@@ -240,12 +294,34 @@ export default function StaffDashboard() {
       activeFloor: aFloor, 
       activeFloorSlots: aFloorSlots, 
       vehiclesInside: vInside, 
-      avgDwellTimeStr: avgDwellStr,
       violationsCount: vCount,
       recentBookings: recent,
       occupancyRate: occRate
     };
   }, [floors, bookings, sessions]);
+
+  const activeFloorZones = useMemo(() => {
+    const slotsByZone = activeFloorSlots.reduce((zones, slot) => {
+      const zoneKey = getSlotZoneKey(slot);
+
+      if (!zones.has(zoneKey)) zones.set(zoneKey, []);
+      zones.get(zoneKey).push(slot);
+
+      return zones;
+    }, new Map());
+
+    return Array.from(slotsByZone.entries())
+      .sort(([firstZone], [secondZone]) => {
+        if (firstZone === 'OTHER') return 1;
+        if (secondZone === 'OTHER') return -1;
+        return firstZone.localeCompare(secondZone, undefined, { numeric: true });
+      })
+      .map(([zoneKey, slots]) => ({
+        key: zoneKey,
+        label: zoneKey === 'OTHER' ? 'Other slots' : `Zone ${zoneKey}`,
+        slots: [...slots].sort(compareSlotLabels),
+      }));
+  }, [activeFloorSlots]);
 
   const getSlotData = (slotObj) => {
     const slotLabel = slotObj.name || slotObj.id;
@@ -323,39 +399,85 @@ export default function StaffDashboard() {
       </div>
 
       {/* ── Stat cards ── */}
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-5">
-        <StatCard
-          icon={<MonitorCheck size={20} className="text-yellow-100" />}
-          color="from-yellow-600/80 to-yellow-500/20"
-          borderGlow="yellow-500"
-          label="Managed Slots"
-          value={totalSlots}
-          sub={`${floors.length} active floors`}
-        />
-        <StatCard
-          icon={<Car size={20} className="text-sky-100" />}
-          color="from-sky-600/80 to-sky-500/20"
-          borderGlow="sky-500"
-          label="Vehicles Inside"
-          value={vehiclesInside}
-          sub={`${occupancyRate}% occupancy`}
-        />
-        <StatCard
-          icon={<Clock size={20} className="text-violet-100" />}
-          color="from-violet-600/80 to-violet-500/20"
-          borderGlow="violet-500"
-          label="Avg. Dwell Time"
-          value={avgDwellTimeStr}
-          sub="Today's completed"
-        />
-        <StatCard
-          icon={<FileWarning size={20} className="text-orange-100" />}
-          color="from-orange-600/80 to-orange-500/20"
-          borderGlow="orange-500"
-          label="Cancellations"
-          value={violationsCount}
-          sub="Requires attention"
-        />
+      <div className="space-y-4">
+        <section>
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/35">
+              System Statistics
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+            <StatCard
+              icon={<MonitorCheck size={20} className="text-yellow-100" />}
+              color="from-yellow-600/80 to-yellow-500/20"
+              hoverBorder="hover:border-yellow-500/30"
+              label="Managed Slots"
+              value={totalSlots}
+              sub={`${floors.length} active floors`}
+            />
+            <StatCard
+              icon={<Car size={20} className="text-sky-100" />}
+              color="from-sky-600/80 to-sky-500/20"
+              hoverBorder="hover:border-sky-500/30"
+              label="Vehicles Inside"
+              value={vehiclesInside}
+              sub={`${occupancyRate}% occupancy`}
+            />
+            <StatCard
+              icon={<FileWarning size={20} className="text-orange-100" />}
+              color="from-orange-600/80 to-orange-500/20"
+              hoverBorder="hover:border-orange-500/30"
+              label="Cancellations"
+              value={violationsCount}
+              sub="Requires attention"
+            />
+          </div>
+        </section>
+
+        <section>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-white/35">
+              Revenue Statistics
+            </p>
+            <p className={`text-[10px] font-semibold ${revenueError ? 'text-red-300/80' : 'text-emerald-400/60'}`}>
+              {revenueError || 'All-time realized revenue'}
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard
+              icon={<Crown size={20} className="text-violet-100" />}
+              color="from-violet-600/80 to-violet-500/20"
+              hoverBorder="hover:border-violet-500/30"
+              label="VIP Revenue"
+              value={formatCurrency(revenueStatistics.vip.revenue)}
+              sub={`${revenueStatistics.vip.transactionCount} paid transactions`}
+            />
+            <StatCard
+              icon={<CalendarCheck2 size={20} className="text-emerald-100" />}
+              color="from-emerald-600/80 to-emerald-500/20"
+              hoverBorder="hover:border-emerald-500/30"
+              label="Booking Revenue"
+              value={formatCurrency(revenueStatistics.booking.revenue)}
+              sub={`${revenueStatistics.booking.completedCount} completed bookings`}
+            />
+            <StatCard
+              icon={<Wrench size={20} className="text-cyan-100" />}
+              color="from-cyan-600/80 to-cyan-500/20"
+              hoverBorder="hover:border-cyan-500/30"
+              label="Service Revenue"
+              value={formatCurrency(revenueStatistics.service.revenue)}
+              sub={`${revenueStatistics.service.completedBookingCount} completed with services`}
+            />
+            <StatCard
+              icon={<CircleDollarSign size={20} className="text-amber-100" />}
+              color="from-amber-600/80 to-amber-500/20"
+              hoverBorder="hover:border-amber-500/30"
+              label="Platform Revenue"
+              value={formatCurrency(revenueStatistics.totalRevenue)}
+              sub="VIP + booking + services"
+            />
+          </div>
+        </section>
       </div>
 
       {/* ── Mid row ── */}
@@ -382,27 +504,49 @@ export default function StaffDashboard() {
             </div>
           </div>
           
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 max-h-[450px] overflow-y-auto custom-scrollbar pr-2 relative z-10 pb-4">
-            {activeFloorSlots.length === 0 ? (
-              <div className="col-span-full flex flex-col items-center justify-center py-20 opacity-50">
+          <div className="max-h-[450px] overflow-y-auto scrollbar-hidden relative z-10 pb-4">
+            {activeFloorZones.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-20 opacity-50">
                 <MonitorCheck size={48} className="text-gray-600 mb-4" />
                 <p className="text-white font-medium">No slot layout found on this floor.</p>
               </div>
             ) : (
-              activeFloorSlots.map(slotObj => {
-                const data = getSlotData(slotObj);
-                return (
-                  <SlotCell 
-                    key={slotObj.id} 
-                    id={slotObj.id} 
-                    name={slotObj.name}
-                    status={data.status} 
-                    plate={data.plate} 
-                    isVip={data.isVip}
-                    onClick={() => navigate('/staff/live-grid')}
-                  />
-                );
-              })
+              <div className="space-y-7">
+                {activeFloorZones.map(zone => (
+                  <section key={zone.key} aria-labelledby={`dashboard-zone-${zone.key}`}>
+                    <div className="mb-4 flex items-center gap-3">
+                      <div className="h-px flex-1 bg-gradient-to-r from-transparent to-emerald-400/25" />
+                      <h4
+                        id={`dashboard-zone-${zone.key}`}
+                        className="shrink-0 text-xs font-black uppercase tracking-[0.2em] text-emerald-400"
+                      >
+                        {zone.label}
+                      </h4>
+                      <span className="shrink-0 rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-gray-500">
+                        {zone.slots.length} slots
+                      </span>
+                      <div className="h-px flex-1 bg-gradient-to-l from-transparent to-emerald-400/25" />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+                      {zone.slots.map(slotObj => {
+                        const data = getSlotData(slotObj);
+                        return (
+                          <SlotCell
+                            key={slotObj.id}
+                            id={slotObj.id}
+                            name={slotObj.name}
+                            status={data.status}
+                            plate={data.plate}
+                            isVip={data.isVip}
+                            onClick={() => navigate('/staff/live-grid')}
+                          />
+                        );
+                      })}
+                    </div>
+                  </section>
+                ))}
+              </div>
             )}
           </div>
 
