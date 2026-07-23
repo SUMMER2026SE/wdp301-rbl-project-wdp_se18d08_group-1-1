@@ -1,5 +1,6 @@
-import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Plus, Trash2, RotateCcw } from 'lucide-react';
 import { normalizeRefundRule } from '../../services/policyService';
+import AdminSelect from '../Admin/AdminSelect';
 
 const asNumber = (value) => {
   if (value === '') return '';
@@ -12,6 +13,11 @@ const fieldClass =
 const numberFieldClass =
   '[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none';
 const errorClass = 'mt-1 text-xs font-semibold text-red-300';
+const earlyCheckoutModeOptions = [
+  { value: 'actual_usage', label: 'Actual usage' },
+  { value: 'fixed_refund_percent', label: 'Fixed refund percent' },
+  { value: 'no_refund', label: 'No parking refund' },
+];
 
 function NumberField({
   id,
@@ -212,29 +218,26 @@ export default function RefundRuleEditor({ value, onChange, errors = {} }) {
             <span className="mb-2 block text-xs font-black uppercase tracking-[0.14em] text-gray-500">
               Refund mode
             </span>
-            <select
-              id="early-checkout-mode"
+            <AdminSelect
               value={rule.earlyCheckout.mode}
-              onChange={(event) =>
+              onChange={(nextMode) =>
                 onChange({
                   ...rule,
                   earlyCheckout: {
                     ...rule.earlyCheckout,
-                    mode: event.target.value,
+                    mode: nextMode,
                     fixedRefundPercent:
-                      event.target.value === 'fixed_refund_percent'
+                      nextMode === 'fixed_refund_percent'
                         ? rule.earlyCheckout.fixedRefundPercent
                         : 0,
                   },
                 })
               }
-              aria-invalid={Boolean(errors['earlyCheckout-mode'])}
-              className={fieldClass}
-            >
-              <option value="actual_usage">Actual usage</option>
-              <option value="fixed_refund_percent">Fixed refund percent</option>
-              <option value="no_refund">No parking refund</option>
-            </select>
+              options={earlyCheckoutModeOptions}
+              icon={RotateCcw}
+              className="w-full"
+              ariaLabel="Select early checkout refund mode"
+            />
             {errors['earlyCheckout-mode'] && <p className={errorClass}>{errors['earlyCheckout-mode']}</p>}
           </label>
           <NumberField

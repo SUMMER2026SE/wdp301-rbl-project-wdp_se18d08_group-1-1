@@ -1,9 +1,34 @@
 import { useState, useEffect, useRef } from "react";
 import { Rnd } from "react-rnd";
 import { Save, Box, Type, Minus, ArrowRight, Square, AlertCircle, Zap, Accessibility, Navigation, Layers, MonitorSmartphone, TreePine, Car } from "lucide-react";
+import AdminSelect from "../../../components/Admin/AdminSelect";
 
 const createElementId = (prefix, suffix = "") =>
   `${prefix}-${Date.now()}${suffix ? `-${suffix}` : ""}-${Math.random().toString(36).substring(7)}`;
+
+const slotTypeOptions = [
+  { value: "slot", label: "Standard Slot" },
+  { value: "slot-ev", label: "EV Charging Slot" },
+  { value: "slot-handicap", label: "Handicap Slot" },
+];
+
+const orientationOptions = [
+  { value: 0, label: "Vertical Parking (| |)" },
+  { value: 90, label: "Horizontal Parking (=)" },
+];
+
+const shapeOptions = [
+  { value: "rectangle", label: "Rectangle" },
+  { value: "circle", label: "Circle" },
+  { value: "triangle", label: "Triangle" },
+];
+
+const colorOptions = [
+  { value: "purple", label: "Purple" },
+  { value: "emerald", label: "Emerald" },
+  { value: "blue", label: "Blue" },
+  { value: "amber", label: "Amber" },
+];
 
 export default function ParkingLotsBuilder({ floor, dbSlots = [], onSave, onCancel }) {
   const [elements, setElements] = useState(floor?.layoutData?.elements || []);
@@ -401,7 +426,7 @@ export default function ParkingLotsBuilder({ floor, dbSlots = [], onSave, onCanc
                   // Find new zone name (case insensitive)
                   const existingZoneNames = currentAll.filter(e => e.type === 'zone').map(e => (e.name || "").toUpperCase());
                   let idx = 0;
-                  let newZoneName = '';
+                  let newZoneName;
                   let newPrefix = '';
                   while (true) {
                      newPrefix = getLabel(idx);
@@ -973,11 +998,14 @@ export default function ParkingLotsBuilder({ floor, dbSlots = [], onSave, onCanc
                   <div>
                     <label className="text-xs text-gray-400 uppercase font-bold tracking-wider mb-1 block">Type</label>
                     {selectedElement.type.startsWith('slot') ? (
-                      <select value={selectedElement.type} onChange={(e) => handleUpdateElement(selectedElement.id, { type: e.target.value })} className="w-full bg-black/50 border border-white/10 rounded p-2 text-white focus:border-cyan-500 outline-none transition">
-                        <option value="slot">Standard Slot</option>
-                        <option value="slot-ev">EV Charging Slot</option>
-                        <option value="slot-handicap">Handicap Slot</option>
-                      </select>
+                      <AdminSelect
+                        value={selectedElement.type}
+                        onChange={(nextType) => handleUpdateElement(selectedElement.id, { type: nextType })}
+                        options={slotTypeOptions}
+                        icon={Car}
+                        className="w-full"
+                        ariaLabel="Select slot type"
+                      />
                     ) : (
                       <input type="text" value={selectedElement.type} disabled className="w-full bg-black/30 border border-white/10 rounded p-2 text-white opacity-50" />
                     )}
@@ -1062,10 +1090,14 @@ export default function ParkingLotsBuilder({ floor, dbSlots = [], onSave, onCanc
                         </div>
                         <div className="col-span-2">
                           <label className="text-[10px] text-gray-400 uppercase font-bold block mb-1">Orientation</label>
-                          <select value={gridConfig.angle} onChange={(e) => setGridConfig({...gridConfig, angle: Number(e.target.value)})} className="w-full bg-black/50 border border-white/10 rounded p-2 text-white text-sm">
-                            <option value={0}>Vertical Parking (| |)</option>
-                            <option value={90}>Horizontal Parking (=)</option>
-                          </select>
+                          <AdminSelect
+                            value={Number(gridConfig.angle)}
+                            onChange={(nextAngle) => setGridConfig({...gridConfig, angle: Number(nextAngle)})}
+                            options={orientationOptions}
+                            icon={Navigation}
+                            className="w-full"
+                            ariaLabel="Select generated slot orientation"
+                          />
                         </div>
                       </div>
                       <button 
@@ -1089,20 +1121,25 @@ export default function ParkingLotsBuilder({ floor, dbSlots = [], onSave, onCanc
                     <>
                       <div>
                         <label className="text-xs text-gray-400 uppercase font-bold tracking-wider mb-1 block">Shape</label>
-                        <select value={selectedElement.shape || "rectangle"} onChange={(e) => handleUpdateElement(selectedElement.id, { shape: e.target.value })} className="w-full bg-black/50 border border-white/10 rounded p-2 text-white focus:border-cyan-500 outline-none transition">
-                          <option value="rectangle">Rectangle</option>
-                          <option value="circle">Circle</option>
-                          <option value="triangle">Triangle</option>
-                        </select>
+                        <AdminSelect
+                          value={selectedElement.shape || "rectangle"}
+                          onChange={(nextShape) => handleUpdateElement(selectedElement.id, { shape: nextShape })}
+                          options={shapeOptions}
+                          icon={Square}
+                          className="w-full"
+                          ariaLabel="Select zone shape"
+                        />
                       </div>
                       <div>
                         <label className="text-xs text-gray-400 uppercase font-bold tracking-wider mb-1 block">Color Theme</label>
-                        <select value={selectedElement.color || "purple"} onChange={(e) => handleUpdateElement(selectedElement.id, { color: e.target.value })} className="w-full bg-black/50 border border-white/10 rounded p-2 text-white focus:border-cyan-500 outline-none transition">
-                          <option value="purple">Purple</option>
-                          <option value="emerald">Emerald</option>
-                          <option value="blue">Blue</option>
-                          <option value="amber">Amber</option>
-                        </select>
+                        <AdminSelect
+                          value={selectedElement.color || "purple"}
+                          onChange={(nextColor) => handleUpdateElement(selectedElement.id, { color: nextColor })}
+                          options={colorOptions}
+                          icon={Layers}
+                          className="w-full"
+                          ariaLabel="Select zone color theme"
+                        />
                       </div>
                     </>
                   )}

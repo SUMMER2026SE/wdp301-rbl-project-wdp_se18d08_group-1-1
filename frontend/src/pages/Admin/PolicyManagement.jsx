@@ -1,16 +1,25 @@
 import { useEffect, useMemo, useState } from 'react';
+import { motion, useReducedMotion } from 'framer-motion';
 import {
   Archive,
   CheckCircle2,
+  ChevronRight,
+  Clock3,
   FileText,
+  History,
+  LayoutDashboard,
   Loader2,
   Plus,
   Save,
+  Search,
   Send,
+  SlidersHorizontal,
   Trash2,
+  Users,
 } from 'lucide-react';
 import RefundRuleEditor from '../../components/policies/RefundRuleEditor';
 import RefundRulePreview from '../../components/policies/RefundRulePreview';
+import AdminSelect from '../../components/Admin/AdminSelect';
 import {
   archivePolicy,
   createDefaultRefundRule,
@@ -19,6 +28,7 @@ import {
   deletePolicy,
   getAdminPolicies,
   getAdminPolicy,
+  getPolicyAcceptances,
   publishPolicyVersion,
   normalizeRefundRule,
   updatePolicy,
@@ -58,11 +68,115 @@ const formatDate = (value) =>
       })
     : '-';
 
+const formatDateTime = (value) =>
+  value
+    ? new Date(value).toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : '-';
+
 const statusClass = (status) => {
   if (status === 'published') return 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300';
   if (status === 'archived') return 'border-gray-500/20 bg-gray-500/10 text-gray-300';
   return 'border-amber-500/20 bg-amber-500/10 text-amber-300';
 };
+
+const categoryLabel = (value) =>
+  categories.find(([key]) => key === value)?.[1] || value || 'Other';
+
+const inputClass =
+  'w-full border border-white/[0.08] bg-black/45 px-4 py-3 text-sm text-white outline-none transition placeholder:text-gray-600 focus:border-yellow-400/60 focus:bg-black/70';
+const labelClass =
+  'mb-2 block text-[11px] font-black uppercase tracking-[0.18em] text-gray-500';
+const scrollbarClass =
+  '[&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-button]:hidden [&::-webkit-scrollbar-button]:h-0 [&::-webkit-scrollbar-button]:w-0 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-white/10 hover:[&::-webkit-scrollbar-thumb]:bg-yellow-400/40';
+
+const tabs = [
+  { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+  { id: 'draft', label: 'Draft', icon: FileText },
+  { id: 'versions', label: 'Versions', icon: History },
+  { id: 'acceptances', label: 'Acceptances', icon: Users },
+];
+
+const policyStatusOptions = [
+  { value: 'all', label: 'All Status' },
+  { value: 'published', label: 'Published' },
+  { value: 'draft', label: 'Draft' },
+  { value: 'archived', label: 'Archived' },
+];
+
+const policySortOptions = [
+  { value: 'updated', label: 'Sort Updated' },
+  { value: 'title', label: 'Sort Title' },
+  { value: 'version', label: 'Sort Version' },
+];
+
+const categoryOptions = categories.map(([value, label]) => ({ value, label }));
+
+function StatusBadge({ status }) {
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] ${statusClass(status)}`}>
+      {status || 'draft'}
+    </span>
+  );
+}
+
+function SectionLabel({ children }) {
+  return (
+    <p className="text-[11px] font-black uppercase tracking-[0.22em] text-gray-500">
+      {children}
+    </p>
+  );
+}
+
+function PremiumButton({
+  children,
+  className = '',
+  disabled = false,
+  onClick,
+  type = 'button',
+  variant = 'primary',
+}) {
+  const styles = {
+    primary:
+      'group relative overflow-hidden border-yellow-300/30 bg-gradient-to-r from-yellow-300 via-yellow-400 to-yellow-600 text-black shadow-[0_0_36px_rgba(234,179,8,0.16)] hover:shadow-[0_0_42px_rgba(234,179,8,0.26)]',
+    ghost:
+      'border-white/[0.09] bg-white/[0.03] text-gray-200 hover:border-yellow-400/30 hover:bg-yellow-400/[0.06] hover:text-yellow-200',
+    danger:
+      'border-red-500/25 bg-red-500/[0.04] text-red-300 hover:border-red-400/40 hover:bg-red-500/10',
+    light:
+      'border-white/70 bg-white text-black hover:bg-gray-200',
+  };
+
+  return (
+    <motion.button
+      type={type}
+      whileHover={disabled ? undefined : { y: -1 }}
+      whileTap={disabled ? undefined : { scale: 0.98 }}
+      onClick={onClick}
+      disabled={disabled}
+      className={`inline-flex items-center justify-center gap-2 rounded-[14px] border px-4 py-2.5 text-sm font-black transition disabled:pointer-events-none disabled:opacity-50 ${styles[variant]} ${className}`}
+    >
+      {variant === 'primary' && (
+        <span className="pointer-events-none absolute inset-y-0 -left-10 w-8 rotate-12 bg-white/40 opacity-0 blur-sm transition-all duration-500 group-hover:left-[115%] group-hover:opacity-70" />
+      )}
+      <span className="relative inline-flex items-center gap-2">{children}</span>
+    </motion.button>
+  );
+}
+
+function InfoLine({ label, value, children }) {
+  return (
+    <div className="grid gap-2 border-b border-white/[0.07] py-4 md:grid-cols-[180px_1fr]">
+      <SectionLabel>{label}</SectionLabel>
+      <div className="text-sm font-semibold text-gray-200">{children || value || '-'}</div>
+    </div>
+  );
+}
 
 export default function PolicyManagement() {
   const [policies, setPolicies] = useState([]);
@@ -79,6 +193,15 @@ export default function PolicyManagement() {
   const [toast, setToast] = useState('');
   const [createRuleErrors, setCreateRuleErrors] = useState({});
   const [draftRuleErrors, setDraftRuleErrors] = useState({});
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [sortMode, setSortMode] = useState('updated');
+  const [activeTab, setActiveTab] = useState('overview');
+  const [acceptances, setAcceptances] = useState([]);
+  const [acceptanceMeta, setAcceptanceMeta] = useState(null);
+  const [acceptancesLoading, setAcceptancesLoading] = useState(false);
+  const [acceptancesError, setAcceptancesError] = useState('');
+  const reduceMotion = useReducedMotion();
 
   const selectedPolicy = detail?.policy;
   const versions = useMemo(() => detail?.versions || [], [detail?.versions]);
@@ -86,6 +209,14 @@ export default function PolicyManagement() {
     () => versions.find((version) => version.status === 'draft') || null,
     [versions]
   );
+
+  const motionProps = reduceMotion
+    ? {}
+    : {
+        initial: { opacity: 0, y: 14 },
+        animate: { opacity: 1, y: 0 },
+        transition: { duration: 0.42, ease: 'easeOut' },
+      };
 
   const showToast = (message) => {
     setToast(message);
@@ -152,6 +283,31 @@ export default function PolicyManagement() {
     if (selectedId) loadDetail(selectedId);
   }, [selectedId]);
 
+  useEffect(() => {
+    let ignore = false;
+    const loadAcceptances = async () => {
+      if (!selectedPolicy?._id || activeTab !== 'acceptances') return;
+      setAcceptancesLoading(true);
+      setAcceptancesError('');
+      const res = await getPolicyAcceptances(selectedPolicy._id, { limit: 50 });
+      if (ignore) return;
+      if (res.ok && res.data?.success) {
+        setAcceptances(res.data.data?.items || []);
+        setAcceptanceMeta(res.data.data?.pagination || null);
+      } else {
+        setAcceptances([]);
+        setAcceptanceMeta(null);
+        setAcceptancesError(res.data?.message || 'Unable to load acceptance records.');
+      }
+      setAcceptancesLoading(false);
+    };
+
+    loadAcceptances();
+    return () => {
+      ignore = true;
+    };
+  }, [activeTab, selectedPolicy?._id]);
+
   const handleCreate = async (event) => {
     event.preventDefault();
     const ruleErrors = createForm.controlsBookingRefunds
@@ -178,6 +334,7 @@ export default function PolicyManagement() {
       setIsCreating(false);
       await fetchPolicies();
       setSelectedId(res.data.data._id);
+      setActiveTab('draft');
     } else {
       setError(res.data?.message || 'Unable to create policy.');
     }
@@ -250,6 +407,7 @@ export default function PolicyManagement() {
     if (res.ok && res.data?.success) {
       showToast('New draft version created');
       await loadDetail(selectedPolicy._id);
+      setActiveTab('draft');
     } else {
       setError(res.data?.message || 'Unable to create draft version.');
     }
@@ -281,6 +439,7 @@ export default function PolicyManagement() {
       showToast('Policy version published');
       await fetchPolicies();
       await loadDetail(selectedPolicy._id);
+      setActiveTab('versions');
     } else {
       setError(res.data?.message || 'Unable to publish policy.');
     }
@@ -322,512 +481,946 @@ export default function PolicyManagement() {
     setSaving(false);
   };
 
+  const summary = useMemo(() => {
+    const total = policies.length;
+    const published = policies.filter((policy) => policy.status === 'published').length;
+    const drafts = policies.filter((policy) => policy.status === 'draft').length;
+    const archived = policies.filter((policy) => policy.status === 'archived').length;
+    return [
+      { label: 'Total Policies', value: total, note: 'All records', icon: FileText },
+      { label: 'Published', value: published, note: 'Active policies', icon: CheckCircle2 },
+      { label: 'Drafts', value: drafts, note: 'In progress', icon: Clock3 },
+      { label: 'Archived', value: archived, note: 'Retained history', icon: Archive },
+    ];
+  }, [policies]);
+
+  const visiblePolicies = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return [...policies]
+      .filter((policy) => {
+        const matchesStatus = statusFilter === 'all' || policy.status === statusFilter;
+        const haystack = [
+          policy.title,
+          policy.slug,
+          policy.category,
+          policy.status,
+          policy.currentVersionNumber,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        return matchesStatus && (!query || haystack.includes(query));
+      })
+      .sort((a, b) => {
+        if (sortMode === 'title') return String(a.title || '').localeCompare(String(b.title || ''));
+        if (sortMode === 'version') return Number(b.currentVersionNumber || 0) - Number(a.currentVersionNumber || 0);
+        return new Date(b.updatedAt || 0).getTime() - new Date(a.updatedAt || 0).getTime();
+      });
+  }, [policies, searchQuery, sortMode, statusFilter]);
+
+  const openCreate = () => {
+    setSelectedId('');
+    setDetail(null);
+    setIsCreating(true);
+    setActiveTab('draft');
+  };
+
+  const selectPolicy = (policyId) => {
+    setIsCreating(false);
+    setSelectedId(policyId);
+    setActiveTab('overview');
+  };
+
   return (
-    <div className="p-6 md:p-8 mx-auto min-h-[calc(100vh-70px)] overflow-auto bg-[#080808] text-white">
+    <div className={`relative min-h-[calc(100vh-70px)] overflow-auto bg-[#090909] px-4 py-6 text-white sm:px-6 lg:px-8 ${scrollbarClass}`}>
+      <div className="pointer-events-none absolute left-8 top-0 h-72 w-72 rounded-full bg-yellow-400/10 blur-[110px]" />
+      <div className="pointer-events-none absolute inset-0 opacity-[0.035] [background-image:linear-gradient(rgba(255,255,255,.6)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.6)_1px,transparent_1px)] [background-size:46px_46px]" />
+
       {toast && (
-        <div className="fixed right-5 top-5 z-50 rounded-2xl border border-emerald-500/20 bg-emerald-500 px-5 py-3 text-sm font-black text-white shadow-2xl">
+        <motion.div
+          initial={{ opacity: 0, y: -12 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="fixed right-5 top-5 z-50 rounded-[14px] border border-emerald-500/20 bg-emerald-500/95 px-5 py-3 text-sm font-black text-white shadow-2xl"
+        >
           {toast}
-        </div>
+        </motion.div>
       )}
 
-      <div className="max-w-[1400px] mx-auto">
-        <div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+      <div className="relative mx-auto max-w-[1480px]">
+        <motion.header
+          {...motionProps}
+          className="mb-7 flex flex-col justify-between gap-5 border-b border-white/[0.08] pb-7 lg:flex-row lg:items-end"
+        >
           <div>
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-yellow-500/20 bg-yellow-500/10 px-3 py-1 text-xs font-black uppercase tracking-[0.2em] text-yellow-300">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-yellow-400/20 bg-yellow-400/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.24em] text-yellow-300">
               <FileText size={13} />
               Policy Manager
             </div>
-            <h1 className="text-2xl font-black tracking-tight sm:text-3xl">
-              Versioned Policies
+            <h1 className="text-4xl font-black tracking-tight text-white sm:text-5xl">
+              Policies
             </h1>
-            <p className="mt-2 text-sm text-gray-400">
-              Manage editable drafts, immutable published versions, and customer acceptance records.
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400 sm:text-[15px]">
+                 Manage policy drafts, versions, and acceptance records.
             </p>
           </div>
-        </div>
+          <PremiumButton onClick={openCreate} className="w-full sm:w-auto">
+            <Plus size={17} className="transition-transform group-hover:rotate-90" />
+            Create New Policy
+          </PremiumButton>
+        </motion.header>
+
+        <motion.section
+          {...motionProps}
+          transition={{ ...motionProps.transition, delay: reduceMotion ? 0 : 0.08 }}
+          className="mb-6 grid border-y border-white/[0.08] md:grid-cols-4"
+        >
+          {summary.map((item, index) => {
+            const Icon = item.icon;
+            return (
+              <motion.div
+                key={item.label}
+                initial={reduceMotion ? false : { opacity: 0, y: 10 }}
+                animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.055 }}
+                className="group flex items-center gap-4 border-white/[0.08] px-2 py-5 transition hover:bg-white/[0.025] md:px-6 [&:not(:last-child)]:border-b md:[&:not(:last-child)]:border-b-0 md:[&:not(:last-child)]:border-r"
+              >
+                <div className="flex h-10 w-10 items-center justify-center rounded-full border border-yellow-400/15 bg-yellow-400/10 text-yellow-300 transition group-hover:border-yellow-300/30 group-hover:bg-yellow-400/15">
+                  <Icon size={17} />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                    {item.label}
+                  </p>
+                  <div className="mt-1 flex items-end gap-2">
+                    <span className="text-2xl font-black leading-none text-white">{item.value}</span>
+                    <span className="text-xs font-semibold text-slate-500">{item.note}</span>
+                  </div>
+                </div>
+              </motion.div>
+            );
+          })}
+        </motion.section>
+
+        <motion.section
+          {...motionProps}
+          transition={{ ...motionProps.transition, delay: reduceMotion ? 0 : 0.12 }}
+          className="mb-6 flex flex-col gap-3 border-b border-white/[0.08] pb-6 lg:flex-row lg:items-center"
+        >
+          <label className="relative flex-1">
+            <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={17} />
+            <input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              className="h-12 w-full rounded-[14px] border border-white/[0.08] bg-[#111111]/80 pl-11 pr-4 text-sm text-white outline-none transition placeholder:text-slate-600 focus:border-yellow-400/45 focus:bg-black/60"
+              placeholder="Search policies by name, slug or category..."
+            />
+          </label>
+          <div className="grid grid-cols-2 gap-3 sm:flex">
+            <AdminSelect
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={policyStatusOptions}
+              icon={SlidersHorizontal}
+              className="w-full sm:w-44"
+              ariaLabel="Filter policies by status"
+            />
+            <AdminSelect
+              value={sortMode}
+              onChange={setSortMode}
+              options={policySortOptions}
+              icon={Clock3}
+              className="w-full sm:w-44"
+              align="right"
+              ariaLabel="Sort policies"
+            />
+          </div>
+        </motion.section>
 
         {error && (
-          <div className="mb-5 rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-200">
+          <div className="mb-5 rounded-[14px] border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm font-bold text-red-200">
             {error}
           </div>
         )}
 
-        <div className="grid gap-6 xl:grid-cols-[380px_1fr]">
-          <section className="space-y-5">
-            <div className="rounded-3xl border border-white/10 bg-[#171717] flex flex-col h-[calc(100vh-140px)]">
-              <div className="border-b border-white/10 px-5 py-4 flex items-center justify-between">
-                <h2 className="font-black">Policies</h2>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedId('');
-                    setDetail(null);
-                    setIsCreating(true);
-                  }}
-                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold transition ${isCreating ? 'bg-yellow-400 text-black' : 'bg-white/5 text-gray-300 hover:bg-white/10'}`}
-                >
-                  <Plus size={14} />
-                  New Policy
-                </button>
+        <motion.main
+          {...motionProps}
+          transition={{ ...motionProps.transition, delay: reduceMotion ? 0 : 0.16 }}
+          className="grid min-h-[620px] overflow-hidden border border-white/[0.08] bg-[#0c0c0c]/70 lg:grid-cols-[34%_66%]"
+        >
+          <aside className="flex min-h-[520px] flex-col border-b border-white/[0.08] lg:border-b-0 lg:border-r">
+            <div className="flex items-center justify-between border-b border-white/[0.08] px-5 py-4">
+              <div>
+                <h2 className="text-sm font-black uppercase tracking-[0.18em] text-white">Policies</h2>
+                <p className="mt-1 text-xs font-semibold text-slate-500">
+                  {visiblePolicies.length} of {policies.length} policies
+                </p>
               </div>
-              
-              <div className="flex-1 overflow-y-auto p-3">
-                {loading ? (
-                  <div className="flex items-center justify-center gap-3 py-12 text-sm font-bold text-gray-400">
-                    <Loader2 size={16} className="animate-spin" />
-                    Loading policies
-                  </div>
-                ) : policies.length === 0 ? (
-                  <div className="px-5 py-10 text-center text-sm text-gray-500">
-                    No policies yet.
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {policies.map((policy) => (
-                      <button
+              <button
+                type="button"
+                onClick={openCreate}
+                className="group flex h-9 w-9 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.03] text-slate-300 transition hover:border-yellow-400/40 hover:bg-yellow-400/10 hover:text-yellow-300"
+                title="Create policy"
+              >
+                <Plus size={16} className="transition-transform group-hover:rotate-90" />
+              </button>
+            </div>
+            <div className={`flex-1 overflow-y-auto ${scrollbarClass}`}>
+              {loading ? (
+                <div className="flex items-center justify-center gap-3 py-16 text-sm font-bold text-slate-400">
+                  <Loader2 size={16} className="animate-spin text-yellow-400" />
+                  Loading policies
+                </div>
+              ) : visiblePolicies.length === 0 ? (
+                <div className="px-6 py-14 text-center">
+                  <FileText size={30} className="mx-auto mb-3 text-slate-700" />
+                  <p className="text-sm font-bold text-slate-400">No policies match this view.</p>
+                </div>
+              ) : (
+                <div>
+                  {visiblePolicies.map((policy, index) => {
+                    const selected = selectedId === policy._id && !isCreating;
+                    return (
+                      <motion.button
                         key={policy._id}
                         type="button"
-                        onClick={() => {
-                          setIsCreating(false);
-                          setSelectedId(policy._id);
-                        }}
-                        className={`w-full rounded-2xl border p-4 text-left transition ${
-                          selectedId === policy._id
-                            ? 'border-yellow-400/60 bg-yellow-400/10'
-                            : 'border-white/5 bg-black/40 hover:border-white/20'
+                        initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+                        animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
+                        transition={{ delay: Math.min(index * 0.025, 0.25) }}
+                        onClick={() => selectPolicy(policy._id)}
+                        className={`group relative flex w-full items-center gap-4 border-b border-white/[0.06] px-5 py-4 text-left transition ${
+                          selected
+                            ? 'bg-yellow-400/[0.075]'
+                            : 'hover:bg-white/[0.035]'
                         }`}
                       >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="font-black text-white">{policy.title}</p>
-                            <p className="mt-1 text-[11px] font-semibold text-gray-500">
-                              /{policy.slug} - v{policy.currentVersionNumber || 0}
-                            </p>
+                        <span className={`absolute bottom-3 left-0 top-3 w-[3px] rounded-r-full bg-yellow-400 transition-all ${selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-50'}`} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="truncate text-sm font-black text-white">{policy.title}</p>
+                            <StatusBadge status={policy.status} />
                           </div>
-                          <span className={`rounded-full border px-2 py-0.5 text-[9px] font-black uppercase whitespace-nowrap ${statusClass(policy.status)}`}>
-                            {policy.status}
-                          </span>
+                          <div className="mt-1 flex items-center gap-2 text-xs font-semibold text-slate-500">
+                            <span className="truncate">/{policy.slug}</span>
+                            <span className="h-1 w-1 rounded-full bg-slate-700" />
+                            <span>v{policy.currentVersionNumber || 0}</span>
+                          </div>
                         </div>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </section>
-
-          <section className="rounded-3xl border border-white/10 bg-[#171717] p-5 lg:p-7 min-h-[calc(100vh-140px)]">
-            {isCreating ? (
-              <div className="max-w-2xl">
-                <div className="mb-6 flex items-center gap-2">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-yellow-400/10 text-yellow-400">
-                    <Plus size={20} />
-                  </div>
-                  <h2 className="text-xl font-black">Create New Policy</h2>
+                        <ChevronRight size={16} className="shrink-0 text-slate-600 transition group-hover:translate-x-1 group-hover:text-yellow-300" />
+                      </motion.button>
+                    );
+                  })}
                 </div>
-                <form onSubmit={handleCreate} className="space-y-4">
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <label className="block">
-                      <span className="mb-1.5 block text-xs font-black uppercase tracking-widest text-gray-500">Title</span>
-                      <input
-                        value={createForm.title}
-                        onChange={(event) => setCreateForm((current) => ({ ...current, title: event.target.value }))}
-                        className="w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm outline-none focus:border-yellow-400"
-                        placeholder="e.g. Terms of Service"
-                        required
-                      />
-                    </label>
-                    <label className="block">
-                      <span className="mb-1.5 block text-xs font-black uppercase tracking-widest text-gray-500">Slug (Optional)</span>
-                      <input
-                        value={createForm.slug}
-                        onChange={(event) => setCreateForm((current) => ({ ...current, slug: event.target.value }))}
-                        className="w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm outline-none focus:border-yellow-400"
-                        placeholder="e.g. terms-of-service"
-                      />
-                    </label>
-                  </div>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <label className="block">
-                      <span className="mb-1.5 block text-xs font-black uppercase tracking-widest text-gray-500">Category</span>
-                      <select
-                        value={createForm.category}
-                        onChange={(event) =>
-                          setCreateForm((current) => ({
-                            ...current,
-                            category: event.target.value,
-                            controlsBookingRefunds:
-                              event.target.value === 'refund'
-                                ? current.controlsBookingRefunds
-                                : false,
-                            refundRule:
-                              event.target.value === 'refund' ? current.refundRule : null,
-                          }))
-                        }
-                        className="w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm outline-none focus:border-yellow-400"
-                      >
-                        {categories.map(([value, label]) => (
-                          <option key={value} value={value}>{label}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <div className="flex items-end">
-                      <label className="flex h-[46px] w-full cursor-pointer items-center gap-3 rounded-2xl border border-white/10 bg-black px-4 text-sm font-bold text-gray-300 transition hover:bg-white/5">
-                        <input
-                          type="checkbox"
-                          checked={createForm.requiresAcceptance}
-                          onChange={(event) => setCreateForm((current) => ({ ...current, requiresAcceptance: event.target.checked }))}
-                          className="h-4 w-4 accent-yellow-400"
-                        />
-                        Requires customer acceptance
-                      </label>
-                    </div>
-                  </div>
-                  {createForm.category === 'refund' && (
-                    <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-yellow-400/20 bg-yellow-400/[0.05] p-4 text-sm font-bold text-gray-200 transition hover:bg-yellow-400/10">
-                      <input
-                        type="checkbox"
-                        checked={createForm.controlsBookingRefunds}
-                        onChange={(event) => {
-                          setCreateForm((current) => ({
-                            ...current,
-                            controlsBookingRefunds: event.target.checked,
-                            refundRule: event.target.checked
-                              ? normalizeRefundRule(current.refundRule || createDefaultRefundRule())
-                              : null,
-                          }));
-                          setCreateRuleErrors({});
-                          setError('');
-                        }}
-                        className="mt-0.5 h-4 w-4 accent-yellow-400"
-                      />
-                      <div>
-                        Control booking refunds
-                        <span className="mt-1 block text-xs font-normal leading-relaxed text-gray-400">
-                          Designate this refund policy as the executable rule source. Only one policy can be designated.
-                        </span>
-                      </div>
-                    </label>
-                  )}
-                  <label className="block">
-                    <span className="mb-1.5 block text-xs font-black uppercase tracking-widest text-gray-500">Initial Content</span>
-                    <textarea
-                      value={createForm.content}
-                      onChange={(event) => setCreateForm((current) => ({ ...current, content: event.target.value }))}
-                      className="min-h-48 w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm leading-relaxed outline-none focus:border-yellow-400"
-                      placeholder="Write your policy content here..."
-                      required
-                    />
-                  </label>
-                  {createForm.controlsBookingRefunds && (
-                    <div className="pt-2">
-                      <h3 className="mb-3 text-sm font-black uppercase tracking-widest text-gray-500">Refund Rules Configuration</h3>
-                      <RefundRuleEditor
-                        value={createForm.refundRule}
-                        onChange={(refundRule) => {
-                          setCreateForm((current) => ({ ...current, refundRule }));
-                          setCreateRuleErrors(validateRefundRule(refundRule));
-                          setError('');
-                        }}
-                        errors={createRuleErrors}
-                      />
-                    </div>
-                  )}
-                  <div className="pt-4">
-                    <button
-                      type="submit"
-                      disabled={saving}
-                      className="flex w-full items-center justify-center gap-2 rounded-2xl bg-yellow-400 py-3.5 text-sm font-black text-black shadow-lg shadow-yellow-400/20 transition hover:bg-yellow-300 disabled:opacity-60 sm:w-auto sm:px-8"
-                    >
-                      {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                      Create Policy
-                    </button>
-                  </div>
-                </form>
-              </div>
+              )}
+            </div>
+          </aside>
+
+          <section className="relative min-h-[620px] overflow-hidden">
+            {isCreating ? (
+              <CreatePolicyWorkspace
+                createForm={createForm}
+                setCreateForm={setCreateForm}
+                handleCreate={handleCreate}
+                saving={saving}
+                createRuleErrors={createRuleErrors}
+                setCreateRuleErrors={setCreateRuleErrors}
+                setError={setError}
+              />
             ) : !selectedPolicy ? (
-              <div className="flex h-full flex-col items-center justify-center text-center text-gray-500">
-                <FileText size={56} className="mb-4 text-gray-800" strokeWidth={1} />
-                <p className="text-lg font-black text-gray-300">No Policy Selected</p>
-                <p className="mt-2 text-sm max-w-sm">Select a policy from the list on the left to edit metadata, drafts, and versions, or create a new one.</p>
-                <button
-                  type="button"
-                  onClick={() => setIsCreating(true)}
-                  className="mt-6 flex items-center gap-2 rounded-full border border-white/10 px-6 py-2.5 text-sm font-bold text-white transition hover:bg-white/5"
-                >
-                  <Plus size={16} />
-                  Create New Policy
-                </button>
-              </div>
+              <EmptyWorkspace onCreate={openCreate} />
             ) : detailLoading ? (
-              <div className="flex min-h-[520px] items-center justify-center gap-3 text-sm font-bold text-gray-400">
-                <Loader2 size={18} className="animate-spin" />
+              <div className="flex min-h-[620px] items-center justify-center gap-3 text-sm font-bold text-slate-400">
+                <Loader2 size={18} className="animate-spin text-yellow-400" />
                 Loading policy detail
               </div>
             ) : (
-              <div className="space-y-6">
-                <div className="flex flex-col justify-between gap-4 border-b border-white/10 pb-5 lg:flex-row lg:items-start">
-                  <div>
-                    <h2 className="text-2xl font-black">{selectedPolicy.title}</h2>
-                    <p className="mt-2 text-sm text-gray-400">
-                      Current published version: v{selectedPolicy.currentVersionNumber || 0}
-                    </p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={handleArchive}
-                      disabled={saving}
-                      className="inline-flex items-center gap-2 rounded-2xl border border-white/10 px-4 py-2 text-sm font-bold text-gray-300 transition hover:bg-white/5"
-                    >
-                      <Archive size={15} />
-                      Archive
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleDelete}
-                      disabled={saving}
-                      className="inline-flex items-center gap-2 rounded-2xl border border-red-500/20 px-4 py-2 text-sm font-bold text-red-300 transition hover:bg-red-500/10"
-                    >
-                      <Trash2 size={15} />
-                      Delete
-                    </button>
-                  </div>
-                </div>
-
-                {metadata && (
-                  <div className="grid gap-4 lg:grid-cols-2">
-                    <label className="block">
-                      <span className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-gray-500">Title</span>
-                      <input
-                        value={metadata.title}
-                        onChange={(event) => setMetadata((current) => ({ ...current, title: event.target.value }))}
-                        className="w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm outline-none focus:border-yellow-400"
-                      />
-                    </label>
-                    <label className="block">
-                      <span className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-gray-500">Slug</span>
-                      <input
-                        value={metadata.slug}
-                        onChange={(event) => setMetadata((current) => ({ ...current, slug: event.target.value }))}
-                        className="w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm outline-none focus:border-yellow-400"
-                      />
-                    </label>
-                    <label className="block">
-                      <span className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-gray-500">Category</span>
-                      <select
-                        value={metadata.category}
-                        onChange={(event) =>
-                          setMetadata((current) => ({
-                            ...current,
-                            category: event.target.value,
-                            controlsBookingRefunds:
-                              event.target.value === 'refund'
-                                ? current.controlsBookingRefunds
-                                : false,
-                          }))
-                        }
-                        className="w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm outline-none focus:border-yellow-400"
-                      >
-                        {categories.map(([value, label]) => (
-                          <option key={value} value={value}>{label}</option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="flex items-center gap-3 self-end rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm font-bold text-gray-300">
-                      <input
-                        type="checkbox"
-                        checked={metadata.requiresAcceptance}
-                        onChange={(event) => setMetadata((current) => ({ ...current, requiresAcceptance: event.target.checked }))}
-                      />
-                      Requires customer acceptance
-                    </label>
-                    {metadata.category === 'refund' && (
-                      <label className="flex items-start gap-3 rounded-2xl border border-yellow-400/20 bg-yellow-400/[0.05] px-4 py-3 text-sm font-bold text-gray-200 lg:col-span-2">
-                        <input
-                          type="checkbox"
-                          checked={metadata.controlsBookingRefunds}
-                          onChange={(event) =>
-                            setMetadata((current) => ({
-                              ...current,
-                              controlsBookingRefunds: event.target.checked,
-                            }))
-                          }
-                          className="mt-1"
-                        />
-                        <span>
-                          Control booking refunds
-                          <span className="mt-1 block text-xs font-normal leading-5 text-gray-500">
-                            The designated policy publishes legal text and executable refund rules as one immutable version.
-                          </span>
-                        </span>
-                      </label>
-                    )}
-                    <label className="block lg:col-span-2">
-                      <span className="mb-2 block text-xs font-black uppercase tracking-[0.16em] text-gray-500">Description</span>
-                      <textarea
-                        value={metadata.description}
-                        onChange={(event) => setMetadata((current) => ({ ...current, description: event.target.value }))}
-                        className="min-h-20 w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm outline-none focus:border-yellow-400"
-                      />
-                    </label>
-                    <div className="lg:col-span-2">
-                      <button
-                        type="button"
-                        onClick={handleMetadataSave}
-                        disabled={saving}
-                        className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-black text-black transition hover:bg-gray-200 disabled:opacity-60"
-                      >
-                        <Save size={16} />
-                        Save metadata
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                <div className="border-t border-white/10 pt-6">
-                  <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-                    <div>
-                      <h3 className="font-black">Draft Editor</h3>
-                      <p className="mt-1 text-sm text-gray-500">
-                        {selectedPolicy.controlsBookingRefunds
-                          ? 'Policy text and executable refund rules stay editable in draft, then become immutable together when published.'
-                          : 'Only draft versions can be edited. Publishing makes content immutable.'}
-                      </p>
-                    </div>
-                    {!activeDraft && (
-                      <button
-                        type="button"
-                        onClick={handleCreateNextDraft}
-                        disabled={saving}
-                        className="inline-flex items-center gap-2 rounded-2xl border border-yellow-400/30 px-4 py-2.5 text-sm font-black text-yellow-300 transition hover:bg-yellow-400/10"
-                      >
-                        <Plus size={16} />
-                        Create next draft
-                      </button>
-                    )}
-                  </div>
-
-                  {!activeDraft || !draft ? (
-                    <div className="rounded-2xl border border-white/10 bg-black/40 p-6 text-sm text-gray-500">
-                      No editable draft exists for this policy.
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      <div className="grid gap-4 lg:grid-cols-[1fr_180px]">
-                        <input
-                          value={draft.title}
-                          onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
-                          className="rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm outline-none focus:border-yellow-400"
-                          placeholder="Version title"
-                        />
-                        <input
-                          type="date"
-                          value={draft.effectiveDate}
-                          onChange={(event) => setDraft((current) => ({ ...current, effectiveDate: event.target.value }))}
-                          className="rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm outline-none focus:border-yellow-400"
-                        />
-                      </div>
-                      <textarea
-                        value={draft.summary}
-                        onChange={(event) => setDraft((current) => ({ ...current, summary: event.target.value }))}
-                        className="min-h-20 w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm outline-none focus:border-yellow-400"
-                        placeholder="Summary"
-                      />
-                      <textarea
-                        value={draft.content}
-                        onChange={(event) => setDraft((current) => ({ ...current, content: event.target.value }))}
-                        className="min-h-[260px] w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm leading-7 outline-none focus:border-yellow-400"
-                        placeholder="Policy content"
-                      />
-                      <input
-                        value={draft.changeNote}
-                        onChange={(event) => setDraft((current) => ({ ...current, changeNote: event.target.value }))}
-                        className="w-full rounded-2xl border border-white/10 bg-black px-4 py-3 text-sm outline-none focus:border-yellow-400"
-                        placeholder="Change note"
-                      />
-                      {selectedPolicy.controlsBookingRefunds && (
-                        <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_340px]">
-                          <RefundRuleEditor
-                            value={draft.refundRule}
-                            onChange={(refundRule) => {
-                              setDraft((current) => ({ ...current, refundRule }));
-                              setDraftRuleErrors(validateRefundRule(refundRule));
-                              setError('');
-                            }}
-                            errors={draftRuleErrors}
-                          />
-                          <RefundRulePreview
-                            rule={draft.refundRule}
-                            hasErrors={Object.keys(draftRuleErrors).length > 0}
-                          />
-                        </div>
-                      )}
-                      <div className="flex flex-wrap gap-3">
-                        <button
-                          type="button"
-                          onClick={handleDraftSave}
-                          disabled={saving}
-                          className="inline-flex items-center gap-2 rounded-2xl bg-white px-5 py-3 text-sm font-black text-black transition hover:bg-gray-200 disabled:opacity-60"
-                        >
-                          <Save size={16} />
-                          Save draft
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handlePublish}
-                          disabled={saving}
-                          className="inline-flex items-center gap-2 rounded-2xl bg-yellow-400 px-5 py-3 text-sm font-black text-black transition hover:bg-yellow-300 disabled:opacity-60"
-                        >
-                          <Send size={16} />
-                          {selectedPolicy.controlsBookingRefunds
-                            ? 'Publish immutable text + rules'
-                            : 'Publish immutable version'}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <div className="border-t border-white/10 pt-6">
-                  <h3 className="mb-4 font-black">Version History</h3>
-                  <div className="overflow-hidden rounded-2xl border border-white/10">
-                    <table className="w-full text-left text-sm">
-                      <thead className="bg-black/50 text-xs font-black uppercase tracking-[0.16em] text-gray-500">
-                        <tr>
-                          <th className="px-4 py-3">Version</th>
-                          <th className="px-4 py-3">Status</th>
-                          <th className="px-4 py-3">Effective</th>
-                          <th className="px-4 py-3">Accepted</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/10">
-                        {versions.map((version) => (
-                          <tr key={version._id} className="text-gray-300">
-                            <td className="px-4 py-3 font-bold">v{version.versionNumber}</td>
-                            <td className="px-4 py-3">
-                              <span className={`rounded-full border px-2.5 py-1 text-[10px] font-black uppercase ${statusClass(version.status)}`}>
-                                {version.status}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3">{formatDate(version.effectiveDate)}</td>
-                            <td className="px-4 py-3">
-                              <span className="inline-flex items-center gap-1 text-emerald-300">
-                                <CheckCircle2 size={14} />
-                                {version.acceptanceCount || 0}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
+              <PolicyWorkspace
+                selectedPolicy={selectedPolicy}
+                versions={versions}
+                activeDraft={activeDraft}
+                metadata={metadata}
+                setMetadata={setMetadata}
+                draft={draft}
+                setDraft={setDraft}
+                saving={saving}
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
+                handleArchive={handleArchive}
+                handleDelete={handleDelete}
+                handleMetadataSave={handleMetadataSave}
+                handleDraftSave={handleDraftSave}
+                handleCreateNextDraft={handleCreateNextDraft}
+                handlePublish={handlePublish}
+                draftRuleErrors={draftRuleErrors}
+                setDraftRuleErrors={setDraftRuleErrors}
+                setError={setError}
+                acceptances={acceptances}
+                acceptanceMeta={acceptanceMeta}
+                acceptancesLoading={acceptancesLoading}
+                acceptancesError={acceptancesError}
+              />
             )}
           </section>
-        </div>
+        </motion.main>
       </div>
     </div>
+  );
+}
+
+function EmptyWorkspace({ onCreate }) {
+  return (
+    <div className="relative flex min-h-[620px] items-center justify-center overflow-hidden px-6 text-center">
+      <div className="absolute h-80 w-80 rounded-full bg-yellow-400/10 blur-[100px]" />
+      <div className="absolute h-[360px] w-[360px] opacity-25 [background-image:radial-gradient(rgba(250,204,21,.38)_1px,transparent_1px)] [background-size:13px_13px]" />
+      <motion.div
+        initial={{ opacity: 0, y: 14 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative max-w-md"
+      >
+        <div className="mx-auto mb-7 flex h-20 w-20 items-center justify-center rounded-[22px] border border-yellow-400/25 bg-black/45 text-yellow-300 shadow-[0_0_50px_rgba(234,179,8,0.16)]">
+          <FileText size={38} strokeWidth={1.4} />
+        </div>
+        <h2 className="text-2xl font-black text-white">No Policy Selected</h2>
+        <p className="mt-3 text-sm leading-6 text-slate-400">
+          Select a policy from the navigator to view metadata, drafts, versions, and acceptance records.
+        </p>
+        <PremiumButton onClick={onCreate} className="mt-7">
+          <Plus size={16} />
+          Create New Policy
+        </PremiumButton>
+      </motion.div>
+    </div>
+  );
+}
+
+function CreatePolicyWorkspace({
+  createForm,
+  setCreateForm,
+  handleCreate,
+  saving,
+  createRuleErrors,
+  setCreateRuleErrors,
+  setError,
+}) {
+  return (
+    <div className={`h-full overflow-y-auto p-5 lg:p-8 ${scrollbarClass}`}>
+      <div className="mb-8 border-b border-white/[0.08] pb-6">
+        <SectionLabel>Draft Builder</SectionLabel>
+        <h2 className="mt-2 text-3xl font-black text-white">Create New Policy</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-400">
+          Start with editable metadata and an initial draft version.
+        </p>
+      </div>
+
+      <form onSubmit={handleCreate} className="space-y-6">
+        <div className="grid gap-5 xl:grid-cols-2">
+          <label className="block">
+            <span className={labelClass}>Title</span>
+            <input
+              value={createForm.title}
+              onChange={(event) => setCreateForm((current) => ({ ...current, title: event.target.value }))}
+              className={`${inputClass} rounded-[14px]`}
+              placeholder="e.g. Terms of Service"
+              required
+            />
+          </label>
+          <label className="block">
+            <span className={labelClass}>Slug Optional</span>
+            <input
+              value={createForm.slug}
+              onChange={(event) => setCreateForm((current) => ({ ...current, slug: event.target.value }))}
+              className={`${inputClass} rounded-[14px]`}
+              placeholder="e.g. terms-of-service"
+            />
+          </label>
+          <label className="block">
+            <span className={labelClass}>Category</span>
+            <AdminSelect
+              value={createForm.category}
+              onChange={(nextCategory) =>
+                setCreateForm((current) => ({
+                  ...current,
+                  category: nextCategory,
+                  controlsBookingRefunds:
+                    nextCategory === 'refund'
+                      ? current.controlsBookingRefunds
+                      : false,
+                  refundRule:
+                    nextCategory === 'refund' ? current.refundRule : null,
+                }))
+              }
+              options={categoryOptions}
+              icon={FileText}
+              className="w-full"
+              ariaLabel="Select policy category"
+            />
+          </label>
+          <div className="flex items-end">
+            <label className="flex min-h-[48px] w-full cursor-pointer items-center gap-3 rounded-[14px] border border-white/[0.08] bg-black/45 px-4 text-sm font-bold text-slate-300 transition hover:bg-white/[0.03]">
+              <input
+                type="checkbox"
+                checked={createForm.requiresAcceptance}
+                onChange={(event) => setCreateForm((current) => ({ ...current, requiresAcceptance: event.target.checked }))}
+                className="h-4 w-4 accent-yellow-400"
+              />
+              Requires customer acceptance
+            </label>
+          </div>
+        </div>
+
+        {createForm.category === 'refund' && (
+          <label className="flex cursor-pointer items-start gap-3 border-y border-yellow-400/20 bg-yellow-400/[0.04] px-1 py-4 text-sm font-bold text-gray-200 transition hover:bg-yellow-400/[0.07]">
+            <input
+              type="checkbox"
+              checked={createForm.controlsBookingRefunds}
+              onChange={(event) => {
+                setCreateForm((current) => ({
+                  ...current,
+                  controlsBookingRefunds: event.target.checked,
+                  refundRule: event.target.checked
+                    ? normalizeRefundRule(current.refundRule || createDefaultRefundRule())
+                    : null,
+                }));
+                setCreateRuleErrors({});
+                setError('');
+              }}
+              className="mt-0.5 h-4 w-4 accent-yellow-400"
+            />
+            <span>
+              Control booking refunds
+              <span className="mt-1 block text-xs font-normal leading-relaxed text-slate-400">
+                Designate this refund policy as the executable rule source. Only one policy can be designated.
+              </span>
+            </span>
+          </label>
+        )}
+
+        <label className="block">
+          <span className={labelClass}>Initial Content</span>
+          <textarea
+            value={createForm.content}
+            onChange={(event) => setCreateForm((current) => ({ ...current, content: event.target.value }))}
+            className={`${inputClass} min-h-52 rounded-[14px] leading-7`}
+            placeholder="Write your policy content here..."
+            required
+          />
+        </label>
+
+        {createForm.controlsBookingRefunds && (
+          <div className="border-t border-white/[0.08] pt-6">
+            <SectionLabel>Refund Rules Configuration</SectionLabel>
+            <div className="mt-4">
+              <RefundRuleEditor
+                value={createForm.refundRule}
+                onChange={(refundRule) => {
+                  setCreateForm((current) => ({ ...current, refundRule }));
+                  setCreateRuleErrors(validateRefundRule(refundRule));
+                  setError('');
+                }}
+                errors={createRuleErrors}
+              />
+            </div>
+          </div>
+        )}
+
+        <PremiumButton type="submit" disabled={saving}>
+          {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+          Create Policy
+        </PremiumButton>
+      </form>
+    </div>
+  );
+}
+
+function PolicyWorkspace({
+  selectedPolicy,
+  versions,
+  activeDraft,
+  metadata,
+  setMetadata,
+  draft,
+  setDraft,
+  saving,
+  activeTab,
+  setActiveTab,
+  handleArchive,
+  handleDelete,
+  handleMetadataSave,
+  handleDraftSave,
+  handleCreateNextDraft,
+  handlePublish,
+  draftRuleErrors,
+  setDraftRuleErrors,
+  setError,
+  acceptances,
+  acceptanceMeta,
+  acceptancesLoading,
+  acceptancesError,
+}) {
+  return (
+    <div className={`h-full overflow-y-auto ${scrollbarClass}`}>
+      <div className="sticky top-0 z-20 border-b border-white/[0.08] bg-[#0c0c0c]/95 px-5 py-5 backdrop-blur-xl lg:px-8">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-3">
+              <h2 className="truncate text-2xl font-black text-white lg:text-3xl">
+                {selectedPolicy.title}
+              </h2>
+              <StatusBadge status={selectedPolicy.status} />
+            </div>
+            <p className="mt-2 text-sm font-semibold text-slate-500">
+              /{selectedPolicy.slug} · v{selectedPolicy.currentVersionNumber || 0} · Updated {formatDate(selectedPolicy.updatedAt)}
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {!activeDraft && (
+              <PremiumButton variant="ghost" onClick={handleCreateNextDraft} disabled={saving}>
+                <Plus size={15} />
+                New Draft
+              </PremiumButton>
+            )}
+            {activeDraft && (
+              <PremiumButton onClick={handlePublish} disabled={saving}>
+                <Send size={15} />
+                Publish
+              </PremiumButton>
+            )}
+            <PremiumButton variant="ghost" onClick={handleArchive} disabled={saving}>
+              <Archive size={15} />
+              Archive
+            </PremiumButton>
+            <PremiumButton variant="danger" onClick={handleDelete} disabled={saving}>
+              <Trash2 size={15} />
+              Delete
+            </PremiumButton>
+          </div>
+        </div>
+
+        <nav className="mt-5 flex gap-1 overflow-x-auto border-b border-white/[0.08]">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            const selected = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`relative flex items-center gap-2 px-4 py-3 text-sm font-black transition ${
+                  selected ? 'text-yellow-300' : 'text-slate-500 hover:text-slate-200'
+                }`}
+              >
+                <Icon size={15} />
+                {tab.label}
+                {selected && (
+                  <motion.span
+                    layoutId="policy-tab-underline"
+                    className="absolute bottom-[-1px] left-3 right-3 h-[2px] rounded-full bg-yellow-400"
+                  />
+                )}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+
+      <div className="p-5 lg:p-8">
+        {activeTab === 'overview' && (
+          <OverviewPanel
+            selectedPolicy={selectedPolicy}
+            metadata={metadata}
+            handleMetadataSave={handleMetadataSave}
+            setMetadata={setMetadata}
+            saving={saving}
+          />
+        )}
+        {activeTab === 'draft' && (
+          <DraftPanel
+            selectedPolicy={selectedPolicy}
+            activeDraft={activeDraft}
+            draft={draft}
+            setDraft={setDraft}
+            saving={saving}
+            handleCreateNextDraft={handleCreateNextDraft}
+            handleDraftSave={handleDraftSave}
+            handlePublish={handlePublish}
+            draftRuleErrors={draftRuleErrors}
+            setDraftRuleErrors={setDraftRuleErrors}
+            setError={setError}
+          />
+        )}
+        {activeTab === 'versions' && (
+          <VersionTimeline versions={versions} currentVersionNumber={selectedPolicy.currentVersionNumber} />
+        )}
+        {activeTab === 'acceptances' && (
+          <AcceptancePanel
+            acceptances={acceptances}
+            acceptanceMeta={acceptanceMeta}
+            loading={acceptancesLoading}
+            error={acceptancesError}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function OverviewPanel({ selectedPolicy, metadata, setMetadata, handleMetadataSave, saving }) {
+  return (
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="max-w-4xl">
+      <div className="mb-7">
+        <SectionLabel>Overview</SectionLabel>
+        <h3 className="mt-2 text-2xl font-black text-white">Policy Information</h3>
+        <p className="mt-2 text-sm leading-6 text-slate-400">
+          Metadata stays editable while version content is controlled through drafts.
+        </p>
+      </div>
+
+      <div className="border-y border-white/[0.08]">
+        <InfoLine label="Policy Name" value={selectedPolicy.title} />
+        <InfoLine label="Slug" value={`/${selectedPolicy.slug}`} />
+        <InfoLine label="Category" value={categoryLabel(selectedPolicy.category)} />
+        <InfoLine label="Latest Version" value={`v${selectedPolicy.currentVersionNumber || 0}`} />
+        <InfoLine label="Status">
+          <StatusBadge status={selectedPolicy.status} />
+        </InfoLine>
+        <InfoLine label="Requires Acceptance" value={selectedPolicy.requiresAcceptance ? 'Yes' : 'No'} />
+        <InfoLine label="Controls Refunds" value={selectedPolicy.controlsBookingRefunds ? 'Yes' : 'No'} />
+        <InfoLine label="Created" value={formatDateTime(selectedPolicy.createdAt)} />
+        <InfoLine label="Updated" value={formatDateTime(selectedPolicy.updatedAt)} />
+      </div>
+
+      {metadata && (
+        <div className="mt-8 border-t border-white/[0.08] pt-7">
+          <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+            <div>
+              <SectionLabel>Editable Metadata</SectionLabel>
+              <p className="mt-2 text-sm text-slate-400">These fields use the existing save metadata handler.</p>
+            </div>
+            <PremiumButton variant="light" onClick={handleMetadataSave} disabled={saving}>
+              <Save size={16} />
+              Save Metadata
+            </PremiumButton>
+          </div>
+          <div className="grid gap-5 xl:grid-cols-2">
+            <label>
+              <span className={labelClass}>Title</span>
+              <input
+                value={metadata.title}
+                onChange={(event) => setMetadata((current) => ({ ...current, title: event.target.value }))}
+                className={`${inputClass} rounded-[14px]`}
+              />
+            </label>
+            <label>
+              <span className={labelClass}>Slug</span>
+              <input
+                value={metadata.slug}
+                onChange={(event) => setMetadata((current) => ({ ...current, slug: event.target.value }))}
+                className={`${inputClass} rounded-[14px]`}
+              />
+            </label>
+            <label>
+              <span className={labelClass}>Category</span>
+              <AdminSelect
+                value={metadata.category}
+                onChange={(nextCategory) =>
+                  setMetadata((current) => ({
+                    ...current,
+                    category: nextCategory,
+                    controlsBookingRefunds:
+                      nextCategory === 'refund'
+                        ? current.controlsBookingRefunds
+                        : false,
+                  }))
+                }
+                options={categoryOptions}
+                icon={FileText}
+                className="w-full"
+                ariaLabel="Select policy category"
+              />
+            </label>
+            <label className="flex min-h-[48px] cursor-pointer items-center gap-3 self-end rounded-[14px] border border-white/[0.08] bg-black/45 px-4 text-sm font-bold text-slate-300 transition hover:bg-white/[0.03]">
+              <input
+                type="checkbox"
+                checked={metadata.requiresAcceptance}
+                onChange={(event) => setMetadata((current) => ({ ...current, requiresAcceptance: event.target.checked }))}
+                className="h-4 w-4 accent-yellow-400"
+              />
+              Requires customer acceptance
+            </label>
+            {metadata.category === 'refund' && (
+              <label className="flex cursor-pointer items-start gap-3 border-y border-yellow-400/20 bg-yellow-400/[0.04] px-1 py-4 text-sm font-bold text-gray-200 xl:col-span-2">
+                <input
+                  type="checkbox"
+                  checked={metadata.controlsBookingRefunds}
+                  onChange={(event) =>
+                    setMetadata((current) => ({
+                      ...current,
+                      controlsBookingRefunds: event.target.checked,
+                    }))
+                  }
+                  className="mt-1 h-4 w-4 accent-yellow-400"
+                />
+                <span>
+                  Control booking refunds
+                  <span className="mt-1 block text-xs font-normal leading-5 text-slate-500">
+                    The designated policy publishes legal text and executable refund rules as one immutable version.
+                  </span>
+                </span>
+              </label>
+            )}
+            <label className="xl:col-span-2">
+              <span className={labelClass}>Description</span>
+              <textarea
+                value={metadata.description}
+                onChange={(event) => setMetadata((current) => ({ ...current, description: event.target.value }))}
+                className={`${inputClass} min-h-24 rounded-[14px] leading-6`}
+              />
+            </label>
+          </div>
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
+function DraftPanel({
+  selectedPolicy,
+  activeDraft,
+  draft,
+  setDraft,
+  saving,
+  handleCreateNextDraft,
+  handleDraftSave,
+  handlePublish,
+  draftRuleErrors,
+  setDraftRuleErrors,
+  setError,
+}) {
+  return (
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="max-w-6xl">
+      <div className="mb-7 flex flex-col justify-between gap-4 xl:flex-row xl:items-end">
+        <div>
+          <SectionLabel>Draft Editor</SectionLabel>
+          <h3 className="mt-2 text-2xl font-black text-white">Editable Draft</h3>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
+            {selectedPolicy.controlsBookingRefunds
+              ? 'Policy text and executable refund rules stay editable in draft, then become immutable together when published.'
+              : 'Only draft versions can be edited. Publishing makes content immutable.'}
+          </p>
+        </div>
+        {!activeDraft && (
+          <PremiumButton variant="ghost" onClick={handleCreateNextDraft} disabled={saving}>
+            <Plus size={16} />
+            Create Next Draft
+          </PremiumButton>
+        )}
+      </div>
+
+      {!activeDraft || !draft ? (
+        <div className="border-y border-white/[0.08] py-12 text-center">
+          <FileText size={32} className="mx-auto mb-3 text-slate-700" />
+          <p className="text-sm font-bold text-slate-400">No editable draft exists for this policy.</p>
+        </div>
+      ) : (
+        <div className="space-y-5">
+          <div className="grid gap-5 xl:grid-cols-[1fr_220px]">
+            <label>
+              <span className={labelClass}>Version Title</span>
+              <input
+                value={draft.title}
+                onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
+                className={`${inputClass} rounded-[14px]`}
+                placeholder="Version title"
+              />
+            </label>
+            <label>
+              <span className={labelClass}>Effective Date</span>
+              <input
+                type="date"
+                value={draft.effectiveDate}
+                onChange={(event) => setDraft((current) => ({ ...current, effectiveDate: event.target.value }))}
+                className={`${inputClass} rounded-[14px]`}
+              />
+            </label>
+          </div>
+          <label className="block">
+            <span className={labelClass}>Summary</span>
+            <textarea
+              value={draft.summary}
+              onChange={(event) => setDraft((current) => ({ ...current, summary: event.target.value }))}
+              className={`${inputClass} min-h-24 rounded-[14px] leading-6`}
+              placeholder="Summary"
+            />
+          </label>
+          <label className="block">
+            <span className={labelClass}>Policy Content</span>
+            <textarea
+              value={draft.content}
+              onChange={(event) => setDraft((current) => ({ ...current, content: event.target.value }))}
+              className={`${inputClass} min-h-[320px] rounded-[14px] leading-7`}
+              placeholder="Policy content"
+            />
+          </label>
+          <label className="block">
+            <span className={labelClass}>Change Note</span>
+            <input
+              value={draft.changeNote}
+              onChange={(event) => setDraft((current) => ({ ...current, changeNote: event.target.value }))}
+              className={`${inputClass} rounded-[14px]`}
+              placeholder="Change note"
+            />
+          </label>
+          {selectedPolicy.controlsBookingRefunds && (
+            <div className="border-t border-white/[0.08] pt-6">
+              <SectionLabel>Refund Rules</SectionLabel>
+              <div className="mt-4 grid gap-5 2xl:grid-cols-[minmax(0,1fr)_360px]">
+                <RefundRuleEditor
+                  value={draft.refundRule}
+                  onChange={(refundRule) => {
+                    setDraft((current) => ({ ...current, refundRule }));
+                    setDraftRuleErrors(validateRefundRule(refundRule));
+                    setError('');
+                  }}
+                  errors={draftRuleErrors}
+                />
+                <RefundRulePreview
+                  rule={draft.refundRule}
+                  hasErrors={Object.keys(draftRuleErrors).length > 0}
+                />
+              </div>
+            </div>
+          )}
+          <div className="flex flex-wrap gap-3 border-t border-white/[0.08] pt-6">
+            <PremiumButton variant="light" onClick={handleDraftSave} disabled={saving}>
+              <Save size={16} />
+              Save Draft
+            </PremiumButton>
+            <PremiumButton onClick={handlePublish} disabled={saving}>
+              <Send size={16} />
+              {selectedPolicy.controlsBookingRefunds
+                ? 'Publish Immutable Text + Rules'
+                : 'Publish Immutable Version'}
+            </PremiumButton>
+          </div>
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
+function VersionTimeline({ versions, currentVersionNumber }) {
+  return (
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="max-w-4xl">
+      <div className="mb-7">
+        <SectionLabel>Version History</SectionLabel>
+        <h3 className="mt-2 text-2xl font-black text-white">Timeline</h3>
+        <p className="mt-2 text-sm text-slate-400">Published versions are immutable. Drafts remain editable until publishing.</p>
+      </div>
+      <div className="relative border-y border-white/[0.08] py-3">
+        {versions.length === 0 ? (
+          <p className="py-10 text-center text-sm font-bold text-slate-500">No versions yet.</p>
+        ) : (
+          versions.map((version, index) => {
+            const active = version.versionNumber === currentVersionNumber;
+            return (
+              <div key={version._id} className="relative grid gap-4 py-5 pl-10 md:grid-cols-[minmax(0,1fr)_160px_120px]">
+                {index < versions.length - 1 && (
+                  <span className="absolute left-[13px] top-10 h-[calc(100%-18px)] w-px bg-white/[0.08]" />
+                )}
+                <span className={`absolute left-0 top-6 flex h-7 w-7 items-center justify-center rounded-full border ${
+                  active
+                    ? 'border-yellow-300 bg-yellow-400 text-black shadow-[0_0_28px_rgba(234,179,8,0.28)]'
+                    : 'border-white/[0.1] bg-[#111111] text-slate-500'
+                }`}>
+                  <span className="h-2 w-2 rounded-full bg-current" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-base font-black text-white">v{version.versionNumber} · {version.title || 'Untitled version'}</p>
+                  <p className="mt-1 line-clamp-2 text-sm leading-6 text-slate-500">{version.summary || version.changeNote || 'No summary provided.'}</p>
+                </div>
+                <div>
+                  <StatusBadge status={version.status} />
+                  <p className="mt-2 text-xs font-semibold text-slate-500">{formatDate(version.effectiveDate)}</p>
+                </div>
+                <div className="inline-flex items-center gap-2 text-sm font-black text-emerald-300">
+                  <CheckCircle2 size={15} />
+                  {version.acceptanceCount || 0}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+function AcceptancePanel({ acceptances, acceptanceMeta, loading, error }) {
+  return (
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+      <div className="mb-7 flex flex-col justify-between gap-3 lg:flex-row lg:items-end">
+        <div>
+          <SectionLabel>Acceptances</SectionLabel>
+          <h3 className="mt-2 text-2xl font-black text-white">Customer Records</h3>
+          <p className="mt-2 text-sm text-slate-400">
+            Showing the latest {acceptanceMeta?.limit || 50} records from the existing policy acceptance endpoint.
+          </p>
+        </div>
+        {acceptanceMeta && (
+          <div className="text-sm font-bold text-slate-500">
+            {acceptanceMeta.total || 0} total records
+          </div>
+        )}
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center gap-3 border-y border-white/[0.08] py-14 text-sm font-bold text-slate-400">
+          <Loader2 size={16} className="animate-spin text-yellow-400" />
+          Loading acceptance records
+        </div>
+      ) : error ? (
+        <div className="border-y border-red-500/20 bg-red-500/5 py-8 text-center text-sm font-bold text-red-300">
+          {error}
+        </div>
+      ) : acceptances.length === 0 ? (
+        <div className="border-y border-white/[0.08] py-14 text-center">
+          <Users size={32} className="mx-auto mb-3 text-slate-700" />
+          <p className="text-sm font-bold text-slate-400">No acceptance records yet.</p>
+        </div>
+      ) : (
+        <div className="overflow-hidden border-y border-white/[0.08]">
+          <div className={`max-h-[520px] overflow-auto ${scrollbarClass}`}>
+            <table className="w-full min-w-[720px] text-left text-sm">
+              <thead className="sticky top-0 z-10 border-b border-white/[0.08] bg-[#111111] text-[11px] font-black uppercase tracking-[0.18em] text-slate-500">
+                <tr>
+                  <th className="px-4 py-4">Customer</th>
+                  <th className="px-4 py-4">Version</th>
+                  <th className="px-4 py-4">Accepted</th>
+                  <th className="px-4 py-4">Source</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/[0.06]">
+                {acceptances.map((item) => (
+                  <tr key={item._id} className="text-slate-300 transition hover:bg-white/[0.025]">
+                    <td className="px-4 py-4">
+                      <p className="font-black text-white">{item.userId?.username || item.userId?.email || 'Unknown customer'}</p>
+                      <p className="mt-1 text-xs font-semibold text-slate-500">{item.userId?.email || item.userId?._id || '-'}</p>
+                    </td>
+                    <td className="px-4 py-4 font-bold text-slate-300">
+                      v{item.policyVersionId?.versionNumber || '-'}
+                    </td>
+                    <td className="px-4 py-4 font-semibold text-slate-400">{formatDateTime(item.acceptedAt)}</td>
+                    <td className="px-4 py-4">
+                      <span className="rounded-full border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-xs font-black uppercase text-slate-400">
+                        {item.source || 'web'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </motion.div>
   );
 }
