@@ -72,9 +72,16 @@ test('reports healthy diagnostics only after every operational source succeeds',
     floors: true,
     bookings: true,
     sessions: true,
+    slotsOk: true,
   }), {
     isAvailable: true,
     error: '',
+    sources: {
+      floors: true,
+      bookings: true,
+      sessions: true,
+      slotsOk: true,
+    },
   });
 });
 
@@ -83,8 +90,33 @@ test('reports failed operational sources as unavailable diagnostics', () => {
     floors: true,
     bookings: false,
     sessions: false,
+    slotsOk: true,
   }), {
     isAvailable: false,
     error: 'Booking and session data unavailable.',
+    sources: {
+      floors: true,
+      bookings: false,
+      sessions: false,
+      slotsOk: true,
+    },
+  });
+});
+
+test('reports unavailable diagnostics when a configured floor slot source fails', () => {
+  assert.deepEqual(getStaffDashboardSyncStatus({
+    floors: true,
+    bookings: true,
+    sessions: true,
+    slotsOk: false,
+  }), {
+    isAvailable: false,
+    error: 'Slots data unavailable.',
+    sources: {
+      floors: true,
+      bookings: true,
+      sessions: true,
+      slotsOk: false,
+    },
   });
 });

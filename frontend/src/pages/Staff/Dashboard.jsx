@@ -229,25 +229,31 @@ export default function StaffDashboard() {
       const sessionSourceSucceeded = Boolean(
         sessionsRes.ok && sessionsData?.success
       );
-      setSyncStatus(getStaffDashboardSyncStatus({
-        floors: floorSourceSucceeded,
-        bookings: bookingSourceSucceeded,
-        sessions: sessionSourceSucceeded,
-      }));
-
       const fetchedFloors = floorSourceSucceeded
         ? (floorsRes.data.data || floorsRes.data.floors || [])
         : [];
       setFloors(fetchedFloors);
+
+      let slotsOk = floorSourceSucceeded && fetchedFloors.length === 0;
       
       if (fetchedFloors.length > 0) {
         const promises = fetchedFloors.map(f => getFloorSlots(f._id));
         const results = await Promise.all(promises);
-        const allSlots = results.flatMap(r => (r.ok && r.data.success) ? r.data.data : []);
+        slotsOk = results.every((result) => result.ok && result.data?.success);
+        const allSlots = results.flatMap((result) =>
+          result.ok && result.data?.success ? result.data.data : []
+        );
         setDbSlots(allSlots);
       } else {
         setDbSlots([]);
       }
+
+      setSyncStatus(getStaffDashboardSyncStatus({
+        floors: floorSourceSucceeded,
+        bookings: bookingSourceSucceeded,
+        sessions: sessionSourceSucceeded,
+        slotsOk,
+      }));
 
       setBookings(bookingSourceSucceeded ? (bookingsRes.data.data || []) : []);
       setSessions(sessionSourceSucceeded ? (sessionsData.data || []) : []);
@@ -416,7 +422,7 @@ export default function StaffDashboard() {
               color="from-yellow-600/80 to-yellow-500/20"
               hoverBorder="hover:border-yellow-500/30"
               label="Managed Slots"
-              value={totalSlots}
+              value={syncStatus.sources.floors && syncStatus.sources.slotsOk ? totalSlots : '—'}
               sub={`${floors.length} active floors`}
             />
             <StatCard
@@ -424,7 +430,7 @@ export default function StaffDashboard() {
               color="from-sky-600/80 to-sky-500/20"
               hoverBorder="hover:border-sky-500/30"
               label="Vehicles Inside"
-              value={vehiclesInside}
+              value={syncStatus.sources.sessions ? vehiclesInside : '—'}
               sub={`${occupancyRate}% occupancy`}
             />
             <StatCard
@@ -432,7 +438,7 @@ export default function StaffDashboard() {
               color="from-orange-600/80 to-orange-500/20"
               hoverBorder="hover:border-orange-500/30"
               label="Cancellations"
-              value={cancellationsToday}
+              value={syncStatus.sources.bookings ? cancellationsToday : '—'}
               sub="Requires attention"
             />
           </div>

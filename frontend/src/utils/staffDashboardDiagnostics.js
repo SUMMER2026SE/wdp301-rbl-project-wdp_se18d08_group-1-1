@@ -37,11 +37,13 @@ export const getStaffDashboardSyncStatus = ({
   floors = false,
   bookings = false,
   sessions = false,
+  slotsOk = false,
 } = {}) => {
   const unavailableSources = [
     !floors && 'Floor',
     !bookings && 'booking',
     !sessions && 'session',
+    !slotsOk && 'slots',
   ].filter(Boolean);
   const lastSource = unavailableSources.pop();
   const sourceLabel = unavailableSources.length > 0
@@ -53,6 +55,7 @@ export const getStaffDashboardSyncStatus = ({
     error: sourceLabel
       ? `${sourceLabel.charAt(0).toUpperCase()}${sourceLabel.slice(1)} data unavailable.`
       : '',
+    sources: { floors, bookings, sessions, slotsOk },
   };
 };
 
