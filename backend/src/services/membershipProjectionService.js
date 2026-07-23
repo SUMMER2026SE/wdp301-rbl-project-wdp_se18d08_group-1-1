@@ -3,6 +3,41 @@ const User = require('../models/User');
 
 const ACTIVE_STATUSES = ['active', 'transfer_locked'];
 
+const documentId = (value) => String(value?._id || value || '');
+
+const sourceSlotKey = (sourceSubscriptionId, floorId, slotCode) =>
+  [
+    documentId(sourceSubscriptionId),
+    documentId(floorId),
+    String(slotCode || '').trim().toUpperCase(),
+  ].join(':');
+
+const getUnmigratedLegacySlots = (
+  activeSubscriptions = [],
+  sourceEntitlements = []
+) => {
+  const migratedSourceSlots = new Set(
+    sourceEntitlements.map((entitlement) =>
+      sourceSlotKey(
+        entitlement.sourceSubscriptionId,
+        entitlement.floorId,
+        entitlement.slotCode
+      )
+    )
+  );
+
+  return activeSubscriptions.flatMap((subscription) =>
+    (subscription.slots || [])
+      .filter(
+        (slot) =>
+          !migratedSourceSlots.has(
+            sourceSlotKey(subscription._id, slot.floorId, slot.slotCode)
+          )
+      )
+      .map((slot) => ({ subscription, slot }))
+  );
+};
+
 const deriveMembershipProjection = (entitlements, now = new Date()) => {
   const active = (entitlements || [])
     .filter(
@@ -56,6 +91,8 @@ const recomputeUserMembership = async (userId, options = {}) => {
 
 module.exports = {
   ACTIVE_STATUSES,
+  sourceSlotKey,
+  getUnmigratedLegacySlots,
   deriveMembershipProjection,
   recomputeUserMembership,
 };

@@ -19,6 +19,12 @@ const MembershipSlotEntitlement = require('../models/MembershipSlotEntitlement')
 const {
   activateSubscriptionEntitlements,
 } = require('../services/membershipEntitlementService');
+const {
+  getUnmigratedLegacySlots,
+} = require('../services/membershipProjectionService');
+const {
+  buildSubscriptionPaymentUrls,
+} = require('../utils/subscriptionPaymentUrls');
 
 const buildExpirationDate = (packageType, fromDate = new Date()) => {
   const expireAt = new Date(fromDate);
@@ -55,14 +61,15 @@ exports.createSubscriptionPayment = async (req, res, next) => {
 
     // Calculate expiration date
     const expireAt = buildExpirationDate(ticketPackage.type);
+    const paymentUrls = buildSubscriptionPaymentUrls(orderCode);
 
     // Call PayOS API to create payment link
     const paymentData = {
       orderCode,
       amount: parseInt(amount),
       description: `VIP ${ticketPackage.type === 'monthly' ? 'Thang' : 'Nam'}`,
-      returnUrl: process.env.PAYOS_RETURN_URL || `${process.env.CLIENT_URL}/membership?orderCode=${orderCode}`,
-      cancelUrl: process.env.PAYOS_CANCEL_URL || `${process.env.CLIENT_URL}/membership?orderCode=${orderCode}&cancel=true`,
+      returnUrl: paymentUrls.returnUrl,
+      cancelUrl: paymentUrls.cancelUrl,
       items: [
         {
           name: `VIP ${ticketPackage.type === 'monthly' ? 'Month' : 'Year'}`,
@@ -335,17 +342,28 @@ exports.getMembership = async (req, res, next) => {
         .lean(),
     ]);
 
+    const sourceEntitlements = activeSubscriptions.length
+      ? await MembershipSlotEntitlement.find({
+          sourceSubscriptionId: {
+            $in: activeSubscriptions.map((subscription) => subscription._id),
+          },
+        })
+          .select('sourceSubscriptionId floorId slotCode')
+          .lean()
+      : [];
+    const legacySlots = getUnmigratedLegacySlots(
+      activeSubscriptions,
+      sourceEntitlements
+    );
+
     const latestEntitlement = entitlements[0] || null;
-    const latestSubscription = activeSubscriptions[0] || null;
+    const latestSubscription = legacySlots[0]?.subscription || null;
     const expireAt = latestEntitlement?.expireAt
       ? new Date(latestEntitlement.expireAt)
-      : user?.membership?.expireAt
-        ? new Date(user.membership.expireAt)
+      : latestSubscription?.expireAt
+        ? new Date(latestSubscription.expireAt)
         : null;
-    const isActive = Boolean(
-      entitlements.length > 0 ||
-      (user?.membership?.isVip && expireAt && expireAt > now)
-    );
+    const isActive = Boolean(entitlements.length || legacySlots.length);
     const daysUntilExpiration = expireAt
       ? Math.ceil((expireAt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
       : null;
@@ -365,8 +383,8 @@ exports.getMembership = async (req, res, next) => {
       daysUntilExpiration <= renewalWindowDays
     );
 
-    const reservedSlots = entitlements.length
-      ? entitlements.map((entitlement) => ({
+    const reservedSlots = [
+      ...entitlements.map((entitlement) => ({
           entitlementId: entitlement._id,
           sourceSubscriptionId: entitlement.sourceSubscriptionId,
           floorId: entitlement.floorId?._id || entitlement.floorId,
@@ -381,26 +399,25 @@ exports.getMembership = async (req, res, next) => {
           canTransfer:
             entitlement.status === 'active' &&
             Number(entitlement.transferCount || 0) < 1,
-        }))
-      : activeSubscriptions.flatMap((subscription) =>
-          (subscription.slots || []).map((slot) => ({
-            entitlementId: null,
-            sourceSubscriptionId: subscription._id,
-            floorId: slot.floorId?._id || slot.floorId,
-            floorName: slot.floorId?.name || '',
-            floorNumber: slot.floorId?.floorNumber || null,
-            slotCode: slot.slotCode,
-            status: 'active',
-            validFrom: subscription.validFrom,
-            expireAt: subscription.expireAt,
-            unitAmount:
-              Number(subscription.amount || 0) /
-              Math.max(1, (subscription.slots || []).length),
-            transferCount: 0,
-            canTransfer: false,
-            legacy: true,
-          }))
-        );
+      })),
+      ...legacySlots.map(({ subscription, slot }) => ({
+        entitlementId: null,
+        sourceSubscriptionId: subscription._id,
+        floorId: slot.floorId?._id || slot.floorId,
+        floorName: slot.floorId?.name || '',
+        floorNumber: slot.floorId?.floorNumber || null,
+        slotCode: slot.slotCode,
+        status: 'active',
+        validFrom: subscription.validFrom,
+        expireAt: subscription.expireAt,
+        unitAmount:
+          Number(subscription.amount || 0) /
+          Math.max(1, (subscription.slots || []).length),
+        transferCount: 0,
+        canTransfer: false,
+        legacy: true,
+      })),
+    ];
 
     res.status(200).json({
       success: true,
@@ -675,12 +692,13 @@ exports.renewSubscription = async (req, res, next) => {
       }
     } else if (paymentMethod === 'PAYOS') {
       const orderCode = Number(String(Date.now()).slice(-6) + Math.floor(Math.random() * 100));
+      const paymentUrls = buildSubscriptionPaymentUrls(orderCode);
       const paymentData = {
         orderCode,
         amount: parseInt(amount),
         description: `Renew VIP ${ticketPackage.type}`,
-        returnUrl: process.env.PAYOS_RETURN_URL || `${process.env.CLIENT_URL}/membership?orderCode=${orderCode}`,
-        cancelUrl: process.env.PAYOS_CANCEL_URL || `${process.env.CLIENT_URL}/membership?orderCode=${orderCode}&cancel=true`,
+        returnUrl: paymentUrls.returnUrl,
+        cancelUrl: paymentUrls.cancelUrl,
         items: [{ name: `Renew VIP ${ticketPackage.type}`, quantity: 1, price: parseInt(amount) }]
       };
 

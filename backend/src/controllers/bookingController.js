@@ -2142,7 +2142,7 @@ exports.createBulkBooking = async (req, res, next) => {
     const wt = await walletService.debitWallet(
       userId,
       grandTotal,
-      `Thanh toán ${bookingsToCreate.length} lượt đặt chỗ`,
+      `Payment for ${bookingsToCreate.length} ${bookingsToCreate.length === 1 ? 'booking' : 'bookings'}`,
       { refSource: 'booking_order', refSourceId: newOrder[0]._id, session }
     );
     newOrder[0].walletTransactionId = wt.transaction._id;
@@ -2209,7 +2209,16 @@ exports.createBulkBooking = async (req, res, next) => {
       }).catch(() => {});
 
       emitBookingChanged(req.app, newBooking, { action: 'created' });
-      createdBookingsResponse.push(newBooking);
+      createdBookingsResponse.push({
+        bookingId: newBooking._id,
+        qrCode: buildBookingQrPayload(newBooking),
+        slotCode: newBooking.parkingSlot,
+        licensePlate: newBooking.licensePlate,
+        startTime: newBooking.scheduledStart,
+        endTime: newBooking.scheduledEnd,
+        totalAmount: newBooking.prepaidAmount,
+        status: newBooking.status,
+      });
     }
 
     await session.commitTransaction();

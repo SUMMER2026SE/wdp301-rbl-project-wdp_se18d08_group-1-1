@@ -1,9 +1,84 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../../components/Navbar';
 import ParkingMapGrid from '../../components/ParkingMapGrid';
 import { getLiveMapData, getAllFloors } from '../../services/parkingFloorService';
-import { Car, X, LayoutDashboard } from 'lucide-react';
+import { Car, ChevronDown, X, LayoutDashboard } from 'lucide-react';
+
+const MapFloorPicker = ({ floors, value, onChange }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+  const selectedFloor = floors.find((floor) => floor._id === value);
+
+  useEffect(() => {
+    const handlePointerDown = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') setIsOpen(false);
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  const selectFloor = (floorId) => {
+    onChange(floorId);
+    setIsOpen(false);
+  };
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <button
+        type="button"
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
+        onClick={() => setIsOpen((current) => !current)}
+        className="flex h-11 min-w-[116px] items-center justify-between rounded-xl border border-transparent bg-gray-100 px-3 text-left text-sm font-bold text-gray-800 outline-none transition hover:border-gold/40 hover:bg-white focus:border-gold focus:ring-1 focus:ring-gold"
+      >
+        <span className="min-w-0 truncate">{selectedFloor?.name || 'Select floor'}</span>
+        <ChevronDown
+          size={15}
+          className={`ml-3 shrink-0 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+        />
+      </button>
+
+      {isOpen && (
+        <div
+          role="listbox"
+          className="absolute left-0 top-full z-50 mt-2 max-h-56 min-w-full overflow-y-auto rounded-2xl border border-gray-100 bg-white py-2 shadow-2xl animate-in fade-in zoom-in-95 duration-100"
+        >
+          {floors.map((floor) => {
+            const isActive = floor._id === value;
+            return (
+              <button
+                key={floor._id}
+                type="button"
+                role="option"
+                aria-selected={isActive}
+                onClick={() => selectFloor(floor._id)}
+                className={`mx-2 flex w-[calc(100%_-_1rem)] min-w-[100px] items-center justify-between whitespace-nowrap rounded-xl px-3 py-2.5 text-left text-sm transition ${
+                  isActive
+                    ? 'bg-gold/10 font-bold text-gold'
+                    : 'font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+              >
+                <span>{floor.name}</span>
+                {isActive && <span className="ml-3 h-1.5 w-1.5 shrink-0 rounded-full bg-gold" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export default function ParkingMap() {
   const navigate = useNavigate();
@@ -168,15 +243,11 @@ export default function ParkingMap() {
             {/* Floor Selector Floating */}
             <div className="absolute top-4 left-4 z-40 bg-white/90 backdrop-blur-md p-2 rounded-xl border border-gray-200 shadow-sm flex items-center gap-2">
                <span className="text-xs font-bold text-gray-500 ml-2">FLOOR:</span>
-               <select 
-                 className="bg-gray-100 border-none outline-none font-bold text-gray-800 text-sm py-1.5 px-3 rounded-lg cursor-pointer"
+               <MapFloorPicker
+                 floors={floors}
                  value={currentFloorId || ""}
-                 onChange={e => setCurrentFloorId(e.target.value)}
-               >
-                 {floors.map(f => (
-                   <option key={f._id} value={f._id}>{f.name}</option>
-                 ))}
-               </select>
+                 onChange={setCurrentFloorId}
+               />
             </div>
 
             {/* Status Legend Floating */}

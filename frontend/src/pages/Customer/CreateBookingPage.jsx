@@ -5,6 +5,8 @@ import {
   Check,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   CreditCard,
   Loader2,
@@ -35,6 +37,12 @@ import {
 import { QRCodeSVG } from 'qrcode.react';
 import { createTopUpUrl, getTopUpStatus } from '../../services/walletService';
 import { calculateBookingPrice } from '../../utils/bookingPricing';
+import {
+  filterUnexpiredBookingCart,
+  readBookingCart,
+  reconcileBookingCart,
+  writeBookingCart,
+} from '../../utils/bookingCartStorage';
 
 const formatMoney = (value = 0) => `${Number(value || 0).toLocaleString('vi-VN')} VND`;
 
@@ -113,6 +121,223 @@ for (let h = 0; h < 24; h++) {
   }
 }
 
+const parseLocalDate = (value) => {
+  const [year, month, day] = String(value || '').split('-').map(Number);
+  if (!year || !month || !day) return null;
+  const date = new Date(year, month - 1, day);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const formatLocalDateValue = (date) => {
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+};
+
+const formatDateButtonLabel = (value) => {
+  const date = parseLocalDate(value);
+  return date
+    ? date.toLocaleDateString('vi-VN', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      })
+    : 'Select date';
+};
+
+const isSameCalendarDay = (left, right) =>
+  Boolean(
+    left &&
+    right &&
+    left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth() &&
+    left.getDate() === right.getDate(),
+  );
+
+const CustomDatePicker = ({ value, minDate, onChange }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const selectedDate = parseLocalDate(value);
+  const minimumDate = parseLocalDate(minDate);
+  const [viewDate, setViewDate] = useState(() => selectedDate || new Date());
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handlePointerDown = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') setIsOpen(false);
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  const calendarDays = useMemo(() => {
+    const year = viewDate.getFullYear();
+    const month = viewDate.getMonth();
+    const firstWeekday = new Date(year, month, 1).getDay();
+    const gridStart = new Date(year, month, 1 - firstWeekday);
+
+    return Array.from({ length: 42 }, (_, index) => {
+      const date = new Date(gridStart);
+      date.setDate(gridStart.getDate() + index);
+      return date;
+    });
+  }, [viewDate]);
+
+  const previousMonthEnd = new Date(
+    viewDate.getFullYear(),
+    viewDate.getMonth(),
+    0,
+  );
+  const previousDisabled = Boolean(
+    minimumDate && previousMonthEnd < minimumDate,
+  );
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const changeMonth = (offset) => {
+    setViewDate(
+      (current) => new Date(current.getFullYear(), current.getMonth() + offset, 1),
+    );
+  };
+
+  const selectDate = (date) => {
+    if (minimumDate && date < minimumDate) return;
+    onChange(formatLocalDateValue(date));
+    setIsOpen(false);
+  };
+
+  const toggleCalendar = () => {
+    if (!isOpen && selectedDate) {
+      setViewDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1));
+    }
+    setIsOpen((current) => !current);
+  };
+
+  return (
+    <div className="relative h-full flex-1" ref={dropdownRef}>
+      <button
+        type="button"
+        aria-expanded={isOpen}
+        aria-haspopup="dialog"
+        onClick={toggleCalendar}
+        className="flex h-full w-full items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 text-left text-sm font-semibold text-gray-800 outline-none transition hover:border-gold/50 focus:border-gold focus:ring-1 focus:ring-gold"
+      >
+        <Calendar size={15} className="shrink-0 text-gray-400" />
+        <span className="min-w-0 flex-1 truncate">{formatDateButtonLabel(value)}</span>
+        <ChevronDown
+          size={14}
+          className={`shrink-0 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+        />
+      </button>
+
+      {isOpen && (
+        <div
+          role="dialog"
+          aria-label="Choose date"
+          className="absolute left-0 top-full z-[60] mt-2 w-[292px] rounded-3xl border border-gray-100 bg-white p-4 shadow-2xl animate-in fade-in zoom-in-95 duration-100"
+        >
+          <div className="mb-4 flex items-center justify-between">
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-gray-400">
+                Select date
+              </div>
+              <div className="mt-0.5 text-base font-black text-gray-900">
+                {viewDate.toLocaleDateString('en-US', {
+                  month: 'long',
+                  year: 'numeric',
+                })}
+              </div>
+            </div>
+            <div className="flex gap-1">
+              <button
+                type="button"
+                aria-label="Previous month"
+                disabled={previousDisabled}
+                onClick={() => changeMonth(-1)}
+                className="flex h-9 w-9 items-center justify-center rounded-xl text-gray-500 transition hover:bg-gray-100 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-30"
+              >
+                <ChevronLeft size={17} />
+              </button>
+              <button
+                type="button"
+                aria-label="Next month"
+                onClick={() => changeMonth(1)}
+                className="flex h-9 w-9 items-center justify-center rounded-xl text-gray-500 transition hover:bg-gray-100 hover:text-gray-900"
+              >
+                <ChevronRight size={17} />
+              </button>
+            </div>
+          </div>
+
+          <div className="mb-1 grid grid-cols-7">
+            {['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'].map((weekday) => (
+              <div
+                key={weekday}
+                className="py-1 text-center text-[10px] font-black uppercase tracking-wider text-gray-400"
+              >
+                {weekday}
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-7 gap-y-1">
+            {calendarDays.map((date) => {
+              const isOutsideMonth = date.getMonth() !== viewDate.getMonth();
+              const isDisabled = Boolean(minimumDate && date < minimumDate);
+              const isSelected = isSameCalendarDay(date, selectedDate);
+              const isToday = isSameCalendarDay(date, today);
+
+              return (
+                <button
+                  key={formatLocalDateValue(date)}
+                  type="button"
+                  disabled={isDisabled}
+                  aria-label={date.toLocaleDateString('vi-VN')}
+                  aria-pressed={isSelected}
+                  onClick={() => selectDate(date)}
+                  className={`mx-auto flex h-9 w-9 items-center justify-center rounded-xl text-xs font-bold transition ${
+                    isSelected
+                      ? 'bg-gold text-black shadow-md shadow-gold/25'
+                      : isDisabled
+                        ? 'cursor-not-allowed text-gray-200'
+                        : isOutsideMonth
+                          ? 'text-gray-300 hover:bg-gray-50 hover:text-gray-500'
+                          : 'text-gray-700 hover:bg-gold/10 hover:text-gold'
+                  } ${isToday && !isSelected ? 'ring-1 ring-inset ring-gold/50 text-gold' : ''}`}
+                >
+                  {date.getDate()}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-3">
+            <span className="text-[10px] font-semibold text-gray-400">
+              {minimumDate ? `From ${formatDateButtonLabel(minDate)}` : ''}
+            </span>
+            <button
+              type="button"
+              disabled={Boolean(minimumDate && today < minimumDate)}
+              onClick={() => selectDate(today)}
+              className="rounded-xl px-3 py-2 text-xs font-black text-gold transition hover:bg-gold/10 disabled:cursor-not-allowed disabled:opacity-30"
+            >
+              Today
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const CustomTimePicker = ({ value, onChange, options, minTime }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -186,6 +411,108 @@ const CustomTimePicker = ({ value, onChange, options, minTime }) => {
   );
 };
 
+const getVehicleOptionLabel = (vehicle) =>
+  `${vehicle.licensePlate} - ${vehicle.brand || 'Vehicle'} ${vehicle.model || ''}`.trim();
+
+const CustomVehiclePicker = ({ value, vehicles, onChange }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+  const selectedVehicle = vehicles.find((vehicle) => vehicle._id === value);
+  const selectedLabel = selectedVehicle
+    ? getVehicleOptionLabel(selectedVehicle)
+    : 'Manual plate';
+
+  useEffect(() => {
+    const handlePointerDown = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') setIsOpen(false);
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  const selectOption = (nextValue) => {
+    onChange(nextValue);
+    setIsOpen(false);
+  };
+
+  return (
+    <div className="relative mt-1" ref={dropdownRef}>
+      <button
+        type="button"
+        aria-expanded={isOpen}
+        aria-haspopup="listbox"
+        onClick={() => setIsOpen((current) => !current)}
+        className="flex h-11 w-full items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 text-left text-sm font-semibold text-gray-800 outline-none transition hover:border-gold/50 focus:border-gold focus:ring-1 focus:ring-gold"
+      >
+        <span className="min-w-0 truncate">{selectedLabel}</span>
+        <ChevronDown
+          size={15}
+          className={`ml-3 shrink-0 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+        />
+      </button>
+
+      {isOpen && (
+        <div
+          role="listbox"
+          className="time-scrollbar absolute left-0 right-0 top-full z-50 mt-2 max-h-64 overflow-y-auto rounded-2xl border border-gray-100 bg-white py-2 shadow-2xl animate-in fade-in zoom-in-95 duration-100"
+        >
+          <div className="mb-2 border-b border-gray-100 px-4 pb-2">
+            <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">
+              Select vehicle
+            </span>
+          </div>
+
+          {vehicles.map((vehicle) => {
+            const isActive = value === vehicle._id;
+            return (
+              <button
+                key={vehicle._id}
+                type="button"
+                role="option"
+                aria-selected={isActive}
+                onClick={() => selectOption(vehicle._id)}
+                className={`mx-2 flex w-[calc(100%_-_1rem)] items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition ${
+                  isActive
+                    ? 'bg-gold/10 font-bold text-gold'
+                    : 'font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                }`}
+              >
+                <span className="min-w-0 truncate">{getVehicleOptionLabel(vehicle)}</span>
+                {isActive && <span className="ml-3 h-1.5 w-1.5 shrink-0 rounded-full bg-gold" />}
+              </button>
+            );
+          })}
+
+          <button
+            type="button"
+            role="option"
+            aria-selected={value === ''}
+            onClick={() => selectOption('')}
+            className={`mx-2 flex w-[calc(100%_-_1rem)] items-center justify-between rounded-xl px-3 py-2.5 text-left text-sm transition ${
+              value === ''
+                ? 'bg-gold/10 font-bold text-gold'
+                : 'font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+            }`}
+          >
+            <span>Manual plate</span>
+            {value === '' && <span className="ml-3 h-1.5 w-1.5 shrink-0 rounded-full bg-gold" />}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function CreateBookingPage() {
   const [initialRange] = useState(() => getInitialTimeRange());
   const [startDate, setStartDate] = useState(() => initialRange.startTime.split('T')[0]);
@@ -205,7 +532,7 @@ export default function CreateBookingPage() {
   const [wallet, setWallet] = useState(null);
   const [slots, setSlots] = useState([]);
   const [selectedSlotKey, setSelectedSlotKey] = useState('');
-  const [cartItems, setCartItems] = useState([]);
+  const [cartItems, setCartItems] = useState(() => readBookingCart());
   const [cartQuote, setCartQuote] = useState(null);
   const [cartItemErrors, setCartItemErrors] = useState({});
   const [editingClientItemId, setEditingClientItemId] = useState(null);
@@ -261,12 +588,35 @@ export default function CreateBookingPage() {
     try {
       const res = await getActiveHolds();
       if (res.ok && res.data?.data) {
-        setActiveHolds(res.data.data);
+        const nextActiveHolds = res.data.data;
+        setActiveHolds(nextActiveHolds);
+        setCartItems((current) => {
+          const reconciled = reconcileBookingCart(current, nextActiveHolds);
+          return reconciled.length === current.length ? current : reconciled;
+        });
       }
     } catch (err) {
       console.error('Failed to fetch active holds', err);
     }
   };
+
+  useEffect(() => {
+    writeBookingCart(cartItems);
+  }, [cartItems]);
+
+  useEffect(() => {
+    if (cartItems.length === 0) return undefined;
+
+    const nextExpiry = Math.min(
+      ...cartItems.map((item) => new Date(item.holdExpiresAt).getTime()),
+    );
+    const delay = Math.max(0, nextExpiry - Date.now());
+    const timerId = window.setTimeout(() => {
+      setCartItems((current) => filterUnexpiredBookingCart(current));
+    }, delay + 50);
+
+    return () => window.clearTimeout(timerId);
+  }, [cartItems]);
 
   const fetchActiveSessions = async () => {
     try {
@@ -760,10 +1110,17 @@ export default function CreateBookingPage() {
   };
 
   const startTopUpForShortfall = async (shortfall) => {
-    const amountToTopUp = Math.max(shortfall, 10000);
+    const amountToTopUp = Math.ceil(Number(shortfall));
+    if (!Number.isFinite(amountToTopUp) || amountToTopUp <= 0) {
+      setError('Could not determine the remaining amount required for this booking.');
+      return;
+    }
+
     setTopUpLoading(true);
     try {
-      const topUpRes = await createTopUpUrl(amountToTopUp);
+      const topUpRes = await createTopUpUrl(amountToTopUp, {
+        purpose: 'booking_shortfall',
+      });
       if (topUpRes.ok) {
         setTopUpData(topUpRes.data?.data);
         setShowTopUpModal(true);
@@ -773,6 +1130,27 @@ export default function CreateBookingPage() {
     } catch {
       setError('Insufficient balance. Network error while generating top-up QR.');
     } finally {
+      setTopUpLoading(false);
+    }
+  };
+
+  const cancelPendingBookingTopUp = async () => {
+    const orderCode = topUpData?.orderCode;
+    setTopUpLoading(true);
+
+    try {
+      if (orderCode) {
+        const cancelRes = await getTopUpStatus(orderCode, true);
+        if (!cancelRes.ok) {
+          setError(cancelRes.data?.message || 'Could not cancel the pending top-up.');
+        }
+      }
+    } catch {
+      setError('Network error while cancelling the pending top-up.');
+    } finally {
+      setShowTopUpModal(false);
+      setTopUpData(null);
+      setTopUpSuccess(false);
       setTopUpLoading(false);
     }
   };
@@ -929,7 +1307,7 @@ export default function CreateBookingPage() {
     bookingInfo?._id
       ? [{
           bookingId: bookingInfo._id,
-          qrCode: bookingInfo._id,
+          qrCode: bookingInfo.qrCode || null,
           slotCode: bookingInfo.slotCode,
           licensePlate: bookingInfo.licensePlate,
           startTime: bookingInfo.startTime,
@@ -950,18 +1328,6 @@ export default function CreateBookingPage() {
   return (
     <div className="min-h-screen bg-[#FAFAFA] text-charcoal pt-24 pb-6 px-6 md:px-8 flex flex-col">
       <style dangerouslySetInnerHTML={{ __html: `
-        .custom-date-input::-webkit-calendar-picker-indicator {
-          background: transparent;
-          bottom: 0;
-          color: transparent;
-          cursor: pointer;
-          height: auto;
-          left: 0;
-          position: absolute;
-          right: 0;
-          top: 0;
-          width: auto;
-        }
         .time-scrollbar::-webkit-scrollbar {
           width: 5px;
         }
@@ -1017,21 +1383,14 @@ export default function CreateBookingPage() {
               <h2 className="text-lg font-black mb-3 text-gray-900">Booking Details</h2>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-4">
-                <label className="block">
+                <div className="block">
                   <span className="text-[11px] text-gray-400 uppercase tracking-widest font-bold mb-1.5 block">Start time</span>
                   <div className="flex gap-2 h-11">
-                    <div className="relative flex-1 h-full">
-                      <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-                        <Calendar size={15} className="text-gray-400" />
-                      </div>
-                      <input
-                        type="date"
-                        min={todayDateStr}
-                        value={startDate}
-                        onChange={(e) => handleStartChange(e.target.value, startTimeStr)}
-                        className="w-full h-full rounded-xl bg-gray-50 border border-gray-200 pl-9 pr-3 text-sm font-semibold text-gray-800 outline-none focus:border-gold focus:ring-1 focus:ring-gold transition custom-date-input hover:border-gold/50"
-                      />
-                    </div>
+                    <CustomDatePicker
+                      value={startDate}
+                      minDate={todayDateStr}
+                      onChange={(nextDate) => handleStartChange(nextDate, startTimeStr)}
+                    />
                     <CustomTimePicker
                       value={startTimeStr}
                       onChange={(val) => handleStartChange(startDate, val)}
@@ -1039,22 +1398,15 @@ export default function CreateBookingPage() {
                       minTime={startMinTime}
                     />
                   </div>
-                </label>
-                <label className="block">
+                </div>
+                <div className="block">
                   <span className="text-[11px] text-gray-400 uppercase tracking-widest font-bold mb-1.5 block">End time</span>
                   <div className="flex gap-2 h-11">
-                    <div className="relative flex-1 h-full">
-                      <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-                        <Calendar size={15} className="text-gray-400" />
-                      </div>
-                      <input
-                        type="date"
-                        min={startDate}
-                        value={endDate}
-                        onChange={(e) => handleEndChange(e.target.value, endTimeStr)}
-                        className="w-full h-full rounded-xl bg-gray-50 border border-gray-200 pl-9 pr-3 text-sm font-semibold text-gray-800 outline-none focus:border-gold focus:ring-1 focus:ring-gold transition custom-date-input hover:border-gold/50"
-                      />
-                    </div>
+                    <CustomDatePicker
+                      value={endDate}
+                      minDate={startDate}
+                      onChange={(nextDate) => handleEndChange(nextDate, endTimeStr)}
+                    />
                     <CustomTimePicker
                       value={endTimeStr}
                       onChange={(val) => handleEndChange(endDate, val)}
@@ -1062,24 +1414,17 @@ export default function CreateBookingPage() {
                       minTime={endMinTime}
                     />
                   </div>
-                </label>
+                </div>
               </div>
 
               <div className="mt-4">
                 <span className="text-[11px] text-gray-400 uppercase tracking-widest font-bold">Vehicle</span>
                 {vehicles.length > 0 ? (
-                  <select
+                  <CustomVehiclePicker
                     value={vehicleId}
-                    onChange={(event) => setVehicleId(event.target.value)}
-                    className="mt-1 w-full rounded-xl bg-gray-50 border border-gray-200 px-3 py-2.5 text-sm font-semibold text-gray-800 outline-none focus:border-gold focus:ring-1 focus:ring-gold transition"
-                  >
-                    {vehicles.map((vehicle) => (
-                      <option key={vehicle._id} value={vehicle._id}>
-                        {vehicle.licensePlate} - {vehicle.brand || 'Vehicle'} {vehicle.model || ''}
-                      </option>
-                    ))}
-                    <option value="">Manual plate</option>
-                  </select>
+                    vehicles={vehicles}
+                    onChange={setVehicleId}
+                  />
                 ) : (
                   <input
                     value={manualPlate}
@@ -1462,7 +1807,13 @@ export default function CreateBookingPage() {
                     <div className="font-black text-gold">{booking.slotCode}</div>
                   </div>
                   <div className="flex justify-center bg-gray-50 border border-gray-100 rounded-2xl p-3 mb-3">
-                    <QRCodeSVG value={String(booking.qrCode || booking.bookingId || booking._id)} size={140} />
+                    {booking.qrCode ? (
+                      <QRCodeSVG value={String(booking.qrCode)} size={140} />
+                    ) : (
+                      <div className="flex min-h-36 items-center justify-center px-4 text-center text-xs font-bold text-amber-600">
+                        QR check-in is temporarily unavailable. Open My Bookings to reload it.
+                      </div>
+                    )}
                   </div>
                   <div className="space-y-2 text-xs">
                     <div className="flex justify-between gap-3">
@@ -1526,15 +1877,11 @@ export default function CreateBookingPage() {
 
             <div className="flex gap-3 w-full">
               <button
-                disabled={topUpSuccess}
-                onClick={() => {
-                  setShowTopUpModal(false);
-                  setTopUpData(null);
-                  setTopUpSuccess(false);
-                }}
+                disabled={topUpSuccess || topUpLoading}
+                onClick={cancelPendingBookingTopUp}
                 className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3.5 rounded-2xl transition disabled:opacity-50 active:scale-[0.98]"
               >
-                Cancel
+                {topUpLoading ? 'Cancelling...' : 'Cancel'}
               </button>
             </div>
           </div>
