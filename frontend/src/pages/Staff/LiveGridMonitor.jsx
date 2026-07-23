@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import ParkingMapGrid from "../../components/ParkingMapGrid";
 import { getAllFloors } from "../../services/parkingFloorService";
-import { getActiveSessions } from "../../services/sessionService";
+import { getActiveSessions, getSessionResponseState } from "../../services/sessionService";
 import { MonitorCheck, X } from "lucide-react";
 import StaffCheckoutModal from "./StaffCheckoutModal";
 import { getAvailableBookingSlots, getActiveHolds, getActiveMapBookings } from "../../services/bookingService";
@@ -12,6 +12,8 @@ export default function LiveGridMonitor() {
   const [loading, setLoading] = useState(true);
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [activeSessions, setActiveSessions] = useState([]);
+  const [sessionDataAvailable, setSessionDataAvailable] = useState(false);
+  const [sessionDataError, setSessionDataError] = useState('Live session data is unavailable.');
   const [availableSlots, setAvailableSlots] = useState(null);
   const [activeHolds, setActiveHolds] = useState([]);
   const [activeBookings, setActiveBookings] = useState([]);
@@ -65,8 +67,13 @@ export default function LiveGridMonitor() {
   const fetchLiveStatus = async () => {
     try {
       const res = await getActiveSessions();
-      if (res.ok && res.data.success) {
-        setActiveSessions(res.data.data);
+      const sessionState = getSessionResponseState(res);
+      setActiveSessions(sessionState.sessions);
+      setSessionDataAvailable(sessionState.isAvailable);
+      setSessionDataError(sessionState.error);
+      if (!sessionState.isAvailable) {
+        setSelectedSlot(null);
+        setShowCheckoutModal(false);
       }
 
       const startTimeStr = new Date().toISOString();
@@ -90,6 +97,11 @@ export default function LiveGridMonitor() {
       }
     } catch (err) {
       console.error("Failed to fetch live status", err);
+      setActiveSessions([]);
+      setSessionDataAvailable(false);
+      setSessionDataError('Live session data is unavailable.');
+      setSelectedSlot(null);
+      setShowCheckoutModal(false);
     }
   };
 
@@ -127,25 +139,36 @@ export default function LiveGridMonitor() {
           {floors.length === 0 && <option value="">No floors available</option>}
         </select>
         <div className="flex items-center gap-1.5 px-3">
-            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-[10px] text-gray-400 font-mono">LIVE UPDATE</span>
+            <div className={`w-2 h-2 rounded-full ${sessionDataAvailable ? 'bg-emerald-400 animate-pulse' : 'bg-red-500'}`} />
+            <span className={`text-[10px] font-mono ${sessionDataAvailable ? 'text-gray-400' : 'text-red-400'}`}>
+              {sessionDataAvailable ? 'LIVE UPDATE' : 'SESSION DATA UNAVAILABLE'}
+            </span>
         </div>
       </div>
 
       <div className="flex-1 overflow-hidden relative">
-        <ParkingMapGrid
-          floors={floors}
-          currentFloorId={currentFloorId}
-          onFloorSelect={setCurrentFloorId}
-          onSlotClick={setSelectedSlot}
-          activeSessions={activeSessions}
-          dbSlots={dbSlots}
-          availableSlots={availableSlots}
-          activeHolds={activeHolds}
-          activeBookings={activeBookings}
-          loading={loading}
-          isEditMode={false} // Staff cannot edit layout
-        />
+        {sessionDataAvailable ? (
+          <ParkingMapGrid
+            floors={floors}
+            currentFloorId={currentFloorId}
+            onFloorSelect={setCurrentFloorId}
+            onSlotClick={setSelectedSlot}
+            activeSessions={activeSessions}
+            dbSlots={dbSlots}
+            availableSlots={availableSlots}
+            activeHolds={activeHolds}
+            activeBookings={activeBookings}
+            loading={loading}
+            isEditMode={false} // Staff cannot edit layout
+          />
+        ) : (
+          <div className="flex h-full items-center justify-center p-6" role="alert">
+            <div className="max-w-md rounded-2xl border border-red-500/30 bg-red-950/20 p-6 text-center shadow-lg">
+              <p className="text-sm font-bold uppercase tracking-[0.16em] text-red-400">Live session data unavailable</p>
+              <p className="mt-2 text-sm text-red-200/80">{sessionDataError}</p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Slide-over panel for slots */}

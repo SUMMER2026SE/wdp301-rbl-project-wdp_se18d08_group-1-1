@@ -1,14 +1,10 @@
 import assert from 'node:assert/strict';
-import { after, afterEach, beforeEach, test } from 'node:test';
+import { afterEach, beforeEach, test } from 'node:test';
 
 const originalFetch = globalThis.fetch;
 const originalLocalStorage = globalThis.localStorage;
-const hadImportMetaEnv = Object.prototype.hasOwnProperty.call(Object.prototype, 'env');
-const originalImportMetaEnv = Object.prototype.env;
 
-Object.prototype.env = {};
-
-const { getActiveSessions, getAllSessions } = await import('./sessionService.js');
+const { getActiveSessions, getAllSessions, getSessionResponseState } = await import('./sessionService.js');
 
 let requests;
 
@@ -32,14 +28,6 @@ afterEach(() => {
   globalThis.localStorage = originalLocalStorage;
 });
 
-after(() => {
-  if (hadImportMetaEnv) {
-    Object.prototype.env = originalImportMetaEnv;
-  } else {
-    delete Object.prototype.env;
-  }
-});
-
 test('getAllSessions requests the authenticated sessions endpoint', async () => {
   const result = await getAllSessions();
 
@@ -58,4 +46,18 @@ test('getActiveSessions requests the authenticated active-status endpoint', asyn
   assert.match(requests[0].url, /\/sessions\/active-status$/);
   assert.equal(requests[0].options.method, 'GET');
   assert.equal(requests[0].options.headers.Authorization, 'Bearer staff-token');
+});
+
+test('getSessionResponseState invalidates session data after an unsuccessful response', () => {
+  const result = getSessionResponseState({
+    ok: false,
+    status: 503,
+    data: { success: false, message: 'Session feed is unavailable.' },
+  });
+
+  assert.deepEqual(result, {
+    isAvailable: false,
+    sessions: [],
+    error: 'Session feed is unavailable.',
+  });
 });
