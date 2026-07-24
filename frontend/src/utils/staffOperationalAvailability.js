@@ -22,3 +22,17 @@ export function getRequiredSourcesAvailability(sources) {
     failedSources: unavailable.map(({ name }) => name),
   };
 }
+
+export function getOperationalViewState({ loading = false, error = '' } = {}) {
+  const status = loading ? 'loading' : error ? 'unavailable' : 'live';
+
+  return {
+    status,
+    isAvailable: status === 'live',
+    error: status === 'unavailable' ? String(error) : '',
+  };
+}
+
+export function getOperationalValue(viewState, value, unavailableValue = '—') {
+  return viewState?.isAvailable ? value : unavailableValue;
+}

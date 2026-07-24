@@ -6,6 +6,8 @@ import { MonitorCheck, X } from "lucide-react";
 import StaffCheckoutModal from "./StaffCheckoutModal";
 import { getAvailableBookingSlots, getActiveHolds, getActiveMapBookings } from "../../services/bookingService";
 import { getRequiredSourcesAvailability } from "../../utils/staffOperationalAvailability";
+import StaffDropdown from "./components/StaffDropdown.jsx";
+import { STAFF_THEME } from "./components/staffTheme.js";
 
 export default function LiveGridMonitor() {
   const [floors, setFloors] = useState([]);
@@ -22,8 +24,8 @@ export default function LiveGridMonitor() {
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
 
   useEffect(() => {
-    document.body.classList.add("bg-[#0b0e16]");
-    return () => document.body.classList.remove("bg-[#0b0e16]");
+    document.body.classList.add("bg-[#080808]");
+    return () => document.body.classList.remove("bg-[#080808]");
   }, []);
 
   const invalidateLiveData = useCallback((message) => {
@@ -105,26 +107,30 @@ export default function LiveGridMonitor() {
   }, [fetchLiveStatus]);
 
   return (
-    <div className="flex flex-col h-[calc(100vh-70px)] bg-[#0b0e16] text-gray-200 font-sans relative overflow-hidden"
+    <div className={`${STAFF_THEME.page} relative flex h-[calc(100vh-70px)] flex-col overflow-hidden font-sans`}
          style={{ backgroundImage: `linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px)`, backgroundSize: '30px 30px' }}>
       
       {/* Top Toolbar */}
-      <div className="absolute top-4 left-8 z-50 flex items-center gap-4 bg-[#181c23]/80 backdrop-blur border border-white/10 p-2 rounded-xl shadow-lg">
+      <div className="absolute left-8 top-4 z-50 flex items-center gap-4 rounded-xl border border-[#ffd555]/15 bg-[#111111]/95 p-2 shadow-[0_18px_45px_rgba(0,0,0,0.35)] backdrop-blur">
         <div className="flex items-center gap-2 px-3 border-r border-white/10">
-            <MonitorCheck size={18} className="text-emerald-400" />
-            <span className="font-bold text-white tracking-widest uppercase text-xs">Live Monitor</span>
+            <MonitorCheck size={18} className="text-[#ffd555]" />
+            <span className="text-xs font-bold uppercase tracking-widest text-[#ffd555]">Live Monitor</span>
         </div>
-        <select 
-          className="bg-black/40 border border-white/20 rounded p-2 text-white text-sm outline-none font-bold min-w-[120px]"
+        <StaffDropdown
           value={currentFloorId || ""}
-          onChange={(e) => setCurrentFloorId(e.target.value === "" ? null : e.target.value)}
-        >
-          {floors.length > 0 && <option value="">-- Overview (All Floors) --</option>}
-          {floors.map(f => (
-            <option key={f._id} value={f._id}>{f.name}</option>
-          ))}
-          {floors.length === 0 && <option value="">No floors available</option>}
-        </select>
+          onChange={(value) => setCurrentFloorId(value === "" ? null : value)}
+          options={floors.length > 0
+            ? [
+                ["", "Overview (All Floors)"],
+                ...floors.map((floor) => [floor._id, floor.name]),
+              ]
+            : [{ value: "", label: "No floors available", disabled: true }]}
+          ariaLabel="Select parking floor"
+          disabled={floors.length === 0}
+          className="min-w-[190px]"
+          buttonClassName="bg-black/40 text-xs font-bold uppercase tracking-wide"
+          menuClassName="w-full min-w-[220px]"
+        />
         <div className="flex items-center gap-1.5 px-3">
             <div className={`w-2 h-2 rounded-full ${liveDataAvailable ? 'bg-emerald-400 animate-pulse' : 'bg-red-500'}`} />
             <span className={`text-[10px] font-mono ${liveDataAvailable ? 'text-gray-400' : 'text-red-400'}`}>
@@ -160,14 +166,14 @@ export default function LiveGridMonitor() {
 
       {/* Slide-over panel for slots */}
       <div className={`absolute inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity duration-300 ${selectedSlot ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`} onClick={() => setSelectedSlot(null)}></div>
-      <div className={`absolute top-0 right-0 bottom-0 w-[420px] bg-[#0f172a]/95 backdrop-blur-3xl border-l border-emerald-500/20 p-8 flex flex-col shadow-[-20px_0_50px_rgba(16,185,129,0.1)] text-slate-200 z-50 transform transition-transform duration-300 ease-in-out ${selectedSlot ? 'translate-x-0' : 'translate-x-full'}`}>
+      <div className={`absolute bottom-0 right-0 top-0 z-50 flex w-[420px] transform flex-col border-l border-[#ffd555]/20 bg-[#111111]/[0.98] p-8 text-slate-200 shadow-[-20px_0_50px_rgba(0,0,0,0.38)] backdrop-blur-3xl transition-transform duration-300 ease-in-out ${selectedSlot ? 'translate-x-0' : 'translate-x-full'}`}>
         {selectedSlot && (
            <>
               <div className="flex justify-between items-start mb-6 flex-shrink-0">
                 <div>
-                    <span className="text-emerald-400 text-xs font-bold uppercase tracking-[0.2em] mb-1 block">{selectedSlot.type} TICKET</span>
+                    <span className="mb-1 block text-xs font-bold uppercase tracking-[0.2em] text-[#d7b94a]">{selectedSlot.type} TICKET</span>
                     <h2 className="text-4xl font-extrabold text-white flex items-center gap-2">
-                        SLOT <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-500">{selectedSlot.id}</span>
+                        SLOT <span className="text-[#ffd555]">{selectedSlot.id}</span>
                     </h2>
                 </div>
                 <button onClick={() => setSelectedSlot(null)} className="text-slate-400 hover:text-white bg-slate-800/50 hover:bg-slate-700/50 w-8 h-8 rounded-full flex items-center justify-center transition-all border border-white/5 flex-shrink-0">
@@ -258,7 +264,7 @@ export default function LiveGridMonitor() {
               <div className="mt-auto flex-shrink-0 pt-2 pb-2">
                  <button 
                     onClick={() => setShowCheckoutModal(true)}
-                    className="w-full bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-extrabold uppercase tracking-wider py-4 rounded-xl shadow-[0_0_20px_rgba(16,185,129,0.3)] transition-all flex items-center justify-center gap-2">
+                    className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#ffd555] py-4 font-extrabold uppercase tracking-wider text-[#080808] shadow-[0_0_20px_rgba(255,213,85,0.18)] transition-all hover:bg-[#ffe58a] focus:outline-none focus:ring-2 focus:ring-[#ffd555]/30 active:scale-[0.98]">
                     <X size={18} />
                     Process Check-out
                  </button>

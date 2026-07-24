@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {
+import * as dashboardDiagnostics from './staffDashboardDiagnostics.js';
+
+const {
   buildStaffDashboardMetrics,
   getStaffDashboardSyncStatus,
   getStaffDashboardViewAvailability,
-} from './staffDashboardDiagnostics.js';
+} = dashboardDiagnostics;
 
 const floor = {
   _id: 'floor-1',
@@ -74,6 +76,7 @@ test('reports healthy diagnostics only after every operational source succeeds',
     bookings: true,
     sessions: true,
     slotsOk: true,
+    revenue: true,
   }), {
     isAvailable: true,
     error: '',
@@ -82,6 +85,7 @@ test('reports healthy diagnostics only after every operational source succeeds',
       bookings: true,
       sessions: true,
       slotsOk: true,
+      revenue: true,
     },
   });
 });
@@ -92,6 +96,7 @@ test('reports failed operational sources as unavailable diagnostics', () => {
     bookings: false,
     sessions: false,
     slotsOk: true,
+    revenue: true,
   }), {
     isAvailable: false,
     error: 'Booking and session data unavailable.',
@@ -100,6 +105,7 @@ test('reports failed operational sources as unavailable diagnostics', () => {
       bookings: false,
       sessions: false,
       slotsOk: true,
+      revenue: true,
     },
   });
 });
@@ -110,6 +116,7 @@ test('reports unavailable diagnostics when a configured floor slot source fails'
     bookings: true,
     sessions: true,
     slotsOk: false,
+    revenue: true,
   }), {
     isAvailable: false,
     error: 'Slots data unavailable.',
@@ -118,6 +125,35 @@ test('reports unavailable diagnostics when a configured floor slot source fails'
       bookings: true,
       sessions: true,
       slotsOk: false,
+      revenue: true,
+    },
+  });
+});
+
+test('revenue failure makes overall sync unavailable without hiding healthy operations', () => {
+  assert.equal(typeof dashboardDiagnostics.getStaffDashboardOperationalStatus, 'function');
+  const { getStaffDashboardOperationalStatus } = dashboardDiagnostics;
+  const sources = {
+    floors: true,
+    bookings: true,
+    sessions: true,
+    slotsOk: true,
+    revenue: false,
+  };
+
+  assert.deepEqual(getStaffDashboardSyncStatus(sources), {
+    isAvailable: false,
+    error: 'Revenue data unavailable.',
+    sources,
+  });
+  assert.deepEqual(getStaffDashboardOperationalStatus(sources), {
+    isAvailable: true,
+    error: '',
+    sources: {
+      floors: true,
+      bookings: true,
+      sessions: true,
+      slotsOk: true,
     },
   });
 });
@@ -152,4 +188,48 @@ test('disables views that depend on unavailable booking or session data', () => 
     occupancy: false,
     cancellations: false,
   });
+});
+
+test('returns a no-floor warning instead of a healthy zero-capacity diagnostic', () => {
+  assert.equal(typeof dashboardDiagnostics.buildStaffLotDiagnostics, 'function');
+  const { buildStaffLotDiagnostics } = dashboardDiagnostics;
+  const metrics = buildStaffDashboardMetrics({
+    floors: [],
+    dbSlots: [],
+    sessions: [],
+    bookings: [],
+    now: new Date('2026-07-24T12:00:00.000Z'),
+  });
+
+  const diagnostics = buildStaffLotDiagnostics({ metrics });
+
+  assert.deepEqual(diagnostics.map(({ key, level }) => ({ key, level })), [
+    { key: 'no-floor', level: 'warn' },
+  ]);
+  assert.equal(
+    diagnostics.some(({ key }) => key === 'capacity-healthy'),
+    false
+  );
+});
+
+test('orders overdue before warnings and healthy capacity last', () => {
+  assert.equal(typeof dashboardDiagnostics.buildStaffLotDiagnostics, 'function');
+  const { buildStaffLotDiagnostics } = dashboardDiagnostics;
+  const diagnostics = buildStaffLotDiagnostics({
+    metrics: {
+      activeFloor: floor,
+      activeFloorSlots: floor.layoutData.elements,
+      occupancyRate: 50,
+      overdueSessions: [{ _id: 'late' }],
+      maintenanceSlots: [{ slotNumber: 'A2', maintenanceReason: 'Repair' }],
+      cancellationsToday: 2,
+    },
+  });
+
+  assert.deepEqual(diagnostics.map(({ key }) => key), [
+    'overdue',
+    'maintenance',
+    'cancellations',
+    'capacity-healthy',
+  ]);
 });
