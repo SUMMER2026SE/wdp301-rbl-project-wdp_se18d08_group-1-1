@@ -40,6 +40,7 @@ const EMPTY_FINANCE_SUMMARY = {
   packagePayments: 0,
   renewalValue: 0,
   violationRevenue: 0,
+  membershipTransferFeeRevenue: 0,
   coverage: 'Unavailable',
   error: '',
 };
@@ -190,7 +191,7 @@ const buildDateQuery = ({ startDate, endDate }) =>
 
 const fetchStatisticsBundle = async (period) => {
   const query = buildDateQuery(period);
-  const [booking, subscriptions, violations] = await Promise.all([
+  const [booking, subscriptions, violations, platformRevenue] = await Promise.all([
     apiFetch(`/statistics/admin/bookings?${query}`, {
       headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` },
     }),
@@ -200,25 +201,34 @@ const fetchStatisticsBundle = async (period) => {
     apiFetch(`/revenue/violations/statistics?${query}`, {
       headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` },
     }),
+    apiFetch(`/statistics/admin/platform-revenue?${query}`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` },
+    }),
   ]);
 
   return {
     booking: booking.ok && booking.data?.success ? booking.data.data : null,
     subscriptions: subscriptions.ok && subscriptions.data?.success ? subscriptions.data.data : null,
     violations: violations.ok && violations.data?.success ? violations.data.data : null,
-    failed: !booking.ok && !subscriptions.ok && !violations.ok,
+    platformRevenue:
+      platformRevenue.ok && platformRevenue.data?.success
+        ? platformRevenue.data.data
+        : null,
+    failed: !booking.ok && !subscriptions.ok && !violations.ok && !platformRevenue.ok,
   };
 };
 
-const getRecordedSourcesValue = ({ booking, subscriptions, violations }) => {
+const getRecordedSourcesValue = ({ booking, subscriptions, violations, platformRevenue }) => {
   const bookingMoney = booking?.money || {};
   const subscriptionSummary = subscriptions?.summary || {};
   const violationSummary = violations?.summary || {};
+  const transferFeeSummary = platformRevenue?.membershipTransferFees || {};
   return (
     Number(bookingMoney.walletBookingCharges || 0) +
     Number(subscriptionSummary.grossAmount || 0) +
     Number(subscriptionSummary.renewalAmount || 0) +
-    Number(violationSummary.totalAmount || 0)
+    Number(violationSummary.totalAmount || 0) +
+    Number(transferFeeSummary.revenue || 0)
   );
 };
 
@@ -226,6 +236,7 @@ const buildFinanceSummary = (currentBundle, previousBundle) => {
   const bookingMoney = currentBundle.booking?.money || {};
   const subscriptionSummary = currentBundle.subscriptions?.summary || {};
   const violationSummary = currentBundle.violations?.summary || {};
+  const transferFeeSummary = currentBundle.platformRevenue?.membershipTransferFees || {};
 
   return {
     currentRecordedSources: getRecordedSourcesValue(currentBundle),
@@ -236,6 +247,7 @@ const buildFinanceSummary = (currentBundle, previousBundle) => {
     packagePayments: Number(subscriptionSummary.grossAmount || 0),
     renewalValue: Number(subscriptionSummary.renewalAmount || 0),
     violationRevenue: Number(violationSummary.totalAmount || 0),
+    membershipTransferFeeRevenue: Number(transferFeeSummary.revenue || 0),
     coverage: bookingMoney.financialCoverage || 'Unavailable',
     error: currentBundle.failed ? 'Revenue sources could not be loaded.' : '',
   };
@@ -549,6 +561,10 @@ function RevenueSummary({ finance, loading }) {
             <div className="flex items-center justify-between gap-4">
               <dt className="text-sm font-semibold text-blue-200/60">Violation revenue</dt>
               <dd className="font-mono text-sm font-black text-white">{formatCurrency(finance.violationRevenue)}</dd>
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <dt className="text-sm font-semibold text-blue-200/60">Membership transfer fees</dt>
+              <dd className="font-mono text-sm font-black text-white">{formatCurrency(finance.membershipTransferFeeRevenue)}</dd>
             </div>
             <div className="flex items-center justify-between gap-4">
               <dt className="text-sm font-semibold text-blue-200/60">Trend</dt>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
-import RenewModal from "./RenewModal";
 import Logo from "../../assets/images/logo.png";
 import { apiFetch, API_BASE } from "../../services/api";
 import { getMembershipQr } from "../../services/subscriptionService";
@@ -209,12 +209,12 @@ function GoldUnderlineField({
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function CustomerProfile() {
+  const navigate = useNavigate();
   const avatarInputRef = useRef(null);
   const spotlightRef = useRef(null);
   const orbRef = useRef(null);
   const magneticRef = useRef(null);
   const fpOtpRefs = useRef([]);
-  const [showRenewModal, setShowRenewModal] = useState(false);
   const [membershipQrOpen, setMembershipQrOpen] = useState(false);
   const [membershipQr, setMembershipQr] = useState("");
   const [membershipQrLoading, setMembershipQrLoading] = useState(false);
@@ -961,7 +961,7 @@ export default function CustomerProfile() {
       </section>
 
       {/* ════════════════════ CONTENT GRID ════════════════════ */}
-      <section className="px-8 py-8 grid grid-cols-12 gap-8 flex-1 overflow-y-auto custom-scrollbar">
+      <section className="scrollbar-hidden px-8 py-8 grid grid-cols-12 gap-8 flex-1 overflow-y-auto">
         {/* ── VIP Pass Banner (Full Width) ── */}
         {isVip && profile.membership?.reservedSlots?.length > 0 && (
           <div className="col-span-12">
@@ -1006,14 +1006,6 @@ export default function CustomerProfile() {
 
               {/* Right: Expiration & Action */}
               <div className="relative z-10 flex flex-col items-center md:items-end gap-3 md:w-1/4">
-                {profile.membership.expireAt && (
-                  <div className="text-center md:text-right">
-                    <p className="text-[9px] text-yellow-500/60 uppercase tracking-widest">Valid Thru</p>
-                    <p className="text-sm text-yellow-400 font-bold tracking-widest mt-0.5" style={{ fontFamily: "monospace" }}>
-                      {new Date(profile.membership.expireAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })}
-                    </p>
-                  </div>
-                )}
                 <button
                   type="button"
                   onClick={() => setMembershipQrOpen(true)}
@@ -1030,17 +1022,7 @@ export default function CustomerProfile() {
                 )}
                 {profile.membership.expireAt && (
                   <button
-                    onClick={() => {
-                      if (
-                        profile.membership.reservedSlots?.some(
-                          (slot) => slot.entitlementId
-                        )
-                      ) {
-                        window.location.href = "/membership";
-                        return;
-                      }
-                      setShowRenewModal(true);
-                    }}
+                    onClick={() => navigate("/customer/membership-transfers")}
                     className="text-[11px] bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 px-6 py-2.5 rounded-full font-bold hover:bg-yellow-500/20 transition-all uppercase tracking-wider shadow-[0_0_15px_rgba(234,179,8,0.15)] hover:shadow-[0_0_25px_rgba(234,179,8,0.3)] hover:-translate-y-0.5"
                   >
                     Renew Pass
@@ -2208,16 +2190,6 @@ export default function CustomerProfile() {
           )}
         </div>
       </section>
-
-      <RenewModal
-        isOpen={showRenewModal}
-        membership={profile.membership}
-        onClose={() => setShowRenewModal(false)}
-        onSuccess={() => {
-          setShowRenewModal(false);
-          window.location.reload();
-        }}
-      />
 
       {membershipQrOpen && membershipQr && (
         <div

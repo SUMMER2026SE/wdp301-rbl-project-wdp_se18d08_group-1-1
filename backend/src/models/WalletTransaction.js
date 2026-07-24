@@ -27,7 +27,16 @@ const walletTransactionSchema = new mongoose.Schema(
     amount: {
       type: Number,
       required: [true, 'Amount is required'],
-      min: [1000, 'Minimum transaction amount is 1,000 VND'],
+      validate: {
+        validator(amount) {
+          return this.type === 'TRANSFER_FEE' ? amount > 0 : amount >= 1000;
+        },
+        message(props) {
+          return props.value > 0 && props.value < 1000
+            ? 'Minimum transaction amount is 1,000 VND'
+            : 'Transaction amount must be greater than 0';
+        },
+      },
     },
     balanceBefore: {
       type: Number,
