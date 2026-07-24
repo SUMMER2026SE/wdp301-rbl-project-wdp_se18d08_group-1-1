@@ -23,6 +23,7 @@ import {
 } from '../../services/bookingService';
 import { getMyVehicles } from '../../services/vehicleService';
 import { useSocket } from '../../hooks/useSocket';
+import CustomerPageHeader from '../../components/Customer/CustomerPageHeader';
 
 const formatMoney = (value = 0) => `${Number(value || 0).toLocaleString('vi-VN')} VND`;
 
@@ -274,19 +275,12 @@ export default function BookingPage() {
 
   return (
     <div className="min-h-full bg-[#050505] text-white p-6 md:p-8">
-      <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4 mb-8">
-        <div>
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-11 h-11 rounded-2xl bg-yellow-500/15 border border-yellow-500/30 flex items-center justify-center text-yellow-400">
-              <CalendarClock size={22} />
-            </div>
-            <div>
-              <h1 className="text-3xl font-black tracking-tight">My Bookings</h1>
-              <p className="text-sm text-white/45">Manage your parking reservations and check-in status.</p>
-            </div>
-          </div>
-        </div>
-      </div>
+      <CustomerPageHeader
+        icon={CalendarClock}
+        title="My Bookings"
+        description="Manage your parking reservations and check-in status."
+        className="mb-8"
+      />
 
       {(error || success) && (
         <div className={`mb-6 rounded-2xl border px-4 py-3 flex items-start gap-3 ${error

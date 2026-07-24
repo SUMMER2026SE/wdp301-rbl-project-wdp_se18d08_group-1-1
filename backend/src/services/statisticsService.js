@@ -312,6 +312,17 @@ const aggregatePaidAmount = async (Model, match) => {
   };
 };
 
+const calculatePlatformRevenueTotal = ({
+  vipRevenue = 0,
+  bookingRevenue = 0,
+  serviceRevenue = 0,
+  membershipTransferFeeRevenue = 0,
+}) =>
+  Number(vipRevenue || 0) +
+  Number(bookingRevenue || 0) +
+  Number(serviceRevenue || 0) +
+  Number(membershipTransferFeeRevenue || 0);
+
 const getAdminPlatformRevenueStatistics = async (filters = {}) => {
   const period = resolveDateRange({ range: 'all', ...filters });
   const bookingDateMatch = buildLifecycleDateMatch(
@@ -329,6 +340,7 @@ const getAdminPlatformRevenueStatistics = async (filters = {}) => {
     subscriptionPurchases,
     subscriptionRenewals,
     entitlementRenewals,
+    membershipTransferFees,
   ] = await Promise.all([
     Booking.find({ status: 'COMPLETED', ...bookingDateMatch })
       .select(
@@ -346,6 +358,11 @@ const getAdminPlatformRevenueStatistics = async (filters = {}) => {
     aggregatePaidAmount(MembershipEntitlementRenewal, {
       status: 'paid',
       ...renewalDateMatch,
+    }),
+    aggregatePaidAmount(WalletTransaction, {
+      type: 'TRANSFER_FEE',
+      status: 'COMPLETED',
+      ...buildCreatedAtMatch(period),
     }),
   ]);
 
@@ -385,8 +402,12 @@ const getAdminPlatformRevenueStatistics = async (filters = {}) => {
     subscriptionPurchases.count +
     subscriptionRenewals.count +
     entitlementRenewals.count;
-  const totalRevenue =
-    vipRevenue + bookingRevenue.bookingRevenue + bookingRevenue.serviceRevenue;
+  const totalRevenue = calculatePlatformRevenueTotal({
+    vipRevenue,
+    bookingRevenue: bookingRevenue.bookingRevenue,
+    serviceRevenue: bookingRevenue.serviceRevenue,
+    membershipTransferFeeRevenue: membershipTransferFees.amount,
+  });
 
   return {
     period,
@@ -406,6 +427,10 @@ const getAdminPlatformRevenueStatistics = async (filters = {}) => {
     service: {
       revenue: bookingRevenue.serviceRevenue,
       completedBookingCount: bookingRevenue.serviceBookingCount,
+    },
+    membershipTransferFees: {
+      revenue: membershipTransferFees.amount,
+      transactionCount: membershipTransferFees.count,
     },
     totalRevenue,
   };
@@ -785,5 +810,6 @@ module.exports = {
     normalizeCompletedBookingStatistics,
     buildLifecycleDateMatch,
     calculatePlatformBookingRevenue,
+    calculatePlatformRevenueTotal,
   },
 };

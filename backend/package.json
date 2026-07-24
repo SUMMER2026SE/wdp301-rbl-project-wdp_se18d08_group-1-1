@@ -26,6 +26,7 @@
     "cloudinary": "^2.6.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
+    "dejavu-fonts-ttf": "^2.37.3",
     "dotenv": "^16.5.0",
     "express": "^5.1.0",
     "express-validator": "^7.2.1",
@@ -36,6 +37,7 @@
     "mongoose": "^8.15.1",
     "multer": "^2.0.1",
     "nodemailer": "^8.0.8",
+    "pdfkit": "^0.19.1",
     "socket.io": "^4.8.3",
     "streamifier": "^0.1.1"
   },

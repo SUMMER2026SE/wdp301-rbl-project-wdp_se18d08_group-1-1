@@ -5,7 +5,7 @@ const {
   calculateTransferPricing,
 } = require('../services/membershipEntitlementTransferService');
 
-test('calculates prorated transfer value and clamps the processing fee', () => {
+test('calculates an exact 5% processing fee from the remaining value', () => {
   const now = new Date('2026-07-16T00:00:00.000Z');
   const result = calculateTransferPricing(
     {
@@ -19,11 +19,11 @@ test('calculates prorated transfer value and clamps the processing fee', () => {
 
   assert.equal(result.remainingValue, 150000);
   assert.equal(result.askingPrice, 120000);
-  assert.equal(result.transferFee, 10000);
-  assert.equal(result.totalDue, 130000);
+  assert.equal(result.transferFee, 7500);
+  assert.equal(result.totalDue, 127500);
 });
 
-test('allows a free transfer but still charges the minimum processing fee', () => {
+test('calculates the same exact 5% fee for a free transfer', () => {
   const result = calculateTransferPricing(
     {
       validFrom: new Date('2026-07-01T00:00:00.000Z'),
@@ -33,8 +33,9 @@ test('allows a free transfer but still charges the minimum processing fee', () =
     0,
     new Date('2026-07-10T00:00:00.000Z')
   );
+  assert.equal(result.remainingValue, 212000);
   assert.equal(result.askingPrice, 0);
-  assert.equal(result.transferFee, 10000);
+  assert.equal(result.transferFee, 10600);
 });
 
 test('rejects an asking price above the remaining value', () => {
