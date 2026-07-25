@@ -5,12 +5,14 @@ import {
   Clock3,
   Crown,
   Filter,
+  Globe2,
   Mail,
   ParkingCircle,
   RefreshCw,
   Search,
   ShieldCheck,
   TimerReset,
+  UserCheck,
   UserRound,
   X,
 } from 'lucide-react';
@@ -227,7 +229,7 @@ function TransferReviewSection({ transfers, onReview }) {
       <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="font-black text-white">Transfer reviews</h2>
-          <p className="mt-1 text-sm font-medium text-slate-500">Only recipient-accepted requests can be approved.</p>
+          <p className="mt-1 text-sm font-medium text-slate-500">Review direct transfers and public marketplace listings.</p>
         </div>
         <span className="inline-flex w-fit items-center gap-2 rounded-full border border-amber-400/25 bg-amber-400/10 px-3 py-1 text-xs font-black text-amber-300">
           <TimerReset size={14} /> {pendingTransfers.length} pending
@@ -238,8 +240,12 @@ function TransferReviewSection({ transfers, onReview }) {
         {pendingTransfers.map((transfer) => (
           <div key={transfer._id} className="flex flex-col gap-3 py-3 lg:flex-row lg:items-center">
             <div className="min-w-0 flex-1">
+              <span className={`mb-2 inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] ${transfer.mode === 'PUBLIC' ? 'border-cyan-400/20 bg-cyan-400/10 text-cyan-300' : 'border-violet-400/20 bg-violet-400/10 text-violet-300'}`}>
+                {transfer.mode === 'PUBLIC' ? <Globe2 size={12} /> : <UserCheck size={12} />}
+                {transfer.mode === 'PUBLIC' ? 'Public listing' : 'Direct transfer'}
+              </span>
               <p className="truncate text-sm font-black text-slate-100">
-                {transfer.entitlementId?.slotCode || 'Parking space'} · {transfer.fromUserId?.email || 'Sender'} → {transfer.toUserId?.email || 'Recipient'}
+                {transfer.entitlementId?.slotCode || 'Parking space'} · {transfer.fromUserId?.email || 'Sender'} → {transfer.mode === 'PUBLIC' ? 'Marketplace' : (transfer.toUserId?.email || 'Recipient')}
               </p>
               <p className="mt-1 text-xs font-semibold text-slate-500">
                 Price {formatCurrency(transfer.askingPrice)} · Fee {formatCurrency(transfer.transferFee)}
@@ -258,7 +264,7 @@ function TransferReviewSection({ transfers, onReview }) {
                 onClick={() => onReview(transfer._id, true)}
                 className="h-10 rounded-xl bg-emerald-400 px-4 text-xs font-black text-slate-950 transition hover:bg-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-200/70"
               >
-                Approve & lock 24h
+                {transfer.mode === 'PUBLIC' ? 'Approve & list 7d' : 'Approve & lock 24h'}
               </button>
             </div>
           </div>
