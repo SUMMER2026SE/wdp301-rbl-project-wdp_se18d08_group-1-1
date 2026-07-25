@@ -62,6 +62,7 @@ export default function CustomerNotifications({ contextRole = 'customer' }) {
     notifications,
     unreadCount,
     loading,
+    error,
     hasMore,
     filters,
     fetchMore,
@@ -85,7 +86,7 @@ export default function CustomerNotifications({ contextRole = 'customer' }) {
           <div>
             <h1 className="text-2xl font-bold text-white">Notifications</h1>
             <p className="text-sm text-gray-500 mt-1">
-              {unreadCount > 0 ? `${unreadCount} unread notifications` : 'All caught up'}
+              {error ? 'Notifications unavailable' : unreadCount > 0 ? `${unreadCount} unread notifications` : 'All caught up'}
             </p>
           </div>
           {unreadCount > 0 && (
@@ -130,7 +131,15 @@ export default function CustomerNotifications({ contextRole = 'customer' }) {
         </div>
 
         <div className="space-y-2">
-          {loading && notifications.length === 0 ? (
+          {error ? (
+            <div className="flex flex-col items-center py-16 text-center" role="alert">
+              <div className="w-16 h-16 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mb-4">
+                <Bell size={28} className="text-red-400" />
+              </div>
+              <p className="text-red-300 font-medium">Unable to load notifications</p>
+              <p className="text-red-200/60 text-sm mt-1">{error}</p>
+            </div>
+          ) : loading && notifications.length === 0 ? (
             <div className="flex flex-col items-center py-16">
               <div className="w-8 h-8 border-2 border-yellow-400/30 border-t-yellow-400 rounded-full animate-spin" />
               <p className="text-gray-500 text-sm mt-4">Loading notifications...</p>
