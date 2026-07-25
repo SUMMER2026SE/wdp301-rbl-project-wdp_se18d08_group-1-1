@@ -15,6 +15,7 @@ import {
   LogIn,
   LogOut
 } from "lucide-react";
+import CustomerPageHeader from "../../components/Customer/CustomerPageHeader";
 
 export default function ParkingHistory() {
   const [sessions, setSessions] = useState([]);
@@ -146,23 +147,15 @@ export default function ParkingHistory() {
       className="min-h-full flex flex-col p-4 md:p-8"
       style={{
         backgroundColor: "#050505",
-        fontFamily: "'Plus Jakarta Sans', 'Montserrat', sans-serif",
       }}
     >
       {/* ── HEADER ── */}
-      <div className="flex items-center gap-4 mb-8 md:mb-10">
-        <div className="p-3 bg-yellow-500/10 text-yellow-400 rounded-2xl border border-yellow-500/20 shadow-[0_0_20px_rgba(234,179,8,0.15)] shrink-0">
-          <History size={24} className="md:w-7 md:h-7" />
-        </div>
-        <div>
-          <h1 className="text-2xl md:text-3xl font-black text-white tracking-tight">
-            Parking History
-          </h1>
-          <p className="text-xs md:text-sm font-medium mt-1 text-gray-400">
-            Review your past parking sessions and expenses
-          </p>
-        </div>
-      </div>
+      <CustomerPageHeader
+        icon={History}
+        title="Parking History"
+        description="Review your past parking sessions and expenses."
+        className="mb-8 md:mb-10"
+      />
 
       {/* ── CONTENT ── */}
       {loading ? (

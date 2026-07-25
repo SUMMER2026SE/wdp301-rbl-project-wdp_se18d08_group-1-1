@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Menu, Transition } from "@headlessui/react";
 import {
   ArrowDownLeft,
   ArrowUpRight,
@@ -6,6 +7,7 @@ import {
   CalendarCheck,
   Car,
   Check,
+  ChevronDown,
   ChevronRight,
   CreditCard,
   Loader2,
@@ -33,6 +35,12 @@ const DEFAULT_TRANSACTION_LIMIT = 4;
 const ALL_TRANSACTION_LIMIT = 50;
 const MIN_TOP_UP = 10000;
 const QUICK_AMOUNTS = [50000, 100000, 200000, 500000];
+const INSIGHT_RANGE_OPTIONS = [
+  { value: "7d", label: "7 days" },
+  { value: "30d", label: "30 days" },
+  { value: "month", label: "This month" },
+  { value: "all", label: "All time" },
+];
 
 const formatMoney = (value = 0) =>
   `${Number(value || 0).toLocaleString("vi-VN")} VND`;
@@ -49,7 +57,7 @@ const formatDateTime = (value) =>
     : "-";
 
 const isCredit = (transaction) =>
-  transaction?.type === "TOP_UP" || transaction?.type === "REFUND";
+  ["TOP_UP", "REFUND", "TRANSFER_IN"].includes(transaction?.type);
 
 const statusStyle = (status = "") => {
   const normalized = String(status).toUpperCase();
@@ -78,6 +86,9 @@ const transactionTitle = (transaction) => {
   if (transaction?.description) return transaction.description;
   if (transaction?.type === "TOP_UP") return "VALO wallet top-up";
   if (transaction?.type === "REFUND") return "Wallet refund";
+  if (transaction?.type === "TRANSFER_IN") return "Membership transfer proceeds";
+  if (transaction?.type === "TRANSFER_OUT") return "Membership transfer payment";
+  if (transaction?.type === "TRANSFER_FEE") return "Membership transfer processing fee";
   if (transaction?.refSource === "parking") return "Parking payment";
   return "Wallet payment";
 };
@@ -85,6 +96,7 @@ const transactionTitle = (transaction) => {
 const transactionIcon = (transaction, className = "") => {
   if (transaction?.type === "TOP_UP") return <ArrowDownLeft className={className} />;
   if (transaction?.type === "REFUND") return <RefreshCw className={className} />;
+  if (transaction?.type === "TRANSFER_IN") return <ArrowDownLeft className={className} />;
   if (transaction?.refSource === "parking") return <Car className={className} />;
   return <ArrowUpRight className={className} />;
 };
@@ -433,17 +445,7 @@ function BookingInsightsPanel({ data, loading, error, range, onRangeChange }) {
             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-yellow-500/10 text-yellow-300">
               <CalendarCheck className="h-5 w-5" />
             </div>
-            <select
-              value={range}
-              onChange={(event) => onRangeChange(event.target.value)}
-              aria-label="Booking insight period"
-              className="rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs font-bold text-white outline-none transition focus:border-yellow-500/60 focus:ring-2 focus:ring-yellow-500/10"
-            >
-              <option value="7d">7 days</option>
-              <option value="30d">30 days</option>
-              <option value="month">This month</option>
-              <option value="all">All time</option>
-            </select>
+            <InsightRangeDropdown value={range} onChange={onRangeChange} />
           </div>
           <h2 className="mt-6 text-xl font-black tracking-tight">Your parking story</h2>
           <p className="mt-2 max-w-sm text-sm leading-6 text-[#AFC2D8]">
@@ -497,6 +499,72 @@ function BookingInsightsPanel({ data, loading, error, range, onRangeChange }) {
         </div>
       </div>
     </section>
+  );
+}
+
+function InsightRangeDropdown({ value, onChange }) {
+  const selected =
+    INSIGHT_RANGE_OPTIONS.find((option) => option.value === value) ||
+    INSIGHT_RANGE_OPTIONS[1];
+
+  return (
+    <Menu as="div" className="relative z-20">
+      {({ open }) => (
+        <>
+          <Menu.Button
+            aria-label="Booking insight period"
+            className="flex h-11 min-w-[148px] items-center justify-between gap-3 rounded-xl border border-yellow-500/40 bg-[#0B0B0B] px-4 text-sm font-bold text-white shadow-[0_8px_24px_rgba(0,0,0,0.28)] outline-none transition hover:border-yellow-400/70 hover:bg-[#111111] focus-visible:border-yellow-400 focus-visible:ring-2 focus-visible:ring-yellow-400/20"
+          >
+            <span>{selected.label}</span>
+            <ChevronDown
+              aria-hidden="true"
+              className={`h-4 w-4 text-yellow-300 transition-transform duration-200 ${
+                open ? "rotate-180" : ""
+              }`}
+            />
+          </Menu.Button>
+
+          <Transition
+            as={Fragment}
+            enter="transition ease-out duration-150"
+            enterFrom="translate-y-1 scale-95 opacity-0"
+            enterTo="translate-y-0 scale-100 opacity-100"
+            leave="transition ease-in duration-100"
+            leaveFrom="translate-y-0 scale-100 opacity-100"
+            leaveTo="translate-y-1 scale-95 opacity-0"
+          >
+            <Menu.Items className="absolute right-0 mt-2 w-44 origin-top-right overflow-hidden rounded-xl border border-yellow-500/20 bg-[#111111] p-1.5 shadow-2xl shadow-black/70 outline-none">
+              {INSIGHT_RANGE_OPTIONS.map((option) => (
+                <Menu.Item key={option.value}>
+                  {({ active }) => {
+                    const isSelected = option.value === value;
+
+                    return (
+                      <button
+                        type="button"
+                        onClick={() => onChange(option.value)}
+                        className={`flex h-10 w-full items-center gap-3 rounded-lg px-3 text-left text-sm font-semibold transition ${
+                          isSelected
+                            ? "bg-yellow-500/15 text-yellow-200"
+                            : active
+                              ? "bg-white/[0.06] text-white"
+                              : "text-[#AFC2D8]"
+                        }`}
+                      >
+                        <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+                          {isSelected && <Check aria-hidden="true" className="h-4 w-4" />}
+                        </span>
+                        <span>{option.label}</span>
+                      </button>
+                    );
+                  }}
+                </Menu.Item>
+              ))}
+            </Menu.Items>
+          </Transition>
+        </>
+      )}
+    </Menu>
   );
 }
 

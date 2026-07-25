@@ -834,6 +834,11 @@ exports.createKioskSession = async (req, res, next) => {
           message: 'Giữ ô tạm thời không thuộc biển số xe này. Vui lòng chọn lại ô đỗ.',
         });
       }
+    } else if (bookingHoldId) {
+      holdToConsume = await BookingHold.findOne({
+        _id: bookingHoldId,
+        status: 'active'
+      });
     }
 
     if (normalizedFinalSlot && finalFloorId) {
@@ -849,6 +854,45 @@ exports.createKioskSession = async (req, res, next) => {
           code: 'SLOT_OCCUPIED',
           message: 'Ô đỗ này hiện đã có xe đỗ. Vui lòng chọn ô khác.',
         });
+      }
+
+      // Check if slot is reserved for someone else's VIP package
+      const isVIPReserved = await MembershipSlotEntitlement.findOne({
+        floorId: finalFloorId,
+        slotCode: normalizedFinalSlot,
+        status: { $in: ['active', 'transfer_locked'] },
+        expireAt: { $gt: now },
+      });
+      
+      const isSubReserved = await mongoose.model('Subscription').findOne({
+        status: 'active',
+        expireAt: { $gt: now },
+        slots: {
+          $elemMatch: {
+            floorId: finalFloorId,
+            slotCode: normalizedFinalSlot,
+          },
+        },
+      });
+
+      if (isVIPReserved || isSubReserved) {
+        let isOwnVipSlot = false;
+        
+        if (userId) {
+           if (isVIPReserved && String(isVIPReserved.ownerId) === String(userId)) {
+             isOwnVipSlot = true;
+           } else if (isSubReserved && String(isSubReserved.user) === String(userId)) {
+             isOwnVipSlot = true;
+           }
+        }
+        
+        if (!isOwnVipSlot) {
+           return res.status(400).json({
+             success: false,
+             code: 'SLOT_VIP_RESERVED',
+             message: 'Ô đỗ này đã được đăng ký cố định cho khách hàng VIP. Vui lòng chọn ô khác.',
+           });
+        }
       }
     }
 

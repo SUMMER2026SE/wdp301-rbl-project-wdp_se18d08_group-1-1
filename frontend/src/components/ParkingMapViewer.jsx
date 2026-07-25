@@ -32,10 +32,6 @@ const SlotElement = React.memo(({ el, floorId, style, isOccupied, isSelected, is
     finalBgColor = '#cffafe'; // cyan-100
     finalBorderColor = '#06b6d4'; // cyan-500
     textColor = '#06b6d4';
-  } else if (isHeld) {
-    finalBgColor = '#ffedd5'; // orange-100
-    finalBorderColor = '#f97316'; // orange-500
-    textColor = '#c2410c'; // orange-700
   } else if (isReserved) {
     // Admin / Staff see different borders for VIP types
     if (canViewLicensePlate && el.subscriptionType === 'yearly') {
@@ -56,19 +52,25 @@ const SlotElement = React.memo(({ el, floorId, style, isOccupied, isSelected, is
     finalBgColor = '#fecdd3'; // rose-200
     finalBorderColor = '#e11d48'; // rose-600
     textColor = '#e11d48';
+  } else if (isHeld) {
+    finalBgColor = '#ffedd5'; // orange-100
+    finalBorderColor = '#f97316'; // orange-500
+    textColor = '#c2410c'; // orange-700
   }
 
   const slotStatusLabel = isMaintenance
     ? `${slotName}: Maintenance`
-    : isOccupied
-      ? `${slotName}: Occupied${(session?.licensePlate && canViewLicensePlate) ? ` - ${session.licensePlate}` : ''}`
-      : isHeld
-        ? `${slotName}: Holding`
-        : isReserved
-          ? `${slotName}: VIP Pass`
-          : hasName
-            ? `${slotName}: Available`
-            : 'Unavailable slot';
+    : isSelected
+      ? `${slotName}: Selected`
+      : isReserved
+        ? `${slotName}: VIP Pass${(isOccupied && session?.licensePlate && canViewLicensePlate) ? ` - ${session.licensePlate}` : ''}`
+        : isOccupied
+          ? `${slotName}: Occupied${(session?.licensePlate && canViewLicensePlate) ? ` - ${session.licensePlate}` : ''}`
+          : isHeld
+            ? `${slotName}: Holding`
+            : hasName
+              ? `${slotName}: Available`
+              : 'Unavailable slot';
 
   return (
     <div

@@ -22,6 +22,7 @@ import { formatCurrency, formatDate } from '@/utils/formatters';
 
 type Props = NativeStackScreenProps<WalletStackParamList, 'TransactionHistory'>;
 type TypeFilter = 'ALL' | 'TOP_UP' | 'PAYMENT' | 'REFUND';
+type TransferType = 'TRANSFER_OUT' | 'TRANSFER_IN' | 'TRANSFER_FEE';
 type StatusFilter = 'ALL' | 'PENDING' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
 
 const TYPE_LABELS: Record<TypeFilter, string> = {
@@ -29,6 +30,11 @@ const TYPE_LABELS: Record<TypeFilter, string> = {
   TOP_UP: 'Top up',
   PAYMENT: 'Payment',
   REFUND: 'Refund',
+};
+const TRANSFER_TYPE_LABELS: Record<TransferType, string> = {
+  TRANSFER_OUT: 'Membership transfer payment',
+  TRANSFER_IN: 'Membership transfer proceeds',
+  TRANSFER_FEE: 'Membership transfer fee',
 };
 
 const STATUS_LABELS: Record<StatusFilter, string> = {
@@ -84,11 +90,15 @@ export const TransactionHistoryScreen = ({ navigation }: Props) => {
   };
 
   const renderTransaction = ({ item }: { item: WalletTransaction }) => {
-    const itemType = String(item.type as TransactionType) as TypeFilter;
+    const itemType = String(item.type as TransactionType);
     const itemStatus = String(item.status as TransactionStatus) as StatusFilter;
-    const isCredit = itemType === 'TOP_UP' || itemType === 'REFUND';
+    const isCredit = itemType === 'TOP_UP' || itemType === 'REFUND' || itemType === 'TRANSFER_IN';
     const amountColor = isCredit ? COLORS.success : COLORS.warning;
     const statusColor = STATUS_COLORS[itemStatus] ?? COLORS.textMuted;
+    const typeLabel =
+      TYPE_LABELS[itemType as TypeFilter] ||
+      TRANSFER_TYPE_LABELS[itemType as TransferType] ||
+      itemType;
 
     return (
       <View style={styles.transactionCard}>
@@ -98,14 +108,14 @@ export const TransactionHistoryScreen = ({ navigation }: Props) => {
         <View style={styles.transactionBody}>
           <View style={styles.transactionTop}>
             <Text style={styles.transactionTitle} numberOfLines={1}>
-              {item.description || TYPE_LABELS[itemType] || itemType}
+              {item.description || typeLabel}
             </Text>
             <Text style={[styles.amount, { color: amountColor }]}>
               {isCredit ? '+' : '-'}{formatCurrency(Math.abs(item.amount))}
             </Text>
           </View>
           <View style={styles.metaRow}>
-            <Text style={styles.metaText}>{TYPE_LABELS[itemType] || itemType}</Text>
+            <Text style={styles.metaText}>{typeLabel}</Text>
             <View style={[styles.statusPill, { backgroundColor: `${statusColor}18` }]}>
               <Text style={[styles.statusText, { color: statusColor }]}>{STATUS_LABELS[itemStatus] || itemStatus}</Text>
             </View>

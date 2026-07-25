@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import {
   getAdminBookingStatistics,
+  getAdminPlatformRevenueStatistics,
   getAdminSubscriptionStatistics,
   getViolationRevenueStatistics,
 } from '../../services/statisticsService';
@@ -129,6 +130,7 @@ export default function RevenueAnalytics() {
   const [booking, setBooking] = useState(null);
   const [subscriptions, setSubscriptions] = useState(null);
   const [violations, setViolations] = useState(null);
+  const [platformRevenue, setPlatformRevenue] = useState(null);
   const [error, setError] = useState('');
   const reduceMotion = useReducedMotion();
 
@@ -138,15 +140,18 @@ export default function RevenueAnalytics() {
       getAdminBookingStatistics(range),
       getAdminSubscriptionStatistics(range),
       getViolationRevenueStatistics(range),
+      getAdminPlatformRevenueStatistics(range),
     ]).then((results) => {
       if (!active) return;
-      const [bookingResult, subscriptionResult, violationResult] = results;
+      const [bookingResult, subscriptionResult, violationResult, platformResult] = results;
       const bookingResponse =
         bookingResult.status === 'fulfilled' ? bookingResult.value : null;
       const subscriptionResponse =
         subscriptionResult.status === 'fulfilled' ? subscriptionResult.value : null;
       const violationResponse =
         violationResult.status === 'fulfilled' ? violationResult.value : null;
+      const platformResponse =
+        platformResult.status === 'fulfilled' ? platformResult.value : null;
 
       setBooking(
         bookingResponse?.ok && bookingResponse.data?.success
@@ -163,11 +168,19 @@ export default function RevenueAnalytics() {
           ? violationResponse.data.data
           : null
       );
+      setPlatformRevenue(
+        platformResponse?.ok && platformResponse.data?.success
+          ? platformResponse.data.data
+          : null
+      );
 
       const statisticsUnavailable =
         bookingResponse?.status === 404 || subscriptionResponse?.status === 404;
       const allFailed =
-        !bookingResponse?.ok && !subscriptionResponse?.ok && !violationResponse?.ok;
+        !bookingResponse?.ok &&
+        !subscriptionResponse?.ok &&
+        !violationResponse?.ok &&
+        !platformResponse?.ok;
       setError(
         statisticsUnavailable
           ? 'Detailed booking and package analytics are currently disabled.'
@@ -200,6 +213,7 @@ export default function RevenueAnalytics() {
   const bookingOperations = booking?.operational || {};
   const subscriptionSummary = subscriptions?.summary || {};
   const violationSummary = violations?.summary || {};
+  const transferFeeSummary = platformRevenue?.membershipTransferFees || {};
   const statusRows = booking?.byStatus || [];
   const packageRows = subscriptions?.byPackage || [];
   const revenueTimeline = buildRevenueTimeline(
@@ -245,6 +259,13 @@ export default function RevenueAnalytics() {
       value: formatCurrency(subscriptionSummary.grossAmount),
       note: `${formatNumber(subscriptionSummary.sold)} packages in this period`,
       tone: 'purple',
+    },
+    {
+      icon: CircleDollarSign,
+      label: 'Membership transfer fees',
+      value: formatCurrency(transferFeeSummary.revenue),
+      note: `${formatNumber(transferFeeSummary.transactionCount)} completed fee transactions`,
+      tone: 'emerald',
     },
   ];
 
@@ -416,7 +437,7 @@ function FinancialOverviewStrip({ metrics, reduceMotion }) {
     <motion.section
       initial={reduceMotion ? false : { opacity: 0, y: 10 }}
       animate={reduceMotion ? undefined : { opacity: 1, y: 0 }}
-      className="grid border-y border-white/[0.08] md:grid-cols-2 xl:grid-cols-4"
+      className="grid border-y border-white/[0.08] md:grid-cols-2 xl:grid-cols-5"
     >
       {metrics.map((metric, index) => {
         const Icon = metric.icon;

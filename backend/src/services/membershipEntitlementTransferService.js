@@ -5,9 +5,15 @@ const MembershipSlotEntitlement = require('../models/MembershipSlotEntitlement')
 const Session = require('../models/Session');
 const Slot = require('../models/Slot');
 const User = require('../models/User');
+const ParkingFloor = require('../models/ParkingFloor');
+const TicketPackage = require('../models/TicketPackage');
 const Vehicle = require('../models/Vehicle');
 const walletService = require('./walletService');
-const { buildPdf, formatCurrency, formatDate } = require('./pdfService');
+const {
+  buildTransferAgreementPdf,
+  formatCurrency,
+  formatDate,
+} = require('./pdfService');
 const { recomputeUserMembership } = require('./membershipProjectionService');
 
 const OPEN_STATUSES = ['PENDING_RECIPIENT', 'PENDING_ADMIN', 'AWAITING_PAYMENT'];
@@ -31,7 +37,7 @@ const calculateTransferPricing = (entitlement, askingPrice, now = new Date()) =>
       'ASKING_PRICE_TOO_HIGH'
     );
   }
-  const transferFee = Math.min(50000, Math.max(10000, floor1000(remainingValue * 0.05)));
+  const transferFee = remainingValue * 0.05;
   return {
     askingPrice: normalizedAskingPrice,
     remainingValue,
@@ -51,7 +57,11 @@ const populateTransfer = (query) =>
     .populate({
       path: 'entitlementId',
       populate: [
-        { path: 'floorId', select: 'name floorNumber' },
+        {
+          path: 'floorId',
+          select: 'name floorNumber parkingLotID',
+          populate: { path: 'parkingLotID', select: 'name address' },
+        },
         { path: 'packageId', select: 'name type price' },
       ],
     })
@@ -283,18 +293,21 @@ const settleTransfer = async (transferId, recipientId) => {
         }
       );
     }
-    const feePayment = await walletService.debitWallet(
-      recipientId,
-      transfer.transferFee,
-      'Membership transfer processing fee',
-      {
-        refSource: 'membership_transfer',
-        refSourceId: transfer._id,
-        idempotencyKey: `membership-transfer:${transfer._id}:fee`,
-        transactionType: 'TRANSFER_FEE',
-        session,
-      }
-    );
+    let feePayment = null;
+    if (transfer.transferFee > 0) {
+      feePayment = await walletService.debitWallet(
+        recipientId,
+        transfer.transferFee,
+        'Membership transfer processing fee',
+        {
+          refSource: 'membership_transfer',
+          refSourceId: transfer._id,
+          idempotencyKey: `membership-transfer:${transfer._id}:fee`,
+          transactionType: 'TRANSFER_FEE',
+          session,
+        }
+      );
+    }
     const entitlement = await MembershipSlotEntitlement.findOneAndUpdate(
       {
         _id: transfer.entitlementId,
@@ -324,17 +337,45 @@ const settleTransfer = async (transferId, recipientId) => {
     transfer.completedAt = new Date();
     transfer.recipientWalletTransactionId = recipientPayment?.transaction?._id || null;
     transfer.senderWalletTransactionId = senderCredit?.transaction?._id || null;
-    transfer.feeWalletTransactionId = feePayment.transaction._id;
+    transfer.feeWalletTransactionId = feePayment?.transaction?._id || null;
     transfer.contractNumber = `MTR-${Date.now()}-${crypto.randomInt(1000, 10000)}`;
+    const [fromUser, toUser, floor, ticketPackage] = await Promise.all([
+      User.findById(transfer.fromUserId).select('username email').session(session).lean(),
+      User.findById(recipientId).select('username email').session(session).lean(),
+      ParkingFloor.findById(entitlement.floorId)
+        .select('name floorNumber parkingLotID')
+        .populate('parkingLotID', 'name address')
+        .session(session)
+        .lean(),
+      TicketPackage.findById(entitlement.packageId).select('name type').session(session).lean(),
+    ]);
     transfer.contractSnapshot = {
       contractNumber: transfer.contractNumber,
       entitlementId: entitlement._id,
       slotCode: entitlement.slotCode,
       floorId: entitlement.floorId,
+      floor: floor
+        ? { name: floor.name, floorNumber: floor.floorNumber }
+        : null,
+      parkingLot: floor?.parkingLotID
+        ? { name: floor.parkingLotID.name, address: floor.parkingLotID.address }
+        : null,
+      package: ticketPackage
+        ? { name: ticketPackage.name, type: ticketPackage.type }
+        : null,
       fromUserId: transfer.fromUserId,
       toUserId: recipientId,
+      fromUser: fromUser
+        ? { username: fromUser.username, email: fromUser.email }
+        : null,
+      toUser: toUser
+        ? { username: toUser.username, email: toUser.email }
+        : null,
+      reason: transfer.reason,
       askingPrice: transfer.askingPrice,
       transferFee: transfer.transferFee,
+      totalDue: transfer.askingPrice + transfer.transferFee,
+      paymentMethod: 'VALO Wallet',
       validFrom: entitlement.validFrom,
       expireAt: entitlement.expireAt,
       completedAt: transfer.completedAt,
@@ -366,6 +407,100 @@ const listTransfers = async (userId, role, filters = {}) => {
     .lean();
 };
 
+const valueOrFallback = (snapshotValue, liveValue) =>
+  snapshotValue === undefined || snapshotValue === null || snapshotValue === ''
+    ? liveValue
+    : snapshotValue;
+
+const buildTransferContractData = (transfer) => {
+  const snapshot = transfer.contractSnapshot || {};
+  const entitlement = transfer.entitlementId || {};
+  const floor = snapshot.floor || entitlement.floorId || {};
+  const parkingLot = snapshot.parkingLot || floor.parkingLotID || {};
+  const ticketPackage = snapshot.package || entitlement.packageId || {};
+  const fromUser = snapshot.fromUser || transfer.fromUserId || {};
+  const toUser = snapshot.toUser || transfer.toUserId || {};
+  const completedAt = valueOrFallback(snapshot.completedAt, transfer.completedAt);
+  const askingPrice = valueOrFallback(snapshot.askingPrice, transfer.askingPrice);
+  const transferFee = valueOrFallback(snapshot.transferFee, transfer.transferFee);
+  const totalDue = valueOrFallback(
+    snapshot.totalDue,
+    Number(askingPrice || 0) + Number(transferFee || 0)
+  );
+  return {
+    contractNumber: valueOrFallback(snapshot.contractNumber, transfer.contractNumber),
+    completedAt,
+    packageName: ticketPackage.name || ticketPackage.type,
+    fromUser,
+    toUser,
+    parkingLot,
+    floorName: floor.name || (
+      floor.floorNumber !== undefined ? `Tầng ${floor.floorNumber}` : null
+    ),
+    slotCode: valueOrFallback(snapshot.slotCode, entitlement.slotCode),
+    validFrom: valueOrFallback(snapshot.validFrom, entitlement.validFrom),
+    expireAt: valueOrFallback(snapshot.expireAt, entitlement.expireAt),
+    askingPrice,
+    transferFee,
+    totalDue,
+    paymentMethod: snapshot.paymentMethod || (
+      transfer.feeWalletTransactionId ? 'VALO Wallet' : null
+    ),
+  };
+};
+
+const buildTransferContractLines = (transfer) => {
+  const data = buildTransferContractData(transfer);
+  const lines = [
+    'CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM',
+    'Độc lập – Tự do – Hạnh phúc',
+    '',
+    data.completedAt ? `Ngày ${formatDate(data.completedAt)}` : '',
+    'HỢP ĐỒNG CHUYỂN NHƯỢNG QUYỀN SỬ DỤNG CHỖ ĐỖ XE',
+    data.contractNumber
+      ? `Số hợp đồng: ${data.contractNumber}`
+      : '',
+    data.packageName
+      ? `Loại quyền: ${data.packageName}`
+      : '',
+    '',
+    'BÊN CHUYỂN NHƯỢNG (BÊN A)',
+    data.fromUser.username ? `Họ và tên/Tên tài khoản: ${data.fromUser.username}` : '',
+    data.fromUser.email ? `Email: ${data.fromUser.email}` : '',
+    '',
+    'BÊN NHẬN CHUYỂN NHƯỢNG (BÊN B)',
+    data.toUser.username ? `Họ và tên/Tên tài khoản: ${data.toUser.username}` : '',
+    data.toUser.email ? `Email: ${data.toUser.email}` : '',
+    '',
+    'Hai bên tự nguyện thỏa thuận và đồng ý ký kết hợp đồng với các điều khoản sau:',
+    '',
+    'ĐIỀU 1: ĐỐI TƯỢNG CỦA HỢP ĐỒNG',
+    data.parkingLot.name ? `Bãi đỗ xe: ${data.parkingLot.name}` : '',
+    data.parkingLot.address ? `Vị trí bãi: ${data.parkingLot.address}` : '',
+    data.floorName ? `Tầng: ${data.floorName}` : '',
+    data.slotCode ? `Chỗ đỗ xe: ${data.slotCode}` : '',
+    data.validFrom ? `Hiệu lực từ: ${formatDate(data.validFrom)}` : '',
+    data.expireAt ? `Hiệu lực đến: ${formatDate(data.expireAt)}` : '',
+    '',
+    'ĐIỀU 2: GIÁ CHUYỂN NHƯỢNG VÀ THANH TOÁN',
+    data.askingPrice !== undefined && data.askingPrice !== null
+      ? `Giá chuyển nhượng: ${formatCurrency(data.askingPrice)}`
+      : '',
+    data.transferFee !== undefined && data.transferFee !== null
+      ? `Phí xử lý: ${formatCurrency(data.transferFee)}`
+      : '',
+    data.totalDue !== undefined && data.totalDue !== null
+      ? `Tổng thanh toán của Bên B: ${formatCurrency(data.totalDue)}`
+      : '',
+    data.paymentMethod
+      ? `Phương thức thanh toán: ${data.paymentMethod}`
+      : '',
+    data.completedAt ? `Thanh toán hoàn tất: ${formatDate(data.completedAt)}` : '',
+  ];
+
+  return lines.filter((line, index) => line !== '' || lines[index - 1] !== '');
+};
+
 const generateTransferPdf = async (transferId, userId, role) => {
   const transfer = await populateTransfer(
     MembershipEntitlementTransfer.findById(transferId)
@@ -381,25 +516,7 @@ const generateTransferPdf = async (transferId, userId, role) => {
   ) {
     throw error('You cannot access this contract.', 403);
   }
-  const snapshot = transfer.contractSnapshot;
-  const maskEmail = (email = '') => {
-    const [name, domain] = String(email).split('@');
-    return domain ? `${name.slice(0, 2)}***@${domain}` : '';
-  };
-  return buildPdf([
-    'VALO PARKING - MEMBERSHIP SPACE TRANSFER AGREEMENT',
-    `Contract: ${snapshot.contractNumber}`,
-    `Completed: ${formatDate(snapshot.completedAt)}`,
-    `Transferor: ${transfer.fromUserId?.username || ''} (${maskEmail(transfer.fromUserId?.email)})`,
-    `Recipient: ${transfer.toUserId?.username || ''} (${maskEmail(transfer.toUserId?.email)})`,
-    `Parking space: ${snapshot.slotCode}`,
-    `Membership valid until: ${formatDate(snapshot.expireAt)}`,
-    `Transfer price: ${formatCurrency(snapshot.askingPrice)}`,
-    `Processing fee: ${formatCurrency(snapshot.transferFee)}`,
-    `Entitlement reference: ${snapshot.entitlementId}`,
-    'The recipient assumes the remaining parking-space entitlement under VALO Parking rules.',
-    'This document is generated from the immutable transfer completion snapshot.',
-  ]);
+  return buildTransferAgreementPdf(buildTransferContractData(transfer));
 };
 
 const releaseExpiredTransferLocks = async (now = new Date()) => {
@@ -449,6 +566,8 @@ const releaseExpiredTransferLocks = async (now = new Date()) => {
 module.exports = {
   OPEN_STATUSES,
   calculateTransferPricing,
+  buildTransferContractData,
+  buildTransferContractLines,
   createTransfer,
   acceptTransfer,
   rejectTransfer,

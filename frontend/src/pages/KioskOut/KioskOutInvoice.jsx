@@ -185,7 +185,7 @@ export default function KioskOutInvoice({ sessionData, exitImage, onCheckoutSucc
                   <AlertTriangle className="text-orange-400 shrink-0 mt-0.5" size={16} />
                   <div>
                     <p className="text-orange-400 font-semibold text-xs">SUBSCRIPTION EXPIRED</p>
-                    <p className="text-gray-300 text-xs mt-1">Gói thuê bao của bạn đã hết hạn. Phiên đỗ xe này được tính phí như vé lượt thông thường.</p>
+                    <p className="text-gray-300 text-xs mt-1">Your subscription has expired. This session is charged as a standard hourly ticket.</p>
                   </div>
                 </div>
               )}
@@ -221,7 +221,7 @@ export default function KioskOutInvoice({ sessionData, exitImage, onCheckoutSucc
               <QRCode value={paymentData.qrCode} size={160} />
             ) : (
               <div className="w-[160px] h-[160px] bg-gray-200 flex items-center justify-center text-gray-500 text-xs text-center p-4 rounded-lg">
-                {isProcessing ? "Đang tạo mã QR..." : "Vui lòng chọn phương thức thanh toán"}
+                {isProcessing ? "Generating QR Code..." : "Please select payment method"}
               </div>
             )}
             <p className="text-xs text-gray-500 mt-4 text-center">Use any banking app to scan and pay.</p>
@@ -241,7 +241,7 @@ export default function KioskOutInvoice({ sessionData, exitImage, onCheckoutSucc
               className="flex-1 bg-green-500/50 text-white font-black text-lg py-4 rounded-xl flex items-center justify-center gap-2 transition-colors cursor-wait"
             >
               <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              Đang chờ thanh toán...
+              Waiting for payment...
             </button>
           ) : (
             <button 
@@ -262,10 +262,10 @@ export default function KioskOutInvoice({ sessionData, exitImage, onCheckoutSucc
               <Clock size={32} />
             </div>
             
-            <h2 className="text-3xl font-black text-white mb-2 uppercase tracking-wide">Bạn rời bãi sớm!</h2>
+            <h2 className="text-3xl font-black text-white mb-2 uppercase tracking-wide">EARLY DEPARTURE!</h2>
             <p className="text-gray-400 mb-6 text-lg">
-              Bạn vẫn còn <strong className="text-yellow-400">{remainingHours} giờ</strong> sử dụng trong Booking.<br />
-              Thời gian sử dụng còn hiệu lực đến: <br />
+              You still have <strong className="text-yellow-400">{remainingHours} hours</strong> left in your Booking.<br />
+              Valid until: <br />
               <strong className="text-white">{new Date(bookingEnd).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} - {new Date(bookingEnd).toLocaleDateString('vi-VN')}</strong>
             </p>
 
@@ -280,7 +280,7 @@ export default function KioskOutInvoice({ sessionData, exitImage, onCheckoutSucc
                 disabled={isProcessing}
                 className={`w-full py-4 px-6 rounded-xl font-bold text-lg text-black transition-colors bg-yellow-500 hover:bg-yellow-400`}
               >
-                TẠM DỪNG (TÔI SẼ QUAY LẠI LẤY Ô ĐỖ)
+                PAUSE (I WILL RETURN LATER)
               </button>
               
               <button 
@@ -293,18 +293,18 @@ export default function KioskOutInvoice({ sessionData, exitImage, onCheckoutSucc
                 disabled={isProcessing}
                 className={`w-full py-4 px-6 rounded-xl font-bold text-lg text-white border-2 transition-colors border-white/20 hover:bg-white/10`}
               >
-                KẾT THÚC HẲN (TRẢ LẠI Ô ĐỖ)
+                END SESSION (RETURN SLOT)
               </button>
             </div>
             {!canAutoPay && (
               <p className="mt-6 text-sm text-gray-400">
-                Hãy đóng hộp thoại này, thanh toán qua QR, sau đó hệ thống sẽ xử lý Kết thúc sớm tự động.
+                Please close this dialog, pay via QR, and the system will process your early exit automatically.
               </p>
             )}
             
             {!canAutoPay && (
               <button onClick={() => setIsEarlyExitModalOpen(false)} className="mt-6 text-gray-400 underline hover:text-white">
-                Đóng
+                Close
               </button>
             )}
           </div>

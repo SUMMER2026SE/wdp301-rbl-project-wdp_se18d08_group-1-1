@@ -40,7 +40,8 @@ exports.scanPlate = async (req, res, next) => {
     // -------------------------------------------------------------
     try {
       console.log('[AI Scan] Attempting Local Python AI for License Plate...');
-      const pythonRes = await axios.post('http://localhost:8000/scan', {
+      const aiServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:8000';
+      const pythonRes = await axios.post(`${aiServiceUrl}/scan`, {
         image: base64Data
       }, {
         timeout: 5000 // 5 seconds timeout

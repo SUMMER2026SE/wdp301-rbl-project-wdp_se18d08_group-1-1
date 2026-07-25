@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowDownLeft,
+  ArrowLeftRight,
   ArrowUpRight,
   Check,
   Clock3,
@@ -24,6 +25,7 @@ import {
 } from "../../services/subscriptionService";
 import { getWalletInfo } from "../../services/walletService";
 import MembershipOwnershipPanel from "../../components/membership/MembershipOwnershipPanel";
+import CustomerPageHeader from "../../components/Customer/CustomerPageHeader";
 
 const STATUS_META = {
   PENDING_RECIPIENT: {
@@ -218,29 +220,23 @@ export default function MembershipTransfers() {
     <div className="min-h-full bg-[#0D0D0D] px-4 py-6 text-white sm:px-6 lg:px-8">
       <Toaster position="top-right" />
       <div className="mx-auto max-w-6xl">
-        <header className="flex flex-col gap-5 border-b border-white/10 pb-6 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-[#DCA11D]">
-              Profile
-            </p>
-            <h1 className="mt-2 text-3xl font-black tracking-tight">
-              Membership transfers
-            </h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/45">
-              Send a parking-space entitlement, respond to invitations, pay after
-              admin approval, and keep the signed PDF contract.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={refreshData}
-            disabled={refreshing}
-            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-bold text-white/70 transition hover:bg-white/10 hover:text-white disabled:opacity-50"
-          >
-            <RefreshCw size={16} className={refreshing ? "animate-spin" : ""} />
-            Refresh
-          </button>
-        </header>
+        <CustomerPageHeader
+          icon={ArrowLeftRight}
+          title="Membership"
+          description="Send a parking-space entitlement, respond to invitations, pay after admin approval, and keep the signed PDF contract."
+          className="border-b border-white/10 pb-6"
+          action={
+            <button
+              type="button"
+              onClick={refreshData}
+              disabled={refreshing}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-bold text-white/70 transition hover:bg-white/10 hover:text-white disabled:opacity-50"
+            >
+              <RefreshCw size={16} className={refreshing ? "animate-spin" : ""} />
+              Refresh
+            </button>
+          }
+        />
 
         <MembershipOwnershipPanel
           membership={membership}
@@ -499,7 +495,7 @@ export default function MembershipTransfers() {
               </label>
               <p className="rounded-xl bg-white/5 p-3 text-xs leading-5 text-white/40">
                 The price cannot exceed the prorated remaining value. The recipient also
-                pays a 5% processing fee (minimum 10,000 VND, maximum 50,000 VND).
+                pays a processing fee equal to exactly 5% of the remaining value.
               </p>
               <button
                 type="button"
